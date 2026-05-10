@@ -1,0 +1,22 @@
+{
+  "name": "custom-user-js-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A personal workspace for writing and modifying browser userscripts.",
+  "author": "dzshzx <dzshzx0930+github@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dzshzx/custom-user-js-scripts.git"
+  },
+  "scripts": {
+    "lint": "node scripts/check-userscripts.mjs"
+  },
+  "keywords": [
+    "userscript",
+    "tampermonkey",
+    "violentmonkey",
+    "browser-script"
+  ]
+}
