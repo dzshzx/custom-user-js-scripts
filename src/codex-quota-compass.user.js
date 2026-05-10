@@ -1,13 +1,17 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.1
+// @version      0.1.2
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
 // @grant        GM_registerMenuCommand
 // @run-at       document-idle
-// @homepageURL  https://gist.github.com/BlueSkyXN/528e810b98affcecca170e6b9d53d7da
+// @homepageURL  https://github.com/dzshzx/custom-user-js-scripts
+// @supportURL   https://github.com/dzshzx/custom-user-js-scripts/issues
+// @downloadURL  https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass.user.js
+// @updateURL    https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass.user.js
+// @license      MIT
 // ==/UserScript==
 
 (function () {
