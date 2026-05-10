@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.0
+// @version      0.1.1
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
@@ -14,6 +14,7 @@
   'use strict';
 
   const SCRIPT_NAME = 'Codex Quota Compass';
+  const DEBUG_KEY = '__codexQuotaCompassDebug';
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
@@ -28,7 +29,9 @@
   let isPanelOpen = false;
   let isDetailsOpen = false;
   let latestError;
+  let latestResult = null;
   let pendingRunPromise = null;
+  let suppressNextButtonClick = false;
 
   function isUsagePage() {
     return (
@@ -36,6 +39,10 @@
       location.pathname === '/codex/cloud/settings/analytics' &&
       location.hash === '#usage'
     );
+  }
+
+  function isDebugEnabled() {
+    return window[DEBUG_KEY] === true;
   }
 
   function escapeHtml(value) {
@@ -137,7 +144,7 @@
       ))
       .join('');
     const more = Array.isArray(rows) && rows.length > visibleRows.length
-      ? `<div class="cqc-table-note">仅显示前 ${visibleRows.length} 条，共 ${rows.length} 条。完整结果见控制台或 window.${LAST_RESULT_KEY}。</div>`
+      ? `<div class="cqc-table-note">仅显示前 ${visibleRows.length} 条，共 ${rows.length} 条。需要完整调试输出时，先设置 window.${DEBUG_KEY} = true 后重新刷新。</div>`
       : '';
 
     return `<div class="cqc-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>${more}`;
@@ -393,6 +400,19 @@
       renderError(error);
       setStatus('失败', 'error');
       throw error;
+    }
+  }
+
+  function activateCompassButton() {
+    if (isPanelOpen) {
+      closePanel();
+    } else if (latestResult && !latestError) {
+      isDetailsOpen = false;
+      renderResult(latestResult);
+      setStatus('已缓存', 'success');
+      openPanel();
+    } else {
+      runAndRender().catch(() => {});
     }
   }
 
@@ -806,17 +826,11 @@
       const rect = button.getBoundingClientRect();
       persistButtonPosition(rect.left, rect.top);
 
-      if (!moved) {
-        if (isPanelOpen) {
-          closePanel();
-        } else if (window[LAST_RESULT_KEY] && !latestError) {
-          isDetailsOpen = false;
-          renderResult(window[LAST_RESULT_KEY]);
-          setStatus('已缓存', 'success');
-          openPanel();
-        } else {
-          runAndRender().catch(() => {});
-        }
+      if (moved) {
+        suppressNextButtonClick = true;
+        window.setTimeout(() => {
+          suppressNextButtonClick = false;
+        }, 0);
       }
     });
   }
@@ -829,7 +843,7 @@
     root = document.createElement('div');
     root.id = ROOT_ID;
     root.innerHTML = `
-      <button type="button" class="cqc-button" aria-label="Open Codex quota compass">
+      <button type="button" class="cqc-button" data-action="toggle" aria-label="Open Codex quota compass">
         <span class="cqc-dot" aria-hidden="true"></span>
         <span class="cqc-button-text">
           <span class="cqc-button-title">Quota Compass</span>
@@ -863,15 +877,35 @@
 
     root.addEventListener('click', (event) => {
       const action = event.target?.closest?.('[data-action]')?.dataset?.action;
-      if (action === 'close') closePanel();
-      if (action === 'refresh') runAndRender().catch(() => {});
-      if (action === 'show-details' && window[LAST_RESULT_KEY]) {
-        isDetailsOpen = true;
-        renderResult(window[LAST_RESULT_KEY]);
+      if (action === 'toggle') {
+        if (suppressNextButtonClick) {
+          suppressNextButtonClick = false;
+          return;
+        }
+
+        activateCompassButton();
+        return;
       }
-      if (action === 'hide-details' && window[LAST_RESULT_KEY]) {
+
+      if (action === 'close') {
+        closePanel();
+        return;
+      }
+
+      if (action === 'refresh') {
+        runAndRender().catch(() => {});
+        return;
+      }
+
+      if (action === 'show-details' && latestResult) {
+        isDetailsOpen = true;
+        renderResult(latestResult);
+        return;
+      }
+
+      if (action === 'hide-details' && latestResult) {
         isDetailsOpen = false;
-        renderResult(window[LAST_RESULT_KEY]);
+        renderResult(latestResult);
       }
     });
 
@@ -888,7 +922,7 @@
   async function runCompass() {
     if (window[RUNNING_KEY]) {
       console.warn(`[${SCRIPT_NAME}] Already running.`);
-      return window[LAST_RESULT_KEY];
+      throw new Error('Codex Quota Compass 正在运行，请等待当前计算完成后再刷新。');
     }
 
     window[RUNNING_KEY] = true;
@@ -912,6 +946,7 @@
       // - 本脚本默认把用量日期桶按 UTC 解释；同时输出 UTC / 本地时区诊断。
 
       const CONFIG = {
+        DEBUG: isDebugEnabled(),
         DATE_BUCKET_MODE: 'utc', // 推荐：'utc'；可改为 'local' 对比
         USD_PER_CREDIT: 40 / 1000, // 1000 credits = 40 USD
         ROLLING_DAYS: 30,
@@ -1288,6 +1323,8 @@
         rollingStartDate,
         endExclusiveDate,
       }) {
+        if (!CONFIG.DEBUG) return;
+
         const browserTimeZone =
           Intl.DateTimeFormat().resolvedOptions().timeZone || '未知';
 
@@ -1508,45 +1545,47 @@
       // 输出
       // ============================================================
 
-      console.log('1）限制窗口概览：刷新周期 UTC / 本地对照');
-      console.table(windows.map(publicWindowRow));
+      if (CONFIG.DEBUG) {
+        console.log('1）限制窗口概览：刷新周期 UTC / 本地对照');
+        console.table(windows.map(publicWindowRow));
 
-      console.log('2）主 7 天窗口：上次重置至今，按 daily analytics 近似');
-      console.log('GET', sinceReset.url);
-      console.table([sinceResetSummary]);
+        console.log('2）主 7 天窗口：上次重置至今，按 daily analytics 近似');
+        console.log('GET', sinceReset.url);
+        console.table([sinceResetSummary]);
 
-      console.log('3）用 used_percent 反推周额度');
-      console.table([weeklyEstimate]);
+        console.log('3）用 used_percent 反推周额度');
+        console.table([weeklyEstimate]);
 
-      console.log('4）上次重置至今每日明细');
-      console.table(sinceReset.rows);
+        console.log('4）上次重置至今每日明细');
+        console.table(sinceReset.rows);
 
-      console.log('4.1）上次重置至今客户端汇总');
-      console.table(sinceReset.clients);
+        console.log('4.1）上次重置至今客户端汇总');
+        console.table(sinceReset.clients);
 
-      console.log('5）本月初至今汇总');
-      console.log('GET', monthToDate.url);
-      console.table([monthToDateSummary]);
+        console.log('5）本月初至今汇总');
+        console.log('GET', monthToDate.url);
+        console.table([monthToDateSummary]);
 
-      console.log('6）本月初至今日明细');
-      console.table(monthToDate.rows);
+        console.log('6）本月初至今日明细');
+        console.table(monthToDate.rows);
 
-      console.log('6.1）本月初至今客户端汇总');
-      console.table(monthToDate.clients);
+        console.log('6.1）本月初至今客户端汇总');
+        console.table(monthToDate.clients);
 
-      console.log(`7）近${CONFIG.ROLLING_DAYS}天汇总`);
-      console.log('GET', rolling.url);
-      console.table([rollingSummary]);
+        console.log(`7）近${CONFIG.ROLLING_DAYS}天汇总`);
+        console.log('GET', rolling.url);
+        console.table([rollingSummary]);
 
-      console.log(`8）近${CONFIG.ROLLING_DAYS}天每日明细`);
-      console.table(rolling.rows);
+        console.log(`8）近${CONFIG.ROLLING_DAYS}天每日明细`);
+        console.table(rolling.rows);
 
-      console.log(`8.1）近${CONFIG.ROLLING_DAYS}天客户端汇总`);
-      console.table(rolling.clients);
+        console.log(`8.1）近${CONFIG.ROLLING_DAYS}天客户端汇总`);
+        console.table(rolling.clients);
 
-      console.log(
-        '说明：end_date 是排他边界；如果今天没有返回，通常是 daily analytics 尚未刷新或当天暂无统计。'
-      );
+        console.log(
+          '说明：end_date 是排他边界；如果今天没有返回，通常是 daily analytics 尚未刷新或当天暂无统计。'
+        );
+      }
 
       return {
         配置: {
@@ -1601,12 +1640,19 @@
     try {
       pendingRunPromise = pendingRunPromise || runCompass();
       const result = await pendingRunPromise;
-      window[LAST_RESULT_KEY] = result;
+      latestResult = result;
       latestError = null;
-      console.log(
-        `[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`,
-        result,
-      );
+
+      if (isDebugEnabled()) {
+        window[LAST_RESULT_KEY] = result;
+        console.log(
+          `[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`,
+          result,
+        );
+      } else {
+        console.info(`[${SCRIPT_NAME}] Finished.`);
+      }
+
       return result;
     } catch (error) {
       console.error(`[${SCRIPT_NAME}] Failed.`, error);
