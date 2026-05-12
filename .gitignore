@@ -6,3 +6,9 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+
+# Trellis local workspace and agent config
+.agents/
+.codex/
+.trellis/
+AGENTS.md
