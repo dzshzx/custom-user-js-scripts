@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Page Auto Refresh Timer
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.1
+// @version      0.2.2
 // @description  Auto-refresh pages and optionally unlock copy, selection, context menu, drag, and unload limits per page or site.
 // @author       dzshzx
 // @match        *://*/*
@@ -88,6 +88,7 @@
   let widgetPosition = null;
   let suppressWidgetExpansion = false;
   let dialog;
+  let activeDialogTab = 'refresh';
   let countdownNodes = [];
   let targetTime = 0;
   let remainingWhenPaused = 0;
@@ -723,9 +724,54 @@
 	      #${ROOT_ID} .part-dialog-header {
 	        position: sticky;
 	        top: 0;
-	        padding: 16px 18px 14px;
+	        padding: 16px 18px 0;
 	        border-bottom: 1px solid var(--part-line);
 	        background: var(--part-surface);
+	        z-index: 1;
+	      }
+
+	      #${ROOT_ID} .part-dialog-header-top {
+	        display: flex;
+	        align-items: flex-start;
+	        justify-content: space-between;
+	        gap: 12px;
+	        padding-bottom: 14px;
+	      }
+
+	      #${ROOT_ID} .part-tabs {
+	        display: flex;
+	        align-items: center;
+	        gap: 6px;
+	        padding: 0 0 10px;
+	      }
+
+	      #${ROOT_ID} .part-tab {
+	        min-height: 34px;
+	        padding: 7px 12px;
+	        border: 1px solid transparent;
+	        border-radius: 7px;
+	        background: transparent;
+	        color: var(--part-muted-text);
+	        font-weight: 700;
+	        transition:
+	          background-color 140ms ease,
+	          border-color 140ms ease,
+	          color 140ms ease;
+	      }
+
+	      #${ROOT_ID} .part-tab:hover {
+	        background: var(--part-panel);
+	        color: var(--part-text);
+	      }
+
+	      #${ROOT_ID} .part-tab[aria-selected="true"] {
+	        border-color: var(--part-accent);
+	        background: var(--part-accent-soft);
+	        color: var(--part-accent-strong);
+	      }
+
+	      #${ROOT_ID} .part-tab-panel[hidden] {
+	        display: none;
 	      }
 
 	      #${ROOT_ID} .part-dialog-body {
@@ -1224,7 +1270,7 @@
     widgetButton.addEventListener('pointercancel', finishDrag);
   }
 
-  function renderDialog(message = '', preferredScope = null) {
+  function renderDialog(message = '', preferredScope = null, preferredTab = null) {
     ensureRoot();
 
     if (dialog) {
@@ -1232,6 +1278,7 @@
       dialog = null;
     }
 
+    activeDialogTab = preferredTab === 'unlocker' ? 'unlocker' : preferredTab === 'refresh' ? 'refresh' : activeDialogTab;
     const selectedScope = preferredScope || activeMatch?.scope || activeUnlockerMatch?.scope || 'page';
     const pageSetting = normalizeRefreshSetting(settings.refresh.pages[currentPageKey]);
     const siteSetting = normalizeRefreshSetting(settings.refresh.sites[currentSiteKey]);
@@ -1254,28 +1301,25 @@
     panel.dataset.partDialogPanel = 'true';
 
     panel.innerHTML = `
-	      <div class="part-dialog-header">
-	        <div>
-	          <h2 class="part-title" id="part-dialog-title">页面工具</h2>
-	          <p class="part-subtitle">按页面或站点保存刷新与限制解除设置。</p>
-	        </div>
-	        <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
-	          <span class="part-close-icon" aria-hidden="true"></span>
-	        </button>
-      </div>
-      <div class="part-dialog-body">
-        <section class="part-section">
-          <p class="part-section-title">当前状态</p>
-          <div class="part-status-box">
-            <div data-part-role="status"></div>
-            <span class="part-key" data-part-role="page-key"></span>
-            <span class="part-key" data-part-role="site-key"></span>
+      <div class="part-dialog-header">
+        <div class="part-dialog-header-top">
+          <div>
+            <h2 class="part-title" id="part-dialog-title">页面工具</h2>
+            <p class="part-subtitle">按页面或站点保存刷新与限制解除设置。</p>
           </div>
-        </section>
-
-        <section class="part-section">
-          <p class="part-section-title">保存范围</p>
-          <div class="part-scope-grid">
+          <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
+            <span class="part-close-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="part-tabs" role="tablist" aria-label="页面工具功能">
+          <button type="button" class="part-tab" role="tab" aria-selected="${activeDialogTab === 'refresh'}" data-part-action="switch-tab" data-part-tab="refresh">自动刷新</button>
+          <button type="button" class="part-tab" role="tab" aria-selected="${activeDialogTab === 'unlocker'}" data-part-action="switch-tab" data-part-tab="unlocker">限制解除</button>
+        </div>
+	      </div>
+	      <div class="part-dialog-body">
+	        <section class="part-section">
+	          <p class="part-section-title">保存范围</p>
+	          <div class="part-scope-grid">
             <label class="part-scope-card">
               <input type="radio" name="part-scope" value="page">
               当前页面
@@ -1286,75 +1330,96 @@
               整个站点
               <span class="part-key">匹配同一 hostname 下的页面。</span>
             </label>
-          </div>
-        </section>
-
-        <section class="part-section">
-          <p class="part-section-title">常用刷新时间</p>
-          <div class="part-presets" data-part-role="presets"></div>
-        </section>
-
-        <section class="part-section">
-          <p class="part-section-title">自定义刷新时间</p>
-          <div class="part-custom-row">
-            <input type="number" min="1" step="1" inputmode="decimal" data-part-role="custom-value" aria-label="自定义刷新时间">
-            <select data-part-role="custom-unit" aria-label="自定义刷新时间单位">
-              <option value="seconds">秒</option>
-              <option value="minutes">分钟</option>
-            </select>
-            <button type="button" class="part-button" data-part-action="save-custom">保存自定义时间</button>
-          </div>
-          <div class="part-muted">有效范围：1 秒到 60 分钟。</div>
-        </section>
-
-	        <section class="part-section">
-	          <p class="part-section-title">删除设置</p>
-	          <div class="part-dialog-actions">
-	            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-page">删除当前页面设置</button>
-	            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-site">删除整个站点设置</button>
 	          </div>
 	        </section>
 
-	        <section class="part-section">
-	          <p class="part-section-title">网页限制解除</p>
-	          <div class="part-status-box">
-	            <div data-part-role="unlocker-status"></div>
-	            <span class="part-key" data-part-role="unlocker-page-key"></span>
-	            <span class="part-key" data-part-role="unlocker-site-key"></span>
-	          </div>
-	          <div class="part-row">
-	            <label class="part-check-card">
-	              <input type="checkbox" data-part-role="unlocker-enabled">
-	              <span>启用当前范围的限制解除</span>
-	            </label>
-	          </div>
-	          <div class="part-row part-check-list">
-	            <label class="part-check-card">
-	              <input type="checkbox" data-part-role="unlocker-selection">
-	              <span>允许选择文本</span>
-	            </label>
-	            <label class="part-check-card">
-	              <input type="checkbox" data-part-role="unlocker-copy">
-	              <span>允许复制/剪切</span>
-	            </label>
-	            <label class="part-check-card">
-	              <input type="checkbox" data-part-role="unlocker-context-menu">
-	              <span>允许右键菜单</span>
-	            </label>
-	            <label class="part-check-card">
-	              <input type="checkbox" data-part-role="unlocker-drag">
-	              <span>允许拖拽</span>
-	            </label>
-	            <label class="part-check-card">
-	              <input type="checkbox" data-part-role="unlocker-beforeunload">
-	              <span>忽略离开页面提示</span>
-	            </label>
-	          </div>
-	          <div class="part-dialog-actions part-row">
-	            <button type="button" class="part-button" data-part-action="save-unlocker">保存限制解除设置</button>
-	            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-unlocker-page">删除当前页面限制解除</button>
-	            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-unlocker-site">删除整个站点限制解除</button>
-	          </div>
+	        <section class="part-tab-panel" data-part-tab-panel="refresh"${activeDialogTab === 'refresh' ? '' : ' hidden'}>
+          <section class="part-section">
+            <p class="part-section-title">当前状态</p>
+            <div class="part-status-box">
+              <div data-part-role="status"></div>
+              <span class="part-key" data-part-role="page-key"></span>
+              <span class="part-key" data-part-role="site-key"></span>
+            </div>
+          </section>
+
+          <section class="part-section">
+            <p class="part-section-title">常用刷新时间</p>
+            <div class="part-presets" data-part-role="presets"></div>
+          </section>
+
+          <section class="part-section">
+            <p class="part-section-title">自定义刷新时间</p>
+            <div class="part-custom-row">
+              <input type="number" min="1" step="1" inputmode="decimal" data-part-role="custom-value" aria-label="自定义刷新时间">
+              <select data-part-role="custom-unit" aria-label="自定义刷新时间单位">
+                <option value="seconds">秒</option>
+                <option value="minutes">分钟</option>
+              </select>
+              <button type="button" class="part-button" data-part-action="save-custom">保存自定义时间</button>
+            </div>
+            <div class="part-muted">有效范围：1 秒到 60 分钟。</div>
+          </section>
+
+          <section class="part-section">
+            <p class="part-section-title">删除设置</p>
+            <div class="part-dialog-actions">
+              <button type="button" class="part-button" data-variant="danger" data-part-action="delete-page">删除当前页面设置</button>
+              <button type="button" class="part-button" data-variant="danger" data-part-action="delete-site">删除整个站点设置</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="part-tab-panel" data-part-tab-panel="unlocker"${activeDialogTab === 'unlocker' ? '' : ' hidden'}>
+	          <section class="part-section">
+	            <p class="part-section-title">当前状态</p>
+	            <div class="part-status-box">
+	              <div data-part-role="unlocker-status"></div>
+	              <span class="part-key" data-part-role="unlocker-page-key"></span>
+	              <span class="part-key" data-part-role="unlocker-site-key"></span>
+	            </div>
+	          </section>
+
+	          <section class="part-section">
+	            <p class="part-section-title">解除能力</p>
+	            <div class="part-row">
+	              <label class="part-check-card">
+	                <input type="checkbox" data-part-role="unlocker-enabled">
+	                <span>启用当前范围的限制解除</span>
+	              </label>
+	            </div>
+	            <div class="part-row part-check-list">
+	              <label class="part-check-card">
+	                <input type="checkbox" data-part-role="unlocker-selection">
+	                <span>允许选择文本</span>
+	              </label>
+	              <label class="part-check-card">
+	                <input type="checkbox" data-part-role="unlocker-copy">
+	                <span>允许复制/剪切</span>
+	              </label>
+	              <label class="part-check-card">
+	                <input type="checkbox" data-part-role="unlocker-context-menu">
+	                <span>允许右键菜单</span>
+	              </label>
+	              <label class="part-check-card">
+	                <input type="checkbox" data-part-role="unlocker-drag">
+	                <span>允许拖拽</span>
+	              </label>
+	              <label class="part-check-card">
+	                <input type="checkbox" data-part-role="unlocker-beforeunload">
+	                <span>忽略离开页面提示</span>
+	              </label>
+	            </div>
+	          </section>
+
+	          <section class="part-section">
+	            <p class="part-section-title">保存与删除</p>
+	            <div class="part-dialog-actions">
+	              <button type="button" class="part-button" data-part-action="save-unlocker">保存限制解除设置</button>
+	              <button type="button" class="part-button" data-variant="danger" data-part-action="delete-unlocker-page">删除当前页面限制解除</button>
+	              <button type="button" class="part-button" data-variant="danger" data-part-action="delete-unlocker-site">删除整个站点限制解除</button>
+	            </div>
+	          </section>
 	        </section>
 
 	        <div class="part-message" data-part-role="message" aria-live="polite"></div>
@@ -1407,7 +1472,11 @@
     dialog.querySelector('[data-part-action="delete-unlocker-page"]').disabled = !pageUnlockerSetting;
     dialog.querySelector('[data-part-action="delete-unlocker-site"]').disabled = !siteUnlockerSetting;
     setMessage(message);
-    customValue.focus();
+    if (activeDialogTab === 'unlocker') {
+      dialog.querySelector('[data-part-role="unlocker-enabled"]')?.focus();
+    } else {
+      customValue.focus();
+    }
   }
 
   function closeDialog() {
@@ -1681,7 +1750,12 @@
 
     try {
       if (action === 'open-settings') {
-        renderDialog();
+        renderDialog('', null, 'refresh');
+        return;
+      }
+
+      if (action === 'switch-tab') {
+        renderDialog('', getSelectedScope(), actionNode.dataset.partTab);
         return;
       }
 
@@ -1704,7 +1778,7 @@
         }
 
         await saveSetting(scope, intervalMs);
-        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(intervalMs)} 刷新一次。`);
+        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(intervalMs)} 刷新一次。`, scope, 'refresh');
         return;
       }
 
@@ -1717,19 +1791,19 @@
 
         const scope = getSelectedScope();
         await saveSetting(scope, parsed.intervalMs);
-        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`);
+        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`, scope, 'refresh');
         return;
       }
 
       if (action === 'delete-page') {
         await deleteSetting('page');
-        renderDialog('已删除当前页面设置。');
+        renderDialog('已删除当前页面设置。', 'page', 'refresh');
         return;
       }
 
 	      if (action === 'delete-site') {
 	        await deleteSetting('site');
-	        renderDialog('已删除整个站点设置。');
+	        renderDialog('已删除整个站点设置。', 'site', 'refresh');
 	        return;
 	      }
 
@@ -1739,19 +1813,19 @@
 	        await saveUnlockerSetting(scope, unlockerSetting);
 	        renderDialog(unlockerSetting.enabled
 	          ? `已保存到${scopeLabel(scope)}：${unlockerStatusText(unlockerSetting)}`
-	          : `已保存到${scopeLabel(scope)}：网页限制解除关闭。`);
+	          : `已保存到${scopeLabel(scope)}：网页限制解除关闭。`, scope, 'unlocker');
 	        return;
 	      }
 
 	      if (action === 'delete-unlocker-page') {
 	        await deleteUnlockerSetting('page');
-	        renderDialog('已删除当前页面限制解除设置。');
+	        renderDialog('已删除当前页面限制解除设置。', 'page', 'unlocker');
 	        return;
 	      }
 
 	      if (action === 'delete-unlocker-site') {
 	        await deleteUnlockerSetting('site');
-	        renderDialog('已删除整个站点限制解除设置。');
+	        renderDialog('已删除整个站点限制解除设置。', 'site', 'unlocker');
 	        return;
 	      }
 
@@ -1759,7 +1833,7 @@
         if (!activeMatch) return;
         const disabledScope = activeMatch.scope;
         await deleteSetting(disabledScope);
-        if (dialog) renderDialog(`已停用${scopeLabel(disabledScope)}自动刷新。`);
+        if (dialog) renderDialog(`已停用${scopeLabel(disabledScope)}自动刷新。`, disabledScope, 'refresh');
       }
     } catch (error) {
       console.warn(`${SCRIPT_NAME}: action failed.`, error);
@@ -1772,7 +1846,7 @@
     if (!target?.matches?.('input[name="part-scope"]')) return;
 
     const selectedScope = getSelectedScope();
-    renderDialog(`将保存到${scopeLabel(selectedScope)}。`, selectedScope);
+    renderDialog(`将保存到${scopeLabel(selectedScope)}。`, selectedScope, activeDialogTab);
   }
 
   function registerMenu() {
