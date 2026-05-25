@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Page Auto Refresh Timer
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.2
+// @version      0.2.3
 // @description  Auto-refresh pages and optionally unlock copy, selection, context menu, drag, and unload limits per page or site.
 // @author       dzshzx
 // @match        *://*/*
@@ -370,22 +370,24 @@
 	        font-size: 14px;
 	        line-height: 1.4;
 	        color: var(--part-text);
-	        --part-text: oklch(25% 0.025 242);
-	        --part-muted-text: oklch(49% 0.026 242);
-	        --part-soft-text: oklch(40% 0.028 242);
-	        --part-surface: oklch(99% 0.006 235);
-	        --part-panel: oklch(97.5% 0.009 235);
-	        --part-panel-strong: oklch(94.8% 0.015 235);
-	        --part-field: oklch(99.2% 0.005 235);
-	        --part-line: oklch(88% 0.018 235);
-	        --part-line-strong: oklch(79% 0.026 235);
-	        --part-accent: oklch(51% 0.095 190);
-	        --part-accent-strong: oklch(43% 0.1 190);
-	        --part-accent-soft: oklch(93% 0.035 190);
-	        --part-danger: oklch(48% 0.15 25);
-	        --part-danger-soft: oklch(94.5% 0.035 25);
-	        --part-shadow-soft: 0 10px 32px oklch(28% 0.03 242 / 0.16);
-	        --part-shadow-strong: 0 24px 80px oklch(25% 0.04 242 / 0.28);
+	        --part-text: oklch(22% 0.012 250);
+	        --part-muted-text: oklch(48% 0.012 250);
+	        --part-soft-text: oklch(35% 0.014 250);
+	        --part-surface: oklch(98.8% 0.003 250);
+	        --part-panel: oklch(96.4% 0.004 250);
+	        --part-panel-strong: oklch(92.8% 0.006 250);
+	        --part-field: oklch(99.4% 0.003 250);
+	        --part-line: oklch(88% 0.006 250);
+	        --part-line-strong: oklch(73% 0.01 250);
+	        --part-action: oklch(24% 0.012 250);
+	        --part-action-hover: oklch(18% 0.01 250);
+	        --part-accent: oklch(52% 0.045 160);
+	        --part-accent-strong: oklch(37% 0.038 160);
+	        --part-accent-soft: oklch(94.5% 0.012 160);
+	        --part-danger: oklch(45% 0.13 25);
+	        --part-danger-soft: oklch(95% 0.02 25);
+	        --part-shadow-soft: 0 10px 30px oklch(20% 0.01 250 / 0.12);
+	        --part-shadow-strong: 0 24px 72px oklch(20% 0.012 250 / 0.24);
 	      }
 
       #${ROOT_ID} *,
@@ -502,8 +504,8 @@
         min-width: 26px;
         height: 26px;
         border-radius: 999px;
-	        background: var(--part-accent);
-	        color: oklch(98% 0.006 190);
+	        background: var(--part-action);
+	        color: oklch(98.6% 0.003 250);
         font-size: 16px;
         line-height: 1;
       }
@@ -529,7 +531,7 @@
         max-width: 0;
         overflow: hidden;
         opacity: 0;
-	        color: var(--part-accent-strong);
+	        color: var(--part-text);
         font-size: 16px;
         font-weight: 750;
         font-variant-numeric: tabular-nums;
@@ -592,7 +594,7 @@
         margin: 6px 0 6px;
         font-size: 22px;
         font-weight: 750;
-	        color: var(--part-accent-strong);
+	        color: var(--part-text);
         font-variant-numeric: tabular-nums;
       }
 
@@ -616,8 +618,8 @@
 	        min-height: 34px;
 	        padding: 7px 12px;
 	        border-radius: 7px;
-	        background: var(--part-accent);
-	        color: oklch(98% 0.006 190);
+	        background: var(--part-action);
+	        color: oklch(98.6% 0.003 250);
 	        font-weight: 650;
 	        transition:
 	          background-color 140ms ease,
@@ -626,8 +628,8 @@
 	      }
 
 	      #${ROOT_ID} .part-button:hover {
-	        background: var(--part-accent-strong);
-	        box-shadow: 0 7px 18px oklch(42% 0.09 190 / 0.22);
+	        background: var(--part-action-hover);
+	        box-shadow: 0 7px 18px oklch(20% 0.01 250 / 0.18);
 	      }
 
 	      #${ROOT_ID} .part-button:active {
@@ -666,7 +668,7 @@
 	      }
 
 	      #${ROOT_ID} .part-icon-button:hover {
-	        background: var(--part-accent-soft);
+	        background: var(--part-panel);
 	        transform: translateY(-1px);
       }
 
@@ -724,6 +726,7 @@
 	      #${ROOT_ID} .part-dialog-header {
 	        position: sticky;
 	        top: 0;
+	        display: block;
 	        padding: 16px 18px 0;
 	        border-bottom: 1px solid var(--part-line);
 	        background: var(--part-surface);
@@ -765,9 +768,9 @@
 	      }
 
 	      #${ROOT_ID} .part-tab[aria-selected="true"] {
-	        border-color: var(--part-accent);
-	        background: var(--part-accent-soft);
-	        color: var(--part-accent-strong);
+	        border-color: var(--part-line-strong);
+	        background: var(--part-panel-strong);
+	        color: var(--part-text);
 	      }
 
 	      #${ROOT_ID} .part-tab-panel[hidden] {
@@ -832,9 +835,9 @@
 	      }
 
 	      #${ROOT_ID} .part-scope-card:has(input:checked) {
-	        border-color: var(--part-accent);
-	        background: var(--part-accent-soft);
-	        box-shadow: inset 0 0 0 1px oklch(67% 0.07 190 / 0.2);
+	        border-color: var(--part-line-strong);
+	        background: var(--part-panel);
+	        box-shadow: inset 0 0 0 1px oklch(75% 0.01 250 / 0.18);
 	      }
 
 	      #${ROOT_ID} .part-scope-card input {
@@ -864,8 +867,8 @@
 
 	      #${ROOT_ID} .part-preset:hover,
 	      #${ROOT_ID} .part-preset:focus-visible {
-	        border-color: var(--part-accent);
-	        background: var(--part-accent-soft);
+	        border-color: var(--part-line-strong);
+	        background: var(--part-panel);
 	        outline: none;
 	      }
 
@@ -927,15 +930,15 @@
 	      }
 
 	      #${ROOT_ID} .part-check-card:has(input:checked) {
-	        border-color: var(--part-accent);
-	        background: var(--part-accent-soft);
-	        box-shadow: inset 0 0 0 1px oklch(67% 0.07 190 / 0.2);
+	        border-color: var(--part-line-strong);
+	        background: var(--part-panel);
+	        box-shadow: inset 0 0 0 1px oklch(75% 0.01 250 / 0.18);
 	      }
 
 	      #${ROOT_ID} .part-message {
 	        min-height: 20px;
 	        margin-top: 10px;
-	        color: var(--part-accent-strong);
+	        color: var(--part-soft-text);
 	        font-size: 13px;
 	      }
 
