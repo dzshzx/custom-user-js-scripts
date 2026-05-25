@@ -362,14 +362,30 @@
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      #${ROOT_ID} {
-        position: fixed;
-        z-index: 2147483647;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-size: 14px;
-        line-height: 1.4;
-        color: #152033;
-      }
+	      #${ROOT_ID} {
+	        position: fixed;
+	        z-index: 2147483647;
+	        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	        font-size: 14px;
+	        line-height: 1.4;
+	        color: var(--part-text);
+	        --part-text: oklch(25% 0.025 242);
+	        --part-muted-text: oklch(49% 0.026 242);
+	        --part-soft-text: oklch(40% 0.028 242);
+	        --part-surface: oklch(99% 0.006 235);
+	        --part-panel: oklch(97.5% 0.009 235);
+	        --part-panel-strong: oklch(94.8% 0.015 235);
+	        --part-field: oklch(99.2% 0.005 235);
+	        --part-line: oklch(88% 0.018 235);
+	        --part-line-strong: oklch(79% 0.026 235);
+	        --part-accent: oklch(51% 0.095 190);
+	        --part-accent-strong: oklch(43% 0.1 190);
+	        --part-accent-soft: oklch(93% 0.035 190);
+	        --part-danger: oklch(48% 0.15 25);
+	        --part-danger-soft: oklch(94.5% 0.035 25);
+	        --part-shadow-soft: 0 10px 32px oklch(28% 0.03 242 / 0.16);
+	        --part-shadow-strong: 0 24px 80px oklch(25% 0.04 242 / 0.28);
+	      }
 
       #${ROOT_ID} *,
       #${ROOT_ID} *::before,
@@ -383,10 +399,23 @@
         font: inherit;
       }
 
-      #${ROOT_ID} button {
-        border: 0;
-        cursor: pointer;
-      }
+	      #${ROOT_ID} button {
+	        border: 0;
+	        cursor: pointer;
+	      }
+
+	      #${ROOT_ID} button,
+	      #${ROOT_ID} input,
+	      #${ROOT_ID} select {
+	        color: inherit;
+	      }
+
+	      #${ROOT_ID} button:focus-visible,
+	      #${ROOT_ID} input:focus-visible,
+	      #${ROOT_ID} select:focus-visible {
+	        outline: 2px solid var(--part-accent);
+	        outline-offset: 2px;
+	      }
 
       #${ROOT_ID} button:disabled {
         cursor: not-allowed;
@@ -420,7 +449,7 @@
         justify-content: space-between;
       }
 
-      #${ROOT_ID} .part-widget-button {
+	      #${ROOT_ID} .part-widget-button {
         position: absolute;
         right: 0;
         bottom: 0;
@@ -431,18 +460,17 @@
         width: 52px;
         height: 52px;
         padding: 0;
-        border: 1px solid rgba(15, 23, 42, 0.13);
-        border-radius: 999px;
-        background: rgba(248, 251, 255, 0.62);
-        color: #152033;
-        box-shadow: 0 8px 24px rgba(31, 44, 71, 0.15);
-        cursor: grab;
-        opacity: 0.66;
-        overflow: hidden;
-        backdrop-filter: blur(16px);
-        transition:
-          width 160ms ease,
-          padding 160ms ease,
+	        border: 1px solid var(--part-line);
+	        border-radius: 999px;
+	        background: var(--part-surface);
+	        color: var(--part-text);
+	        box-shadow: var(--part-shadow-soft);
+	        cursor: grab;
+	        opacity: 0.72;
+	        overflow: hidden;
+	        transition:
+	          width 160ms ease,
+	          padding 160ms ease,
           opacity 160ms ease,
           background-color 160ms ease,
           box-shadow 160ms ease;
@@ -456,13 +484,13 @@
       #${ROOT_ID} .part-widget:focus-within .part-widget-button,
       #${ROOT_ID} .part-widget.is-expanded .part-widget-button {
         justify-content: flex-start;
-        gap: 8px;
-        width: 154px;
-        padding: 0 12px;
-        background: rgba(248, 251, 255, 0.95);
-        box-shadow: 0 12px 30px rgba(31, 44, 71, 0.2);
-        opacity: 1;
-      }
+	        gap: 8px;
+	        width: 154px;
+	        padding: 0 12px;
+	        background: var(--part-surface);
+	        box-shadow: 0 14px 38px oklch(28% 0.03 242 / 0.2);
+	        opacity: 1;
+	      }
 
       #${ROOT_ID} .part-widget-button-icon {
         position: relative;
@@ -473,8 +501,8 @@
         min-width: 26px;
         height: 26px;
         border-radius: 999px;
-        background: #0f766e;
-        color: #ffffff;
+	        background: var(--part-accent);
+	        color: oklch(98% 0.006 190);
         font-size: 16px;
         line-height: 1;
       }
@@ -500,7 +528,7 @@
         max-width: 0;
         overflow: hidden;
         opacity: 0;
-        color: #0f766e;
+	        color: var(--part-accent-strong);
         font-size: 16px;
         font-weight: 750;
         font-variant-numeric: tabular-nums;
@@ -526,16 +554,15 @@
         top: var(--part-panel-top, -140px);
         width: var(--part-panel-width, min(248px, calc(100vw - 24px)));
         padding: 10px;
-        border: 1px solid rgba(63, 79, 105, 0.18);
-        border-radius: 8px;
-        background: rgba(248, 251, 255, 0.96);
-        box-shadow: 0 16px 44px rgba(31, 44, 71, 0.22);
+	        border: 1px solid var(--part-line);
+	        border-radius: 8px;
+	        background: var(--part-surface);
+	        box-shadow: 0 18px 50px oklch(25% 0.035 242 / 0.2);
         opacity: 0;
         pointer-events: none;
         transform: translateY(8px) scale(0.98);
         transform-origin: var(--part-panel-origin, bottom right);
-        backdrop-filter: blur(18px);
-        transition:
+	        transition:
           opacity 140ms ease,
           transform 160ms ease;
       }
@@ -548,22 +575,28 @@
         transform: translateY(0) scale(1);
       }
 
-      #${ROOT_ID} .part-title {
-        margin: 0;
-        font-size: 14px;
-        font-weight: 700;
-      }
+	      #${ROOT_ID} .part-title {
+	        margin: 0;
+	        font-size: 15px;
+	        font-weight: 750;
+	      }
+
+	      #${ROOT_ID} .part-subtitle {
+	        margin: 4px 0 0;
+	        color: var(--part-muted-text);
+	        font-size: 12px;
+	      }
 
       #${ROOT_ID} .part-widget-countdown {
         margin: 6px 0 6px;
         font-size: 22px;
         font-weight: 750;
-        color: #0f766e;
+	        color: var(--part-accent-strong);
         font-variant-numeric: tabular-nums;
       }
 
       #${ROOT_ID} .part-muted {
-        color: #66758c;
+	        color: var(--part-muted-text);
         font-size: 12px;
       }
 
@@ -579,35 +612,61 @@
       }
 
       #${ROOT_ID} .part-button {
-        min-height: 34px;
-        padding: 7px 10px;
-        border-radius: 7px;
-        background: #0f766e;
-        color: #fff;
-        font-weight: 650;
-      }
+	        min-height: 34px;
+	        padding: 7px 12px;
+	        border-radius: 7px;
+	        background: var(--part-accent);
+	        color: oklch(98% 0.006 190);
+	        font-weight: 650;
+	        transition:
+	          background-color 140ms ease,
+	          box-shadow 140ms ease,
+	          transform 140ms ease;
+	      }
 
-      #${ROOT_ID} .part-button[data-variant="secondary"] {
-        background: #e9eef6;
-        color: #1f2a44;
-      }
+	      #${ROOT_ID} .part-button:hover {
+	        background: var(--part-accent-strong);
+	        box-shadow: 0 7px 18px oklch(42% 0.09 190 / 0.22);
+	      }
 
-      #${ROOT_ID} .part-button[data-variant="danger"] {
-        background: #fee2e2;
-        color: #991b1b;
-      }
+	      #${ROOT_ID} .part-button:active {
+	        transform: translateY(1px);
+	      }
+
+	      #${ROOT_ID} .part-button[data-variant="secondary"] {
+	        background: var(--part-panel-strong);
+	        color: var(--part-text);
+	      }
+
+	      #${ROOT_ID} .part-button[data-variant="danger"] {
+	        background: var(--part-danger-soft);
+	        color: var(--part-danger);
+	      }
+
+	      #${ROOT_ID} .part-button[data-variant="danger"]:hover {
+	        background: oklch(91% 0.052 25);
+	        box-shadow: none;
+	      }
 
       #${ROOT_ID} .part-icon-button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 30px;
-        height: 30px;
-        border-radius: 7px;
-        background: #e9eef6;
-        color: #1f2a44;
-        font-size: 18px;
-        line-height: 1;
+	        width: 30px;
+	        height: 30px;
+	        border-radius: 7px;
+	        background: var(--part-panel-strong);
+	        color: var(--part-text);
+	        font-size: 18px;
+	        line-height: 1;
+	        transition:
+	          background-color 140ms ease,
+	          transform 140ms ease;
+	      }
+
+	      #${ROOT_ID} .part-icon-button:hover {
+	        background: var(--part-accent-soft);
+	        transform: translateY(-1px);
       }
 
       #${ROOT_ID} .part-icon-button .part-icon-svg {
@@ -644,63 +703,69 @@
 
       #${ROOT_ID} .part-backdrop {
         position: fixed;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        padding: 18px;
-        background: rgba(15, 23, 42, 0.38);
-      }
+	        inset: 0;
+	        display: grid;
+	        place-items: center;
+	        padding: 18px;
+	        background: oklch(28% 0.025 242 / 0.42);
+	      }
 
-      #${ROOT_ID} .part-dialog {
-        width: min(560px, 100%);
-        max-height: min(760px, calc(100vh - 36px));
-        overflow: auto;
-        border: 1px solid rgba(63, 79, 105, 0.18);
-        border-radius: 8px;
-        background: #ffffff;
-        box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
-      }
+	      #${ROOT_ID} .part-dialog {
+	        width: min(640px, 100%);
+	        max-height: min(760px, calc(100vh - 36px));
+	        overflow: auto;
+	        border: 1px solid var(--part-line);
+	        border-radius: 8px;
+	        background: var(--part-surface);
+	        box-shadow: var(--part-shadow-strong);
+	      }
 
-      #${ROOT_ID} .part-dialog-header {
-        position: sticky;
-        top: 0;
-        padding: 14px 16px;
-        border-bottom: 1px solid #e7edf5;
-        background: #ffffff;
-      }
+	      #${ROOT_ID} .part-dialog-header {
+	        position: sticky;
+	        top: 0;
+	        padding: 16px 18px 14px;
+	        border-bottom: 1px solid var(--part-line);
+	        background: var(--part-surface);
+	      }
 
-      #${ROOT_ID} .part-dialog-body {
-        padding: 16px;
-      }
+	      #${ROOT_ID} .part-dialog-body {
+	        padding: 18px;
+	      }
 
-      #${ROOT_ID} .part-section {
-        margin-top: 16px;
-      }
+	      #${ROOT_ID} .part-section {
+	        margin-top: 18px;
+	        padding-top: 18px;
+	        border-top: 1px solid var(--part-line);
+	      }
 
-      #${ROOT_ID} .part-section:first-child {
-        margin-top: 0;
-      }
+	      #${ROOT_ID} .part-section:first-child {
+	        margin-top: 0;
+	        padding-top: 0;
+	        border-top: 0;
+	      }
 
-      #${ROOT_ID} .part-section-title {
-        margin: 0 0 8px;
-        font-size: 13px;
-        font-weight: 750;
-        color: #253149;
-      }
+	      #${ROOT_ID} .part-section-title {
+	        margin: 0 0 8px;
+	        font-size: 12px;
+	        font-weight: 750;
+	        color: var(--part-soft-text);
+	        letter-spacing: 0;
+	      }
 
-      #${ROOT_ID} .part-status-box {
-        padding: 10px;
-        border-radius: 8px;
-        background: #f2f6fb;
-      }
+	      #${ROOT_ID} .part-status-box {
+	        padding: 12px;
+	        border-radius: 8px;
+	        background: var(--part-panel);
+	        border: 1px solid var(--part-line);
+	      }
 
       #${ROOT_ID} .part-key {
         display: block;
         margin-top: 4px;
         overflow-wrap: anywhere;
-        color: #43536b;
-        font-size: 12px;
-      }
+	        color: var(--part-muted-text);
+	        font-size: 12px;
+	      }
 
       #${ROOT_ID} .part-scope-grid {
         align-items: stretch;
@@ -708,16 +773,27 @@
       }
 
       #${ROOT_ID} .part-scope-card {
-        flex: 1 1 210px;
-        display: block;
-        padding: 10px;
-        border: 1px solid #d8e2ef;
-        border-radius: 8px;
-        background: #fbfdff;
-      }
+	        flex: 1 1 210px;
+	        display: block;
+	        padding: 12px;
+	        border: 1px solid var(--part-line);
+	        border-radius: 8px;
+	        background: var(--part-field);
+	        transition:
+	          border-color 140ms ease,
+	          background-color 140ms ease,
+	          box-shadow 140ms ease;
+	      }
 
-      #${ROOT_ID} .part-scope-card input {
-        margin-right: 6px;
+	      #${ROOT_ID} .part-scope-card:has(input:checked) {
+	        border-color: var(--part-accent);
+	        background: var(--part-accent-soft);
+	        box-shadow: inset 0 0 0 1px oklch(67% 0.07 190 / 0.2);
+	      }
+
+	      #${ROOT_ID} .part-scope-card input {
+	        margin-right: 6px;
+	        accent-color: var(--part-accent);
       }
 
       #${ROOT_ID} .part-presets {
@@ -729,18 +805,27 @@
       #${ROOT_ID} .part-preset {
         min-height: 36px;
         padding: 8px;
-        border: 1px solid #d8e2ef;
-        border-radius: 7px;
-        background: #ffffff;
-        color: #1f2a44;
-        font-weight: 650;
-      }
+	        border: 1px solid var(--part-line);
+	        border-radius: 7px;
+	        background: var(--part-field);
+	        color: var(--part-text);
+	        font-weight: 650;
+	        transition:
+	          border-color 140ms ease,
+	          background-color 140ms ease,
+	          transform 140ms ease;
+	      }
 
-      #${ROOT_ID} .part-preset:hover,
-      #${ROOT_ID} .part-preset:focus-visible {
-        border-color: #0f766e;
-        outline: none;
-      }
+	      #${ROOT_ID} .part-preset:hover,
+	      #${ROOT_ID} .part-preset:focus-visible {
+	        border-color: var(--part-accent);
+	        background: var(--part-accent-soft);
+	        outline: none;
+	      }
+
+	      #${ROOT_ID} .part-preset:active {
+	        transform: translateY(1px);
+	      }
 
       #${ROOT_ID} .part-custom-row {
         align-items: stretch;
@@ -750,11 +835,11 @@
       #${ROOT_ID} .part-custom-row input,
       #${ROOT_ID} .part-custom-row select {
         min-height: 36px;
-        border: 1px solid #ccd8e8;
-        border-radius: 7px;
-        background: #ffffff;
-        color: #152033;
-      }
+	        border: 1px solid var(--part-line-strong);
+	        border-radius: 7px;
+	        background: var(--part-field);
+	        color: var(--part-text);
+	      }
 
       #${ROOT_ID} .part-custom-row input {
         width: 140px;
@@ -781,25 +866,36 @@
 	        gap: 8px;
 	        min-height: 42px;
 	        padding: 10px;
-	        border: 1px solid #d8e2ef;
+	        border: 1px solid var(--part-line);
 	        border-radius: 7px;
-	        background: #fbfdff;
+	        background: var(--part-field);
+	        transition:
+	          border-color 140ms ease,
+	          background-color 140ms ease,
+	          box-shadow 140ms ease;
 	      }
 
 	      #${ROOT_ID} .part-check-card input {
 	        margin-top: 2px;
+	        accent-color: var(--part-accent);
 	      }
 
-      #${ROOT_ID} .part-message {
-        min-height: 20px;
-        margin-top: 10px;
-        color: #0f766e;
-        font-size: 13px;
-      }
+	      #${ROOT_ID} .part-check-card:has(input:checked) {
+	        border-color: var(--part-accent);
+	        background: var(--part-accent-soft);
+	        box-shadow: inset 0 0 0 1px oklch(67% 0.07 190 / 0.2);
+	      }
 
-      #${ROOT_ID} .part-message[data-tone="error"] {
-        color: #b91c1c;
-      }
+	      #${ROOT_ID} .part-message {
+	        min-height: 20px;
+	        margin-top: 10px;
+	        color: var(--part-accent-strong);
+	        font-size: 13px;
+	      }
+
+	      #${ROOT_ID} .part-message[data-tone="error"] {
+	        color: var(--part-danger);
+	      }
 
       @media (max-width: 520px) {
 	        #${ROOT_ID} .part-presets {
@@ -1158,11 +1254,14 @@
     panel.dataset.partDialogPanel = 'true';
 
     panel.innerHTML = `
-      <div class="part-dialog-header">
-        <h2 class="part-title" id="part-dialog-title">页面定时刷新</h2>
-        <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
-          <span class="part-close-icon" aria-hidden="true"></span>
-        </button>
+	      <div class="part-dialog-header">
+	        <div>
+	          <h2 class="part-title" id="part-dialog-title">页面工具</h2>
+	          <p class="part-subtitle">按页面或站点保存刷新与限制解除设置。</p>
+	        </div>
+	        <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
+	          <span class="part-close-icon" aria-hidden="true"></span>
+	        </button>
       </div>
       <div class="part-dialog-body">
         <section class="part-section">

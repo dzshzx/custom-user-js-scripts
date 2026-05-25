@@ -31,6 +31,7 @@ npm run lint
 - 每个用户脚本使用 `.user.js` 后缀。
 - 一个文件尽量只解决一个网页或一个功能问题。
 - 改写已有脚本时，在文件头部或 `docs/` 中记录来源、修改点和适用版本。
+- 有注入 UI 的脚本遵守 `docs/frontend-design-guidelines.md`。
 - 不把账号密码、Cookie、Token 等敏感信息写入脚本。
 
 ## Git 作者信息
