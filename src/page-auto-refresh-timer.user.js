@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Page Auto Refresh Timer
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.0
-// @description  Auto-refresh pages with presets, custom intervals, and per-page or per-site remembered settings.
+// @version      0.2.0
+// @description  Auto-refresh pages and optionally unlock copy, selection, context menu, drag, and unload limits per page or site.
 // @author       dzshzx
 // @match        *://*/*
 // @grant        GM_getValue
@@ -27,6 +27,7 @@
   const SCRIPT_NAME = 'Page Auto Refresh Timer';
   const ROOT_ID = 'page-auto-refresh-timer-root';
   const STYLE_ID = `${ROOT_ID}-style`;
+  const UNLOCKER_STYLE_ID = `${ROOT_ID}-unlocker-style`;
   const STORAGE_KEY = 'pageAutoRefreshTimerSettings';
   const WIDGET_POSITION_KEY = 'pageAutoRefreshTimerWidgetPosition';
   const FALLBACK_STORAGE_KEY = `__${STORAGE_KEY}`;
@@ -51,6 +52,13 @@
     { label: '30 分钟', ms: 30 * 60 * 1000 },
     { label: '60 分钟', ms: 60 * 60 * 1000 },
   ];
+  const DEFAULT_UNLOCKER_OPTIONS = {
+    allowSelection: true,
+    allowCopy: true,
+    allowContextMenu: true,
+    allowDrag: false,
+    suppressBeforeUnload: false,
+  };
   // Icons are sourced from Lucide (https://lucide.dev), ISC License.
   // Copyright (c) 2026 Lucide Icons and Contributors.
   const LUCIDE_REFRESH_CW_ICON_HTML = `
@@ -73,6 +81,7 @@
 
   let settings = emptySettings();
   let activeMatch = null;
+  let activeUnlockerMatch = null;
   let root;
   let widget;
   let widgetButton;
@@ -86,12 +95,19 @@
   let timerId = null;
   let isRefreshing = false;
   let hasRootListener = false;
+  let unlockerCleanup = [];
 
   function emptySettings() {
     return {
-      version: 1,
-      pages: {},
-      sites: {},
+      version: 2,
+      refresh: {
+        pages: {},
+        sites: {},
+      },
+      unlocker: {
+        pages: {},
+        sites: {},
+      },
     };
   }
 
@@ -103,7 +119,14 @@
     return Number.isFinite(value) && value >= MIN_INTERVAL_MS && value <= MAX_INTERVAL_MS;
   }
 
-  function normalizeSetting(value) {
+  function emptyScopedSettings() {
+    return {
+      pages: {},
+      sites: {},
+    };
+  }
+
+  function normalizeRefreshSetting(value) {
     if (!isRecord(value)) return null;
 
     const intervalMs = Number(value.intervalMs);
@@ -115,19 +138,50 @@
     };
   }
 
-  function normalizeSettings(value) {
-    const next = emptySettings();
+  function normalizeUnlockerSetting(value) {
+    if (!isRecord(value)) return null;
+
+    const enabled = Boolean(value.enabled);
+    const next = {
+      enabled,
+      allowSelection: value.allowSelection !== false,
+      allowCopy: value.allowCopy !== false,
+      allowContextMenu: value.allowContextMenu !== false,
+      allowDrag: value.allowDrag === true,
+      suppressBeforeUnload: value.suppressBeforeUnload === true,
+      updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : Date.now(),
+    };
+
+    return next;
+  }
+
+  function normalizeScopedSettings(value, normalizer) {
+    const next = emptyScopedSettings();
     const source = isRecord(value) ? value : {};
 
     for (const [key, setting] of Object.entries(isRecord(source.pages) ? source.pages : {})) {
-      const normalized = normalizeSetting(setting);
+      const normalized = normalizer(setting);
       if (normalized) next.pages[key] = normalized;
     }
 
     for (const [key, setting] of Object.entries(isRecord(source.sites) ? source.sites : {})) {
-      const normalized = normalizeSetting(setting);
+      const normalized = normalizer(setting);
       if (normalized) next.sites[key] = normalized;
     }
+
+    return next;
+  }
+
+  function normalizeSettings(value) {
+    const next = emptySettings();
+    const source = isRecord(value) ? value : {};
+    const refreshSource = isRecord(source.refresh)
+      ? source.refresh
+      : { pages: source.pages, sites: source.sites };
+    const unlockerSource = isRecord(source.unlocker) ? source.unlocker : {};
+
+    next.refresh = normalizeScopedSettings(refreshSource, normalizeRefreshSetting);
+    next.unlocker = normalizeScopedSettings(unlockerSource, normalizeUnlockerSetting);
 
     return next;
   }
@@ -235,7 +289,8 @@
   }
 
   function resolveActiveSetting(sourceSettings = settings) {
-    const pageSetting = normalizeSetting(sourceSettings.pages[currentPageKey]);
+    const refreshSettings = normalizeScopedSettings(sourceSettings.refresh, normalizeRefreshSetting);
+    const pageSetting = normalizeRefreshSetting(refreshSettings.pages[currentPageKey]);
     if (pageSetting) {
       return {
         scope: 'page',
@@ -244,8 +299,44 @@
       };
     }
 
-    const siteSetting = normalizeSetting(sourceSettings.sites[currentSiteKey]);
+    const siteSetting = normalizeRefreshSetting(refreshSettings.sites[currentSiteKey]);
     if (siteSetting) {
+      return {
+        scope: 'site',
+        key: currentSiteKey,
+        setting: siteSetting,
+      };
+    }
+
+    return null;
+  }
+
+  function hasUnlockerAction(setting) {
+    return Boolean(
+      setting?.enabled
+        && (
+          setting.allowSelection
+          || setting.allowCopy
+          || setting.allowContextMenu
+          || setting.allowDrag
+          || setting.suppressBeforeUnload
+        ),
+    );
+  }
+
+  function resolveActiveUnlockerSetting(sourceSettings = settings) {
+    const unlockerSettings = normalizeScopedSettings(sourceSettings.unlocker, normalizeUnlockerSetting);
+    const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[currentPageKey]);
+    if (hasUnlockerAction(pageSetting)) {
+      return {
+        scope: 'page',
+        key: currentPageKey,
+        setting: pageSetting,
+      };
+    }
+
+    const siteSetting = normalizeUnlockerSetting(unlockerSettings.sites[currentSiteKey]);
+    if (hasUnlockerAction(siteSetting)) {
       return {
         scope: 'site',
         key: currentSiteKey,
@@ -674,9 +765,30 @@
         padding: 7px 28px 7px 9px;
       }
 
-      #${ROOT_ID} .part-dialog-actions {
-        flex-wrap: wrap;
-      }
+	      #${ROOT_ID} .part-dialog-actions {
+	        flex-wrap: wrap;
+	      }
+
+	      #${ROOT_ID} .part-check-list {
+	        display: grid;
+	        grid-template-columns: repeat(2, minmax(0, 1fr));
+	        gap: 8px;
+	      }
+
+	      #${ROOT_ID} .part-check-card {
+	        display: flex;
+	        align-items: flex-start;
+	        gap: 8px;
+	        min-height: 42px;
+	        padding: 10px;
+	        border: 1px solid #d8e2ef;
+	        border-radius: 7px;
+	        background: #fbfdff;
+	      }
+
+	      #${ROOT_ID} .part-check-card input {
+	        margin-top: 2px;
+	      }
 
       #${ROOT_ID} .part-message {
         min-height: 20px;
@@ -690,9 +802,13 @@
       }
 
       @media (max-width: 520px) {
-        #${ROOT_ID} .part-presets {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
+	        #${ROOT_ID} .part-presets {
+	          grid-template-columns: repeat(2, minmax(0, 1fr));
+	        }
+
+	        #${ROOT_ID} .part-check-list {
+	          grid-template-columns: 1fr;
+	        }
 
         #${ROOT_ID} .part-custom-row input,
         #${ROOT_ID} .part-custom-row select,
@@ -773,6 +889,29 @@
   function currentStatusText() {
     if (!activeMatch) return '当前未启用自动刷新。';
     return `${scopeLabel(activeMatch.scope)}已启用，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
+  }
+
+  function unlockerStatusText(setting = activeUnlockerMatch?.setting) {
+    if (!setting?.enabled) return '当前未启用网页限制解除。';
+
+    const labels = [];
+    if (setting.allowSelection) labels.push('选择文本');
+    if (setting.allowCopy) labels.push('复制/剪切');
+    if (setting.allowContextMenu) labels.push('右键菜单');
+    if (setting.allowDrag) labels.push('拖拽');
+    if (setting.suppressBeforeUnload) labels.push('离开提示');
+
+    if (!labels.length) return '网页限制解除已保存，但没有启用任何能力。';
+    return `${scopeLabel(activeUnlockerMatch?.scope || getSelectedScope())}已启用：${labels.join('、')}。`;
+  }
+
+  function defaultUnlockerSetting(overrides = {}) {
+    return normalizeUnlockerSetting({
+      enabled: true,
+      ...DEFAULT_UNLOCKER_OPTIONS,
+      ...overrides,
+      updatedAt: Date.now(),
+    });
   }
 
   function defaultWidgetPosition() {
@@ -989,7 +1128,7 @@
     widgetButton.addEventListener('pointercancel', finishDrag);
   }
 
-  function renderDialog(message = '') {
+  function renderDialog(message = '', preferredScope = null) {
     ensureRoot();
 
     if (dialog) {
@@ -997,9 +1136,15 @@
       dialog = null;
     }
 
-    const pageSetting = normalizeSetting(settings.pages[currentPageKey]);
-    const siteSetting = normalizeSetting(settings.sites[currentSiteKey]);
-    const selectedScope = activeMatch?.scope || 'page';
+    const selectedScope = preferredScope || activeMatch?.scope || activeUnlockerMatch?.scope || 'page';
+    const pageSetting = normalizeRefreshSetting(settings.refresh.pages[currentPageKey]);
+    const siteSetting = normalizeRefreshSetting(settings.refresh.sites[currentSiteKey]);
+    const pageUnlockerSetting = normalizeUnlockerSetting(settings.unlocker.pages[currentPageKey]);
+    const siteUnlockerSetting = normalizeUnlockerSetting(settings.unlocker.sites[currentSiteKey]);
+    const scopedUnlockerSetting = selectedScope === 'site'
+      ? siteUnlockerSetting
+      : pageUnlockerSetting;
+    const unlockerFormSetting = scopedUnlockerSetting || defaultUnlockerSetting({ enabled: false });
 
     dialog = document.createElement('div');
     dialog.className = 'part-backdrop';
@@ -1063,16 +1208,58 @@
           <div class="part-muted">有效范围：1 秒到 60 分钟。</div>
         </section>
 
-        <section class="part-section">
-          <p class="part-section-title">删除设置</p>
-          <div class="part-dialog-actions">
-            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-page">删除当前页面设置</button>
-            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-site">删除整个站点设置</button>
-          </div>
-        </section>
+	        <section class="part-section">
+	          <p class="part-section-title">删除设置</p>
+	          <div class="part-dialog-actions">
+	            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-page">删除当前页面设置</button>
+	            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-site">删除整个站点设置</button>
+	          </div>
+	        </section>
 
-        <div class="part-message" data-part-role="message" aria-live="polite"></div>
-      </div>
+	        <section class="part-section">
+	          <p class="part-section-title">网页限制解除</p>
+	          <div class="part-status-box">
+	            <div data-part-role="unlocker-status"></div>
+	            <span class="part-key" data-part-role="unlocker-page-key"></span>
+	            <span class="part-key" data-part-role="unlocker-site-key"></span>
+	          </div>
+	          <div class="part-row">
+	            <label class="part-check-card">
+	              <input type="checkbox" data-part-role="unlocker-enabled">
+	              <span>启用当前范围的限制解除</span>
+	            </label>
+	          </div>
+	          <div class="part-row part-check-list">
+	            <label class="part-check-card">
+	              <input type="checkbox" data-part-role="unlocker-selection">
+	              <span>允许选择文本</span>
+	            </label>
+	            <label class="part-check-card">
+	              <input type="checkbox" data-part-role="unlocker-copy">
+	              <span>允许复制/剪切</span>
+	            </label>
+	            <label class="part-check-card">
+	              <input type="checkbox" data-part-role="unlocker-context-menu">
+	              <span>允许右键菜单</span>
+	            </label>
+	            <label class="part-check-card">
+	              <input type="checkbox" data-part-role="unlocker-drag">
+	              <span>允许拖拽</span>
+	            </label>
+	            <label class="part-check-card">
+	              <input type="checkbox" data-part-role="unlocker-beforeunload">
+	              <span>忽略离开页面提示</span>
+	            </label>
+	          </div>
+	          <div class="part-dialog-actions part-row">
+	            <button type="button" class="part-button" data-part-action="save-unlocker">保存限制解除设置</button>
+	            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-unlocker-page">删除当前页面限制解除</button>
+	            <button type="button" class="part-button" data-variant="danger" data-part-action="delete-unlocker-site">删除整个站点限制解除</button>
+	          </div>
+	        </section>
+
+	        <div class="part-message" data-part-role="message" aria-live="polite"></div>
+	      </div>
     `;
 
     dialog.append(panel);
@@ -1081,6 +1268,9 @@
     dialog.querySelector('[data-part-role="status"]').textContent = currentStatusText();
     dialog.querySelector('[data-part-role="page-key"]').textContent = `页面：${currentPageKey}${pageSetting ? `（${formatInterval(pageSetting.intervalMs)}）` : '（未设置）'}`;
     dialog.querySelector('[data-part-role="site-key"]').textContent = `站点：${currentSiteKey}${siteSetting ? `（${formatInterval(siteSetting.intervalMs)}）` : '（未设置）'}`;
+    dialog.querySelector('[data-part-role="unlocker-status"]').textContent = unlockerStatusText();
+    dialog.querySelector('[data-part-role="unlocker-page-key"]').textContent = `页面：${currentPageKey}${pageUnlockerSetting ? '（已保存）' : '（未设置）'}`;
+    dialog.querySelector('[data-part-role="unlocker-site-key"]').textContent = `站点：${currentSiteKey}${siteUnlockerSetting ? '（已保存）' : '（未设置）'}`;
 
     const scopeInput = dialog.querySelector(`input[name="part-scope"][value="${selectedScope}"]`);
     if (scopeInput) scopeInput.checked = true;
@@ -1109,6 +1299,14 @@
 
     dialog.querySelector('[data-part-action="delete-page"]').disabled = !pageSetting;
     dialog.querySelector('[data-part-action="delete-site"]').disabled = !siteSetting;
+    dialog.querySelector('[data-part-role="unlocker-enabled"]').checked = unlockerFormSetting.enabled;
+    dialog.querySelector('[data-part-role="unlocker-selection"]').checked = unlockerFormSetting.allowSelection;
+    dialog.querySelector('[data-part-role="unlocker-copy"]').checked = unlockerFormSetting.allowCopy;
+    dialog.querySelector('[data-part-role="unlocker-context-menu"]').checked = unlockerFormSetting.allowContextMenu;
+    dialog.querySelector('[data-part-role="unlocker-drag"]').checked = unlockerFormSetting.allowDrag;
+    dialog.querySelector('[data-part-role="unlocker-beforeunload"]').checked = unlockerFormSetting.suppressBeforeUnload;
+    dialog.querySelector('[data-part-action="delete-unlocker-page"]').disabled = !pageUnlockerSetting;
+    dialog.querySelector('[data-part-action="delete-unlocker-site"]').disabled = !siteUnlockerSetting;
     setMessage(message);
     customValue.focus();
   }
@@ -1139,7 +1337,7 @@
 
   async function saveSetting(scope, intervalMs) {
     const next = normalizeSettings(settings);
-    const bucket = scope === 'site' ? next.sites : next.pages;
+    const bucket = scope === 'site' ? next.refresh.sites : next.refresh.pages;
     const key = scope === 'site' ? currentSiteKey : currentPageKey;
 
     bucket[key] = {
@@ -1154,13 +1352,52 @@
   async function deleteSetting(scope) {
     const next = normalizeSettings(settings);
     if (scope === 'site') {
-      delete next.sites[currentSiteKey];
+      delete next.refresh.sites[currentSiteKey];
     } else {
-      delete next.pages[currentPageKey];
+      delete next.refresh.pages[currentPageKey];
     }
 
     settings = await writeStoredSettings(next);
     restartActiveCountdown();
+  }
+
+  function readUnlockerFormSetting() {
+    return defaultUnlockerSetting({
+      enabled: dialog?.querySelector('[data-part-role="unlocker-enabled"]')?.checked === true,
+      allowSelection: dialog?.querySelector('[data-part-role="unlocker-selection"]')?.checked === true,
+      allowCopy: dialog?.querySelector('[data-part-role="unlocker-copy"]')?.checked === true,
+      allowContextMenu: dialog?.querySelector('[data-part-role="unlocker-context-menu"]')?.checked === true,
+      allowDrag: dialog?.querySelector('[data-part-role="unlocker-drag"]')?.checked === true,
+      suppressBeforeUnload: dialog?.querySelector('[data-part-role="unlocker-beforeunload"]')?.checked === true,
+    });
+  }
+
+  async function saveUnlockerSetting(scope, unlockerSetting) {
+    const normalized = normalizeUnlockerSetting(unlockerSetting);
+    if (!normalized) return;
+
+    const next = normalizeSettings(settings);
+    const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
+    const key = scope === 'site' ? currentSiteKey : currentPageKey;
+    bucket[key] = {
+      ...normalized,
+      updatedAt: Date.now(),
+    };
+
+    settings = await writeStoredSettings(next);
+    refreshUnlockerState();
+  }
+
+  async function deleteUnlockerSetting(scope) {
+    const next = normalizeSettings(settings);
+    if (scope === 'site') {
+      delete next.unlocker.sites[currentSiteKey];
+    } else {
+      delete next.unlocker.pages[currentPageKey];
+    }
+
+    settings = await writeStoredSettings(next);
+    refreshUnlockerState();
   }
 
   function stopTimer() {
@@ -1252,6 +1489,79 @@
     updateCountdownText();
   }
 
+  function stopEvent(event) {
+    if (root?.contains(event.target)) return;
+    event.stopPropagation();
+  }
+
+  function stopBeforeUnload(event) {
+    event.stopImmediatePropagation();
+    event.returnValue = undefined;
+    return undefined;
+  }
+
+  function uninstallUnlocker() {
+    for (const cleanup of unlockerCleanup) {
+      cleanup();
+    }
+    unlockerCleanup = [];
+
+    const style = document.getElementById(UNLOCKER_STYLE_ID);
+    if (style) style.remove();
+  }
+
+  function addUnlockerListener(target, type, handler) {
+    target.addEventListener(type, handler, true);
+    unlockerCleanup.push(() => target.removeEventListener(type, handler, true));
+  }
+
+  function installUnlockerStyles(setting) {
+    if (!setting.allowSelection || document.getElementById(UNLOCKER_STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = UNLOCKER_STYLE_ID;
+    style.textContent = `
+      html :not(#${ROOT_ID}):not(#${ROOT_ID} *) {
+        -webkit-user-select: text !important;
+        user-select: text !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function installUnlocker(setting) {
+    uninstallUnlocker();
+    if (!hasUnlockerAction(setting)) return;
+
+    installUnlockerStyles(setting);
+
+    if (setting.allowSelection) {
+      addUnlockerListener(document, 'selectstart', stopEvent);
+    }
+
+    if (setting.allowCopy) {
+      addUnlockerListener(document, 'copy', stopEvent);
+      addUnlockerListener(document, 'cut', stopEvent);
+    }
+
+    if (setting.allowContextMenu) {
+      addUnlockerListener(document, 'contextmenu', stopEvent);
+    }
+
+    if (setting.allowDrag) {
+      addUnlockerListener(document, 'dragstart', stopEvent);
+    }
+
+    if (setting.suppressBeforeUnload) {
+      addUnlockerListener(window, 'beforeunload', stopBeforeUnload);
+    }
+  }
+
+  function refreshUnlockerState() {
+    activeUnlockerMatch = resolveActiveUnlockerSetting(settings);
+    installUnlocker(activeUnlockerMatch?.setting);
+  }
+
   async function handleRootClick(event) {
     const actionNode = event.target?.closest?.('[data-part-action]');
     if (!actionNode || !root?.contains(actionNode)) return;
@@ -1318,13 +1628,35 @@
         return;
       }
 
-      if (action === 'delete-site') {
-        await deleteSetting('site');
-        renderDialog('已删除整个站点设置。');
-        return;
-      }
+	      if (action === 'delete-site') {
+	        await deleteSetting('site');
+	        renderDialog('已删除整个站点设置。');
+	        return;
+	      }
 
-      if (action === 'disable-active') {
+	      if (action === 'save-unlocker') {
+	        const scope = getSelectedScope();
+	        const unlockerSetting = readUnlockerFormSetting();
+	        await saveUnlockerSetting(scope, unlockerSetting);
+	        renderDialog(unlockerSetting.enabled
+	          ? `已保存到${scopeLabel(scope)}：${unlockerStatusText(unlockerSetting)}`
+	          : `已保存到${scopeLabel(scope)}：网页限制解除关闭。`);
+	        return;
+	      }
+
+	      if (action === 'delete-unlocker-page') {
+	        await deleteUnlockerSetting('page');
+	        renderDialog('已删除当前页面限制解除设置。');
+	        return;
+	      }
+
+	      if (action === 'delete-unlocker-site') {
+	        await deleteUnlockerSetting('site');
+	        renderDialog('已删除整个站点限制解除设置。');
+	        return;
+	      }
+
+	      if (action === 'disable-active') {
         if (!activeMatch) return;
         const disabledScope = activeMatch.scope;
         await deleteSetting(disabledScope);
@@ -1340,7 +1672,8 @@
     const target = event.target;
     if (!target?.matches?.('input[name="part-scope"]')) return;
 
-    setMessage(`将保存到${scopeLabel(getSelectedScope())}。`);
+    const selectedScope = getSelectedScope();
+    renderDialog(`将保存到${scopeLabel(selectedScope)}。`, selectedScope);
   }
 
   function registerMenu() {
@@ -1362,12 +1695,14 @@
     [settings, widgetPosition] = await Promise.all([
       readStoredSettings(),
       readStoredWidgetPosition(),
-    ]);
-    activeMatch = resolveActiveSetting(settings);
-    registerMenu();
-    window.addEventListener('resize', () => applyWidgetPosition());
+	    ]);
+	    activeMatch = resolveActiveSetting(settings);
+	    activeUnlockerMatch = resolveActiveUnlockerSetting(settings);
+	    registerMenu();
+	    window.addEventListener('resize', () => applyWidgetPosition());
+	    refreshUnlockerState();
 
-    if (activeMatch) {
+	    if (activeMatch) {
       onReady(restartActiveCountdown);
     }
   }
