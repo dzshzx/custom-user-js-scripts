@@ -1,8 +1,16 @@
 // ==UserScript==
-// @name         Page Auto Refresh Timer
+// @name         Web Page Assistant
+// @name:en      Web Page Assistant
+// @name:zh      网页助手
+// @name:zh-CN   网页助手
+// @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.4
+// @version      0.2.5
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
+// @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
+// @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
+// @description:zh-CN 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
+// @description:zh-TW 網頁助手：按頁面或站點管理自動重新整理，並可解除複製、選取、右鍵選單、拖曳和離開確認限制。
 // @author       dzshzx
 // @match        *://*/*
 // @grant        GM_getValue

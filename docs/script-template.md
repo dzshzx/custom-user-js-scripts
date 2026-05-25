@@ -3,9 +3,11 @@
 复制 `src/example.user.js` 创建新脚本时，优先修改这些字段：
 
 - `@name`: 脚本名称。
+- `@name:zh-CN` / `@name:en`: 脚本有中文用户界面或跨语言使用场景时，补充本地化名称。
 - `@namespace`: 通常使用仓库地址或个人域名。
 - `@version`: 只有用户明确要求更新版本号时才递增；普通功能、UI 或修复改动不默认改版本号。
 - `@description`: 简短说明脚本功能。
+- `@description:zh-CN` / `@description:en`: 脚本有本地化名称时，同步补充本地化简介。
 - `@match`: 脚本生效的网址规则。
 - `@grant`: 需要的浏览器用户脚本 API 权限；没有特殊权限时使用 `none`。
 
