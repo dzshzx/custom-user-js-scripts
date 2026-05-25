@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Page Auto Refresh Timer
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.0
+// @version      0.2.1
 // @description  Auto-refresh pages and optionally unlock copy, selection, context menu, drag, and unload limits per page or site.
 // @author       dzshzx
 // @match        *://*/*
