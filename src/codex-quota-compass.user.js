@@ -177,7 +177,7 @@
       ? `<div class="cqc-table-note">最近一次导入：新增 ${escapeHtml(latestImportReport.added)} 条，跳过 ${escapeHtml(latestImportReport.skipped)} 条，无效 ${escapeHtml(latestImportReport.invalid)} 条。</div>`
       : '';
 
-    return `${overview}${importReport}${recent}`;
+    return `${overview}${importReport}${recent}${detailFootnoteHtml('export-archive', '导出归档')}`;
   }
 
   function loadButtonPosition() {
@@ -1442,6 +1442,14 @@
 
       if (action === 'refresh') {
         runAndRender().catch(() => {});
+        return;
+      }
+
+      if (action === 'export-archive') {
+        exportSnapshotArchive().catch((error) => {
+          console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
+          alert(`${SCRIPT_NAME} 导出失败：${error?.message || error}`);
+        });
         return;
       }
 
