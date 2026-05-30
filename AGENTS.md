@@ -37,6 +37,20 @@
 - 不覆盖、不回滚用户已有改动；遇到未识别的本地改动，先判断是否与当前任务相关。
 - 删除、批量重命名、迁移数据、修改权限/归属、跨工作区写入、`git reset`、`git checkout --`、`git clean`、重写 Git 历史等高风险操作，必须先说明影响并等待确认。
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `dzshzx/custom-user-js-scripts`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+This repo uses the default triage label vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repo uses a single-context domain documentation layout. See `docs/agents/domain.md`.
+
 <!-- TRELLIS:START -->
 # Trellis Instructions
 
