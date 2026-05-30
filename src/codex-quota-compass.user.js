@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.4
+// @version      0.1.5
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-core.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-archive.lib.js
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -25,7 +26,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.1.4';
+  const SCRIPT_VERSION = '0.1.5';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
   const SNAPSHOT_ARCHIVE_KEY = 'codexQuotaCompassSnapshotArchive';
   const SNAPSHOT_ARCHIVE_FALLBACK_KEY = 'codexQuotaCompassSnapshotArchiveFallback';
@@ -55,6 +56,7 @@
   let suppressNextButtonClick = false;
   let buttonDockSide = null;
   let panelCloseTimer = null;
+  const coreLib = globalThis.CodexQuotaCompassCoreLib;
   const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
   const archiveStore = archiveLib
     ? archiveLib.createSnapshotArchiveStore({
@@ -62,6 +64,9 @@
       write: writeStoredArchive,
       scriptVersion: SCRIPT_VERSION,
     })
+    : null;
+  const syncPort = coreLib?.createSnapshotSyncPort
+    ? coreLib.createSnapshotSyncPort({ archiveStore })
     : null;
 
   function isUsagePage() {
@@ -140,8 +145,8 @@
   }
 
   async function refreshArchiveSummary() {
-    if (!archiveStore) return null;
-    latestArchiveSummary = await archiveStore.summarizeArchive();
+    if (!syncPort) return null;
+    latestArchiveSummary = await syncPort.summarize();
     return latestArchiveSummary;
   }
 
@@ -777,7 +782,13 @@
     style.textContent = `
       #${ROOT_ID} {
         color-scheme: light dark;
-        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: "Fira Sans", "Segoe UI", sans-serif;
+        --cqc-primary: #1e40af;
+        --cqc-primary-soft: #3b82f6;
+        --cqc-accent: #f59e0b;
+        --cqc-surface: #ffffff;
+        --cqc-surface-muted: #f8fafc;
+        --cqc-text: #1e3a8a;
         position: fixed;
         inset: 0;
         z-index: 2147483647;
@@ -801,8 +812,8 @@
         border: 1px solid rgba(0, 0, 0, 0.12);
         border-radius: 999px;
         padding: 0 14px;
-        background: rgba(255, 255, 255, 0.92);
-        color: #202123;
+        background: rgba(248, 250, 252, 0.95);
+        color: var(--cqc-text);
         box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
         cursor: grab;
         pointer-events: auto;
@@ -823,8 +834,16 @@
       }
 
       .cqc-button.is-active {
-        border-color: rgba(16, 163, 127, 0.45);
-        box-shadow: 0 10px 32px rgba(16, 163, 127, 0.22);
+        border-color: rgba(30, 64, 175, 0.45);
+        box-shadow: 0 10px 32px rgba(30, 64, 175, 0.22);
+      }
+
+      .cqc-button:focus-visible,
+      .cqc-refresh:focus-visible,
+      .cqc-icon-button:focus-visible,
+      .cqc-detail-footnote button:focus-visible {
+        outline: 2px solid var(--cqc-primary-soft);
+        outline-offset: 2px;
       }
 
       .cqc-button.is-docked {
@@ -874,8 +893,8 @@
         width: 10px;
         height: 10px;
         border-radius: 50%;
-        background: #10a37f;
-        box-shadow: 0 0 0 4px rgba(16, 163, 127, 0.14);
+        background: var(--cqc-primary);
+        box-shadow: 0 0 0 4px rgba(30, 64, 175, 0.14);
         flex: 0 0 auto;
       }
 
@@ -918,7 +937,7 @@
       }
 
       .cqc-status[data-tone="loading"] { color: #0f7f67; }
-      .cqc-status[data-tone="success"] { color: #0f7f67; }
+      .cqc-status[data-tone="success"] { color: var(--cqc-primary); }
       .cqc-status[data-tone="error"] { color: #d92d20; }
 
       .cqc-panel {
@@ -931,8 +950,8 @@
         max-height: min(760px, calc(100vh - 24px));
         border: 1px solid rgba(0, 0, 0, 0.12);
         border-radius: 12px;
-        background: #ffffff;
-        color: #202123;
+        background: var(--cqc-surface);
+        color: var(--cqc-text);
         box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
         overflow: hidden;
         pointer-events: auto;
@@ -1103,7 +1122,7 @@
       .cqc-detail-footnote button {
         border: 0;
         background: transparent;
-        color: #10a37f;
+        color: var(--cqc-primary);
         cursor: pointer;
         font-size: 13px;
         font-weight: 600;
@@ -1145,6 +1164,10 @@
         text-align: left;
         vertical-align: top;
         white-space: nowrap;
+      }
+
+      .cqc-table-wrap tbody tr:hover {
+        background: rgba(30, 64, 175, 0.05);
       }
 
       .cqc-table-wrap th {
@@ -1200,6 +1223,17 @@
 
       @keyframes cqc-spin {
         to { transform: rotate(360deg); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .cqc-button,
+        .cqc-panel,
+        .cqc-panel-header,
+        .cqc-content,
+        .cqc-spinner {
+          transition: none !important;
+          animation: none !important;
+        }
       }
 
       @media (max-width: 720px) {
@@ -2147,14 +2181,13 @@
         );
       }
 
-      return {
-        配置: {
-          日期桶模式: CONFIG.DATE_BUCKET_MODE,
-          USD_PER_CREDIT: CONFIG.USD_PER_CREDIT,
-          ROLLING_DAYS: CONFIG.ROLLING_DAYS,
-        },
+      if (!coreLib?.buildQuotaSnapshotResult) {
+        throw new Error('CodexQuotaCompassCoreLib is unavailable.');
+      }
 
-        时区诊断: {
+      return coreLib.buildQuotaSnapshotResult({
+        config: CONFIG,
+        diagnostics: {
           浏览器本地时区:
             Intl.DateTimeFormat().resolvedOptions().timeZone || '未知',
           浏览器UTC偏移: utcOffsetLabel(apiNowMs),
@@ -2169,28 +2202,26 @@
           [`API_start_date_近${CONFIG.ROLLING_DAYS}天`]: rollingStartDate,
           API_end_date_排他: endExclusiveDate,
         },
-
-        限制窗口概览: windows.map(publicWindowRow),
-
-        主7天窗口_上次重置至今: {
-          汇总: sinceResetSummary,
-          反推周额度: weeklyEstimate,
-          每日明细: sinceReset.rows,
-          客户端汇总: sinceReset.clients,
+        windows: windows.map(publicWindowRow),
+        periods: {
+          sinceReset: {
+            summary: sinceResetSummary,
+            weeklyEstimate,
+            rows: sinceReset.rows,
+            clients: sinceReset.clients,
+          },
+          monthToDate: {
+            summary: monthToDateSummary,
+            rows: monthToDate.rows,
+            clients: monthToDate.clients,
+          },
+          rolling: {
+            summary: rollingSummary,
+            rows: rolling.rows,
+            clients: rolling.clients,
+          },
         },
-
-        本月初至今: {
-          汇总: monthToDateSummary,
-          每日明细: monthToDate.rows,
-          客户端汇总: monthToDate.clients,
-        },
-
-        [`近${CONFIG.ROLLING_DAYS}天`]: {
-          汇总: rollingSummary,
-          每日明细: rolling.rows,
-          客户端汇总: rolling.clients,
-        },
-      };
+      });
     } finally {
       window[RUNNING_KEY] = false;
     }
@@ -2204,9 +2235,9 @@
       latestError = null;
       latestImportReport = null;
 
-      if (archiveStore) {
+      if (syncPort) {
         try {
-          const saved = await archiveStore.saveSnapshot(result);
+          const saved = await syncPort.saveLatestResult(result);
           latestArchiveSummary = saved.summary;
         } catch (archiveError) {
           console.error(`[${SCRIPT_NAME}] Snapshot Archive save failed.`, archiveError);
@@ -2252,16 +2283,16 @@
   }
 
   async function exportSnapshotArchive() {
-    if (!archiveStore) {
-      throw new Error('Snapshot Archive library is unavailable.');
+    if (!syncPort) {
+      throw new Error('Snapshot sync port is unavailable.');
     }
 
-    const exportDocument = await archiveStore.buildExportDocument();
+    const exportDocument = await syncPort.exportArchive();
     downloadTextFile(
       'codex-quota-compass-snapshot-archive.v1.json',
       JSON.stringify(exportDocument, null, 2),
     );
-    latestArchiveSummary = await archiveStore.summarizeArchive();
+    latestArchiveSummary = await syncPort.summarize();
     alert(`${SCRIPT_NAME} 导出完成：${exportDocument.snapshotCount} 条快照。`);
   }
 
@@ -2298,13 +2329,13 @@
   }
 
   async function importSnapshotArchive() {
-    if (!archiveStore) {
-      throw new Error('Snapshot Archive library is unavailable.');
+    if (!syncPort) {
+      throw new Error('Snapshot sync port is unavailable.');
     }
 
     const fileText = await chooseImportFileText();
     const importDocument = JSON.parse(fileText);
-    const imported = await archiveStore.importArchiveDocument(importDocument);
+    const imported = await syncPort.importArchiveDocument(importDocument);
     latestArchiveSummary = imported.summary;
     latestImportReport = imported.report;
     if (latestResult && !latestError) {
