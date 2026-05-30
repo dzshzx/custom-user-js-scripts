@@ -1,8 +1,12 @@
 // ==UserScript==
 // @name         Codex Quota Compass
+// @name:zh-CN   Codex 配额统计
+// @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
 // @version      0.1.6.1
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
+// @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
+// @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-core.lib.js
@@ -30,20 +34,102 @@
   const DEFAULT_LOCALE = 'zh-CN';
   const I18N_MESSAGES = {
     'zh-CN': {
+      panelTitle: 'Codex 配额统计',
+      buttonTitle: '配额统计',
+      buttonAriaOpen: '打开 Codex 配额统计',
+      statusIdle: '点击计算',
+      statusLoading: '计算中',
+      statusUpdated: '已更新',
+      statusFailed: '失败',
+      statusCached: '已缓存',
+      actionRefresh: '刷新',
+      actionRetry: '重试',
+      tabOverview: '概览',
+      tabHistory: '历史',
+      tabDetails: '详情',
+      tabTransfer: '同步',
+      sectionArchiveOverview: '归档概况',
+      sectionDailyQuery: '按日查询',
+      sectionPeriodSummary: '周期汇总',
+      sectionWeeklyEstimate: '周额度估算',
+      sectionRangeSummary: '区间汇总',
+      sectionWindows: '限制窗口',
+      transferNote: '导入和导出可用于跨设备同步快照归档。',
+      detailExpand: '查看计算详情',
+      detailCollapse: '收起详情',
+      loadingTitle: '正在计算 Codex 用量',
+      loadingHint: '会请求 usage 和 daily analytics 接口，结果不会包含 token 或 cookie。',
+      errorTitle: '计算失败',
+      errorUnknown: '未知错误',
+      archiveEmpty: '归档尚未加载。',
+      archiveNoSnapshot: '还没有已记录的快照。',
+      archiveLatestImport: '最近一次导入：新增 {added} 条，跳过 {skipped} 条，无效 {invalid} 条。',
+      archiveExportAction: '导出归档',
+      tableNoData: '暂无数据',
+      tablePreviewHint: '仅显示前 {visible} 条，共 {total} 条。需要完整调试输出时，先设置 window.{debugKey} = true 后刷新。',
+      resetCountdown: '距离重置',
+      mainWindowFallback: '主 7 天窗口',
       menuRun: '运行 Codex Quota Compass',
       menuExport: '导出快照归档',
       menuImport: '导入快照归档',
       exportDone: '导出完成：{count} 条快照。',
       importDone: '导入完成：新增 {added} 条，跳过 {skipped} 条，无效 {invalid} 条。',
       syncPortUnavailable: 'Snapshot 同步端口不可用。',
+      exportFailed: '导出失败：{error}',
+      importFailed: '导入失败：{error}',
+      saveArchiveFailed: '已完成计算，但写入 Snapshot Archive 失败：{error}',
+      importNoFile: '未选择导入文件。',
+      importReadFailed: '读取导入文件失败。',
+      alreadyRunning: 'Codex Quota Compass 正在运行，请等待当前计算完成后再刷新。',
     },
     en: {
+      panelTitle: 'Codex Quota Compass',
+      buttonTitle: 'Quota Stats',
+      buttonAriaOpen: 'Open Codex quota stats',
+      statusIdle: 'Click to run',
+      statusLoading: 'Running',
+      statusUpdated: 'Updated',
+      statusFailed: 'Failed',
+      statusCached: 'Cached',
+      actionRefresh: 'Refresh',
+      actionRetry: 'Retry',
+      tabOverview: 'Overview',
+      tabHistory: 'History',
+      tabDetails: 'Details',
+      tabTransfer: 'Sync',
+      sectionArchiveOverview: 'Archive Overview',
+      sectionDailyQuery: 'Daily Query',
+      sectionPeriodSummary: 'Period Summary',
+      sectionWeeklyEstimate: 'Weekly Estimate',
+      sectionRangeSummary: 'Range Summary',
+      sectionWindows: 'Limit Windows',
+      transferNote: 'Import and export can sync snapshot archives across devices.',
+      detailExpand: 'Show Details',
+      detailCollapse: 'Hide Details',
+      loadingTitle: 'Calculating Codex usage',
+      loadingHint: 'This requests usage and daily analytics endpoints, and does not expose token or cookie.',
+      errorTitle: 'Calculation Failed',
+      errorUnknown: 'Unknown error',
+      archiveEmpty: 'Archive not loaded yet.',
+      archiveNoSnapshot: 'No snapshot has been recorded yet.',
+      archiveLatestImport: 'Latest import: {added} added, {skipped} skipped, {invalid} invalid.',
+      archiveExportAction: 'Export Archive',
+      tableNoData: 'No data',
+      tablePreviewHint: 'Showing first {visible} of {total} rows. For full debug output, set window.{debugKey} = true and refresh.',
+      resetCountdown: 'Reset in',
+      mainWindowFallback: 'Primary 7-day window',
       menuRun: 'Run Codex Quota Compass',
       menuExport: 'Export Snapshot Archive',
       menuImport: 'Import Snapshot Archive',
       exportDone: 'Export complete: {count} snapshots.',
       importDone: 'Import complete: {added} added, {skipped} skipped, {invalid} invalid.',
       syncPortUnavailable: 'Snapshot sync port is unavailable.',
+      exportFailed: 'Export failed: {error}',
+      importFailed: 'Import failed: {error}',
+      saveArchiveFailed: 'Calculation finished, but writing Snapshot Archive failed: {error}',
+      importNoFile: 'No import file selected.',
+      importReadFailed: 'Failed to read import file.',
+      alreadyRunning: 'Codex Quota Compass is already running. Please wait and retry.',
     },
   };
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
@@ -190,7 +276,7 @@
 
   function archiveSummaryHtml(summary = latestArchiveSummary) {
     if (!summary) {
-      return '<div class="cqc-empty">归档尚未加载。</div>';
+      return `<div class="cqc-empty">${escapeHtml(t('archiveEmpty'))}</div>`;
     }
 
     const recentRows = safeRows(summary.recentSnapshots || [], 5);
@@ -214,13 +300,13 @@
       })), {
         columns: ['采集时间', '快照ID', '本月Credits', '7天已用百分比'],
       })
-      : '<div class="cqc-empty">还没有已记录的快照。</div>';
+      : `<div class="cqc-empty">${escapeHtml(t('archiveNoSnapshot'))}</div>`;
 
     const importReport = latestImportReport
-      ? `<div class="cqc-table-note">最近一次导入：新增 ${escapeHtml(latestImportReport.added)} 条，跳过 ${escapeHtml(latestImportReport.skipped)} 条，无效 ${escapeHtml(latestImportReport.invalid)} 条。</div>`
+      ? `<div class="cqc-table-note">${escapeHtml(t('archiveLatestImport', { added: latestImportReport.added, skipped: latestImportReport.skipped, invalid: latestImportReport.invalid }))}</div>`
       : '';
 
-    return `${overview}${importReport}${recent}${detailFootnoteHtml('export-archive', '导出归档')}`;
+    return `${overview}${importReport}${recent}${detailFootnoteHtml('export-archive', t('archiveExportAction'))}`;
   }
 
   function loadButtonPosition() {
@@ -384,7 +470,7 @@
     const columns = options.columns || [...new Set(visibleRows.flatMap((row) => Object.keys(row || {})))];
 
     if (!visibleRows.length || !columns.length) {
-      return '<div class="cqc-empty">暂无数据</div>';
+      return `<div class="cqc-empty">${escapeHtml(t('tableNoData'))}</div>`;
     }
 
     const head = columns
@@ -398,7 +484,7 @@
       ))
       .join('');
     const more = Array.isArray(rows) && rows.length > visibleRows.length
-      ? `<div class="cqc-table-note">仅显示前 ${visibleRows.length} 条，共 ${rows.length} 条。需要完整调试输出时，先设置 window.${DEBUG_KEY} = true 后重新刷新。</div>`
+      ? `<div class="cqc-table-note">${escapeHtml(t('tablePreviewHint', { visible: visibleRows.length, total: rows.length, debugKey: DEBUG_KEY }))}</div>`
       : '';
 
     return `<div class="cqc-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>${more}`;
@@ -459,9 +545,9 @@
 
   function resetMetricHtml(windowRow) {
     return metricHtml(
-      '距离重置',
+      t('resetCountdown'),
       formatHoursDuration(windowRow?.距离重置小时),
-      windowRow?.下次重置_本地 || '主 7 天窗口',
+      windowRow?.下次重置_本地 || t('mainWindowFallback'),
     );
   }
 
@@ -484,10 +570,10 @@
 
   function panelTabsHtml() {
     const tabs = [
-      { id: 'overview', label: '概览' },
-      { id: 'history', label: '历史' },
-      { id: 'details', label: '详情' },
-      { id: 'transfer', label: '同步' },
+      { id: 'overview', label: t('tabOverview') },
+      { id: 'history', label: t('tabHistory') },
+      { id: 'details', label: t('tabDetails') },
+      { id: 'transfer', label: t('tabTransfer') },
     ];
     return `
       <div class="cqc-tabs">
@@ -509,12 +595,12 @@
     const rollingSummary = latestHistoryUsage?.rolling?.summary || {};
     const monthSummary = latestHistoryUsage?.month?.summary || {};
     return `
-      ${sectionHtml('按日查询', tableHtml(dayRows.map((row) => ({
+      ${sectionHtml(t('sectionDailyQuery'), tableHtml(dayRows.map((row) => ({
         日期桶: row.date,
         Credits: row.credits,
         折算USD: row.usd,
       })), { columns: ['日期桶', 'Credits', '折算USD'] }))}
-      ${sectionHtml('周期汇总', tableHtml([{
+      ${sectionHtml(t('sectionPeriodSummary'), tableHtml([{
         近30天Credits: rollingSummary.totalCredits,
         近30天USD: rollingSummary.totalUsd,
         本月Credits: monthSummary.totalCredits,
@@ -544,7 +630,7 @@
       viewBody = historyViewHtml();
     } else if (activePanelView === 'details') {
       viewBody = `
-      ${sectionHtml('周额度估算', tableHtml([weekly], {
+      ${sectionHtml(t('sectionWeeklyEstimate'), tableHtml([weekly], {
         columns: [
           '已用百分比',
           '剩余比例小数',
@@ -561,23 +647,23 @@
         ],
       }))}
 
-      ${sectionHtml('区间汇总', tableHtml([sinceReset, month, rolling], {
+      ${sectionHtml(t('sectionRangeSummary'), tableHtml([sinceReset, month, rolling], {
         columns: ['范围', '累计折算USD', '累计Credits', '返回日期桶数', '累计Token', '累计线程数', '累计轮数'],
       }))}
 
-      ${sectionHtml('限制窗口', tableHtml(result?.限制窗口概览, {
+      ${sectionHtml(t('sectionWindows'), tableHtml(result?.限制窗口概览, {
         columns: ['名称', '已用百分比', '窗口天数', '本轮开始_本地', '下次重置_本地', '距离重置小时'],
       }))}
       `;
     } else if (activePanelView === 'transfer') {
       viewBody = `
-      ${sectionHtml('归档概况', archiveSummaryHtml())}
-      <div class="cqc-transfer-note">导出与导入能力用于跨设备同步快照归档。</div>
+      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml())}
+      <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
       `;
     } else {
       viewBody = `
-      ${sectionHtml('归档概况', archiveSummaryHtml())}
-      ${isDetailsOpen ? detailFootnoteHtml('hide-details', '收起详情') : detailFootnoteHtml('show-details', '计算详情')}
+      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml())}
+      ${isDetailsOpen ? detailFootnoteHtml('hide-details', t('detailCollapse')) : detailFootnoteHtml('show-details', t('detailExpand'))}
       `;
     }
 
@@ -606,8 +692,8 @@
       <div class="cqc-loading">
         <div class="cqc-spinner"></div>
         <div>
-          <strong>正在计算 Codex 用量</strong>
-          <span>会请求 usage 和 daily analytics 接口，结果不会包含 token 或 cookie。</span>
+          <strong>${escapeHtml(t('loadingTitle'))}</strong>
+          <span>${escapeHtml(t('loadingHint'))}</span>
         </div>
       </div>
     `;
@@ -619,9 +705,9 @@
     latestError = error;
     contentNode.innerHTML = `
       <div class="cqc-error">
-        <strong>计算失败</strong>
-        <p>${escapeHtml(error?.message || error || '未知错误')}</p>
-        <button type="button" class="cqc-refresh" data-action="refresh">重试</button>
+        <strong>${escapeHtml(t('errorTitle'))}</strong>
+        <p>${escapeHtml(error?.message || error || t('errorUnknown'))}</p>
+        <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml(t('actionRetry'))}</button>
       </div>
     `;
     schedulePanelResize();
@@ -818,7 +904,7 @@
   }
 
   async function runAndRender() {
-    setStatus('计算中', 'loading');
+    setStatus(t('statusLoading'), 'loading');
     renderLoading();
     if (isPanelOpen) {
       positionPanelNearButton();
@@ -838,11 +924,11 @@
       }
       isDetailsOpen = false;
       renderResult(result);
-      setStatus('已更新', 'success');
+      setStatus(t('statusUpdated'), 'success');
       return result;
     } catch (error) {
       renderError(error);
-      setStatus('失败', 'error');
+      setStatus(t('statusFailed'), 'error');
       throw error;
     }
   }
@@ -853,7 +939,7 @@
     } else if (latestResult && !latestError) {
       isDetailsOpen = false;
       renderResult(latestResult);
-      setStatus('已缓存', 'success');
+      setStatus(t('statusCached'), 'success');
       openPanel();
     } else {
       runAndRender().catch(() => {});
@@ -1538,21 +1624,21 @@
     root = document.createElement('div');
     root.id = ROOT_ID;
     root.innerHTML = `
-      <button type="button" class="cqc-button" data-action="toggle" aria-label="Open Codex quota compass">
+      <button type="button" class="cqc-button" data-action="toggle" aria-label="${escapeHtml(t('buttonAriaOpen'))}">
         <span class="cqc-dot" aria-hidden="true"></span>
         <span class="cqc-button-text">
-          <span class="cqc-button-title">Quota Compass</span>
-          <span class="cqc-status" data-tone="idle">点击计算</span>
+          <span class="cqc-button-title">${escapeHtml(t('buttonTitle'))}</span>
+          <span class="cqc-status" data-tone="idle">${escapeHtml(t('statusIdle'))}</span>
         </span>
       </button>
       <div class="cqc-panel" hidden>
         <div class="cqc-panel-header">
           <div class="cqc-panel-title">
             <span class="cqc-dot" aria-hidden="true"></span>
-            <span>Codex Quota Compass</span>
+            <span>${escapeHtml(t('panelTitle'))}</span>
           </div>
           <div class="cqc-panel-actions">
-            <button type="button" class="cqc-refresh" data-action="refresh">刷新</button>
+            <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml(t('actionRefresh'))}</button>
             <button type="button" class="cqc-icon-button" data-action="close" aria-label="Close">
               <span class="cqc-close-icon" aria-hidden="true"></span>
             </button>
@@ -1607,7 +1693,7 @@
       if (action === 'export-archive') {
         exportSnapshotArchive().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-          alert(`${SCRIPT_NAME} 导出失败：${error?.message || error}`);
+          alert(`${SCRIPT_NAME} ${t('exportFailed', { error: error?.message || error })}`);
         });
         return;
       }
@@ -1635,13 +1721,13 @@
       if (isPanelOpen) positionPanelNearButton();
     });
 
-    setStatus('点击计算', 'idle');
+    setStatus(t('statusIdle'), 'idle');
   }
 
   async function runCompass() {
     if (window[RUNNING_KEY]) {
       console.warn(`[${SCRIPT_NAME}] Already running.`);
-      throw new Error('Codex Quota Compass 正在运行，请等待当前计算完成后再刷新。');
+      throw new Error(t('alreadyRunning'));
     }
 
     window[RUNNING_KEY] = true;
@@ -2367,7 +2453,7 @@
         } catch (archiveError) {
           console.error(`[${SCRIPT_NAME}] Snapshot Archive save failed.`, archiveError);
           if (!options.silentAlert) {
-            alert(`${SCRIPT_NAME} 已完成计算，但写入 Snapshot Archive 失败：${archiveError?.message || archiveError}`);
+            alert(`${SCRIPT_NAME} ${t('saveArchiveFailed', { error: archiveError?.message || archiveError })}`);
           }
         }
       }
@@ -2433,14 +2519,14 @@
         const file = input.files?.[0];
         if (!file) {
           input.remove();
-          reject(new Error('未选择导入文件。'));
+          reject(new Error(t('importNoFile')));
           return;
         }
 
         const reader = new FileReader();
         reader.onerror = () => {
           input.remove();
-          reject(new Error('读取导入文件失败。'));
+          reject(new Error(t('importReadFailed')));
         };
         reader.onload = () => {
           input.remove();
@@ -2485,13 +2571,13 @@
     GM_registerMenuCommand(t('menuExport'), () => {
       exportSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-        alert(`${SCRIPT_NAME} 导出失败：${error?.message || error}`);
+        alert(`${SCRIPT_NAME} ${t('exportFailed', { error: error?.message || error })}`);
       });
     });
     GM_registerMenuCommand(t('menuImport'), () => {
       importSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
-        alert(`${SCRIPT_NAME} 导入失败：${error?.message || error}`);
+        alert(`${SCRIPT_NAME} ${t('importFailed', { error: error?.message || error })}`);
       });
     });
   }
