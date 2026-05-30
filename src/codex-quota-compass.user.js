@@ -47,6 +47,7 @@
       tabOverview: '概览',
       tabHistory: '历史',
       tabDetails: '详情',
+      tabArchive: '归档',
       tabTransfer: '同步',
       sectionArchiveOverview: '归档概况',
       sectionDailyQuery: '按日查询',
@@ -65,6 +66,14 @@
       archiveNoSnapshot: '还没有已记录的快照。',
       archiveLatestImport: '最近一次导入：新增 {added} 条，跳过 {skipped} 条，无效 {invalid} 条。',
       archiveExportAction: '导出归档',
+      archiveImportAction: '导入归档',
+      archiveSnapshotCount: '快照数',
+      archiveEarliestCapturedAt: '最早采集',
+      archiveLatestCapturedAt: '最近采集',
+      archiveCapturedAt: '采集时间',
+      archiveSnapshotId: '快照ID',
+      archiveMonthlyCredits: '本月Credits',
+      archiveWeeklyUsedPercent: '7天已用百分比',
       tableNoData: '暂无数据',
       tablePreviewHint: '仅显示前 {visible} 条，共 {total} 条。需要完整调试输出时，先设置 window.{debugKey} = true 后刷新。',
       resetCountdown: '距离重置',
@@ -96,6 +105,7 @@
       tabOverview: 'Overview',
       tabHistory: 'History',
       tabDetails: 'Details',
+      tabArchive: 'Archive',
       tabTransfer: 'Sync',
       sectionArchiveOverview: 'Archive Overview',
       sectionDailyQuery: 'Daily Query',
@@ -114,6 +124,14 @@
       archiveNoSnapshot: 'No snapshot has been recorded yet.',
       archiveLatestImport: 'Latest import: {added} added, {skipped} skipped, {invalid} invalid.',
       archiveExportAction: 'Export Archive',
+      archiveImportAction: 'Import Archive',
+      archiveSnapshotCount: 'Snapshots',
+      archiveEarliestCapturedAt: 'Earliest Captured',
+      archiveLatestCapturedAt: 'Latest Captured',
+      archiveCapturedAt: 'Captured At',
+      archiveSnapshotId: 'Snapshot ID',
+      archiveMonthlyCredits: 'Monthly Credits',
+      archiveWeeklyUsedPercent: '7-day Used Percent',
       tableNoData: 'No data',
       tablePreviewHint: 'Showing first {visible} of {total} rows. For full debug output, set window.{debugKey} = true and refresh.',
       resetCountdown: 'Reset in',
@@ -274,39 +292,81 @@
     return latestArchiveSummary;
   }
 
-  function archiveSummaryHtml(summary = latestArchiveSummary) {
+  function createArchivePanelModel(summary, importReport = latestImportReport) {
     if (!summary) {
-      return `<div class="cqc-empty">${escapeHtml(t('archiveEmpty'))}</div>`;
+      return {
+        isLoaded: false,
+        snapshotCount: 0,
+        earliestCapturedAt: null,
+        latestCapturedAt: null,
+        recentSnapshots: [],
+        importReport,
+      };
     }
 
-    const recentRows = safeRows(summary.recentSnapshots || [], 5);
+    return {
+      isLoaded: true,
+      snapshotCount: summary.snapshotCount,
+      earliestCapturedAt: summary.earliestCapturedAt || null,
+      latestCapturedAt: summary.latestCapturedAt || null,
+      recentSnapshots: safeRows(summary.recentSnapshots || [], 5).map((row) => ({
+        capturedAt: row?.capturedAt || '-',
+        snapshotId: row?.snapshotId || 'legacy',
+        monthlyCredits: row?.monthlyCredits,
+        weeklyUsedPercent: row?.weeklyUsedPercent,
+      })),
+      importReport,
+    };
+  }
+
+  function archiveSummaryHtml(model = createArchivePanelModel(latestArchiveSummary, latestImportReport)) {
+    const archiveActions = detailActionsHtml([
+      { action: 'export-archive', label: t('archiveExportAction') },
+      { action: 'import-archive', label: t('archiveImportAction') },
+    ]);
+
+    if (!model.isLoaded) {
+      return `<div class="cqc-empty">${escapeHtml(t('archiveEmpty'))}</div>${archiveActions}`;
+    }
+
+    const overviewColumns = [
+      t('archiveSnapshotCount'),
+      t('archiveEarliestCapturedAt'),
+      t('archiveLatestCapturedAt'),
+    ];
+    const recentColumns = [
+      t('archiveCapturedAt'),
+      t('archiveSnapshotId'),
+      t('archiveMonthlyCredits'),
+      t('archiveWeeklyUsedPercent'),
+    ];
     const overview = tableHtml([
       {
-        快照数: summary.snapshotCount,
-        最早采集: summary.earliestCapturedAt || '-',
-        最近采集: summary.latestCapturedAt || '-',
+        [overviewColumns[0]]: model.snapshotCount,
+        [overviewColumns[1]]: model.earliestCapturedAt || '-',
+        [overviewColumns[2]]: model.latestCapturedAt || '-',
       },
     ], {
-      columns: ['快照数', '最早采集', '最近采集'],
+      columns: overviewColumns,
       limit: 1,
     });
 
-    const recent = recentRows.length
-      ? tableHtml(recentRows.map((row) => ({
-        采集时间: row.capturedAt,
-        快照ID: row.snapshotId || 'legacy',
-        本月Credits: row.monthlyCredits,
-        '7天已用百分比': row.weeklyUsedPercent,
+    const recent = model.recentSnapshots.length
+      ? tableHtml(model.recentSnapshots.map((row) => ({
+        [recentColumns[0]]: row.capturedAt,
+        [recentColumns[1]]: row.snapshotId,
+        [recentColumns[2]]: row.monthlyCredits,
+        [recentColumns[3]]: row.weeklyUsedPercent,
       })), {
-        columns: ['采集时间', '快照ID', '本月Credits', '7天已用百分比'],
+        columns: recentColumns,
       })
       : `<div class="cqc-empty">${escapeHtml(t('archiveNoSnapshot'))}</div>`;
 
-    const importReport = latestImportReport
-      ? `<div class="cqc-table-note">${escapeHtml(t('archiveLatestImport', { added: latestImportReport.added, skipped: latestImportReport.skipped, invalid: latestImportReport.invalid }))}</div>`
+    const importReport = model.importReport
+      ? `<div class="cqc-table-note">${escapeHtml(t('archiveLatestImport', { added: model.importReport.added, skipped: model.importReport.skipped, invalid: model.importReport.invalid }))}</div>`
       : '';
 
-    return `${overview}${importReport}${recent}${detailFootnoteHtml('export-archive', t('archiveExportAction'))}`;
+    return `${overview}${importReport}${recent}${archiveActions}`;
   }
 
   function loadButtonPosition() {
@@ -561,9 +621,15 @@
   }
 
   function detailFootnoteHtml(action, label) {
+    return detailActionsHtml([{ action, label }]);
+  }
+
+  function detailActionsHtml(actions) {
     return `
       <div class="cqc-detail-footnote">
-        <button type="button" data-action="${escapeHtml(action)}">${escapeHtml(label)}</button>
+        ${actions.map((item) => `
+          <button type="button" data-action="${escapeHtml(item.action)}">${escapeHtml(item.label)}</button>
+        `).join('')}
       </div>
     `;
   }
@@ -573,6 +639,7 @@
       { id: 'overview', label: t('tabOverview') },
       { id: 'history', label: t('tabHistory') },
       { id: 'details', label: t('tabDetails') },
+      { id: 'archive', label: t('tabArchive') },
       { id: 'transfer', label: t('tabTransfer') },
     ];
     return `
@@ -607,6 +674,13 @@
         本月USD: monthSummary.totalUsd,
         日查询Credits: daySummary.totalCredits,
       }], { columns: ['近30天Credits', '近30天USD', '本月Credits', '本月USD', '日查询Credits'] }))}
+    `;
+  }
+
+  function archiveViewHtml() {
+    return `
+      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml())}
+      <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
     `;
   }
 
@@ -655,14 +729,14 @@
         columns: ['名称', '已用百分比', '窗口天数', '本轮开始_本地', '下次重置_本地', '距离重置小时'],
       }))}
       `;
+    } else if (activePanelView === 'archive') {
+      viewBody = archiveViewHtml();
     } else if (activePanelView === 'transfer') {
       viewBody = `
-      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml())}
       <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
       `;
     } else {
       viewBody = `
-      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml())}
       ${isDetailsOpen ? detailFootnoteHtml('hide-details', t('detailCollapse')) : detailFootnoteHtml('show-details', t('detailExpand'))}
       `;
     }
@@ -1317,6 +1391,8 @@
 
       .cqc-detail-footnote {
         display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
         justify-content: center;
         margin: 10px 0 2px;
       }
@@ -1694,6 +1770,14 @@
         exportSnapshotArchive().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
           alert(`${SCRIPT_NAME} ${t('exportFailed', { error: error?.message || error })}`);
+        });
+        return;
+      }
+
+      if (action === 'import-archive') {
+        importSnapshotArchive().catch((error) => {
+          console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
+          alert(`${SCRIPT_NAME} ${t('importFailed', { error: error?.message || error })}`);
         });
         return;
       }
@@ -2504,6 +2588,9 @@
       JSON.stringify(exportDocument, null, 2),
     );
     latestArchiveSummary = await syncPort.summarize();
+    if (latestResult && !latestError) {
+      renderResult(latestResult);
+    }
     alert(`${SCRIPT_NAME} ${t('exportDone', { count: exportDocument.snapshotCount })}`);
   }
 
