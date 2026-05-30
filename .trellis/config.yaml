@@ -99,12 +99,10 @@ channel:
 #-------------------------------------------------------------------------------
 # Codex (dispatch behavior)
 #-------------------------------------------------------------------------------
-# Codex-only knob; other platforms ignore it. Default ("inline") makes the
-# main Codex agent edit code directly. Set to "sub-agent" to route Codex
-# phase guidance through the sub-agent-capable platform block in
-# `.trellis/workflow.md`. In the channel-driven workflow, that block dispatches
-# `.trellis/agents/implement.md` and `.trellis/agents/check.md` via
-# `trellis channel spawn --agent ...`; `.codex/agents/*` remains fallback only.
+# Codex-only knob; other platforms ignore it. Default ("inline") keeps the
+# main Codex session in charge and uses the native inline workflow path:
+# `trellis-before-dev` -> edit -> `trellis-check`. Set to "sub-agent" only
+# when a task explicitly requires the legacy Codex trellis-* sub-agent split.
 #
 codex:
-  dispatch_mode: sub-agent
+  dispatch_mode: inline
