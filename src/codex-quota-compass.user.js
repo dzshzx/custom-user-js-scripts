@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.6
+// @version      0.1.6fix
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
@@ -26,7 +26,26 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.1.6';
+  const SCRIPT_VERSION = '0.1.6fix';
+  const DEFAULT_LOCALE = 'zh-CN';
+  const I18N_MESSAGES = {
+    'zh-CN': {
+      menuRun: '运行 Codex Quota Compass',
+      menuExport: '导出快照归档',
+      menuImport: '导入快照归档',
+      exportDone: '导出完成：{count} 条快照。',
+      importDone: '导入完成：新增 {added} 条，跳过 {skipped} 条，无效 {invalid} 条。',
+      syncPortUnavailable: 'Snapshot 同步端口不可用。',
+    },
+    en: {
+      menuRun: 'Run Codex Quota Compass',
+      menuExport: 'Export Snapshot Archive',
+      menuImport: 'Import Snapshot Archive',
+      exportDone: 'Export complete: {count} snapshots.',
+      importDone: 'Import complete: {added} added, {skipped} skipped, {invalid} invalid.',
+      syncPortUnavailable: 'Snapshot sync port is unavailable.',
+    },
+  };
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
   const SNAPSHOT_ARCHIVE_KEY = 'codexQuotaCompassSnapshotArchive';
   const SNAPSHOT_ARCHIVE_FALLBACK_KEY = 'codexQuotaCompassSnapshotArchiveFallback';
@@ -76,6 +95,23 @@
       location.hostname === 'chatgpt.com' &&
       location.pathname === '/codex/cloud/settings/analytics' &&
       location.hash === '#usage'
+    );
+  }
+
+  function resolveLocale() {
+    const navLang = String(globalThis.navigator?.language || '').toLowerCase();
+    if (navLang.startsWith('en')) return 'en';
+    return DEFAULT_LOCALE;
+  }
+
+  function t(key, variables = {}) {
+    const locale = resolveLocale();
+    const template = I18N_MESSAGES[locale]?.[key]
+      || I18N_MESSAGES[DEFAULT_LOCALE]?.[key]
+      || key;
+    return Object.entries(variables).reduce(
+      (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+      template,
     );
   }
 
@@ -2373,7 +2409,7 @@
 
   async function exportSnapshotArchive() {
     if (!syncPort) {
-      throw new Error('Snapshot sync port is unavailable.');
+      throw new Error(t('syncPortUnavailable'));
     }
 
     const exportDocument = await syncPort.exportArchive();
@@ -2382,7 +2418,7 @@
       JSON.stringify(exportDocument, null, 2),
     );
     latestArchiveSummary = await syncPort.summarize();
-    alert(`${SCRIPT_NAME} 导出完成：${exportDocument.snapshotCount} 条快照。`);
+    alert(`${SCRIPT_NAME} ${t('exportDone', { count: exportDocument.snapshotCount })}`);
   }
 
   function chooseImportFileText() {
@@ -2419,7 +2455,7 @@
 
   async function importSnapshotArchive() {
     if (!syncPort) {
-      throw new Error('Snapshot sync port is unavailable.');
+      throw new Error(t('syncPortUnavailable'));
     }
 
     const fileText = await chooseImportFileText();
@@ -2430,9 +2466,11 @@
     if (latestResult && !latestError) {
       renderResult(latestResult);
     }
-    alert(
-      `${SCRIPT_NAME} 导入完成：新增 ${imported.report.added} 条，跳过 ${imported.report.skipped} 条，无效 ${imported.report.invalid} 条。`,
-    );
+    alert(`${SCRIPT_NAME} ${t('importDone', {
+      added: imported.report.added,
+      skipped: imported.report.skipped,
+      invalid: imported.report.invalid,
+    })}`);
   }
 
   createUi();
@@ -2441,16 +2479,16 @@
   });
 
   if (typeof GM_registerMenuCommand === 'function') {
-    GM_registerMenuCommand('Run Codex Quota Compass', () => {
+    GM_registerMenuCommand(t('menuRun'), () => {
       runAndRender().catch(() => {});
     });
-    GM_registerMenuCommand('Export Snapshot Archive', () => {
+    GM_registerMenuCommand(t('menuExport'), () => {
       exportSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
         alert(`${SCRIPT_NAME} 导出失败：${error?.message || error}`);
       });
     });
-    GM_registerMenuCommand('Import Snapshot Archive', () => {
+    GM_registerMenuCommand(t('menuImport'), () => {
       importSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
         alert(`${SCRIPT_NAME} 导入失败：${error?.message || error}`);
