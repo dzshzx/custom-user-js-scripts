@@ -11,7 +11,8 @@
     "url": "https://github.com/dzshzx/custom-user-js-scripts.git"
   },
   "scripts": {
-    "lint": "node scripts/check-userscripts.mjs"
+    "lint": "node scripts/check-userscripts.mjs",
+    "test": "node --test"
   },
   "keywords": [
     "userscript",

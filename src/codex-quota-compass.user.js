@@ -5,6 +5,9 @@
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-archive.lib.js
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @grant        GM_registerMenuCommand
 // @run-at       document-idle
 // @homepageURL  https://github.com/dzshzx/custom-user-js-scripts
@@ -22,7 +25,10 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
+  const SCRIPT_VERSION = '0.1.3';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
+  const SNAPSHOT_ARCHIVE_KEY = 'codexQuotaCompassSnapshotArchive';
+  const SNAPSHOT_ARCHIVE_FALLBACK_KEY = 'codexQuotaCompassSnapshotArchiveFallback';
   const DEFAULT_BUTTON_POSITION = { top: 76, right: 24 };
   const BUTTON_FULL_WIDTH = 168;
   const BUTTON_HEIGHT = 42;
@@ -43,10 +49,20 @@
   let isDetailsOpen = false;
   let latestError;
   let latestResult = null;
+  let latestArchiveSummary = null;
+  let latestImportReport = null;
   let pendingRunPromise = null;
   let suppressNextButtonClick = false;
   let buttonDockSide = null;
   let panelCloseTimer = null;
+  const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
+  const archiveStore = archiveLib
+    ? archiveLib.createSnapshotArchiveStore({
+      read: readStoredArchive,
+      write: writeStoredArchive,
+      scriptVersion: SCRIPT_VERSION,
+    })
+    : null;
 
   function isUsagePage() {
     return (
@@ -58,6 +74,10 @@
 
   function isDebugEnabled() {
     return window[DEBUG_KEY] === true;
+  }
+
+  function maybePromise(value) {
+    return value && typeof value.then === 'function' ? value : Promise.resolve(value);
   }
 
   function escapeHtml(value) {
@@ -77,6 +97,87 @@
 
   function safeRows(rows, limit = 12) {
     return Array.isArray(rows) ? rows.slice(0, limit) : [];
+  }
+
+  async function readStoredArchive() {
+    try {
+      if (typeof GM_getValue === 'function') {
+        return await maybePromise(GM_getValue(SNAPSHOT_ARCHIVE_KEY, null));
+      }
+
+      if (typeof GM !== 'undefined' && typeof GM.getValue === 'function') {
+        return await GM.getValue(SNAPSHOT_ARCHIVE_KEY, null);
+      }
+    } catch (error) {
+      console.warn(`${SCRIPT_NAME}: failed to read userscript archive storage.`, error);
+    }
+
+    try {
+      return JSON.parse(localStorage.getItem(SNAPSHOT_ARCHIVE_FALLBACK_KEY) || 'null');
+    } catch (error) {
+      console.warn(`${SCRIPT_NAME}: failed to read fallback archive storage.`, error);
+      return null;
+    }
+  }
+
+  async function writeStoredArchive(nextArchive) {
+    try {
+      if (typeof GM_setValue === 'function') {
+        await maybePromise(GM_setValue(SNAPSHOT_ARCHIVE_KEY, nextArchive));
+        return nextArchive;
+      }
+
+      if (typeof GM !== 'undefined' && typeof GM.setValue === 'function') {
+        await GM.setValue(SNAPSHOT_ARCHIVE_KEY, nextArchive);
+        return nextArchive;
+      }
+    } catch (error) {
+      console.warn(`${SCRIPT_NAME}: failed to write userscript archive storage.`, error);
+    }
+
+    localStorage.setItem(SNAPSHOT_ARCHIVE_FALLBACK_KEY, JSON.stringify(nextArchive));
+    return nextArchive;
+  }
+
+  async function refreshArchiveSummary() {
+    if (!archiveStore) return null;
+    latestArchiveSummary = await archiveStore.summarizeArchive();
+    return latestArchiveSummary;
+  }
+
+  function archiveSummaryHtml(summary = latestArchiveSummary) {
+    if (!summary) {
+      return '<div class="cqc-empty">归档尚未加载。</div>';
+    }
+
+    const recentRows = safeRows(summary.recentSnapshots || [], 5);
+    const overview = tableHtml([
+      {
+        快照数: summary.snapshotCount,
+        最早采集: summary.earliestCapturedAt || '-',
+        最近采集: summary.latestCapturedAt || '-',
+      },
+    ], {
+      columns: ['快照数', '最早采集', '最近采集'],
+      limit: 1,
+    });
+
+    const recent = recentRows.length
+      ? tableHtml(recentRows.map((row) => ({
+        采集时间: row.capturedAt,
+        快照ID: row.snapshotId || 'legacy',
+        本月Credits: row.monthlyCredits,
+        '7天已用百分比': row.weeklyUsedPercent,
+      })), {
+        columns: ['采集时间', '快照ID', '本月Credits', '7天已用百分比'],
+      })
+      : '<div class="cqc-empty">还没有已记录的快照。</div>';
+
+    const importReport = latestImportReport
+      ? `<div class="cqc-table-note">最近一次导入：新增 ${escapeHtml(latestImportReport.added)} 条，跳过 ${escapeHtml(latestImportReport.skipped)} 条，无效 ${escapeHtml(latestImportReport.invalid)} 条。</div>`
+      : '';
+
+    return `${overview}${importReport}${recent}`;
   }
 
   function loadButtonPosition() {
@@ -364,6 +465,8 @@
         ${metricHtml('本月累计', usdMetricValue(month.累计折算USD), creditsMetricHint(month.累计Credits))}
         ${resetMetricHtml(mainSevenDayWindow)}
       </div>
+
+      ${sectionHtml('归档概况', archiveSummaryHtml())}
 
       ${
         isDetailsOpen
@@ -2091,6 +2194,19 @@
       const result = await pendingRunPromise;
       latestResult = result;
       latestError = null;
+      latestImportReport = null;
+
+      if (archiveStore) {
+        try {
+          const saved = await archiveStore.saveSnapshot(result);
+          latestArchiveSummary = saved.summary;
+        } catch (archiveError) {
+          console.error(`[${SCRIPT_NAME}] Snapshot Archive save failed.`, archiveError);
+          if (!options.silentAlert) {
+            alert(`${SCRIPT_NAME} 已完成计算，但写入 Snapshot Archive 失败：${archiveError?.message || archiveError}`);
+          }
+        }
+      }
 
       if (isDebugEnabled()) {
         window[LAST_RESULT_KEY] = result;
@@ -2115,11 +2231,102 @@
     }
   }
 
+  function downloadTextFile(filename, text) {
+    const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  async function exportSnapshotArchive() {
+    if (!archiveStore) {
+      throw new Error('Snapshot Archive library is unavailable.');
+    }
+
+    const exportDocument = await archiveStore.buildExportDocument();
+    downloadTextFile(
+      'codex-quota-compass-snapshot-archive.v1.json',
+      JSON.stringify(exportDocument, null, 2),
+    );
+    latestArchiveSummary = await archiveStore.summarizeArchive();
+    alert(`${SCRIPT_NAME} 导出完成：${exportDocument.snapshotCount} 条快照。`);
+  }
+
+  function chooseImportFileText() {
+    return new Promise((resolve, reject) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json,.json';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) {
+          input.remove();
+          reject(new Error('未选择导入文件。'));
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onerror = () => {
+          input.remove();
+          reject(new Error('读取导入文件失败。'));
+        };
+        reader.onload = () => {
+          input.remove();
+          resolve(String(reader.result || ''));
+        };
+        reader.readAsText(file, 'utf-8');
+      }, { once: true });
+
+      input.click();
+    });
+  }
+
+  async function importSnapshotArchive() {
+    if (!archiveStore) {
+      throw new Error('Snapshot Archive library is unavailable.');
+    }
+
+    const fileText = await chooseImportFileText();
+    const importDocument = JSON.parse(fileText);
+    const imported = await archiveStore.importArchiveDocument(importDocument);
+    latestArchiveSummary = imported.summary;
+    latestImportReport = imported.report;
+    if (latestResult && !latestError) {
+      renderResult(latestResult);
+    }
+    alert(
+      `${SCRIPT_NAME} 导入完成：新增 ${imported.report.added} 条，跳过 ${imported.report.skipped} 条，无效 ${imported.report.invalid} 条。`,
+    );
+  }
+
   createUi();
+  refreshArchiveSummary().catch((error) => {
+    console.warn(`${SCRIPT_NAME}: failed to load archive summary.`, error);
+  });
 
   if (typeof GM_registerMenuCommand === 'function') {
     GM_registerMenuCommand('Run Codex Quota Compass', () => {
       runAndRender().catch(() => {});
+    });
+    GM_registerMenuCommand('Export Snapshot Archive', () => {
+      exportSnapshotArchive().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
+        alert(`${SCRIPT_NAME} 导出失败：${error?.message || error}`);
+      });
+    });
+    GM_registerMenuCommand('Import Snapshot Archive', () => {
+      importSnapshotArchive().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
+        alert(`${SCRIPT_NAME} 导入失败：${error?.message || error}`);
+      });
     });
   }
 

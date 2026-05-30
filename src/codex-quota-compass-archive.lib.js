@@ -1,0 +1,348 @@
+(function attachCodexQuotaCompassArchiveLib(globalObject) {
+  'use strict';
+
+  const LIB_NAME = 'CodexQuotaCompassArchiveLib';
+  const ARCHIVE_SCHEMA_VERSION = 1;
+  const EXPORT_FORMAT = 'codex-quota-compass.snapshot-archive';
+  const EXPORT_VERSION = 1;
+
+  function isPlainObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function sanitizeValue(value) {
+    if (Array.isArray(value)) {
+      return value.map(sanitizeValue);
+    }
+
+    if (isPlainObject(value)) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)]),
+      );
+    }
+
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string' || typeof value === 'boolean' || value === null) {
+      return value;
+    }
+
+    return value == null ? null : String(value);
+  }
+
+  function sortSnapshotsByCaptureTime(snapshots) {
+    return snapshots
+      .slice()
+      .sort((left, right) => String(left.capturedAt || '').localeCompare(String(right.capturedAt || '')));
+  }
+
+  function rollingPeriodKey(result) {
+    return Object.keys(result || {}).find((key) => /^近\d+天$/.test(key)) || '';
+  }
+
+  function normalizeDailyRows(rows) {
+    return Array.isArray(rows) ? rows.map((row) => sanitizeValue(row)) : [];
+  }
+
+  function normalizeSnapshot(input) {
+    if (!isPlainObject(input)) return null;
+
+    const snapshotId = typeof input.snapshotId === 'string' && input.snapshotId.trim()
+      ? input.snapshotId.trim()
+      : null;
+    const capturedAt = typeof input.capturedAt === 'string' && input.capturedAt.trim()
+      ? input.capturedAt
+      : null;
+
+    if (!capturedAt) return null;
+
+    return {
+      snapshotId,
+      capturedAt,
+      scriptVersion: typeof input.scriptVersion === 'string' ? input.scriptVersion : '',
+      storageSchemaVersion: ARCHIVE_SCHEMA_VERSION,
+      sourceContext: sanitizeValue(isPlainObject(input.sourceContext) ? input.sourceContext : {}),
+      windowSnapshot: normalizeDailyRows(input.windowSnapshot),
+      periodSummaries: sanitizeValue(isPlainObject(input.periodSummaries) ? input.periodSummaries : {}),
+      periodDetails: sanitizeValue(isPlainObject(input.periodDetails) ? input.periodDetails : {}),
+    };
+  }
+
+  function normalizeSnapshotArchive(rawArchive) {
+    const archiveObject = Array.isArray(rawArchive)
+      ? { snapshots: rawArchive }
+      : (isPlainObject(rawArchive) ? rawArchive : {});
+
+    const snapshots = Array.isArray(archiveObject.snapshots)
+      ? archiveObject.snapshots.map(normalizeSnapshot).filter(Boolean)
+      : [];
+
+    return {
+      schemaVersion: ARCHIVE_SCHEMA_VERSION,
+      createdAt: typeof archiveObject.createdAt === 'string' ? archiveObject.createdAt : null,
+      updatedAt: typeof archiveObject.updatedAt === 'string' ? archiveObject.updatedAt : null,
+      snapshots: sortSnapshotsByCaptureTime(snapshots),
+    };
+  }
+
+  function summarizeSnapshotArchive(archive) {
+    const normalized = normalizeSnapshotArchive(archive);
+    const first = normalized.snapshots[0] || null;
+    const last = normalized.snapshots[normalized.snapshots.length - 1] || null;
+
+    return {
+      snapshotCount: normalized.snapshots.length,
+      earliestCapturedAt: first?.capturedAt || null,
+      latestCapturedAt: last?.capturedAt || null,
+      recentSnapshots: normalized.snapshots.slice(-5).reverse().map((snapshot) => ({
+        snapshotId: snapshot.snapshotId,
+        capturedAt: snapshot.capturedAt,
+        scriptVersion: snapshot.scriptVersion,
+        rollingLabel: Object.values(snapshot.periodSummaries || {}).find((period) => period?.periodKey === 'rolling')?.label || '',
+        monthlyCredits: snapshot.periodSummaries?.monthToDate?.totalCredits ?? null,
+        weeklyUsedPercent: snapshot.periodSummaries?.sinceReset?.usedPercent ?? null,
+      })),
+    };
+  }
+
+  function snapshotFallbackKey(snapshot) {
+    const sinceReset = snapshot?.periodSummaries?.sinceReset || {};
+    const primaryWindow = Array.isArray(snapshot?.windowSnapshot)
+      ? snapshot.windowSnapshot.find((row) => row?.名称 === '主限制 - 7天窗口')
+      : null;
+
+    return JSON.stringify({
+      capturedAt: snapshot?.capturedAt || '',
+      sinceResetStart: sinceReset.startDate || '',
+      sinceResetEnd: sinceReset.endExclusiveDate || '',
+      sinceResetCredits: sinceReset.totalCredits || 0,
+      windowStart: primaryWindow?.本轮开始_UTC || '',
+      windowReset: primaryWindow?.下次重置_UTC || '',
+    });
+  }
+
+  function createQuotaSnapshot({ result, capturedAt, scriptVersion, snapshotId }) {
+    if (!isPlainObject(result)) {
+      throw new Error('Cannot create Quota Snapshot without a result object.');
+    }
+
+    const rollingKey = rollingPeriodKey(result);
+    const sinceReset = result['主7天窗口_上次重置至今'] || {};
+    const monthToDate = result['本月初至今'] || {};
+    const rolling = rollingKey ? (result[rollingKey] || {}) : {};
+    const weeklyEstimate = sinceReset['反推周额度'] || {};
+
+    return normalizeSnapshot({
+      snapshotId,
+      capturedAt,
+      scriptVersion,
+      sourceContext: {
+        dateBucketMode: result?.配置?.日期桶模式 || '',
+        usdPerCredit: result?.配置?.USD_PER_CREDIT ?? null,
+        rollingDays: result?.配置?.ROLLING_DAYS ?? null,
+        browserTimeZone: result?.时区诊断?.浏览器本地时区 || '',
+        apiEndExclusiveDate: result?.时区诊断?.API_end_date_排他 || '',
+      },
+      windowSnapshot: result['限制窗口概览'] || [],
+      periodSummaries: {
+        sinceReset: {
+          periodKey: 'sinceReset',
+          label: sinceReset?.汇总?.范围 || '',
+          startDate: sinceReset?.汇总?.API_start_date || '',
+          endExclusiveDate: sinceReset?.汇总?.API_end_date_排他 || '',
+          totalCredits: sinceReset?.汇总?.累计Credits ?? null,
+          totalUsd: sinceReset?.汇总?.累计折算USD ?? null,
+          returnedBuckets: sinceReset?.汇总?.返回日期桶数 ?? null,
+          usedPercent: weeklyEstimate?.已用百分比 ?? null,
+        },
+        monthToDate: {
+          periodKey: 'monthToDate',
+          label: monthToDate?.汇总?.范围 || '',
+          startDate: monthToDate?.汇总?.API_start_date || '',
+          endExclusiveDate: monthToDate?.汇总?.API_end_date_排他 || '',
+          totalCredits: monthToDate?.汇总?.累计Credits ?? null,
+          totalUsd: monthToDate?.汇总?.累计折算USD ?? null,
+          returnedBuckets: monthToDate?.汇总?.返回日期桶数 ?? null,
+        },
+        rolling: {
+          periodKey: 'rolling',
+          label: rolling?.汇总?.范围 || rollingKey,
+          periodName: rollingKey,
+          startDate: rolling?.汇总?.API_start_date || '',
+          endExclusiveDate: rolling?.汇总?.API_end_date_排他 || '',
+          totalCredits: rolling?.汇总?.累计Credits ?? null,
+          totalUsd: rolling?.汇总?.累计折算USD ?? null,
+          returnedBuckets: rolling?.汇总?.返回日期桶数 ?? null,
+        },
+      },
+      periodDetails: {
+        sinceReset: {
+          dailyBuckets: sinceReset['每日明细'] || [],
+          clientSummaries: sinceReset['客户端汇总'] || [],
+          weeklyEstimate,
+        },
+        monthToDate: {
+          dailyBuckets: monthToDate['每日明细'] || [],
+          clientSummaries: monthToDate['客户端汇总'] || [],
+        },
+        rolling: {
+          periodName: rollingKey,
+          dailyBuckets: rolling['每日明细'] || [],
+          clientSummaries: rolling['客户端汇总'] || [],
+        },
+      },
+    });
+  }
+
+  function mergeSnapshots(currentArchive, incomingSnapshots) {
+    const archive = normalizeSnapshotArchive(currentArchive);
+    const existingIds = new Set(
+      archive.snapshots.map((snapshot) => snapshot.snapshotId).filter(Boolean),
+    );
+    const existingFallbackKeys = new Set(
+      archive.snapshots.filter((snapshot) => !snapshot.snapshotId).map(snapshotFallbackKey),
+    );
+
+    const nextSnapshots = archive.snapshots.slice();
+    let added = 0;
+    let skipped = 0;
+    let invalid = 0;
+
+    for (const entry of incomingSnapshots) {
+      const snapshot = normalizeSnapshot(entry);
+      if (!snapshot) {
+        invalid += 1;
+        continue;
+      }
+
+      if (snapshot.snapshotId) {
+        if (existingIds.has(snapshot.snapshotId)) {
+          skipped += 1;
+          continue;
+        }
+
+        existingIds.add(snapshot.snapshotId);
+      } else {
+        const fallbackKey = snapshotFallbackKey(snapshot);
+        if (existingFallbackKeys.has(fallbackKey)) {
+          skipped += 1;
+          continue;
+        }
+
+        existingFallbackKeys.add(fallbackKey);
+      }
+
+      nextSnapshots.push(snapshot);
+      added += 1;
+    }
+
+    return {
+      archive: {
+        schemaVersion: ARCHIVE_SCHEMA_VERSION,
+        createdAt: archive.createdAt,
+        updatedAt: archive.updatedAt,
+        snapshots: sortSnapshotsByCaptureTime(nextSnapshots),
+      },
+      report: { added, skipped, invalid },
+    };
+  }
+
+  function buildSnapshotExportDocument(archive, exportedAt) {
+    const normalized = normalizeSnapshotArchive(archive);
+
+    return {
+      format: EXPORT_FORMAT,
+      version: EXPORT_VERSION,
+      exportedAt,
+      snapshotCount: normalized.snapshots.length,
+      snapshots: normalized.snapshots.map((snapshot) => sanitizeValue(snapshot)),
+    };
+  }
+
+  function createSnapshotArchiveStore({
+    read,
+    write,
+    now = () => new Date().toISOString(),
+    createId = () => (globalObject.crypto?.randomUUID ? globalObject.crypto.randomUUID() : `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
+    scriptVersion = '',
+  }) {
+    if (typeof read !== 'function' || typeof write !== 'function') {
+      throw new Error('Snapshot Archive store requires read and write functions.');
+    }
+
+    async function loadArchive() {
+      return normalizeSnapshotArchive(await read());
+    }
+
+    async function writeArchive(archive) {
+      const normalized = normalizeSnapshotArchive(archive);
+      if (!normalized.createdAt) {
+        normalized.createdAt = now();
+      }
+      normalized.updatedAt = now();
+      await write(normalized);
+      return normalized;
+    }
+
+    return {
+      async loadArchive() {
+        return loadArchive();
+      },
+
+      async saveSnapshot(result, options = {}) {
+        const archive = await loadArchive();
+        const capturedAt = options.capturedAt || now();
+        const snapshot = createQuotaSnapshot({
+          result,
+          capturedAt,
+          scriptVersion,
+          snapshotId: options.snapshotId || createId(),
+        });
+        const merged = mergeSnapshots(archive, [snapshot]);
+        const nextArchive = await writeArchive(merged.archive);
+
+        return {
+          archive: nextArchive,
+          snapshot,
+          report: merged.report,
+          summary: summarizeSnapshotArchive(nextArchive),
+        };
+      },
+
+      async buildExportDocument() {
+        return buildSnapshotExportDocument(await loadArchive(), now());
+      },
+
+      async importArchiveDocument(documentObject) {
+        if (!isPlainObject(documentObject) || documentObject.format !== EXPORT_FORMAT || documentObject.version !== EXPORT_VERSION) {
+          throw new Error('Unsupported Snapshot Export document.');
+        }
+
+        const merged = mergeSnapshots(await loadArchive(), Array.isArray(documentObject.snapshots) ? documentObject.snapshots : []);
+        const nextArchive = await writeArchive(merged.archive);
+
+        return {
+          archive: nextArchive,
+          summary: summarizeSnapshotArchive(nextArchive),
+          report: merged.report,
+        };
+      },
+
+      async summarizeArchive() {
+        return summarizeSnapshotArchive(await loadArchive());
+      },
+    };
+  }
+
+  globalObject[LIB_NAME] = Object.freeze({
+    ARCHIVE_SCHEMA_VERSION,
+    EXPORT_FORMAT,
+    EXPORT_VERSION,
+    createQuotaSnapshot,
+    normalizeSnapshotArchive,
+    summarizeSnapshotArchive,
+    buildSnapshotExportDocument,
+    mergeSnapshots,
+    createSnapshotArchiveStore,
+  });
+})(typeof globalThis !== 'undefined' ? globalThis : this);
