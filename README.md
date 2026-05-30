@@ -95,6 +95,26 @@ rtk node scripts/feishu-export-image.mjs \
 - 优先用 `GM_download` 下载
 - 下载文件名默认取当前飞书文档标题
 
+## Codex Quota Compass userscript
+
+如果你要在 `chatgpt.com` 上查看 Codex 用量，并长期记录每个周期、每个月的额度数据，可以安装：
+
+- [src/codex-quota-compass.user.js](/home/ubuntu/workspace/custom-user-js-scripts/src/codex-quota-compass.user.js)
+
+当前能力：
+
+- 在 `https://chatgpt.com/*` 页面运行，通过悬浮按钮或菜单命令计算当前额度
+- 每次成功运行后，自动保存一条本地 `Quota Snapshot`
+- 面板里显示归档概况和最近若干条快照
+- 支持从面板导出整个归档
+- 支持从 userscript 菜单导出 / 导入版本化 JSON 归档，用于多端手动同步
+
+说明：
+
+- 长期归档优先使用 userscript manager 存储，运行环境不支持时回退到页面 `localStorage`
+- 导入是 `merge` 语义，不会覆盖本地已有归档
+- 首版只支持完整 JSON 归档导出 / 导入，不支持 CSV 和按范围导出
+
 ## 开发约定
 
 - 每个用户脚本使用 `.user.js` 后缀。

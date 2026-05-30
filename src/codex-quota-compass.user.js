@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.3
+// @version      0.1.4
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
@@ -25,7 +25,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.1.3';
+  const SCRIPT_VERSION = '0.1.4';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
   const SNAPSHOT_ARCHIVE_KEY = 'codexQuotaCompassSnapshotArchive';
   const SNAPSHOT_ARCHIVE_FALLBACK_KEY = 'codexQuotaCompassSnapshotArchiveFallback';
