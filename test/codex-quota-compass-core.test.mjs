@@ -67,3 +67,24 @@ test('createSnapshotSyncPort routes save/export/import through archive store sea
   assert.deepEqual(calls, ['save', 'export', 'import']);
 });
 
+test('createSnapshotSyncPort routes queryUsage and validates store availability', async () => {
+  const calls = [];
+  const port = createSnapshotSyncPort({
+    archiveStore: {
+      queryArchiveUsage: async (input) => {
+        calls.push(input.mode);
+        return { mode: input.mode, rows: [], summary: { totalCredits: 0 } };
+      },
+    },
+  });
+
+  const day = await port.queryUsage({ mode: 'day', startDate: '2026-05-01', endDate: '2026-05-02' });
+  assert.equal(day.mode, 'day');
+  assert.deepEqual(calls, ['day']);
+
+  const unavailablePort = createSnapshotSyncPort({ archiveStore: null });
+  await assert.rejects(
+    () => unavailablePort.queryUsage({ mode: 'day', startDate: '2026-05-01', endDate: '2026-05-02' }),
+    /Snapshot Archive library is unavailable/,
+  );
+});

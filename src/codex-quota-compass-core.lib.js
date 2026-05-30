@@ -66,11 +66,22 @@
       return archiveStore.importArchiveDocument(documentObject);
     }
 
+    async function queryUsage(query) {
+      if (!archiveStore) {
+        throw new Error('Snapshot Archive library is unavailable.');
+      }
+      if (typeof archiveStore.queryArchiveUsage !== 'function') {
+        throw new Error('Snapshot Archive query interface is unavailable.');
+      }
+      return archiveStore.queryArchiveUsage(query || {});
+    }
+
     return {
       summarize,
       saveLatestResult,
       exportArchive,
       importArchiveDocument,
+      queryUsage,
     };
   }
 
@@ -80,4 +91,3 @@
     createSnapshotSyncPort,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
-

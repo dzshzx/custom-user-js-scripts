@@ -259,6 +259,87 @@
     };
   }
 
+  function toNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function sumRows(rows) {
+    return rows.reduce((acc, row) => {
+      acc.totalCredits += toNumber(row?.credits ?? row?.Credits);
+      acc.totalUsd += toNumber(row?.usd ?? row?.折算USD);
+      return acc;
+    }, { totalCredits: 0, totalUsd: 0 });
+  }
+
+  function queryArchiveUsage(archive, query = {}) {
+    const normalized = normalizeSnapshotArchive(archive);
+    const latest = normalized.snapshots[normalized.snapshots.length - 1];
+    if (!latest) {
+      return { mode: query.mode || 'day', rows: [], summary: { totalCredits: 0, totalUsd: 0 } };
+    }
+
+    const mode = query.mode || 'day';
+    if (mode === 'rolling') {
+      const rolling = latest.periodSummaries?.rolling || {};
+      return {
+        mode,
+        rows: [],
+        summary: {
+          periodDays: Number(query.periodDays) || null,
+          totalCredits: toNumber(rolling.totalCredits),
+          totalUsd: toNumber(rolling.totalUsd),
+          startDate: rolling.startDate || '',
+          endDateExclusive: rolling.endExclusiveDate || '',
+        },
+      };
+    }
+
+    if (mode === 'month') {
+      const month = latest.periodSummaries?.monthToDate || {};
+      return {
+        mode,
+        rows: [],
+        summary: {
+          totalCredits: toNumber(month.totalCredits),
+          totalUsd: toNumber(month.totalUsd),
+          startDate: month.startDate || '',
+          endDateExclusive: month.endExclusiveDate || '',
+        },
+      };
+    }
+
+    const dayRows = Array.isArray(latest.periodDetails?.sinceReset?.dailyBuckets)
+      ? latest.periodDetails.sinceReset.dailyBuckets
+      : [];
+    const startDate = query.startDate || '';
+    const endDate = query.endDate || '';
+    const filtered = dayRows
+      .filter((row) => {
+        const date = String(row?.日期桶 || '');
+        if (!date) return false;
+        if (startDate && date < startDate) return false;
+        if (endDate && date >= endDate) return false;
+        return true;
+      })
+      .map((row) => ({
+        date: row?.日期桶 || '',
+        credits: toNumber(row?.Credits),
+        usd: toNumber(row?.折算USD),
+      }));
+
+    const summary = sumRows(filtered);
+    return {
+      mode: 'day',
+      rows: filtered,
+      summary: {
+        ...summary,
+        startDate: startDate || null,
+        endDateExclusive: endDate || null,
+      },
+    };
+  }
+
   function createSnapshotArchiveStore({
     read,
     write,
@@ -331,6 +412,10 @@
       async summarizeArchive() {
         return summarizeSnapshotArchive(await loadArchive());
       },
+
+      async queryArchiveUsage(query) {
+        return queryArchiveUsage(await loadArchive(), query);
+      },
     };
   }
 
@@ -341,6 +426,7 @@
     createQuotaSnapshot,
     normalizeSnapshotArchive,
     summarizeSnapshotArchive,
+    queryArchiveUsage,
     buildSnapshotExportDocument,
     mergeSnapshots,
     createSnapshotArchiveStore,

@@ -154,3 +154,33 @@ test('normalizeSnapshotArchive upgrades a legacy snapshot array into the Snapsho
   assert.equal(archive.snapshots.length, 1);
   assert.equal(archive.snapshots[0].capturedAt, '2026-05-30T10:00:00.000Z');
 });
+
+test('queryArchiveUsage returns day rows and period summary from stored snapshots', async () => {
+  const storage = createMemoryStore();
+  const store = createSnapshotArchiveStore({
+    read: storage.read,
+    write: storage.write,
+    now: () => '2026-05-30T10:00:00.000Z',
+    createId: () => 'snapshot-1',
+    scriptVersion: '0.1.6',
+  });
+
+  await store.saveSnapshot(createFixtureResult());
+  const dayQuery = await store.queryArchiveUsage({
+    mode: 'day',
+    startDate: '2026-05-30',
+    endDate: '2026-05-31',
+  });
+  const rollingQuery = await store.queryArchiveUsage({
+    mode: 'rolling',
+    periodDays: 30,
+  });
+
+  assert.equal(dayQuery.mode, 'day');
+  assert.equal(dayQuery.rows.length, 1);
+  assert.equal(dayQuery.rows[0].date, '2026-05-30');
+  assert.equal(dayQuery.summary.totalCredits, 10.5);
+  assert.equal(rollingQuery.mode, 'rolling');
+  assert.equal(rollingQuery.summary.periodDays, 30);
+  assert.equal(rollingQuery.summary.totalCredits, 777.7);
+});

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.5
+// @version      0.1.6
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
@@ -26,7 +26,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.1.5';
+  const SCRIPT_VERSION = '0.1.6';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
   const SNAPSHOT_ARCHIVE_KEY = 'codexQuotaCompassSnapshotArchive';
   const SNAPSHOT_ARCHIVE_FALLBACK_KEY = 'codexQuotaCompassSnapshotArchiveFallback';
@@ -48,8 +48,10 @@
   let contentNode;
   let isPanelOpen = false;
   let isDetailsOpen = false;
+  let activePanelView = 'overview';
   let latestError;
   let latestResult = null;
+  let latestHistoryUsage = null;
   let latestArchiveSummary = null;
   let latestImportReport = null;
   let pendingRunPromise = null;
@@ -444,6 +446,48 @@
     `;
   }
 
+  function panelTabsHtml() {
+    const tabs = [
+      { id: 'overview', label: '概览' },
+      { id: 'history', label: '历史' },
+      { id: 'details', label: '详情' },
+      { id: 'transfer', label: '同步' },
+    ];
+    return `
+      <div class="cqc-tabs">
+        ${tabs.map((tab) => `
+          <button
+            type="button"
+            class="cqc-tab${activePanelView === tab.id ? ' is-active' : ''}"
+            data-action="switch-view"
+            data-view="${tab.id}"
+          >${escapeHtml(tab.label)}</button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function historyViewHtml() {
+    const dayRows = latestHistoryUsage?.day?.rows || [];
+    const daySummary = latestHistoryUsage?.day?.summary || {};
+    const rollingSummary = latestHistoryUsage?.rolling?.summary || {};
+    const monthSummary = latestHistoryUsage?.month?.summary || {};
+    return `
+      ${sectionHtml('按日查询', tableHtml(dayRows.map((row) => ({
+        日期桶: row.date,
+        Credits: row.credits,
+        折算USD: row.usd,
+      })), { columns: ['日期桶', 'Credits', '折算USD'] }))}
+      ${sectionHtml('周期汇总', tableHtml([{
+        近30天Credits: rollingSummary.totalCredits,
+        近30天USD: rollingSummary.totalUsd,
+        本月Credits: monthSummary.totalCredits,
+        本月USD: monthSummary.totalUsd,
+        日查询Credits: daySummary.totalCredits,
+      }], { columns: ['近30天Credits', '近30天USD', '本月Credits', '本月USD', '日查询Credits'] }))}
+    `;
+  }
+
   function renderResult(result) {
     if (!contentNode) return;
 
@@ -459,24 +503,11 @@
       (row) => row?.名称 === '主限制 - 7天窗口',
     );
 
-    contentNode.innerHTML = `
-      <div class="cqc-metrics">
-        ${creditMetricHtml('剩余 USD · 含重置日', weekly.剩余USD_包含重置日口径, weekly.剩余Credits_包含重置日口径)}
-        ${creditMetricHtml('剩余 USD · 排除重置日', weekly.剩余USD_排除重置日口径, weekly.剩余Credits_排除重置日口径)}
-        ${creditMetricHtml('周总额度 · 含重置日', weekly.反推周总USD_包含重置日, weekly.反推周总Credits_包含重置日)}
-        ${creditMetricHtml('周总额度 · 排除重置日', weekly.反推周总USD_排除重置日, weekly.反推周总Credits_排除重置日)}
-        ${metricHtml('7 天已用', weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-', 'secondary_window')}
-        ${metricHtml('上次重置至今', usdMetricValue(sinceReset.累计折算USD), creditsMetricHint(sinceReset.累计Credits))}
-        ${metricHtml('本月累计', usdMetricValue(month.累计折算USD), creditsMetricHint(month.累计Credits))}
-        ${resetMetricHtml(mainSevenDayWindow)}
-      </div>
-
-      ${sectionHtml('归档概况', archiveSummaryHtml())}
-
-      ${
-        isDetailsOpen
-          ? `
-      <div class="cqc-details">
+    let viewBody = '';
+    if (activePanelView === 'history') {
+      viewBody = historyViewHtml();
+    } else if (activePanelView === 'details') {
+      viewBody = `
       ${sectionHtml('周额度估算', tableHtml([weekly], {
         columns: [
           '已用百分比',
@@ -501,23 +532,34 @@
       ${sectionHtml('限制窗口', tableHtml(result?.限制窗口概览, {
         columns: ['名称', '已用百分比', '窗口天数', '本轮开始_本地', '下次重置_本地', '距离重置小时'],
       }))}
+      `;
+    } else if (activePanelView === 'transfer') {
+      viewBody = `
+      ${sectionHtml('归档概况', archiveSummaryHtml())}
+      <div class="cqc-transfer-note">导出与导入能力用于跨设备同步快照归档。</div>
+      `;
+    } else {
+      viewBody = `
+      ${sectionHtml('归档概况', archiveSummaryHtml())}
+      ${isDetailsOpen ? detailFootnoteHtml('hide-details', '收起详情') : detailFootnoteHtml('show-details', '计算详情')}
+      `;
+    }
 
-      ${sectionHtml('上次重置至今每日明细', tableHtml(sinceResetRows, {
-        columns: ['日期桶', '折算USD', 'Credits', '线程数', '轮数', 'Token总量', '客户端Credits'],
-      }))}
-
-      ${sectionHtml('客户端汇总', tableHtml(sinceResetClients, {
-        columns: ['客户端', '折算USD', 'Credits', '线程数', '轮数', 'Token总量'],
-      }))}
-
-      ${sectionHtml(`${rollingKey || '近 N 天'}每日明细`, tableHtml(rollingRows, {
-        columns: ['日期桶', '折算USD', 'Credits', '线程数', '轮数', 'Token总量', '客户端Credits'],
-      }))}
-        ${detailFootnoteHtml('hide-details', '收起详情')}
+    contentNode.innerHTML = `
+      <div class="cqc-metrics">
+        ${creditMetricHtml('剩余 USD · 含重置日', weekly.剩余USD_包含重置日口径, weekly.剩余Credits_包含重置日口径)}
+        ${creditMetricHtml('剩余 USD · 排除重置日', weekly.剩余USD_排除重置日口径, weekly.剩余Credits_排除重置日口径)}
+        ${creditMetricHtml('周总额度 · 含重置日', weekly.反推周总USD_包含重置日, weekly.反推周总Credits_包含重置日)}
+        ${creditMetricHtml('周总额度 · 排除重置日', weekly.反推周总USD_排除重置日, weekly.反推周总Credits_排除重置日)}
+        ${metricHtml('7 天已用', weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-', 'secondary_window')}
+        ${metricHtml('上次重置至今', usdMetricValue(sinceReset.累计折算USD), creditsMetricHint(sinceReset.累计Credits))}
+        ${metricHtml('本月累计', usdMetricValue(month.累计折算USD), creditsMetricHint(month.累计Credits))}
+        ${resetMetricHtml(mainSevenDayWindow)}
       </div>
-      `
-          : detailFootnoteHtml('show-details', '计算详情')
-      }
+      ${panelTabsHtml()}
+      <div class="cqc-details">
+        ${viewBody}
+      </div>
     `;
     schedulePanelResize();
   }
@@ -750,6 +792,14 @@
 
     try {
       const result = await runAndReport({ silentAlert: true });
+      const sinceResetSummary = result?.主7天窗口_上次重置至今?.汇总 || {};
+      if (syncPort?.queryUsage) {
+        latestHistoryUsage = {
+          day: await syncPort.queryUsage({ mode: 'day', startDate: sinceResetSummary?.API_start_date, endDate: sinceResetSummary?.API_end_date_排他 }),
+          rolling: await syncPort.queryUsage({ mode: 'rolling', periodDays: result?.配置?.ROLLING_DAYS }),
+          month: await syncPort.queryUsage({ mode: 'month' }),
+        };
+      }
       isDetailsOpen = false;
       renderResult(result);
       setStatus('已更新', 'success');
@@ -782,13 +832,13 @@
     style.textContent = `
       #${ROOT_ID} {
         color-scheme: light dark;
-        font-family: "Fira Sans", "Segoe UI", sans-serif;
-        --cqc-primary: #1e40af;
-        --cqc-primary-soft: #3b82f6;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        --cqc-primary: #10a37f;
+        --cqc-primary-soft: #34d399;
         --cqc-accent: #f59e0b;
         --cqc-surface: #ffffff;
         --cqc-surface-muted: #f8fafc;
-        --cqc-text: #1e3a8a;
+        --cqc-text: #202123;
         position: fixed;
         inset: 0;
         z-index: 2147483647;
@@ -938,6 +988,36 @@
 
       .cqc-status[data-tone="loading"] { color: #0f7f67; }
       .cqc-status[data-tone="success"] { color: var(--cqc-primary); }
+
+      .cqc-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 14px 0;
+      }
+
+      .cqc-tab {
+        border: 1px solid rgba(16, 163, 127, 0.22);
+        background: #ffffff;
+        color: #334155;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .cqc-tab.is-active {
+        background: rgba(16, 163, 127, 0.12);
+        border-color: rgba(16, 163, 127, 0.58);
+        color: #0f766e;
+      }
+
+      .cqc-transfer-note {
+        margin-top: 8px;
+        color: #64748b;
+        font-size: 12px;
+      }
       .cqc-status[data-tone="error"] { color: #d92d20; }
 
       .cqc-panel {
@@ -1476,6 +1556,15 @@
 
       if (action === 'refresh') {
         runAndRender().catch(() => {});
+        return;
+      }
+
+      if (action === 'switch-view' && latestResult) {
+        const nextView = event.target?.closest?.('[data-view]')?.dataset?.view;
+        if (nextView) {
+          activePanelView = nextView;
+          renderResult(latestResult);
+        }
         return;
       }
 
