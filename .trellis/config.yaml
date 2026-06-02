@@ -93,16 +93,18 @@ max_journal_lines: 2000
 #
 channel:
   worker_guard:
-    idle_timeout: 10m
-    max_live_workers: 4
+    idle_timeout: 5m
+    max_live_workers: 6
 
 #-------------------------------------------------------------------------------
 # Codex (dispatch behavior)
 #-------------------------------------------------------------------------------
-# Codex-only knob; other platforms ignore it. Default ("inline") keeps the
-# main Codex session in charge and uses the native inline workflow path:
-# `trellis-before-dev` -> edit -> `trellis-check`. Set to "sub-agent" only
-# when a task explicitly requires the legacy Codex trellis-* sub-agent split.
+# Codex-only knob; other platforms ignore it. Default ("inline") makes the
+# main Codex agent edit code directly because Codex sub-agents run with
+# `fork_turns="none"` isolation and can't inherit the parent session's
+# task context. Set to "sub-agent" to opt into the legacy dispatch model
+# (main agent spawns trellis-implement / trellis-check / trellis-research
+# sub-agents).
 #
 codex:
   dispatch_mode: inline
