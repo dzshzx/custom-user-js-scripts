@@ -1,6 +1,5 @@
 # Codex Global Instructions
 
-@/home/ubuntu/.codex/RTK.md
 @/home/ubuntu/.codex/INSTRUCTION.md
 @/home/ubuntu/.codex/HUMANIZER_ZH.md
 

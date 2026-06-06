@@ -33,13 +33,13 @@ npm run lint
 首次使用前，先确保 Playwright 在本机 npm 缓存里可用：
 
 ```bash
-rtk npx --yes playwright --version
+npx --yes playwright --version
 ```
 
 然后运行：
 
 ```bash
-rtk node scripts/feishu-login-qr.mjs --refresh --tenant "小米合作伙伴"
+node scripts/feishu-login-qr.mjs --refresh --tenant "小米合作伙伴"
 ```
 
 默认行为：
@@ -64,7 +64,7 @@ rtk node scripts/feishu-login-qr.mjs --refresh --tenant "小米合作伙伴"
 如果登录态已经准备好，可以直接把当前飞书文件页里显示的主图导出来：
 
 ```bash
-rtk node scripts/feishu-export-image.mjs \
+node scripts/feishu-export-image.mjs \
   --profile-dir /home/ubuntu/.local/share/codex-browser/feishu-login/replay-profile-20260525-143617
 ```
 
