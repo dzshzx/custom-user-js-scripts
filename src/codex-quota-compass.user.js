@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.8
+// @version      0.1.9
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -30,7 +30,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.1.8';
+  const SCRIPT_VERSION = '0.1.9';
   const DEFAULT_LOCALE = 'zh-CN';
   const I18N_MESSAGES = {
     'zh-CN': {
@@ -74,6 +74,7 @@
       archiveSnapshotId: '快照ID',
       archiveMonthlyCredits: '本月Credits',
       archiveWeeklyUsedPercent: '7天已用百分比',
+      archiveStorageBackend: '存储后端',
       tableNoData: '暂无数据',
       tablePreviewHint: '仅显示前 {visible} 条，共 {total} 条。需要完整调试输出时，先设置 window.{debugKey} = true 后刷新。',
       resetCountdown: '距离重置',
@@ -132,6 +133,7 @@
       archiveSnapshotId: 'Snapshot ID',
       archiveMonthlyCredits: 'Monthly Credits',
       archiveWeeklyUsedPercent: '7-day Used Percent',
+      archiveStorageBackend: 'Storage Backend',
       tableNoData: 'No data',
       tablePreviewHint: 'Showing first {visible} of {total} rows. For full debug output, set window.{debugKey} = true and refresh.',
       resetCountdown: 'Reset in',
@@ -163,6 +165,11 @@
   const PANEL_CLOSE_ANIMATION_MS = PANEL_OPEN_ANIMATION_MS * 2;
   const PANEL_OPEN_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
   const PANEL_CLOSE_EASING = 'cubic-bezier(0.64, 0, 0.78, 0)';
+  const STORAGE_BACKENDS = {
+    pending: { id: 'pending', label: 'pending' },
+    gm: { id: 'gm', label: 'GM storage' },
+    localStorage: { id: 'localStorage', label: 'localStorage' },
+  };
 
   let root;
   let panel;
@@ -175,6 +182,7 @@
   let latestError;
   let latestResult = null;
   let latestHistoryUsage = null;
+  let latestPanelViewModel = null;
   let latestArchiveSummary = null;
   let latestImportReport = null;
   let pendingRunPromise = null;
@@ -183,10 +191,11 @@
   let panelCloseTimer = null;
   const coreLib = globalThis.CodexQuotaCompassCoreLib;
   const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
+  const archiveStoragePort = createSnapshotArchiveStoragePort();
   const archiveStore = archiveLib
     ? archiveLib.createSnapshotArchiveStore({
-      read: readStoredArchive,
-      write: writeStoredArchive,
+      read: archiveStoragePort.read,
+      write: archiveStoragePort.write,
       scriptVersion: SCRIPT_VERSION,
     })
     : null;
@@ -246,8 +255,10 @@
     return Array.isArray(rows) ? rows.slice(0, limit) : [];
   }
 
-  async function readStoredArchive() {
-    try {
+  function createSnapshotArchiveStoragePort() {
+    let backendInfo = STORAGE_BACKENDS.pending;
+
+    async function readFromGmStorage() {
       if (typeof GM_getValue === 'function') {
         return await maybePromise(GM_getValue(SNAPSHOT_ARCHIVE_KEY, null));
       }
@@ -255,20 +266,11 @@
       if (typeof GM !== 'undefined' && typeof GM.getValue === 'function') {
         return await GM.getValue(SNAPSHOT_ARCHIVE_KEY, null);
       }
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to read userscript archive storage.`, error);
+
+      throw new Error('GM storage is unavailable.');
     }
 
-    try {
-      return JSON.parse(localStorage.getItem(SNAPSHOT_ARCHIVE_FALLBACK_KEY) || 'null');
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to read fallback archive storage.`, error);
-      return null;
-    }
-  }
-
-  async function writeStoredArchive(nextArchive) {
-    try {
+    async function writeToGmStorage(nextArchive) {
       if (typeof GM_setValue === 'function') {
         await maybePromise(GM_setValue(SNAPSHOT_ARCHIVE_KEY, nextArchive));
         return nextArchive;
@@ -278,12 +280,58 @@
         await GM.setValue(SNAPSHOT_ARCHIVE_KEY, nextArchive);
         return nextArchive;
       }
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to write userscript archive storage.`, error);
+
+      throw new Error('GM storage is unavailable.');
     }
 
-    localStorage.setItem(SNAPSHOT_ARCHIVE_FALLBACK_KEY, JSON.stringify(nextArchive));
-    return nextArchive;
+    function readFromLocalStorage() {
+      return JSON.parse(localStorage.getItem(SNAPSHOT_ARCHIVE_FALLBACK_KEY) || 'null');
+    }
+
+    function writeToLocalStorage(nextArchive) {
+      localStorage.setItem(SNAPSHOT_ARCHIVE_FALLBACK_KEY, JSON.stringify(nextArchive));
+      return nextArchive;
+    }
+
+    return {
+      async read() {
+        try {
+          const archive = await readFromGmStorage();
+          backendInfo = STORAGE_BACKENDS.gm;
+          return archive;
+        } catch (error) {
+          console.warn(`${SCRIPT_NAME}: failed to read userscript archive storage.`, error);
+        }
+
+        try {
+          const archive = readFromLocalStorage();
+          backendInfo = STORAGE_BACKENDS.localStorage;
+          return archive;
+        } catch (error) {
+          console.warn(`${SCRIPT_NAME}: failed to read fallback archive storage.`, error);
+          backendInfo = STORAGE_BACKENDS.localStorage;
+          return null;
+        }
+      },
+
+      async write(nextArchive) {
+        try {
+          await writeToGmStorage(nextArchive);
+          backendInfo = STORAGE_BACKENDS.gm;
+          return nextArchive;
+        } catch (error) {
+          console.warn(`${SCRIPT_NAME}: failed to write userscript archive storage.`, error);
+        }
+
+        writeToLocalStorage(nextArchive);
+        backendInfo = STORAGE_BACKENDS.localStorage;
+        return nextArchive;
+      },
+
+      getBackendInfo() {
+        return backendInfo;
+      },
+    };
   }
 
   async function refreshArchiveSummary() {
@@ -300,6 +348,7 @@
         earliestCapturedAt: null,
         latestCapturedAt: null,
         recentSnapshots: [],
+        storageBackend: archiveStoragePort.getBackendInfo(),
         importReport,
       };
     }
@@ -309,6 +358,7 @@
       snapshotCount: summary.snapshotCount,
       earliestCapturedAt: summary.earliestCapturedAt || null,
       latestCapturedAt: summary.latestCapturedAt || null,
+      storageBackend: archiveStoragePort.getBackendInfo(),
       recentSnapshots: safeRows(summary.recentSnapshots || [], 5).map((row) => ({
         capturedAt: row?.capturedAt || '-',
         snapshotId: row?.snapshotId || 'legacy',
@@ -333,6 +383,7 @@
       t('archiveSnapshotCount'),
       t('archiveEarliestCapturedAt'),
       t('archiveLatestCapturedAt'),
+      t('archiveStorageBackend'),
     ];
     const recentColumns = [
       t('archiveCapturedAt'),
@@ -345,6 +396,7 @@
         [overviewColumns[0]]: model.snapshotCount,
         [overviewColumns[1]]: model.earliestCapturedAt || '-',
         [overviewColumns[2]]: model.latestCapturedAt || '-',
+        [overviewColumns[3]]: model.storageBackend?.label || '-',
       },
     ], {
       columns: overviewColumns,
@@ -656,11 +708,11 @@
     `;
   }
 
-  function historyViewHtml() {
-    const dayRows = latestHistoryUsage?.day?.rows || [];
-    const daySummary = latestHistoryUsage?.day?.summary || {};
-    const rollingSummary = latestHistoryUsage?.rolling?.summary || {};
-    const monthSummary = latestHistoryUsage?.month?.summary || {};
+  function historyViewHtml(model = latestPanelViewModel) {
+    const dayRows = model?.history?.dayRows || [];
+    const daySummary = model?.history?.daySummary || {};
+    const rollingSummary = model?.history?.rollingSummary || {};
+    const monthSummary = model?.history?.monthSummary || {};
     return `
       ${sectionHtml(t('sectionDailyQuery'), tableHtml(dayRows.map((row) => ({
         日期桶: row.date,
@@ -677,31 +729,38 @@
     `;
   }
 
-  function archiveViewHtml() {
+  function archiveViewHtml(model = latestPanelViewModel) {
     return `
-      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml())}
+      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(model?.archive))}
       <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
     `;
   }
 
   function renderResult(result) {
     if (!contentNode) return;
+    if (!coreLib?.createQuotaPanelViewModel) {
+      throw new Error('CodexQuotaCompassCoreLib panel view model is unavailable.');
+    }
 
-    const weekly = result?.主7天窗口_上次重置至今?.反推周额度 || {};
-    const sinceReset = result?.主7天窗口_上次重置至今?.汇总 || {};
-    const month = result?.本月初至今?.汇总 || {};
-    const rollingKey = Object.keys(result || {}).find((key) => key.startsWith('近'));
-    const rolling = rollingKey ? result?.[rollingKey]?.汇总 : {};
-    const rollingRows = rollingKey ? result?.[rollingKey]?.每日明细 : [];
-    const sinceResetRows = result?.主7天窗口_上次重置至今?.每日明细 || [];
-    const sinceResetClients = result?.主7天窗口_上次重置至今?.客户端汇总 || [];
-    const mainSevenDayWindow = (result?.限制窗口概览 || []).find(
-      (row) => row?.名称 === '主限制 - 7天窗口',
-    );
+    const viewModel = coreLib.createQuotaPanelViewModel({
+      result,
+      historyUsage: latestHistoryUsage,
+      archiveSummary: latestArchiveSummary,
+      importReport: latestImportReport,
+      storageBackend: archiveStoragePort.getBackendInfo(),
+    });
+    latestPanelViewModel = viewModel;
+    const {
+      weekly,
+      sinceReset,
+      month,
+      rolling,
+      mainSevenDayWindow,
+    } = viewModel;
 
     let viewBody = '';
     if (activePanelView === 'history') {
-      viewBody = historyViewHtml();
+      viewBody = historyViewHtml(viewModel);
     } else if (activePanelView === 'details') {
       viewBody = `
       ${sectionHtml(t('sectionWeeklyEstimate'), tableHtml([weekly], {
@@ -730,7 +789,7 @@
       }))}
       `;
     } else if (activePanelView === 'archive') {
-      viewBody = archiveViewHtml();
+      viewBody = archiveViewHtml(viewModel);
     } else if (activePanelView === 'transfer') {
       viewBody = `
       <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
@@ -989,12 +1048,12 @@
     try {
       const result = await runAndReport({ silentAlert: true });
       const sinceResetSummary = result?.主7天窗口_上次重置至今?.汇总 || {};
-      if (syncPort?.queryUsage) {
-        latestHistoryUsage = {
-          day: await syncPort.queryUsage({ mode: 'day', startDate: sinceResetSummary?.API_start_date, endDate: sinceResetSummary?.API_end_date_排他 }),
-          rolling: await syncPort.queryUsage({ mode: 'rolling', periodDays: result?.配置?.ROLLING_DAYS }),
-          month: await syncPort.queryUsage({ mode: 'month' }),
-        };
+      if (syncPort?.queryHistory) {
+        latestHistoryUsage = await syncPort.queryHistory({
+          startDate: sinceResetSummary?.API_start_date,
+          endDate: sinceResetSummary?.API_end_date_排他,
+          periodDays: result?.配置?.ROLLING_DAYS,
+        });
       }
       isDetailsOpen = false;
       renderResult(result);
@@ -1853,77 +1912,6 @@
         throw new Error('请在 chatgpt.com 页面运行，例如 Codex Usage / Analytics 页面。');
       }
 
-      // ============================================================
-      // 基础工具
-      // ============================================================
-
-      const DAY_MS = 24 * 60 * 60 * 1000;
-      const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-      const round = (v, d = 2) => Number(Number(v).toFixed(d));
-      const pad2 = (x) => String(x).padStart(2, '0');
-      const last = (arr) => (arr.length ? arr[arr.length - 1] : undefined);
-
-      const fmtLocal = (ms) => new Date(ms).toLocaleString();
-      const fmtUTC = (ms) =>
-        new Date(ms).toISOString().replace('T', ' ').replace('.000Z', ' UTC');
-
-      const ymdUTC = (x) => {
-        const d = new Date(x);
-        return [
-          d.getUTCFullYear(),
-          pad2(d.getUTCMonth() + 1),
-          pad2(d.getUTCDate()),
-        ].join('-');
-      };
-
-      const ymdLocal = (x) => {
-        const d = new Date(x);
-        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-        return d.toISOString().slice(0, 10);
-      };
-
-      const ymdForApi = (ms) =>
-        CONFIG.DATE_BUCKET_MODE === 'utc' ? ymdUTC(ms) : ymdLocal(ms);
-
-      const addDaysLocalMs = (ms, days) => {
-        const d = new Date(ms);
-        d.setDate(d.getDate() + days);
-        return d.getTime();
-      };
-
-      const addDaysForApi = (ms, days) =>
-        CONFIG.DATE_BUCKET_MODE === 'utc'
-          ? ms + days * DAY_MS
-          : addDaysLocalMs(ms, days);
-
-      const firstDayOfMonthUTC = (ms) => {
-        const d = new Date(ms);
-        return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-01`;
-      };
-
-      const firstDayOfMonthLocal = (ms) => {
-        const d = new Date(ms);
-        return ymdLocal(new Date(d.getFullYear(), d.getMonth(), 1).getTime());
-      };
-
-      const firstDayOfMonthForApi = (ms) =>
-        CONFIG.DATE_BUCKET_MODE === 'utc'
-          ? firstDayOfMonthUTC(ms)
-          : firstDayOfMonthLocal(ms);
-
-      const utcOffsetLabel = (ms) => {
-        const offsetMinutes = -new Date(ms).getTimezoneOffset();
-        const sign = offsetMinutes >= 0 ? '+' : '-';
-        const abs = Math.abs(offsetMinutes);
-        return `UTC${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
-      };
-
-      const tokenTotal = (obj = {}) =>
-        n(obj.text_total_tokens) ||
-        n(obj.cached_text_input_tokens) +
-          n(obj.uncached_text_input_tokens) +
-          n(obj.text_output_tokens);
-
       const stripBearer = (s) =>
         String(s || '')
           .replace(/^Bearer\s+/i, '')
@@ -2020,503 +2008,28 @@
         return res.json();
       }
 
-      // ============================================================
-      // /usage 解析：刷新周期、重置时间、已用百分比
-      // ============================================================
-
-      function parseWindow(label, w) {
-        const usedPercent = n(w?.used_percent);
-        const windowSeconds = n(w?.limit_window_seconds);
-        const resetAfterSeconds = n(w?.reset_after_seconds);
-        const resetAtSeconds = n(w?.reset_at);
-
-        const resetAtMs = resetAtSeconds * 1000;
-        const windowStartMs = resetAtMs - windowSeconds * 1000;
-        const serverNowMs = resetAtMs - resetAfterSeconds * 1000;
-
-        return {
-          名称: label,
-          已用百分比: usedPercent,
-          已用比例小数: round(usedPercent / 100, 4),
-          窗口秒数: windowSeconds,
-          窗口天数: round(windowSeconds / 86400, 4),
-          本轮开始_UTC: fmtUTC(windowStartMs),
-          本轮开始_本地: fmtLocal(windowStartMs),
-          下次重置_UTC: fmtUTC(resetAtMs),
-          下次重置_本地: fmtLocal(resetAtMs),
-          后端当前_UTC: fmtUTC(serverNowMs),
-          后端当前_本地: fmtLocal(serverNowMs),
-          距离重置小时: round(resetAfterSeconds / 3600, 2),
-
-          _windowStartMs: windowStartMs,
-          _resetAtMs: resetAtMs,
-          _serverNowMs: serverNowMs,
-        };
+      if (!coreLib?.createQuotaCalculator) {
+        throw new Error('CodexQuotaCompassCoreLib calculator is unavailable.');
       }
 
-      function collectWindows(usage) {
-        const windows = [];
-
-        if (usage?.rate_limit?.primary_window) {
-          windows.push(
-            parseWindow('主限制 - 5小时窗口', usage.rate_limit.primary_window)
-          );
-        }
-
-        if (usage?.rate_limit?.secondary_window) {
-          windows.push(
-            parseWindow('主限制 - 7天窗口', usage.rate_limit.secondary_window)
-          );
-        }
-
-        for (const item of usage?.additional_rate_limits ?? []) {
-          const name = item.limit_name || item.metered_feature || '额外限制';
-
-          if (item?.rate_limit?.primary_window) {
-            windows.push(
-              parseWindow(`${name} - 5小时窗口`, item.rate_limit.primary_window)
-            );
-          }
-
-          if (item?.rate_limit?.secondary_window) {
-            windows.push(
-              parseWindow(`${name} - 7天窗口`, item.rate_limit.secondary_window)
-            );
-          }
-        }
-
-        return windows;
-      }
-
-      // ============================================================
-      // daily-workspace-usage-counts 解析
-      // ============================================================
-
-      function parseDailyRows(json) {
-        return (json.data ?? [])
-          .slice()
-          .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-          .map((d) => {
-            const t = d.totals ?? {};
-            const credits = n(t.credits);
-
-            return {
-              日期桶: d.date,
-              Credits: round(credits, 6),
-              折算USD: round(credits * CONFIG.USD_PER_CREDIT, 2),
-              用户数: n(t.users),
-              线程数: n(t.threads),
-              轮数: n(t.turns),
-              Token总量: tokenTotal(t),
-              缓存输入Token: n(t.cached_text_input_tokens),
-              非缓存输入Token: n(t.uncached_text_input_tokens),
-              输出Token: n(t.text_output_tokens),
-              客户端数量: Array.isArray(d.clients) ? d.clients.length : 0,
-              客户端Credits: (d.clients ?? [])
-                .map((c) => `${c.client_id ?? 'UNKNOWN'}:${round(n(c.credits), 2)}`)
-                .join(' | '),
-            };
-          });
-      }
-
-      function summarizeClients(json) {
-        const map = new Map();
-
-        for (const day of json.data ?? []) {
-          for (const c of day.clients ?? []) {
-            const id = c.client_id ?? 'UNKNOWN';
-            const row = map.get(id) ?? {
-              客户端: id,
-              Credits: 0,
-              折算USD: 0,
-              线程数: 0,
-              轮数: 0,
-              Token总量: 0,
-              缓存输入Token: 0,
-              非缓存输入Token: 0,
-              输出Token: 0,
-            };
-
-            const credits = n(c.credits);
-
-            row.Credits += credits;
-            row.折算USD += credits * CONFIG.USD_PER_CREDIT;
-            row.线程数 += n(c.threads);
-            row.轮数 += n(c.turns);
-            row.Token总量 += tokenTotal(c);
-            row.缓存输入Token += n(c.cached_text_input_tokens);
-            row.非缓存输入Token += n(c.uncached_text_input_tokens);
-            row.输出Token += n(c.text_output_tokens);
-
-            map.set(id, row);
-          }
-        }
-
-        return [...map.values()]
-          .map((r) => ({
-            ...r,
-            Credits: round(r.Credits, 6),
-            折算USD: round(r.折算USD, 2),
-          }))
-          .sort((a, b) => b.Credits - a.Credits);
-      }
-
-      async function fetchDailyUsage(startDate, endExclusiveDate) {
-        const qs = new URLSearchParams({
-          start_date: startDate,
-          end_date: endExclusiveDate,
-          group_by: 'day',
-        });
-
-        const url = `${CONFIG.DAILY_USAGE_PATH}?${qs}`;
-        const json = await apiGet(url);
-
-        return {
-          url: location.origin + url,
-          rows: parseDailyRows(json),
-          clients: summarizeClients(json),
-        };
-      }
-
-      function summarizeRows(rangeName, rows, startDate, endExclusiveDate) {
-        const credits = rows.reduce((s, r) => s + n(r.Credits), 0);
-
-        return {
-          范围: rangeName,
-          日期桶口径:
-            CONFIG.DATE_BUCKET_MODE === 'utc' ? 'UTC日期桶' : '本地日期桶',
-          API_start_date: startDate,
-          API_end_date_排他: endExclusiveDate,
-          返回日期桶数: rows.length,
-          首个返回日期桶: rows[0]?.日期桶 ?? '',
-          最后返回日期桶: last(rows)?.日期桶 ?? '',
-          累计Credits: round(credits, 6),
-          累计折算USD: round(credits * CONFIG.USD_PER_CREDIT, 2),
-          累计Token: rows.reduce((s, r) => s + n(r.Token总量), 0),
-          累计线程数: rows.reduce((s, r) => s + n(r.线程数), 0),
-          累计轮数: rows.reduce((s, r) => s + n(r.轮数), 0),
-        };
-      }
-
-      function publicWindowRow(w) {
-        const { _windowStartMs, _resetAtMs, _serverNowMs, ...visible } = w;
-        return visible;
-      }
-
-      function printTimezoneDiagnostics({
-        apiNowMs,
-        windowStartMs,
-        resetAtMs,
-        sinceResetStartDate,
-        monthStartDate,
-        rollingStartDate,
-        endExclusiveDate,
-      }) {
-        if (!CONFIG.DEBUG) return;
-
-        const browserTimeZone =
-          Intl.DateTimeFormat().resolvedOptions().timeZone || '未知';
-
-        console.log('0）时区诊断：刷新周期与用量日期桶');
-        console.table([
-          { 项目: '浏览器本地时区', 值: browserTimeZone },
-          { 项目: '浏览器UTC偏移', 值: utcOffsetLabel(apiNowMs) },
-          {
-            项目: '当前脚本日期桶模式',
-            值: CONFIG.DATE_BUCKET_MODE === 'utc' ? 'UTC日期桶' : '本地日期桶',
-          },
-          { 项目: '浏览器当前时间_本地', 值: fmtLocal(Date.now()) },
-          { 项目: '浏览器当前时间_UTC', 值: fmtUTC(Date.now()) },
-          { 项目: '后端当前时间_本地', 值: fmtLocal(apiNowMs) },
-          { 项目: '后端当前时间_UTC', 值: fmtUTC(apiNowMs) },
-          {
-            项目: '浏览器时间与后端时间差_秒',
-            值: round((Date.now() - apiNowMs) / 1000, 2),
-          },
-          { 项目: '7天窗口开始_本地', 值: fmtLocal(windowStartMs) },
-          { 项目: '7天窗口开始_UTC', 值: fmtUTC(windowStartMs) },
-          { 项目: '下次重置时间_本地', 值: fmtLocal(resetAtMs) },
-          { 项目: '下次重置时间_UTC', 值: fmtUTC(resetAtMs) },
-          { 项目: '7天窗口开始日期_本地口径', 值: ymdLocal(windowStartMs) },
-          { 项目: '7天窗口开始日期_UTC口径', 值: ymdUTC(windowStartMs) },
-          { 项目: '后端当前日期_本地口径', 值: ymdLocal(apiNowMs) },
-          { 项目: '后端当前日期_UTC口径', 值: ymdUTC(apiNowMs) },
-          { 项目: '本月月初_本地口径', 值: firstDayOfMonthLocal(apiNowMs) },
-          { 项目: '本月月初_UTC口径', 值: firstDayOfMonthUTC(apiNowMs) },
-          { 项目: 'API_start_date_上次重置至今', 值: sinceResetStartDate },
-          { 项目: 'API_start_date_本月初至今', 值: monthStartDate },
-          { 项目: `API_start_date_近${CONFIG.ROLLING_DAYS}天`, 值: rollingStartDate },
-          { 项目: 'API_end_date_排他', 值: endExclusiveDate },
-        ]);
-      }
-
-      function buildWeeklyEstimate({
-        mainSecondary,
-        sinceResetRows,
-        sinceResetSummary,
-        sinceResetStartDate,
-      }) {
-        const usedPercent = n(mainSecondary.已用百分比);
-        const usedRatio = usedPercent / 100;
-        const includedCredits = n(sinceResetSummary.累计Credits);
-
-        const resetDayRow = sinceResetRows.find(
-          (r) => r.日期桶 === sinceResetStartDate
-        );
-
-        const resetDayCredits = n(resetDayRow?.Credits);
-        const excludedCredits = Math.max(0, includedCredits - resetDayCredits);
-
-        if (usedRatio <= 0) {
-          return {
-            依据: '主限制 - 7天窗口 secondary_window',
-            已用百分比: usedPercent,
-            说明: '已用比例为 0，无法反推总额度。',
-          };
-        }
-
-        const totalWithResetDay = includedCredits / usedRatio;
-        const totalWithoutResetDay = excludedCredits / usedRatio;
-
-        const remainingWithResetDay = Math.max(
-          0,
-          totalWithResetDay - includedCredits
-        );
-
-        const remainingWithoutResetDay = Math.max(
-          0,
-          totalWithoutResetDay - excludedCredits
-        );
-
-        return {
-          依据: '主限制 - 7天窗口 secondary_window',
-          已用百分比: usedPercent,
-          已用比例小数: round(usedRatio, 4),
-          剩余比例小数: round(1 - usedRatio, 4),
-          说明:
-            'used_percent 表示已经用掉的比例；例如 45 = 已用 45%，不是剩余 45%。',
-          日期桶口径:
-            CONFIG.DATE_BUCKET_MODE === 'utc' ? 'UTC日期桶' : '本地日期桶',
-
-          包含重置日_已用Credits: round(includedCredits, 6),
-          包含重置日_已用折算USD: round(
-            includedCredits * CONFIG.USD_PER_CREDIT,
-            2
-          ),
-
-          重置日整天Credits: round(resetDayCredits, 6),
-          重置日整天折算USD: round(
-            resetDayCredits * CONFIG.USD_PER_CREDIT,
-            2
-          ),
-
-          排除重置日_已用Credits: round(excludedCredits, 6),
-          排除重置日_已用折算USD: round(
-            excludedCredits * CONFIG.USD_PER_CREDIT,
-            2
-          ),
-
-          反推周总Credits_包含重置日: round(totalWithResetDay, 2),
-          反推周总USD_包含重置日: round(
-            totalWithResetDay * CONFIG.USD_PER_CREDIT,
-            2
-          ),
-
-          反推周总Credits_排除重置日: round(totalWithoutResetDay, 2),
-          反推周总USD_排除重置日: round(
-            totalWithoutResetDay * CONFIG.USD_PER_CREDIT,
-            2
-          ),
-
-          剩余Credits_包含重置日口径: round(remainingWithResetDay, 2),
-          剩余USD_包含重置日口径: round(
-            remainingWithResetDay * CONFIG.USD_PER_CREDIT,
-            2
-          ),
-
-          剩余Credits_排除重置日口径: round(remainingWithoutResetDay, 2),
-          剩余USD_排除重置日口径: round(
-            remainingWithoutResetDay * CONFIG.USD_PER_CREDIT,
-            2
-          ),
-
-          误差说明:
-            'daily analytics 只能按天聚合，不能切到具体小时分钟；实际值通常介于“排除重置日”和“包含重置日”之间。used_percent 也是整数，存在四舍五入或截断误差。',
-        };
-      }
-
-      // ============================================================
-      // 主流程
-      // ============================================================
-
-      const usage = await apiGet(CONFIG.USAGE_PATH);
-      const windows = collectWindows(usage);
-
-      if (!usage?.rate_limit?.secondary_window) {
-        throw new Error(
-          '没有找到 usage.rate_limit.secondary_window，无法反推主 7 天窗口。'
-        );
-      }
-
-      const mainSecondary = parseWindow(
-        '主限制 - 7天窗口',
-        usage.rate_limit.secondary_window
-      );
-
-      const apiNowMs = mainSecondary._serverNowMs || Date.now();
-
-      const apiTodayDate = ymdForApi(apiNowMs);
-
-      // daily-workspace-usage-counts 的 end_date 是排他边界。
-      // 要尽量包含当前日期桶，所以传“后端当前日期 + 1天”。
-      const endExclusiveDate = ymdForApi(addDaysForApi(apiNowMs, 1));
-
-      // 7天窗口：用 UTC 日期桶取 windowStart 所在日期。
-      // 注意：因为接口只能按天，windowStart 当天只能整天纳入。
-      const sinceResetStartDate = ymdForApi(mainSecondary._windowStartMs);
-
-      // 本月初至今：按 DATE_BUCKET_MODE 取月初。
-      const monthStartDate = firstDayOfMonthForApi(apiNowMs);
-
-      // 近 N 天：包含今天，往前 N-1 个日期桶。
-      const rollingStartDate = ymdForApi(
-        addDaysForApi(apiNowMs, -(CONFIG.ROLLING_DAYS - 1))
-      );
-
-      printTimezoneDiagnostics({
-        apiNowMs,
-        windowStartMs: mainSecondary._windowStartMs,
-        resetAtMs: mainSecondary._resetAtMs,
-        sinceResetStartDate,
-        monthStartDate,
-        rollingStartDate,
-        endExclusiveDate,
-      });
-
-      const sinceReset = await fetchDailyUsage(
-        sinceResetStartDate,
-        endExclusiveDate
-      );
-
-      const sinceResetSummary = summarizeRows(
-        `上次重置至今近似 ${sinceResetStartDate} ~ ${apiTodayDate}`,
-        sinceReset.rows,
-        sinceResetStartDate,
-        endExclusiveDate
-      );
-
-      const weeklyEstimate = buildWeeklyEstimate({
-        mainSecondary,
-        sinceResetRows: sinceReset.rows,
-        sinceResetSummary,
-        sinceResetStartDate,
-      });
-
-      const monthToDate = await fetchDailyUsage(monthStartDate, endExclusiveDate);
-
-      const monthToDateSummary = summarizeRows(
-        `本月初至今 ${monthStartDate} ~ ${apiTodayDate}`,
-        monthToDate.rows,
-        monthStartDate,
-        endExclusiveDate
-      );
-
-      const rolling = await fetchDailyUsage(rollingStartDate, endExclusiveDate);
-
-      const rollingSummary = summarizeRows(
-        `近${CONFIG.ROLLING_DAYS}天 ${rollingStartDate} ~ ${apiTodayDate}`,
-        rolling.rows,
-        rollingStartDate,
-        endExclusiveDate
-      );
-
-      // ============================================================
-      // 输出
-      // ============================================================
-
-      if (CONFIG.DEBUG) {
-        console.log('1）限制窗口概览：刷新周期 UTC / 本地对照');
-        console.table(windows.map(publicWindowRow));
-
-        console.log('2）主 7 天窗口：上次重置至今，按 daily analytics 近似');
-        console.log('GET', sinceReset.url);
-        console.table([sinceResetSummary]);
-
-        console.log('3）用 used_percent 反推周额度');
-        console.table([weeklyEstimate]);
-
-        console.log('4）上次重置至今每日明细');
-        console.table(sinceReset.rows);
-
-        console.log('4.1）上次重置至今客户端汇总');
-        console.table(sinceReset.clients);
-
-        console.log('5）本月初至今汇总');
-        console.log('GET', monthToDate.url);
-        console.table([monthToDateSummary]);
-
-        console.log('6）本月初至今日明细');
-        console.table(monthToDate.rows);
-
-        console.log('6.1）本月初至今客户端汇总');
-        console.table(monthToDate.clients);
-
-        console.log(`7）近${CONFIG.ROLLING_DAYS}天汇总`);
-        console.log('GET', rolling.url);
-        console.table([rollingSummary]);
-
-        console.log(`8）近${CONFIG.ROLLING_DAYS}天每日明细`);
-        console.table(rolling.rows);
-
-        console.log(`8.1）近${CONFIG.ROLLING_DAYS}天客户端汇总`);
-        console.table(rolling.clients);
-
-        console.log(
-          '说明：end_date 是排他边界；如果今天没有返回，通常是 daily analytics 尚未刷新或当天暂无统计。'
-        );
-      }
-
-      if (!coreLib?.buildQuotaSnapshotResult) {
-        throw new Error('CodexQuotaCompassCoreLib is unavailable.');
-      }
-
-      return coreLib.buildQuotaSnapshotResult({
+      return coreLib.createQuotaCalculator({
         config: CONFIG,
-        diagnostics: {
-          浏览器本地时区:
-            Intl.DateTimeFormat().resolvedOptions().timeZone || '未知',
-          浏览器UTC偏移: utcOffsetLabel(apiNowMs),
-          后端当前_UTC: fmtUTC(apiNowMs),
-          后端当前_本地: fmtLocal(apiNowMs),
-          七天窗口开始_UTC: fmtUTC(mainSecondary._windowStartMs),
-          七天窗口开始_本地: fmtLocal(mainSecondary._windowStartMs),
-          下次重置_UTC: fmtUTC(mainSecondary._resetAtMs),
-          下次重置_本地: fmtLocal(mainSecondary._resetAtMs),
-          API_start_date_上次重置至今: sinceResetStartDate,
-          API_start_date_本月初至今: monthStartDate,
-          [`API_start_date_近${CONFIG.ROLLING_DAYS}天`]: rollingStartDate,
-          API_end_date_排他: endExclusiveDate,
+        fetchUsage: () => apiGet(CONFIG.USAGE_PATH),
+        fetchDailyUsage: (startDate, endExclusiveDate) => {
+          const query = new URLSearchParams({
+            start_date: startDate,
+            end_date: endExclusiveDate,
+            group_by: 'day',
+          });
+          return apiGet(`${CONFIG.DAILY_USAGE_PATH}?${query}`);
         },
-        windows: windows.map(publicWindowRow),
-        periods: {
-          sinceReset: {
-            summary: sinceResetSummary,
-            weeklyEstimate,
-            rows: sinceReset.rows,
-            clients: sinceReset.clients,
-          },
-          monthToDate: {
-            summary: monthToDateSummary,
-            rows: monthToDate.rows,
-            clients: monthToDate.clients,
-          },
-          rolling: {
-            summary: rollingSummary,
-            rows: rolling.rows,
-            clients: rolling.clients,
-          },
-        },
-      });
+        now: () => Date.now(),
+        formatLocalTime: (ms) => new Date(ms).toLocaleString(),
+        getBrowserTimeZone: () => (
+          Intl.DateTimeFormat().resolvedOptions().timeZone || '未知'
+        ),
+      }).run();
+
     } finally {
       window[RUNNING_KEY] = false;
     }

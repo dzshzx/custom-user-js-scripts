@@ -272,72 +272,109 @@
     }, { totalCredits: 0, totalUsd: 0 });
   }
 
-  function queryArchiveUsage(archive, query = {}) {
+  function createSnapshotArchiveQuery(archive) {
     const normalized = normalizeSnapshotArchive(archive);
     const latest = normalized.snapshots[normalized.snapshots.length - 1];
-    if (!latest) {
-      return { mode: query.mode || 'day', rows: [], summary: { totalCredits: 0, totalUsd: 0 } };
+
+    function emptyUsage(mode = 'day') {
+      return { mode, rows: [], summary: { totalCredits: 0, totalUsd: 0 } };
     }
 
-    const mode = query.mode || 'day';
-    if (mode === 'rolling') {
-      const rolling = latest.periodSummaries?.rolling || {};
+    function periodSummary(periodKey, extra = {}) {
+      if (!latest) return emptyUsage(periodKey);
+      const period = latest.periodSummaries?.[periodKey] || {};
       return {
-        mode,
+        mode: periodKey === 'monthToDate' ? 'month' : periodKey,
         rows: [],
         summary: {
-          periodDays: Number(query.periodDays) || null,
-          totalCredits: toNumber(rolling.totalCredits),
-          totalUsd: toNumber(rolling.totalUsd),
-          startDate: rolling.startDate || '',
-          endDateExclusive: rolling.endExclusiveDate || '',
+          ...extra,
+          totalCredits: toNumber(period.totalCredits),
+          totalUsd: toNumber(period.totalUsd),
+          startDate: period.startDate || '',
+          endDateExclusive: period.endExclusiveDate || '',
         },
       };
     }
 
-    if (mode === 'month') {
-      const month = latest.periodSummaries?.monthToDate || {};
+    function dailyUsageForLatestSinceReset(query = {}) {
+      if (!latest) return emptyUsage('day');
+      const dayRows = Array.isArray(latest.periodDetails?.sinceReset?.dailyBuckets)
+        ? latest.periodDetails.sinceReset.dailyBuckets
+        : [];
+      const startDate = query.startDate || '';
+      const endDate = query.endDate || '';
+      const filtered = dayRows
+        .filter((row) => {
+          const date = String(row?.日期桶 || '');
+          if (!date) return false;
+          if (startDate && date < startDate) return false;
+          if (endDate && date >= endDate) return false;
+          return true;
+        })
+        .map((row) => ({
+          date: row?.日期桶 || '',
+          credits: toNumber(row?.Credits),
+          usd: toNumber(row?.折算USD),
+        }));
+
+      const summary = sumRows(filtered);
       return {
-        mode,
-        rows: [],
+        mode: 'day',
+        rows: filtered,
         summary: {
-          totalCredits: toNumber(month.totalCredits),
-          totalUsd: toNumber(month.totalUsd),
-          startDate: month.startDate || '',
-          endDateExclusive: month.endExclusiveDate || '',
+          ...summary,
+          startDate: startDate || null,
+          endDateExclusive: endDate || null,
         },
       };
     }
 
-    const dayRows = Array.isArray(latest.periodDetails?.sinceReset?.dailyBuckets)
-      ? latest.periodDetails.sinceReset.dailyBuckets
-      : [];
-    const startDate = query.startDate || '';
-    const endDate = query.endDate || '';
-    const filtered = dayRows
-      .filter((row) => {
-        const date = String(row?.日期桶 || '');
-        if (!date) return false;
-        if (startDate && date < startDate) return false;
-        if (endDate && date >= endDate) return false;
-        return true;
-      })
-      .map((row) => ({
-        date: row?.日期桶 || '',
-        credits: toNumber(row?.Credits),
-        usd: toNumber(row?.折算USD),
-      }));
+    function latestPeriodSummaries(query = {}) {
+      return {
+        rolling: periodSummary('rolling', { periodDays: Number(query.periodDays) || null }),
+        month: periodSummary('monthToDate'),
+        sinceReset: periodSummary('sinceReset'),
+      };
+    }
 
-    const summary = sumRows(filtered);
+    function snapshotTimeline(limit = 12) {
+      const count = Math.max(0, Number(limit) || 0);
+      return normalized.snapshots
+        .slice(count ? -count : 0)
+        .reverse()
+        .map((snapshot) => ({
+          snapshotId: snapshot.snapshotId,
+          capturedAt: snapshot.capturedAt,
+          scriptVersion: snapshot.scriptVersion,
+          monthlyCredits: toNumber(snapshot.periodSummaries?.monthToDate?.totalCredits),
+          rollingCredits: toNumber(snapshot.periodSummaries?.rolling?.totalCredits),
+          weeklyUsedPercent: snapshot.periodSummaries?.sinceReset?.usedPercent ?? null,
+        }));
+    }
+
     return {
-      mode: 'day',
-      rows: filtered,
-      summary: {
-        ...summary,
-        startDate: startDate || null,
-        endDateExclusive: endDate || null,
+      dailyUsageForLatestSinceReset,
+      latestPeriodSummaries,
+      snapshotTimeline,
+      queryHistory(query = {}) {
+        const periods = latestPeriodSummaries(query);
+        return {
+          day: dailyUsageForLatestSinceReset(query),
+          rolling: periods.rolling,
+          month: periods.month,
+          sinceReset: periods.sinceReset,
+          timeline: snapshotTimeline(query.timelineLimit ?? 12),
+        };
       },
     };
+  }
+
+  function queryArchiveUsage(archive, query = {}) {
+    const mode = query.mode || 'day';
+    const archiveQuery = createSnapshotArchiveQuery(archive);
+    if (mode === 'rolling') return archiveQuery.latestPeriodSummaries(query).rolling;
+    if (mode === 'month') return archiveQuery.latestPeriodSummaries(query).month;
+    return archiveQuery.dailyUsageForLatestSinceReset(query);
   }
 
   function createSnapshotArchiveStore({
@@ -416,6 +453,10 @@
       async queryArchiveUsage(query) {
         return queryArchiveUsage(await loadArchive(), query);
       },
+
+      async queryHistory(query) {
+        return createSnapshotArchiveQuery(await loadArchive()).queryHistory(query);
+      },
     };
   }
 
@@ -424,6 +465,7 @@
     EXPORT_FORMAT,
     EXPORT_VERSION,
     createQuotaSnapshot,
+    createSnapshotArchiveQuery,
     normalizeSnapshotArchive,
     summarizeSnapshotArchive,
     queryArchiveUsage,

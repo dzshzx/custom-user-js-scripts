@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 await import('../src/codex-quota-compass-archive.lib.js');
 
 const {
+  createSnapshotArchiveQuery,
   createSnapshotArchiveStore,
   normalizeSnapshotArchive,
 } = globalThis.CodexQuotaCompassArchiveLib;
@@ -183,4 +184,43 @@ test('queryArchiveUsage returns day rows and period summary from stored snapshot
   assert.equal(rollingQuery.mode, 'rolling');
   assert.equal(rollingQuery.summary.periodDays, 30);
   assert.equal(rollingQuery.summary.totalCredits, 777.7);
+});
+
+test('queryHistory returns latest period summaries and snapshot timeline', async () => {
+  const storage = createMemoryStore();
+  const ids = ['snapshot-1', 'snapshot-2'];
+  const store = createSnapshotArchiveStore({
+    read: storage.read,
+    write: storage.write,
+    now: () => '2026-05-30T10:00:00.000Z',
+    createId: () => ids.shift(),
+    scriptVersion: '0.1.9',
+  });
+  const older = createFixtureResult();
+  older['本月初至今'].汇总.累计Credits = 100;
+  older['近30天'].汇总.累计Credits = 200;
+  const newer = createFixtureResult();
+  newer['本月初至今'].汇总.累计Credits = 300;
+  newer['近30天'].汇总.累计Credits = 400;
+
+  await store.saveSnapshot(older, { capturedAt: '2026-05-29T10:00:00.000Z' });
+  await store.saveSnapshot(newer, { capturedAt: '2026-05-30T10:00:00.000Z' });
+
+  const history = await store.queryHistory({
+    startDate: '2026-05-30',
+    endDate: '2026-05-31',
+    periodDays: 30,
+    timelineLimit: 2,
+  });
+
+  assert.equal(history.month.summary.totalCredits, 300);
+  assert.equal(history.rolling.summary.totalCredits, 400);
+  assert.equal(history.rolling.summary.periodDays, 30);
+  assert.equal(history.day.rows.length, 1);
+  assert.equal(history.timeline.length, 2);
+  assert.equal(history.timeline[0].snapshotId, 'snapshot-2');
+  assert.equal(history.timeline[1].snapshotId, 'snapshot-1');
+
+  const directQuery = createSnapshotArchiveQuery(storage.dump());
+  assert.equal(directQuery.latestPeriodSummaries().month.summary.totalCredits, 300);
 });
