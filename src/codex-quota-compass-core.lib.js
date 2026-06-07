@@ -2,6 +2,8 @@
   'use strict';
 
   const LIB_NAME = 'CodexQuotaCompassCoreLib';
+  const MAIN_PRIMARY_WINDOW_KEY = 'main.primaryWindow';
+  const MAIN_SEVEN_DAY_WINDOW_KEY = 'main.sevenDayWindow';
 
   function rollingPeriodKey(result) {
     return Object.keys(result || {}).find((key) => /^近\d+天$/.test(key)) || '';
@@ -21,6 +23,10 @@
 
   function lastItem(items) {
     return items.length ? items[items.length - 1] : undefined;
+  }
+
+  function isMainSevenDayWindow(row) {
+    return row?.窗口Key === MAIN_SEVEN_DAY_WINDOW_KEY || row?.名称 === '主限制 - 7天窗口';
   }
 
   function ymdUTC(value) {
@@ -138,7 +144,20 @@
     );
     const fmtUTC = (ms) => new Date(ms).toISOString().replace('T', ' ').replace('.000Z', ' UTC');
 
-    function parseWindow(label, windowRow) {
+    function windowIdentity({
+      key,
+      label,
+      backendField,
+      sourceName = '',
+    }) {
+      return { key, label, backendField, sourceName };
+    }
+
+    function additionalWindowKey(name, suffix) {
+      return `additional.${String(name || 'unknown').trim() || 'unknown'}.${suffix}`;
+    }
+
+    function parseWindow(identity, windowRow) {
       const usedPercent = toNumber(windowRow?.used_percent);
       const windowSeconds = toNumber(windowRow?.limit_window_seconds);
       const resetAfterSeconds = toNumber(windowRow?.reset_after_seconds);
@@ -148,7 +167,10 @@
       const serverNowMs = resetAtMs - resetAfterSeconds * 1000;
 
       return {
-        名称: label,
+        窗口Key: identity.key,
+        名称: identity.label,
+        后端字段: identity.backendField,
+        来源: identity.sourceName,
         已用百分比: usedPercent,
         已用比例小数: roundNumber(usedPercent / 100, 4),
         窗口秒数: windowSeconds,
@@ -169,18 +191,36 @@
     function collectWindows(usage) {
       const windows = [];
       if (usage?.rate_limit?.primary_window) {
-        windows.push(parseWindow('主限制 - 5小时窗口', usage.rate_limit.primary_window));
+        windows.push(parseWindow(windowIdentity({
+          key: MAIN_PRIMARY_WINDOW_KEY,
+          label: '主限制 - 5小时窗口',
+          backendField: 'primary_window',
+        }), usage.rate_limit.primary_window));
       }
       if (usage?.rate_limit?.secondary_window) {
-        windows.push(parseWindow('主限制 - 7天窗口', usage.rate_limit.secondary_window));
+        windows.push(parseWindow(windowIdentity({
+          key: MAIN_SEVEN_DAY_WINDOW_KEY,
+          label: '主限制 - 7天窗口',
+          backendField: 'secondary_window',
+        }), usage.rate_limit.secondary_window));
       }
       for (const item of usage?.additional_rate_limits ?? []) {
         const name = item.limit_name || item.metered_feature || '额外限制';
         if (item?.rate_limit?.primary_window) {
-          windows.push(parseWindow(`${name} - 5小时窗口`, item.rate_limit.primary_window));
+          windows.push(parseWindow(windowIdentity({
+            key: additionalWindowKey(name, 'primaryWindow'),
+            label: `${name} - 5小时窗口`,
+            backendField: 'primary_window',
+            sourceName: name,
+          }), item.rate_limit.primary_window));
         }
         if (item?.rate_limit?.secondary_window) {
-          windows.push(parseWindow(`${name} - 7天窗口`, item.rate_limit.secondary_window));
+          windows.push(parseWindow(windowIdentity({
+            key: additionalWindowKey(name, 'sevenDayWindow'),
+            label: `${name} - 7天窗口`,
+            backendField: 'secondary_window',
+            sourceName: name,
+          }), item.rate_limit.secondary_window));
         }
       }
       return windows;
@@ -300,7 +340,7 @@
 
       if (usedRatio <= 0) {
         return {
-          依据: '主限制 - 7天窗口 secondary_window',
+          依据: '主 7 天窗口',
           已用百分比: usedPercent,
           说明: '已用比例为 0，无法反推总额度。',
         };
@@ -312,7 +352,7 @@
       const remainingWithoutResetDay = Math.max(0, totalWithoutResetDay - excludedCredits);
 
       return {
-        依据: '主限制 - 7天窗口 secondary_window',
+        依据: '主 7 天窗口',
         已用百分比: usedPercent,
         已用比例小数: roundNumber(usedRatio, 4),
         剩余比例小数: roundNumber(1 - usedRatio, 4),
@@ -344,7 +384,11 @@
         throw new Error('没有找到 usage.rate_limit.secondary_window，无法反推主 7 天窗口。');
       }
 
-      const mainSecondary = parseWindow('主限制 - 7天窗口', usage.rate_limit.secondary_window);
+      const mainSecondary = parseWindow(windowIdentity({
+        key: MAIN_SEVEN_DAY_WINDOW_KEY,
+        label: '主限制 - 7天窗口',
+        backendField: 'secondary_window',
+      }), usage.rate_limit.secondary_window);
       const apiNowMs = mainSecondary._serverNowMs || now();
       const apiTodayDate = ymdForApi(apiNowMs);
       const endExclusiveDate = ymdForApi(addDaysForApi(apiNowMs, 1));
@@ -472,11 +516,166 @@
     };
   }
 
+  function dataColumn(key, options = {}) {
+    return {
+      key,
+      label: options.label || key,
+      labelKey: options.labelKey || '',
+      priority: options.priority || 'secondary',
+      truncate: Boolean(options.truncate),
+      wrap: Boolean(options.wrap),
+      compact: options.compact !== false,
+    };
+  }
+
+  function dataView(id, titleKey, rows, columns, options = {}) {
+    return {
+      type: 'dataView',
+      id,
+      titleKey,
+      rows: Array.isArray(rows) ? rows : [],
+      columns,
+      emptyKey: options.emptyKey || 'tableNoData',
+      compactOnMobile: options.compactOnMobile !== false,
+      limit: options.limit,
+    };
+  }
+
+  function createOverviewSections({ weekly, sinceReset, month, rolling, archiveHealth }) {
+    return [
+      dataView('overview-status', 'sectionOverviewSummary', [
+        { item: '7 天已用', value: weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-' },
+        { item: '上次重置至今', value: sinceReset.累计折算USD, detail: `${sinceReset.累计Credits ?? '-'} Credits` },
+        { item: '本月累计', value: month.累计折算USD, detail: `${month.累计Credits ?? '-'} Credits` },
+        { item: '近30天', value: rolling.累计折算USD, detail: `${rolling.累计Credits ?? '-'} Credits` },
+        { item: '归档快照', value: archiveHealth.snapshotCount, detail: archiveHealth.storageBackendLabel },
+      ], [
+        dataColumn('item', { labelKey: 'columnItem', priority: 'primary' }),
+        dataColumn('value', { labelKey: 'columnValue', priority: 'primary' }),
+        dataColumn('detail', { labelKey: 'columnDetail', priority: 'secondary', wrap: true }),
+      ]),
+    ];
+  }
+
+  function createHistorySections(historyUsage) {
+    const dayRows = historyUsage?.day?.rows || [];
+    const daySummary = historyUsage?.day?.summary || {};
+    const rollingSummary = historyUsage?.rolling?.summary || {};
+    const monthSummary = historyUsage?.month?.summary || {};
+
+    return [
+      dataView('history-daily', 'sectionDailyQuery', dayRows.map((row) => ({
+        date: row.date,
+        credits: row.credits,
+        usd: row.usd,
+      })), [
+        dataColumn('date', { labelKey: 'columnDateBucket', priority: 'primary' }),
+        dataColumn('credits', { label: 'Credits', priority: 'primary' }),
+        dataColumn('usd', { labelKey: 'columnUsd', priority: 'primary' }),
+      ]),
+      dataView('history-period-summary', 'sectionPeriodSummary', [{
+        rollingCredits: rollingSummary.totalCredits,
+        rollingUsd: rollingSummary.totalUsd,
+        monthCredits: monthSummary.totalCredits,
+        monthUsd: monthSummary.totalUsd,
+        dayCredits: daySummary.totalCredits,
+      }], [
+        dataColumn('rollingCredits', { labelKey: 'columnRollingCredits', priority: 'primary' }),
+        dataColumn('rollingUsd', { labelKey: 'columnRollingUsd', priority: 'primary' }),
+        dataColumn('monthCredits', { labelKey: 'columnMonthCredits', priority: 'primary' }),
+        dataColumn('monthUsd', { labelKey: 'columnMonthUsd', priority: 'secondary' }),
+        dataColumn('dayCredits', { labelKey: 'columnDailyCredits', priority: 'secondary' }),
+      ]),
+    ];
+  }
+
+  function createDetailsSections({ weekly, sinceReset, month, rolling, result }) {
+    return [
+      dataView('details-weekly-estimate', 'sectionWeeklyEstimate', [weekly], [
+        dataColumn('已用百分比', { priority: 'primary' }),
+        dataColumn('剩余比例小数', { priority: 'secondary' }),
+        dataColumn('包含重置日_已用折算USD', { labelKey: 'columnIncludedResetUsd', priority: 'primary' }),
+        dataColumn('反推周总USD_包含重置日', { labelKey: 'columnIncludedResetTotalUsd', priority: 'primary' }),
+        dataColumn('剩余USD_包含重置日口径', { labelKey: 'columnIncludedResetRemainingUsd', priority: 'primary' }),
+        dataColumn('包含重置日_已用Credits', { priority: 'secondary' }),
+        dataColumn('剩余Credits_包含重置日口径', { priority: 'secondary' }),
+        dataColumn('排除重置日_已用折算USD', { priority: 'secondary' }),
+        dataColumn('剩余USD_排除重置日口径', { priority: 'secondary' }),
+        dataColumn('排除重置日_已用Credits', { priority: 'debug' }),
+        dataColumn('剩余Credits_排除重置日口径', { priority: 'debug' }),
+        dataColumn('误差说明', { priority: 'debug', wrap: true }),
+      ]),
+      dataView('details-range-summary', 'sectionRangeSummary', [sinceReset, month, rolling], [
+        dataColumn('范围', { priority: 'primary', wrap: true }),
+        dataColumn('累计折算USD', { priority: 'primary' }),
+        dataColumn('累计Credits', { priority: 'primary' }),
+        dataColumn('返回日期桶数', { priority: 'secondary' }),
+        dataColumn('累计Token', { priority: 'debug' }),
+        dataColumn('累计线程数', { priority: 'debug' }),
+        dataColumn('累计轮数', { priority: 'debug' }),
+      ]),
+      dataView('details-windows', 'sectionWindows', result?.限制窗口概览 || [], [
+        dataColumn('名称', { priority: 'primary', wrap: true }),
+        dataColumn('已用百分比', { priority: 'primary' }),
+        dataColumn('窗口天数', { priority: 'secondary' }),
+        dataColumn('本轮开始_本地', { priority: 'secondary', truncate: true }),
+        dataColumn('下次重置_本地', { priority: 'secondary', truncate: true }),
+        dataColumn('距离重置小时', { priority: 'primary' }),
+      ]),
+    ];
+  }
+
+  function createPanelViews({ weekly, sinceReset, month, rolling, result, historyUsage, archiveHealth, transfer }) {
+    const tabs = [
+      { id: 'overview', labelKey: 'tabOverview' },
+      { id: 'history', labelKey: 'tabHistory' },
+      { id: 'details', labelKey: 'tabDetails' },
+      { id: 'archive', labelKey: 'tabArchiveWorkspace' },
+    ];
+
+    return {
+      tabs,
+      views: {
+        overview: {
+          id: 'overview',
+          labelKey: 'tabOverview',
+          kind: 'sections',
+          sections: createOverviewSections({ weekly, sinceReset, month, rolling, archiveHealth }),
+        },
+        history: {
+          id: 'history',
+          labelKey: 'tabHistory',
+          kind: 'sections',
+          sections: createHistorySections(historyUsage),
+        },
+        details: {
+          id: 'details',
+          labelKey: 'tabDetails',
+          kind: 'sections',
+          sections: createDetailsSections({ weekly, sinceReset, month, rolling, result }),
+        },
+        archive: {
+          id: 'archive',
+          labelKey: 'tabArchiveWorkspace',
+          kind: 'archiveWorkspace',
+          actionIds: transfer.actions.map((action) => action.action),
+          sections: [
+            { type: 'syncBanner' },
+            { type: 'archiveSummary' },
+            { type: 'note', noteKey: transfer.noteKey },
+            { type: 'actions', actions: transfer.actions },
+          ],
+        },
+      },
+    };
+  }
+
   function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow }) {
     return [
       {
         id: 'remainingUsdIncludingReset',
         type: 'credit',
+        labelKey: 'metricRemainingUsdIncludingReset',
         label: '剩余 USD · 含重置日',
         usd: weekly.剩余USD_包含重置日口径,
         credits: weekly.剩余Credits_包含重置日口径,
@@ -484,6 +683,7 @@
       {
         id: 'remainingUsdExcludingReset',
         type: 'credit',
+        labelKey: 'metricRemainingUsdExcludingReset',
         label: '剩余 USD · 排除重置日',
         usd: weekly.剩余USD_排除重置日口径,
         credits: weekly.剩余Credits_排除重置日口径,
@@ -491,6 +691,7 @@
       {
         id: 'weeklyTotalIncludingReset',
         type: 'credit',
+        labelKey: 'metricWeeklyTotalIncludingReset',
         label: '周总额度 · 含重置日',
         usd: weekly.反推周总USD_包含重置日,
         credits: weekly.反推周总Credits_包含重置日,
@@ -498,6 +699,7 @@
       {
         id: 'weeklyTotalExcludingReset',
         type: 'credit',
+        labelKey: 'metricWeeklyTotalExcludingReset',
         label: '周总额度 · 排除重置日',
         usd: weekly.反推周总USD_排除重置日,
         credits: weekly.反推周总Credits_排除重置日,
@@ -505,13 +707,16 @@
       {
         id: 'sevenDayUsedPercent',
         type: 'value',
+        labelKey: 'metricSevenDayUsedPercent',
         label: '7 天已用',
         value: weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-',
-        hint: 'secondary_window',
+        hintKey: 'metricHintMainSevenDayWindow',
+        hint: '主 7 天窗口',
       },
       {
         id: 'sinceResetTotal',
         type: 'credit',
+        labelKey: 'metricSinceResetTotal',
         label: '上次重置至今',
         usd: sinceReset.累计折算USD,
         credits: sinceReset.累计Credits,
@@ -519,6 +724,7 @@
       {
         id: 'monthTotal',
         type: 'credit',
+        labelKey: 'metricMonthTotal',
         label: '本月累计',
         usd: month.累计折算USD,
         credits: month.累计Credits,
@@ -544,9 +750,7 @@
     const sinceReset = result?.主7天窗口_上次重置至今?.汇总 || {};
     const month = result?.本月初至今?.汇总 || {};
     const rolling = rollingKey ? result?.[rollingKey]?.汇总 || {} : {};
-    const mainSevenDayWindow = (result?.限制窗口概览 || []).find(
-      (row) => row?.名称 === '主限制 - 7天窗口',
-    ) || null;
+    const mainSevenDayWindow = (result?.限制窗口概览 || []).find(isMainSevenDayWindow) || null;
     const recentSnapshots = Array.isArray(archiveSummary?.recentSnapshots)
       ? archiveSummary.recentSnapshots.slice(0, 5).map((row) => ({
         capturedAt: row?.capturedAt || '-',
@@ -566,6 +770,25 @@
       importReport,
     };
 
+    const transfer = {
+      noteKey: 'transferNote',
+      syncStatus: normalizedSyncStatus,
+      actions: [
+        { action: 'export-archive', labelKey: 'archiveExportAction' },
+        { action: 'import-archive', labelKey: 'archiveImportAction' },
+      ],
+    };
+    const panelViews = createPanelViews({
+      weekly,
+      sinceReset,
+      month,
+      rolling,
+      result,
+      historyUsage,
+      archiveHealth,
+      transfer,
+    });
+
     return {
       rollingKey,
       weekly,
@@ -575,14 +798,9 @@
       syncStatus: normalizedSyncStatus,
       syncBanner: createSyncBanner(normalizedSyncStatus),
       archiveHealth,
-      transfer: {
-        noteKey: 'transferNote',
-        syncStatus: normalizedSyncStatus,
-        actions: [
-          { action: 'export-archive', labelKey: 'archiveExportAction' },
-          { action: 'import-archive', labelKey: 'archiveImportAction' },
-        ],
-      },
+      transfer,
+      tabs: panelViews.tabs,
+      views: panelViews.views,
       primaryMetrics: createPrimaryMetrics({
         weekly,
         sinceReset,

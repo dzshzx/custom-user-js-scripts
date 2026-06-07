@@ -6,6 +6,7 @@ await import('../src/codex-quota-compass-archive.lib.js');
 const {
   createSnapshotArchiveQuery,
   createSnapshotArchiveStore,
+  mergeSnapshots,
   normalizeSnapshotArchive,
   previewImportArchiveDocument,
 } = globalThis.CodexQuotaCompassArchiveLib;
@@ -241,6 +242,46 @@ test('normalizeSnapshotArchive upgrades a legacy snapshot array into the Snapsho
   assert.equal(archive.schemaVersion, 1);
   assert.equal(archive.snapshots.length, 1);
   assert.equal(archive.snapshots[0].capturedAt, '2026-05-30T10:00:00.000Z');
+});
+
+test('mergeSnapshots deduplicates stable-key and legacy main seven-day windows', () => {
+  const legacySnapshot = {
+    snapshotId: null,
+    capturedAt: '2026-05-30T10:00:00.000Z',
+    scriptVersion: '0.2.0',
+    periodSummaries: {
+      sinceReset: {
+        startDate: '2026-05-24',
+        endExclusiveDate: '2026-05-31',
+        totalCredits: 123.456,
+      },
+    },
+    periodDetails: {},
+    sourceContext: {},
+    windowSnapshot: [
+      {
+        名称: '主限制 - 7天窗口',
+        本轮开始_UTC: '2026-05-24 00:00:00 UTC',
+        下次重置_UTC: '2026-05-31 00:00:00 UTC',
+      },
+    ],
+  };
+  const stableKeySnapshot = {
+    ...legacySnapshot,
+    windowSnapshot: [
+      {
+        窗口Key: 'main.sevenDayWindow',
+        名称: '主 7 天窗口',
+        本轮开始_UTC: '2026-05-24 00:00:00 UTC',
+        下次重置_UTC: '2026-05-31 00:00:00 UTC',
+      },
+    ],
+  };
+
+  const merged = mergeSnapshots({ snapshots: [legacySnapshot] }, [stableKeySnapshot]);
+
+  assert.deepEqual(merged.report, { added: 0, skipped: 1, invalid: 0 });
+  assert.equal(merged.archive.snapshots.length, 1);
 });
 
 test('queryArchiveUsage returns day rows and period summary from stored snapshots', async () => {

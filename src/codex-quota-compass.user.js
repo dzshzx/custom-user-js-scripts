@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.0
+// @version      0.2.1
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -30,7 +30,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.2.0';
+  const SCRIPT_VERSION = '0.2.1';
   const DEFAULT_LOCALE = 'zh-CN';
   const I18N_MESSAGES = {
     'zh-CN': {
@@ -47,14 +47,35 @@
       tabOverview: '概览',
       tabHistory: '历史',
       tabDetails: '详情',
-      tabArchive: '归档',
-      tabTransfer: '同步',
+      tabArchiveWorkspace: '归档同步',
+      sectionOverviewSummary: '概览摘要',
       sectionArchiveOverview: '归档概况',
       sectionDailyQuery: '按日查询',
       sectionPeriodSummary: '周期汇总',
       sectionWeeklyEstimate: '周额度估算',
       sectionRangeSummary: '区间汇总',
       sectionWindows: '限制窗口',
+      columnItem: '项目',
+      columnValue: '值',
+      columnDetail: '说明',
+      columnDateBucket: '日期桶',
+      columnUsd: '折算USD',
+      columnRollingCredits: '近30天Credits',
+      columnRollingUsd: '近30天USD',
+      columnMonthCredits: '本月Credits',
+      columnMonthUsd: '本月USD',
+      columnDailyCredits: '日查询Credits',
+      columnIncludedResetUsd: '含重置日已用USD',
+      columnIncludedResetTotalUsd: '含重置日周总USD',
+      columnIncludedResetRemainingUsd: '含重置日剩余USD',
+      metricRemainingUsdIncludingReset: '剩余 USD · 含重置日',
+      metricRemainingUsdExcludingReset: '剩余 USD · 排除重置日',
+      metricWeeklyTotalIncludingReset: '周总额度 · 含重置日',
+      metricWeeklyTotalExcludingReset: '周总额度 · 排除重置日',
+      metricSevenDayUsedPercent: '7 天已用',
+      metricSinceResetTotal: '上次重置至今',
+      metricMonthTotal: '本月累计',
+      metricHintMainSevenDayWindow: '主 7 天窗口',
       transferNote: '导入和导出可用于跨设备同步快照归档。',
       syncBannerGmTitle: '跨设备同步路径可用',
       syncBannerGmDetail: '正在使用 {backend}。如果用户脚本管理器同步已开启，个人用量历史可随脚本存储同步。',
@@ -62,8 +83,6 @@
       syncBannerLocalDetail: '正在使用 {backend} fallback；个人用量历史不会自动同步到其它设备。',
       syncBannerPendingTitle: '归档状态待加载',
       syncBannerPendingDetail: '打开或刷新统计后会读取 Snapshot Archive 状态。',
-      detailExpand: '查看计算详情',
-      detailCollapse: '收起详情',
       loadingTitle: '正在计算 Codex 用量',
       loadingHint: '会请求 usage 和 daily analytics 接口，结果不会包含 token 或 cookie。',
       errorTitle: '计算失败',
@@ -112,14 +131,35 @@
       tabOverview: 'Overview',
       tabHistory: 'History',
       tabDetails: 'Details',
-      tabArchive: 'Archive',
-      tabTransfer: 'Sync',
+      tabArchiveWorkspace: 'Archive Sync',
+      sectionOverviewSummary: 'Overview Summary',
       sectionArchiveOverview: 'Archive Overview',
       sectionDailyQuery: 'Daily Query',
       sectionPeriodSummary: 'Period Summary',
       sectionWeeklyEstimate: 'Weekly Estimate',
       sectionRangeSummary: 'Range Summary',
       sectionWindows: 'Limit Windows',
+      columnItem: 'Item',
+      columnValue: 'Value',
+      columnDetail: 'Detail',
+      columnDateBucket: 'Date Bucket',
+      columnUsd: 'USD',
+      columnRollingCredits: 'Last 30d Credits',
+      columnRollingUsd: 'Last 30d USD',
+      columnMonthCredits: 'Month Credits',
+      columnMonthUsd: 'Month USD',
+      columnDailyCredits: 'Daily Credits',
+      columnIncludedResetUsd: 'Used USD incl reset day',
+      columnIncludedResetTotalUsd: 'Weekly USD incl reset day',
+      columnIncludedResetRemainingUsd: 'Remaining USD incl reset day',
+      metricRemainingUsdIncludingReset: 'Remaining USD · incl reset day',
+      metricRemainingUsdExcludingReset: 'Remaining USD · excl reset day',
+      metricWeeklyTotalIncludingReset: 'Weekly total · incl reset day',
+      metricWeeklyTotalExcludingReset: 'Weekly total · excl reset day',
+      metricSevenDayUsedPercent: '7-day used',
+      metricSinceResetTotal: 'Since reset',
+      metricMonthTotal: 'Month total',
+      metricHintMainSevenDayWindow: 'Primary 7-day window',
       transferNote: 'Import and export can sync snapshot archives across devices.',
       syncBannerGmTitle: 'Cross-device sync path available',
       syncBannerGmDetail: 'Using {backend}. If userscript-manager sync is enabled, personal usage history can sync with script storage.',
@@ -127,8 +167,6 @@
       syncBannerLocalDetail: 'Using {backend} fallback; personal usage history will not automatically sync to other devices.',
       syncBannerPendingTitle: 'Archive status pending',
       syncBannerPendingDetail: 'Open or refresh stats to load Snapshot Archive status.',
-      detailExpand: 'Show Details',
-      detailCollapse: 'Hide Details',
       loadingTitle: 'Calculating Codex usage',
       loadingHint: 'This requests usage and daily analytics endpoints, and does not expose token or cookie.',
       errorTitle: 'Calculation Failed',
@@ -189,7 +227,6 @@
   let statusNode;
   let contentNode;
   let isPanelOpen = false;
-  let isDetailsOpen = false;
   let activePanelView = 'overview';
   let latestError;
   let latestResult = null;
@@ -404,26 +441,40 @@
       t('archiveMonthlyCredits'),
       t('archiveWeeklyUsedPercent'),
     ];
-    const overview = tableHtml([
+    const overview = dataViewHtml({
+      id: 'archive-overview',
+      rows: [
       {
         [overviewColumns[0]]: model.snapshotCount,
         [overviewColumns[1]]: model.earliestCapturedAt || '-',
         [overviewColumns[2]]: model.latestCapturedAt || '-',
         [overviewColumns[3]]: model.storageBackend?.label || '-',
       },
-    ], {
-      columns: overviewColumns,
+      ],
+      columns: overviewColumns.map((column) => ({
+        key: column,
+        label: column,
+        priority: column === t('archiveSnapshotCount') ? 'primary' : 'secondary',
+        truncate: column !== t('archiveSnapshotCount'),
+      })),
       limit: 1,
     });
 
     const recent = model.recentSnapshots.length
-      ? tableHtml(model.recentSnapshots.map((row) => ({
+      ? dataViewHtml({
+        id: 'archive-recent',
+        rows: model.recentSnapshots.map((row) => ({
         [recentColumns[0]]: row.capturedAt,
         [recentColumns[1]]: row.snapshotId,
         [recentColumns[2]]: row.monthlyCredits,
         [recentColumns[3]]: row.weeklyUsedPercent,
-      })), {
-        columns: recentColumns,
+        })),
+        columns: recentColumns.map((column) => ({
+          key: column,
+          label: column,
+          priority: column === t('archiveSnapshotId') ? 'primary' : 'secondary',
+          truncate: column === t('archiveSnapshotId') || column === t('archiveCapturedAt'),
+        })),
       })
       : `<div class="cqc-empty">${escapeHtml(t('archiveNoSnapshot'))}</div>`;
 
@@ -590,29 +641,108 @@
     statusNode.dataset.tone = tone;
   }
 
-  function tableHtml(rows, options = {}) {
-    const visibleRows = safeRows(rows, options.limit ?? 12);
-    const columns = options.columns || [...new Set(visibleRows.flatMap((row) => Object.keys(row || {})))];
+  function normalizeDataColumns(rows, columns) {
+    if (Array.isArray(columns) && columns.length) {
+      return columns.map((column) => (
+        typeof column === 'string'
+          ? { key: column, label: column, priority: 'secondary', compact: true }
+          : {
+            key: column.key || column.label || '',
+            label: column.label || column.key || '',
+            labelKey: column.labelKey || '',
+            priority: column.priority || 'secondary',
+            truncate: Boolean(column.truncate),
+            wrap: Boolean(column.wrap),
+            compact: column.compact !== false,
+          }
+      )).filter((column) => column.key);
+    }
+
+    return [...new Set(rows.flatMap((row) => Object.keys(row || {})))]
+      .map((key) => ({ key, label: key, priority: 'secondary', compact: true }));
+  }
+
+  function columnLabel(column) {
+    return column.labelKey ? t(column.labelKey) : column.label;
+  }
+
+  function dataCellHtml(row, column) {
+    const value = formatValue(row?.[column.key]);
+    const classes = [
+      column.truncate ? 'is-truncated' : '',
+      column.wrap ? 'is-wrappable' : '',
+      column.priority ? `is-${column.priority}` : '',
+    ].filter(Boolean).join(' ');
+    const title = column.truncate ? ` title="${escapeHtml(value)}"` : '';
+    return `<td class="${escapeHtml(classes)}"${title}>${escapeHtml(value)}</td>`;
+  }
+
+  function compactValueHtml(row, column) {
+    const value = formatValue(row?.[column.key]);
+    const classes = [
+      'cqc-compact-value',
+      column.truncate ? 'is-truncated' : '',
+      column.wrap ? 'is-wrappable' : '',
+    ].filter(Boolean).join(' ');
+    const title = column.truncate ? ` title="${escapeHtml(value)}"` : '';
+    return `
+      <div class="cqc-compact-field">
+        <dt>${escapeHtml(columnLabel(column))}</dt>
+        <dd class="${escapeHtml(classes)}"${title}>${escapeHtml(value)}</dd>
+      </div>
+    `;
+  }
+
+  function dataViewHtml(view = {}) {
+    const rows = Array.isArray(view.rows) ? view.rows : [];
+    const visibleRows = safeRows(rows, view.limit ?? 12);
+    const columns = normalizeDataColumns(visibleRows, view.columns);
 
     if (!visibleRows.length || !columns.length) {
-      return `<div class="cqc-empty">${escapeHtml(t('tableNoData'))}</div>`;
+      return `<div class="cqc-empty">${escapeHtml(t(view.emptyKey || 'tableNoData'))}</div>`;
     }
 
     const head = columns
-      .map((column) => `<th>${escapeHtml(column)}</th>`)
+      .map((column) => `<th>${escapeHtml(columnLabel(column))}</th>`)
       .join('');
     const body = visibleRows
       .map((row) => (
         `<tr>${columns
-          .map((column) => `<td>${escapeHtml(formatValue(row?.[column]))}</td>`)
+          .map((column) => dataCellHtml(row, column))
           .join('')}</tr>`
       ))
       .join('');
-    const more = Array.isArray(rows) && rows.length > visibleRows.length
+    const compactColumns = columns.filter((column) => column.compact && column.priority !== 'debug');
+    const compact = visibleRows
+      .map((row) => `
+        <dl class="cqc-compact-row">
+          ${compactColumns.map((column) => compactValueHtml(row, column)).join('')}
+        </dl>
+      `)
+      .join('');
+    const more = rows.length > visibleRows.length
       ? `<div class="cqc-table-note">${escapeHtml(t('tablePreviewHint', { visible: visibleRows.length, total: rows.length, debugKey: DEBUG_KEY }))}</div>`
       : '';
 
-    return `<div class="cqc-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>${more}`;
+    return `
+      <div class="cqc-data-view" data-view-id="${escapeHtml(view.id || '')}" data-compact="${view.compactOnMobile === false ? 'false' : 'true'}">
+        <div class="cqc-table-wrap cqc-data-table">
+          <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+        </div>
+        <div class="cqc-compact-list">${compact}</div>
+      </div>
+      ${more}
+    `;
+  }
+
+  function tableHtml(rows, options = {}) {
+    return dataViewHtml({
+      id: options.id || '',
+      rows,
+      columns: options.columns,
+      limit: options.limit,
+      compactOnMobile: options.compactOnMobile,
+    });
   }
 
   function metricHtml(label, value, hint = '') {
@@ -677,13 +807,15 @@
   }
 
   function primaryMetricHtml(metric) {
+    const label = metric?.labelKey ? t(metric.labelKey) : (metric?.label || '-');
+    const hint = metric?.hintKey ? t(metric.hintKey) : metric?.hint;
     if (metric?.type === 'credit') {
-      return creditMetricHtml(metric.label, metric.usd, metric.credits);
+      return creditMetricHtml(label, metric.usd, metric.credits);
     }
     if (metric?.type === 'reset') {
       return resetMetricHtml(metric.windowRow);
     }
-    return metricHtml(metric?.label || '-', metric?.value, metric?.hint);
+    return metricHtml(label, metric?.value, hint);
   }
 
   function syncBannerHtml(banner) {
@@ -706,10 +838,6 @@
     `;
   }
 
-  function detailFootnoteHtml(action, label) {
-    return detailActionsHtml([{ action, label }]);
-  }
-
   function detailActionsHtml(actions) {
     return `
       <div class="cqc-detail-footnote">
@@ -720,14 +848,15 @@
     `;
   }
 
-  function panelTabsHtml() {
-    const tabs = [
-      { id: 'overview', label: t('tabOverview') },
-      { id: 'history', label: t('tabHistory') },
-      { id: 'details', label: t('tabDetails') },
-      { id: 'archive', label: t('tabArchive') },
-      { id: 'transfer', label: t('tabTransfer') },
-    ];
+  function panelTabsHtml(model = latestPanelViewModel) {
+    const tabs = Array.isArray(model?.tabs) && model.tabs.length
+      ? model.tabs
+      : [
+        { id: 'overview', labelKey: 'tabOverview' },
+        { id: 'history', labelKey: 'tabHistory' },
+        { id: 'details', labelKey: 'tabDetails' },
+        { id: 'archive', labelKey: 'tabArchiveWorkspace' },
+      ];
     return `
       <div class="cqc-tabs">
         ${tabs.map((tab) => `
@@ -736,13 +865,45 @@
             class="cqc-tab${activePanelView === tab.id ? ' is-active' : ''}"
             data-action="switch-view"
             data-view="${tab.id}"
-          >${escapeHtml(tab.label)}</button>
+          >${escapeHtml(tab.labelKey ? t(tab.labelKey) : tab.label)}</button>
         `).join('')}
       </div>
     `;
   }
 
+  function sectionFromModelHtml(section) {
+    if (!section) return '';
+    if (section.type === 'dataView') {
+      return sectionHtml(t(section.titleKey), dataViewHtml(section));
+    }
+    if (section.type === 'syncBanner') {
+      return syncBannerHtml(latestPanelViewModel?.syncBanner);
+    }
+    if (section.type === 'archiveSummary') {
+      return sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(latestPanelViewModel?.archive));
+    }
+    if (section.type === 'note') {
+      return `<div class="cqc-transfer-note">${escapeHtml(t(section.noteKey || 'transferNote'))}</div>`;
+    }
+    if (section.type === 'actions') {
+      const actions = Array.isArray(section.actions)
+        ? section.actions.map((item) => ({
+          action: item.action,
+          label: item.labelKey ? t(item.labelKey) : item.label,
+        }))
+        : [];
+      return actions.length ? detailActionsHtml(actions) : '';
+    }
+    return '';
+  }
+
+  function sectionsViewHtml(view) {
+    return (view?.sections || []).map(sectionFromModelHtml).join('');
+  }
+
   function historyViewHtml(model = latestPanelViewModel) {
+    const view = model?.views?.history;
+    if (view) return sectionsViewHtml(view);
     const dayRows = model?.history?.dayRows || [];
     const daySummary = model?.history?.daySummary || {};
     const rollingSummary = model?.history?.rollingSummary || {};
@@ -764,6 +925,8 @@
   }
 
   function archiveViewHtml(model = latestPanelViewModel) {
+    const view = model?.views?.archive;
+    if (view) return sectionsViewHtml(view);
     return `
       ${syncBannerHtml(model?.syncBanner)}
       ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(model?.archive))}
@@ -771,19 +934,20 @@
     `;
   }
 
-  function transferViewHtml(model = latestPanelViewModel) {
-    const transfer = model?.transfer || {};
-    const actions = Array.isArray(transfer.actions)
-      ? transfer.actions.map((item) => ({
-        action: item.action,
-        label: item.labelKey ? t(item.labelKey) : item.label,
-      }))
-      : [];
-    return `
-      ${syncBannerHtml(model?.syncBanner)}
-      <div class="cqc-transfer-note">${escapeHtml(t(transfer.noteKey || 'transferNote'))}</div>
-      ${actions.length ? detailActionsHtml(actions) : ''}
-    `;
+  function activeViewHtml(viewModel) {
+    const tabs = Array.isArray(viewModel?.tabs) ? viewModel.tabs : [];
+    if (tabs.length && !tabs.some((tab) => tab.id === activePanelView)) {
+      activePanelView = tabs[0].id;
+    }
+
+    const view = viewModel?.views?.[activePanelView] || viewModel?.views?.overview;
+    if (view?.kind === 'archiveWorkspace') {
+      return archiveViewHtml(viewModel);
+    }
+    if (view?.kind === 'sections') {
+      return sectionsViewHtml(view);
+    }
+    return historyViewHtml(viewModel);
   }
 
   function renderResult(result) {
@@ -801,59 +965,13 @@
       syncStatus: syncPort?.getSyncStatus ? syncPort.getSyncStatus() : null,
     });
     latestPanelViewModel = viewModel;
-    const {
-      weekly,
-      sinceReset,
-      month,
-      rolling,
-      mainSevenDayWindow,
-    } = viewModel;
-
-    let viewBody = '';
-    if (activePanelView === 'history') {
-      viewBody = historyViewHtml(viewModel);
-    } else if (activePanelView === 'details') {
-      viewBody = `
-      ${sectionHtml(t('sectionWeeklyEstimate'), tableHtml([weekly], {
-        columns: [
-          '已用百分比',
-          '剩余比例小数',
-          '包含重置日_已用折算USD',
-          '反推周总USD_包含重置日',
-          '剩余USD_包含重置日口径',
-          '包含重置日_已用Credits',
-          '剩余Credits_包含重置日口径',
-          '排除重置日_已用折算USD',
-          '剩余USD_排除重置日口径',
-          '排除重置日_已用Credits',
-          '剩余Credits_排除重置日口径',
-          '误差说明',
-        ],
-      }))}
-
-      ${sectionHtml(t('sectionRangeSummary'), tableHtml([sinceReset, month, rolling], {
-        columns: ['范围', '累计折算USD', '累计Credits', '返回日期桶数', '累计Token', '累计线程数', '累计轮数'],
-      }))}
-
-      ${sectionHtml(t('sectionWindows'), tableHtml(result?.限制窗口概览, {
-        columns: ['名称', '已用百分比', '窗口天数', '本轮开始_本地', '下次重置_本地', '距离重置小时'],
-      }))}
-      `;
-    } else if (activePanelView === 'archive') {
-      viewBody = archiveViewHtml(viewModel);
-    } else if (activePanelView === 'transfer') {
-      viewBody = transferViewHtml(viewModel);
-    } else {
-      viewBody = `
-      ${isDetailsOpen ? detailFootnoteHtml('hide-details', t('detailCollapse')) : detailFootnoteHtml('show-details', t('detailExpand'))}
-      `;
-    }
+    const viewBody = activeViewHtml(viewModel);
 
     contentNode.innerHTML = `
       <div class="cqc-metrics">
         ${viewModel.primaryMetrics.map(primaryMetricHtml).join('')}
       </div>
-      ${panelTabsHtml()}
+      ${panelTabsHtml(viewModel)}
       <div class="cqc-details">
         ${viewBody}
       </div>
@@ -1097,7 +1215,6 @@
           periodDays: result?.配置?.ROLLING_DAYS,
         });
       }
-      isDetailsOpen = false;
       renderResult(result);
       setStatus(t('statusUpdated'), 'success');
       return result;
@@ -1112,7 +1229,6 @@
     if (isPanelOpen) {
       closePanel();
     } else if (latestResult && !latestError) {
-      isDetailsOpen = false;
       renderResult(latestResult);
       setStatus(t('statusCached'), 'success');
       openPanel();
@@ -1583,6 +1699,70 @@
         white-space: nowrap;
       }
 
+      .cqc-table-wrap td.is-wrappable {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .cqc-table-wrap td.is-truncated {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .cqc-table-wrap td.is-debug,
+      .cqc-table-wrap th.is-debug {
+        color: #6e6e80;
+      }
+
+      .cqc-compact-list {
+        display: none;
+      }
+
+      .cqc-compact-row {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      }
+
+      .cqc-compact-row:last-child {
+        border-bottom: 0;
+      }
+
+      .cqc-compact-field {
+        display: grid;
+        grid-template-columns: minmax(92px, 38%) minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+      }
+
+      .cqc-compact-field dt,
+      .cqc-compact-field dd {
+        margin: 0;
+        min-width: 0;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .cqc-compact-field dt {
+        color: #6e6e80;
+        font-weight: 650;
+      }
+
+      .cqc-compact-value {
+        color: #202123;
+        overflow-wrap: anywhere;
+      }
+
+      .cqc-compact-value.is-truncated {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
       .cqc-table-wrap tbody tr:hover {
         background: rgba(30, 64, 175, 0.05);
       }
@@ -1668,6 +1848,14 @@
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
+        .cqc-data-view[data-compact="true"] .cqc-data-table {
+          display: none;
+        }
+
+        .cqc-data-view[data-compact="true"] .cqc-compact-list {
+          display: block;
+        }
+
       }
 
       @media (prefers-color-scheme: dark) {
@@ -1730,9 +1918,14 @@
 
         .cqc-table-wrap th,
         .cqc-table-wrap td,
+        .cqc-compact-row,
         .cqc-panel-header,
         .cqc-section h3 {
           border-bottom-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .cqc-compact-value {
+          color: #ececf1;
         }
 
         .cqc-detail-footnote button {
@@ -1965,16 +2158,6 @@
       return;
     }
 
-    if (action === 'show-details' && latestResult) {
-      isDetailsOpen = true;
-      renderResult(latestResult);
-      return;
-    }
-
-    if (action === 'hide-details' && latestResult) {
-      isDetailsOpen = false;
-      renderResult(latestResult);
-    }
   }
 
   function handleShellResize() {

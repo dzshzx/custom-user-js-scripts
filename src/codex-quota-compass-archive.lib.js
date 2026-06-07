@@ -5,6 +5,7 @@
   const ARCHIVE_SCHEMA_VERSION = 1;
   const EXPORT_FORMAT = 'codex-quota-compass.snapshot-archive';
   const EXPORT_VERSION = 1;
+  const MAIN_SEVEN_DAY_WINDOW_KEY = 'main.sevenDayWindow';
 
   function isPlainObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -38,6 +39,10 @@
 
   function rollingPeriodKey(result) {
     return Object.keys(result || {}).find((key) => /^近\d+天$/.test(key)) || '';
+  }
+
+  function isMainSevenDayWindow(row) {
+    return row?.窗口Key === MAIN_SEVEN_DAY_WINDOW_KEY || row?.名称 === '主限制 - 7天窗口';
   }
 
   function normalizeDailyRows(rows) {
@@ -108,7 +113,7 @@
   function snapshotFallbackKey(snapshot) {
     const sinceReset = snapshot?.periodSummaries?.sinceReset || {};
     const primaryWindow = Array.isArray(snapshot?.windowSnapshot)
-      ? snapshot.windowSnapshot.find((row) => row?.名称 === '主限制 - 7天窗口')
+      ? snapshot.windowSnapshot.find(isMainSevenDayWindow)
       : null;
 
     return JSON.stringify({

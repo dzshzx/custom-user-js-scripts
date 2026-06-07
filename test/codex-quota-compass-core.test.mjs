@@ -103,6 +103,8 @@ test('createQuotaCalculator computes quota result through injected fetch adapter
   ]);
   assert.equal(result.时区诊断.浏览器本地时区, 'Asia/Shanghai');
   assert.equal(result.限制窗口概览.length, 2);
+  assert.equal(result.限制窗口概览[1].窗口Key, 'main.sevenDayWindow');
+  assert.equal(result.限制窗口概览[1].后端字段, 'secondary_window');
   assert.equal(result.主7天窗口_上次重置至今.汇总.累计Credits, 10);
   assert.equal(result.主7天窗口_上次重置至今.反推周额度.反推周总Credits_包含重置日, 25);
   assert.equal(result.主7天窗口_上次重置至今.客户端汇总[0].客户端, 'chatgpt-web');
@@ -114,7 +116,7 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   const result = buildQuotaSnapshotResult({
     config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
     diagnostics: {},
-    windows: [{ 名称: '主限制 - 7天窗口', 距离重置小时: 12 }],
+    windows: [{ 窗口Key: 'main.sevenDayWindow', 名称: '主限制 - 7天窗口', 距离重置小时: 12 }],
     periods: {
       sinceReset: {
         summary: { 累计Credits: 20 },
@@ -164,6 +166,17 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   assert.equal(model.archiveHealth.snapshotCount, 1);
   assert.equal(model.archiveHealth.hasSnapshots, true);
   assert.deepEqual(model.transfer.actions.map((action) => action.action), ['export-archive', 'import-archive']);
+  assert.deepEqual(model.tabs.map((tab) => tab.id), ['overview', 'history', 'details', 'archive']);
+  assert.equal(model.tabs.some((tab) => tab.id === 'transfer'), false);
+  assert.equal(model.views.overview.sections.length > 0, true);
+  assert.equal(model.views.details.sections[2].id, 'details-windows');
+  assert.equal(
+    model.views.details.sections[2].columns.find((column) => column.key === '本轮开始_本地').truncate,
+    true,
+  );
+  assert.deepEqual(model.views.archive.actionIds, ['export-archive', 'import-archive']);
+  assert.equal(model.primaryMetrics.find((metric) => metric.id === 'sevenDayUsedPercent').hintKey, 'metricHintMainSevenDayWindow');
+  assert.notEqual(model.primaryMetrics.find((metric) => metric.id === 'sevenDayUsedPercent').hint, 'secondary_window');
   assert.deepEqual(model.primaryMetrics.map((metric) => metric.id), [
     'remainingUsdIncludingReset',
     'remainingUsdExcludingReset',
@@ -203,6 +216,72 @@ test('createQuotaPanelViewModel marks localStorage archive as local-only sync', 
   assert.equal(model.syncBanner.titleKey, 'syncBannerLocalTitle');
   assert.equal(model.archiveHealth.hasSnapshots, false);
   assert.equal(model.transfer.syncStatus.localOnly, true);
+  assert.equal(model.tabs.some((tab) => tab.id === 'archive'), true);
+  assert.equal(model.views.archive.kind, 'archiveWorkspace');
+});
+
+test('panel mobile regression contract gives every tab content and compact long fields', () => {
+  const model = createQuotaPanelViewModel({
+    result: buildQuotaSnapshotResult({
+      config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+      diagnostics: {},
+      windows: [{
+        窗口Key: 'main.sevenDayWindow',
+        名称: '主限制 - 7天窗口',
+        本轮开始_本地: '2026/05/30 18:00:00',
+        下次重置_本地: '2026/06/06 18:00:00',
+        距离重置小时: 12,
+      }],
+      periods: {
+        sinceReset: {
+          summary: { 范围: '上次重置至今近似 2026-05-30 ~ 2026-06-06', 累计Credits: 20, 累计折算USD: 0.8 },
+          weeklyEstimate: { 已用百分比: 40, 包含重置日_已用折算USD: 0.8, 反推周总USD_包含重置日: 2, 剩余USD_包含重置日口径: 1.2 },
+          rows: [],
+          clients: [],
+        },
+        monthToDate: { summary: { 累计Credits: 100, 累计折算USD: 4 }, rows: [], clients: [] },
+        rolling: { summary: { 累计Credits: 200, 累计折算USD: 8 }, rows: [], clients: [] },
+      },
+    }),
+    historyUsage: {
+      day: { rows: [{ date: '2026-05-30', credits: 20, usd: 0.8 }], summary: { totalCredits: 20 } },
+      rolling: { summary: { totalCredits: 200, totalUsd: 8 } },
+      month: { summary: { totalCredits: 100, totalUsd: 4 } },
+    },
+    archiveSummary: {
+      snapshotCount: 1,
+      earliestCapturedAt: '2026-05-30T10:00:00.000Z',
+      latestCapturedAt: '2026-05-30T10:00:00.000Z',
+      recentSnapshots: [{
+        snapshotId: '60497965-2364-4e37-ace5-long-snapshot-id',
+        capturedAt: '2026-05-30T10:00:00.000Z',
+      }],
+    },
+    storageBackend: { id: 'gm', label: 'GM storage' },
+    syncStatus: {
+      backendId: 'gm',
+      backendLabel: 'GM storage',
+      crossDeviceCapable: true,
+      localOnly: false,
+    },
+  });
+
+  for (const tab of model.tabs) {
+    const view = model.views[tab.id];
+    assert.ok(view, `missing view for ${tab.id}`);
+    assert.ok(Array.isArray(view.sections) && view.sections.length > 0, `empty sections for ${tab.id}`);
+  }
+
+  const dataViews = Object.values(model.views)
+    .flatMap((view) => view.sections)
+    .filter((section) => section.type === 'dataView');
+
+  assert.ok(dataViews.length > 0);
+  assert.equal(dataViews.every((section) => section.compactOnMobile !== false), true);
+  assert.equal(
+    dataViews.some((section) => section.columns.some((column) => column.truncate || column.wrap)),
+    true,
+  );
 });
 
 test('createSnapshotSyncPort routes save/export/import through archive store seam', async () => {
