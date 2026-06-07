@@ -142,6 +142,13 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     },
     importReport: { added: 1, skipped: 0, invalid: 0 },
     storageBackend: { id: 'gm', label: 'GM storage' },
+    syncStatus: {
+      backendId: 'gm',
+      backendLabel: 'GM storage',
+      crossDeviceCapable: true,
+      localOnly: false,
+      reason: 'Userscript manager storage is available.',
+    },
   });
 
   assert.equal(model.rollingKey, '近30天');
@@ -152,6 +159,50 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   assert.equal(model.archive.snapshotCount, 1);
   assert.equal(model.archive.storageBackend.label, 'GM storage');
   assert.equal(model.archive.importReport.added, 1);
+  assert.equal(model.syncBanner.tone, 'success');
+  assert.equal(model.syncBanner.titleKey, 'syncBannerGmTitle');
+  assert.equal(model.archiveHealth.snapshotCount, 1);
+  assert.equal(model.archiveHealth.hasSnapshots, true);
+  assert.deepEqual(model.transfer.actions.map((action) => action.action), ['export-archive', 'import-archive']);
+  assert.deepEqual(model.primaryMetrics.map((metric) => metric.id), [
+    'remainingUsdIncludingReset',
+    'remainingUsdExcludingReset',
+    'weeklyTotalIncludingReset',
+    'weeklyTotalExcludingReset',
+    'sevenDayUsedPercent',
+    'sinceResetTotal',
+    'monthTotal',
+    'resetCountdown',
+  ]);
+});
+
+test('createQuotaPanelViewModel marks localStorage archive as local-only sync', () => {
+  const model = createQuotaPanelViewModel({
+    result: buildQuotaSnapshotResult({
+      config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+      diagnostics: {},
+      windows: [],
+      periods: {
+        sinceReset: { summary: {}, weeklyEstimate: {}, rows: [], clients: [] },
+        monthToDate: { summary: {}, rows: [], clients: [] },
+        rolling: { summary: {}, rows: [], clients: [] },
+      },
+    }),
+    syncStatus: {
+      backendId: 'localStorage',
+      backendLabel: 'localStorage',
+      crossDeviceCapable: false,
+      localOnly: true,
+      reason: 'localStorage is browser-local.',
+    },
+    archiveSummary: null,
+    storageBackend: { id: 'localStorage', label: 'localStorage' },
+  });
+
+  assert.equal(model.syncBanner.tone, 'warning');
+  assert.equal(model.syncBanner.titleKey, 'syncBannerLocalTitle');
+  assert.equal(model.archiveHealth.hasSnapshots, false);
+  assert.equal(model.transfer.syncStatus.localOnly, true);
 });
 
 test('createSnapshotSyncPort routes save/export/import through archive store seam', async () => {
@@ -170,24 +221,42 @@ test('createSnapshotSyncPort routes save/export/import through archive store sea
         calls.push('import');
         return { summary: { snapshotCount: 2 }, report: { added: 1, skipped: 0, invalid: 0 } };
       },
+      previewImportArchiveDocument: async () => {
+        calls.push('preview');
+        return { summary: { snapshotCount: 2 }, report: { added: 1, skipped: 0, invalid: 0 } };
+      },
       queryHistory: async () => {
         calls.push('history');
         return { day: { rows: [] }, rolling: { summary: {} }, month: { summary: {} }, timeline: [] };
       },
       summarizeArchive: async () => ({ snapshotCount: 2 }),
     },
+    getBackendInfo: () => ({ id: 'gm', label: 'GM storage' }),
   });
 
-  const saved = await port.saveLatestResult({ 任意: true });
-  const exported = await port.exportArchive();
-  const imported = await port.importArchiveDocument({ format: 'x' });
+  const saved = await port.saveLocalSnapshot({ 任意: true });
+  const exported = await port.buildSyncPayload();
+  const preview = await port.previewIncomingArchive({ format: 'x' });
+  const imported = await port.mergeIncomingArchive({ format: 'x' });
   const history = await port.queryHistory({ periodDays: 30 });
+  const status = port.getSyncStatus();
 
   assert.equal(saved.summary.snapshotCount, 1);
   assert.equal(exported.snapshotCount, 1);
+  assert.equal(preview.report.added, 1);
   assert.equal(imported.report.added, 1);
   assert.equal(history.timeline.length, 0);
-  assert.deepEqual(calls, ['save', 'export', 'import', 'history']);
+  assert.equal(status.backendId, 'gm');
+  assert.equal(status.crossDeviceCapable, true);
+  assert.deepEqual(calls, ['save', 'export', 'preview', 'import', 'history']);
+
+  const compatibilitySaved = await port.saveLatestResult({ 任意: true });
+  const compatibilityExported = await port.exportArchive();
+  const compatibilityImported = await port.importArchiveDocument({ format: 'x' });
+
+  assert.equal(compatibilitySaved.summary.snapshotCount, 1);
+  assert.equal(compatibilityExported.snapshotCount, 1);
+  assert.equal(compatibilityImported.report.added, 1);
 });
 
 test('createSnapshotSyncPort routes queryUsage and validates store availability', async () => {
@@ -210,4 +279,18 @@ test('createSnapshotSyncPort routes queryUsage and validates store availability'
     () => unavailablePort.queryUsage({ mode: 'day', startDate: '2026-05-01', endDate: '2026-05-02' }),
     /Snapshot Archive library is unavailable/,
   );
+});
+
+test('createSnapshotSyncPort reports local-only fallback sync status', () => {
+  const port = createSnapshotSyncPort({
+    archiveStore: {},
+    getBackendInfo: () => ({ id: 'localStorage', label: 'localStorage' }),
+  });
+  const status = port.getSyncStatus();
+
+  assert.equal(status.backendId, 'localStorage');
+  assert.equal(status.backendLabel, 'localStorage');
+  assert.equal(status.crossDeviceCapable, false);
+  assert.equal(status.localOnly, true);
+  assert.match(status.reason, /local/i);
 });

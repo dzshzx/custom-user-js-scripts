@@ -423,12 +423,121 @@
     return { run };
   }
 
+  function normalizePanelSyncStatus(syncStatus, storageBackend) {
+    const backendId = syncStatus?.backendId || storageBackend?.id || 'pending';
+    const backendLabel = syncStatus?.backendLabel || storageBackend?.label || backendId;
+    const crossDeviceCapable = Boolean(syncStatus?.crossDeviceCapable ?? backendId === 'gm');
+    const localOnly = Boolean(syncStatus?.localOnly ?? backendId === 'localStorage');
+    const reason = syncStatus?.reason || (
+      backendId === 'gm'
+        ? 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.'
+        : backendId === 'localStorage'
+          ? 'localStorage is browser-local and will not sync personal usage history across devices.'
+          : 'Snapshot Archive storage has not been loaded yet.'
+    );
+
+    return {
+      backendId,
+      backendLabel,
+      crossDeviceCapable,
+      localOnly,
+      reason,
+    };
+  }
+
+  function createSyncBanner(syncStatus) {
+    if (syncStatus.crossDeviceCapable) {
+      return {
+        tone: 'success',
+        titleKey: 'syncBannerGmTitle',
+        detailKey: 'syncBannerGmDetail',
+        backendLabel: syncStatus.backendLabel,
+      };
+    }
+
+    if (syncStatus.localOnly) {
+      return {
+        tone: 'warning',
+        titleKey: 'syncBannerLocalTitle',
+        detailKey: 'syncBannerLocalDetail',
+        backendLabel: syncStatus.backendLabel,
+      };
+    }
+
+    return {
+      tone: 'muted',
+      titleKey: 'syncBannerPendingTitle',
+      detailKey: 'syncBannerPendingDetail',
+      backendLabel: syncStatus.backendLabel,
+    };
+  }
+
+  function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow }) {
+    return [
+      {
+        id: 'remainingUsdIncludingReset',
+        type: 'credit',
+        label: '剩余 USD · 含重置日',
+        usd: weekly.剩余USD_包含重置日口径,
+        credits: weekly.剩余Credits_包含重置日口径,
+      },
+      {
+        id: 'remainingUsdExcludingReset',
+        type: 'credit',
+        label: '剩余 USD · 排除重置日',
+        usd: weekly.剩余USD_排除重置日口径,
+        credits: weekly.剩余Credits_排除重置日口径,
+      },
+      {
+        id: 'weeklyTotalIncludingReset',
+        type: 'credit',
+        label: '周总额度 · 含重置日',
+        usd: weekly.反推周总USD_包含重置日,
+        credits: weekly.反推周总Credits_包含重置日,
+      },
+      {
+        id: 'weeklyTotalExcludingReset',
+        type: 'credit',
+        label: '周总额度 · 排除重置日',
+        usd: weekly.反推周总USD_排除重置日,
+        credits: weekly.反推周总Credits_排除重置日,
+      },
+      {
+        id: 'sevenDayUsedPercent',
+        type: 'value',
+        label: '7 天已用',
+        value: weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-',
+        hint: 'secondary_window',
+      },
+      {
+        id: 'sinceResetTotal',
+        type: 'credit',
+        label: '上次重置至今',
+        usd: sinceReset.累计折算USD,
+        credits: sinceReset.累计Credits,
+      },
+      {
+        id: 'monthTotal',
+        type: 'credit',
+        label: '本月累计',
+        usd: month.累计折算USD,
+        credits: month.累计Credits,
+      },
+      {
+        id: 'resetCountdown',
+        type: 'reset',
+        windowRow: mainSevenDayWindow,
+      },
+    ];
+  }
+
   function createQuotaPanelViewModel({
     result,
     historyUsage,
     archiveSummary,
     importReport,
     storageBackend,
+    syncStatus,
   }) {
     const rollingKey = rollingPeriodKey(result);
     const weekly = result?.主7天窗口_上次重置至今?.反推周额度 || {};
@@ -446,6 +555,16 @@
         weeklyUsedPercent: row?.weeklyUsedPercent,
       }))
       : [];
+    const normalizedSyncStatus = normalizePanelSyncStatus(syncStatus, storageBackend);
+    const archiveHealth = {
+      isLoaded: Boolean(archiveSummary),
+      snapshotCount: archiveSummary?.snapshotCount || 0,
+      hasSnapshots: Boolean((archiveSummary?.snapshotCount || 0) > 0),
+      earliestCapturedAt: archiveSummary?.earliestCapturedAt || null,
+      latestCapturedAt: archiveSummary?.latestCapturedAt || null,
+      storageBackendLabel: normalizedSyncStatus.backendLabel,
+      importReport,
+    };
 
     return {
       rollingKey,
@@ -453,6 +572,23 @@
       sinceReset,
       month,
       rolling,
+      syncStatus: normalizedSyncStatus,
+      syncBanner: createSyncBanner(normalizedSyncStatus),
+      archiveHealth,
+      transfer: {
+        noteKey: 'transferNote',
+        syncStatus: normalizedSyncStatus,
+        actions: [
+          { action: 'export-archive', labelKey: 'archiveExportAction' },
+          { action: 'import-archive', labelKey: 'archiveImportAction' },
+        ],
+      },
+      primaryMetrics: createPrimaryMetrics({
+        weekly,
+        sinceReset,
+        month,
+        mainSevenDayWindow,
+      }),
       rollingRows: rollingKey ? result?.[rollingKey]?.每日明细 || [] : [],
       sinceResetRows: result?.主7天窗口_上次重置至今?.每日明细 || [],
       sinceResetClients: result?.主7天窗口_上次重置至今?.客户端汇总 || [],
@@ -475,25 +611,63 @@
     };
   }
 
-  function createSnapshotSyncPort({ archiveStore }) {
-    async function summarize() {
+  function createSnapshotSyncPort({ archiveStore, getBackendInfo = () => null }) {
+    function getSyncStatus() {
+      const backendInfo = typeof getBackendInfo === 'function' ? getBackendInfo() : null;
+      const backendId = backendInfo?.id || 'unavailable';
+      const backendLabel = backendInfo?.label || backendId;
+      const crossDeviceCapable = backendId === 'gm';
+      const localOnly = backendId === 'localStorage';
+      const reason = (() => {
+        if (backendId === 'gm') {
+          return 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.';
+        }
+        if (backendId === 'localStorage') {
+          return 'localStorage is browser-local and will not sync personal usage history across devices.';
+        }
+        if (backendId === 'pending') {
+          return 'Snapshot Archive storage has not been loaded yet.';
+        }
+        return 'Snapshot Archive storage is unavailable.';
+      })();
+
+      return {
+        backendId,
+        backendLabel,
+        crossDeviceCapable,
+        localOnly,
+        reason,
+      };
+    }
+
+    async function getLocalSummary() {
       if (!archiveStore) return null;
       return archiveStore.summarizeArchive();
     }
 
-    async function saveLatestResult(result) {
+    async function saveLocalSnapshot(result) {
       if (!archiveStore) return { summary: null, report: null, snapshot: null, archive: null };
       return archiveStore.saveSnapshot(result);
     }
 
-    async function exportArchive() {
+    async function buildSyncPayload() {
       if (!archiveStore) {
         throw new Error('Snapshot Archive library is unavailable.');
       }
       return archiveStore.buildExportDocument();
     }
 
-    async function importArchiveDocument(documentObject) {
+    async function previewIncomingArchive(documentObject) {
+      if (!archiveStore) {
+        throw new Error('Snapshot Archive library is unavailable.');
+      }
+      if (typeof archiveStore.previewImportArchiveDocument !== 'function') {
+        throw new Error('Snapshot Archive preview interface is unavailable.');
+      }
+      return archiveStore.previewImportArchiveDocument(documentObject);
+    }
+
+    async function mergeIncomingArchive(documentObject) {
       if (!archiveStore) {
         throw new Error('Snapshot Archive library is unavailable.');
       }
@@ -526,10 +700,16 @@
     }
 
     return {
-      summarize,
-      saveLatestResult,
-      exportArchive,
-      importArchiveDocument,
+      getLocalSummary,
+      summarize: getLocalSummary,
+      saveLocalSnapshot,
+      saveLatestResult: saveLocalSnapshot,
+      buildSyncPayload,
+      exportArchive: buildSyncPayload,
+      previewIncomingArchive,
+      mergeIncomingArchive,
+      importArchiveDocument: mergeIncomingArchive,
+      getSyncStatus,
       queryUsage,
       queryHistory,
     };

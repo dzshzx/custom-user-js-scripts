@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.9
+// @version      0.2.0
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -30,7 +30,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.1.9';
+  const SCRIPT_VERSION = '0.2.0';
   const DEFAULT_LOCALE = 'zh-CN';
   const I18N_MESSAGES = {
     'zh-CN': {
@@ -56,6 +56,12 @@
       sectionRangeSummary: '区间汇总',
       sectionWindows: '限制窗口',
       transferNote: '导入和导出可用于跨设备同步快照归档。',
+      syncBannerGmTitle: '跨设备同步路径可用',
+      syncBannerGmDetail: '正在使用 {backend}。如果用户脚本管理器同步已开启，个人用量历史可随脚本存储同步。',
+      syncBannerLocalTitle: '当前设备本地归档',
+      syncBannerLocalDetail: '正在使用 {backend} fallback；个人用量历史不会自动同步到其它设备。',
+      syncBannerPendingTitle: '归档状态待加载',
+      syncBannerPendingDetail: '打开或刷新统计后会读取 Snapshot Archive 状态。',
       detailExpand: '查看计算详情',
       detailCollapse: '收起详情',
       loadingTitle: '正在计算 Codex 用量',
@@ -115,6 +121,12 @@
       sectionRangeSummary: 'Range Summary',
       sectionWindows: 'Limit Windows',
       transferNote: 'Import and export can sync snapshot archives across devices.',
+      syncBannerGmTitle: 'Cross-device sync path available',
+      syncBannerGmDetail: 'Using {backend}. If userscript-manager sync is enabled, personal usage history can sync with script storage.',
+      syncBannerLocalTitle: 'Current device local archive',
+      syncBannerLocalDetail: 'Using {backend} fallback; personal usage history will not automatically sync to other devices.',
+      syncBannerPendingTitle: 'Archive status pending',
+      syncBannerPendingDetail: 'Open or refresh stats to load Snapshot Archive status.',
       detailExpand: 'Show Details',
       detailCollapse: 'Hide Details',
       loadingTitle: 'Calculating Codex usage',
@@ -189,6 +201,7 @@
   let suppressNextButtonClick = false;
   let buttonDockSide = null;
   let panelCloseTimer = null;
+  let floatingPanelShell = null;
   const coreLib = globalThis.CodexQuotaCompassCoreLib;
   const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
   const archiveStoragePort = createSnapshotArchiveStoragePort();
@@ -200,7 +213,7 @@
     })
     : null;
   const syncPort = coreLib?.createSnapshotSyncPort
-    ? coreLib.createSnapshotSyncPort({ archiveStore })
+    ? coreLib.createSnapshotSyncPort({ archiveStore, getBackendInfo: archiveStoragePort.getBackendInfo })
     : null;
 
   function isUsagePage() {
@@ -663,6 +676,27 @@
     );
   }
 
+  function primaryMetricHtml(metric) {
+    if (metric?.type === 'credit') {
+      return creditMetricHtml(metric.label, metric.usd, metric.credits);
+    }
+    if (metric?.type === 'reset') {
+      return resetMetricHtml(metric.windowRow);
+    }
+    return metricHtml(metric?.label || '-', metric?.value, metric?.hint);
+  }
+
+  function syncBannerHtml(banner) {
+    if (!banner) return '';
+    const variables = { backend: banner.backendLabel || '-' };
+    return `
+      <div class="cqc-sync-banner" data-tone="${escapeHtml(banner.tone || 'muted')}">
+        <strong>${escapeHtml(t(banner.titleKey, variables))}</strong>
+        <span>${escapeHtml(t(banner.detailKey, variables))}</span>
+      </div>
+    `;
+  }
+
   function sectionHtml(title, body) {
     return `
       <section class="cqc-section">
@@ -731,8 +765,24 @@
 
   function archiveViewHtml(model = latestPanelViewModel) {
     return `
+      ${syncBannerHtml(model?.syncBanner)}
       ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(model?.archive))}
       <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
+    `;
+  }
+
+  function transferViewHtml(model = latestPanelViewModel) {
+    const transfer = model?.transfer || {};
+    const actions = Array.isArray(transfer.actions)
+      ? transfer.actions.map((item) => ({
+        action: item.action,
+        label: item.labelKey ? t(item.labelKey) : item.label,
+      }))
+      : [];
+    return `
+      ${syncBannerHtml(model?.syncBanner)}
+      <div class="cqc-transfer-note">${escapeHtml(t(transfer.noteKey || 'transferNote'))}</div>
+      ${actions.length ? detailActionsHtml(actions) : ''}
     `;
   }
 
@@ -748,6 +798,7 @@
       archiveSummary: latestArchiveSummary,
       importReport: latestImportReport,
       storageBackend: archiveStoragePort.getBackendInfo(),
+      syncStatus: syncPort?.getSyncStatus ? syncPort.getSyncStatus() : null,
     });
     latestPanelViewModel = viewModel;
     const {
@@ -791,9 +842,7 @@
     } else if (activePanelView === 'archive') {
       viewBody = archiveViewHtml(viewModel);
     } else if (activePanelView === 'transfer') {
-      viewBody = `
-      <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
-      `;
+      viewBody = transferViewHtml(viewModel);
     } else {
       viewBody = `
       ${isDetailsOpen ? detailFootnoteHtml('hide-details', t('detailCollapse')) : detailFootnoteHtml('show-details', t('detailExpand'))}
@@ -802,14 +851,7 @@
 
     contentNode.innerHTML = `
       <div class="cqc-metrics">
-        ${creditMetricHtml('剩余 USD · 含重置日', weekly.剩余USD_包含重置日口径, weekly.剩余Credits_包含重置日口径)}
-        ${creditMetricHtml('剩余 USD · 排除重置日', weekly.剩余USD_排除重置日口径, weekly.剩余Credits_排除重置日口径)}
-        ${creditMetricHtml('周总额度 · 含重置日', weekly.反推周总USD_包含重置日, weekly.反推周总Credits_包含重置日)}
-        ${creditMetricHtml('周总额度 · 排除重置日', weekly.反推周总USD_排除重置日, weekly.反推周总Credits_排除重置日)}
-        ${metricHtml('7 天已用', weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-', 'secondary_window')}
-        ${metricHtml('上次重置至今', usdMetricValue(sinceReset.累计折算USD), creditsMetricHint(sinceReset.累计Credits))}
-        ${metricHtml('本月累计', usdMetricValue(month.累计折算USD), creditsMetricHint(month.累计Credits))}
-        ${resetMetricHtml(mainSevenDayWindow)}
+        ${viewModel.primaryMetrics.map(primaryMetricHtml).join('')}
       </div>
       ${panelTabsHtml()}
       <div class="cqc-details">
@@ -1273,6 +1315,44 @@
         color: #64748b;
         font-size: 12px;
       }
+
+      .cqc-sync-banner {
+        display: grid;
+        gap: 4px;
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border: 1px solid rgba(100, 116, 139, 0.22);
+        border-radius: 10px;
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .cqc-sync-banner strong {
+        color: #202123;
+        font-size: 13px;
+      }
+
+      .cqc-sync-banner[data-tone="success"] {
+        border-color: rgba(16, 163, 127, 0.28);
+        background: rgba(16, 163, 127, 0.08);
+        color: #0f766e;
+      }
+
+      .cqc-sync-banner[data-tone="warning"] {
+        border-color: rgba(245, 158, 11, 0.3);
+        background: rgba(245, 158, 11, 0.1);
+        color: #92400e;
+      }
+
+      .cqc-sync-banner[data-tone="success"] strong {
+        color: #0f766e;
+      }
+
+      .cqc-sync-banner[data-tone="warning"] strong {
+        color: #92400e;
+      }
       .cqc-status[data-tone="error"] { color: #d92d20; }
 
       .cqc-panel {
@@ -1628,9 +1708,19 @@
         .cqc-metric-hint,
         .cqc-table-note,
         .cqc-empty,
+        .cqc-sync-banner,
         .cqc-loading span,
         .cqc-error p {
           color: #b4b4b4;
+        }
+
+        .cqc-sync-banner {
+          background: #212121;
+          border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .cqc-sync-banner strong {
+          color: #ececf1;
         }
 
         .cqc-refresh:hover,
@@ -1751,14 +1841,8 @@
     );
   }
 
-  function createUi() {
-    if (document.getElementById(ROOT_ID)) return;
-
-    installStyles();
-
-    root = document.createElement('div');
-    root.id = ROOT_ID;
-    root.innerHTML = `
+  function floatingPanelMarkupHtml() {
+    return `
       <button type="button" class="cqc-button" data-action="toggle" aria-label="${escapeHtml(t('buttonAriaOpen'))}">
         <span class="cqc-dot" aria-hidden="true"></span>
         <span class="cqc-button-text">
@@ -1782,89 +1866,148 @@
         <div class="cqc-content"></div>
       </div>
     `;
+  }
 
-    document.documentElement.append(root);
+  function createFloatingPanelShell({
+    rootId,
+    markupHtml,
+    installShellStyles,
+    onMount,
+    onAction,
+    onResize,
+  }) {
+    function mount() {
+      if (document.getElementById(rootId)) return null;
 
-    button = root.querySelector('.cqc-button');
-    panel = root.querySelector('.cqc-panel');
-    statusNode = root.querySelector('.cqc-status');
-    contentNode = root.querySelector('.cqc-content');
+      installShellStyles();
 
-    applyButtonPosition(loadButtonPosition());
-    installDrag();
-    installOutsideClose();
+      const shellRoot = document.createElement('div');
+      shellRoot.id = rootId;
+      shellRoot.innerHTML = markupHtml();
 
-    root.addEventListener('click', (event) => {
-      const action = event.target?.closest?.('[data-action]')?.dataset?.action;
-      if (action === 'toggle') {
-        if (suppressNextButtonClick) {
-          suppressNextButtonClick = false;
-          return;
-        }
+      document.documentElement.append(shellRoot);
 
-        activateCompassButton();
-        return;
-      }
+      const refs = {
+        root: shellRoot,
+        button: shellRoot.querySelector('.cqc-button'),
+        panel: shellRoot.querySelector('.cqc-panel'),
+        statusNode: shellRoot.querySelector('.cqc-status'),
+        contentNode: shellRoot.querySelector('.cqc-content'),
+      };
 
-      if (action === 'close') {
-        closePanel();
-        return;
-      }
+      onMount(refs);
 
-      if (action === 'refresh') {
-        runAndRender().catch(() => {});
-        return;
-      }
-
-      if (action === 'switch-view' && latestResult) {
-        const nextView = event.target?.closest?.('[data-view]')?.dataset?.view;
-        if (nextView) {
-          activePanelView = nextView;
-          renderResult(latestResult);
-        }
-        return;
-      }
-
-      if (action === 'export-archive') {
-        exportSnapshotArchive().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-          alert(`${SCRIPT_NAME} ${t('exportFailed', { error: error?.message || error })}`);
-        });
-        return;
-      }
-
-      if (action === 'import-archive') {
-        importSnapshotArchive().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
-          alert(`${SCRIPT_NAME} ${t('importFailed', { error: error?.message || error })}`);
-        });
-        return;
-      }
-
-      if (action === 'show-details' && latestResult) {
-        isDetailsOpen = true;
-        renderResult(latestResult);
-        return;
-      }
-
-      if (action === 'hide-details' && latestResult) {
-        isDetailsOpen = false;
-        renderResult(latestResult);
-      }
-    });
-
-    window.addEventListener('resize', () => {
-      if (!button) return;
-      const rect = getExpandedButtonRect() || button.getBoundingClientRect();
-      applyButtonPosition({
-        left: rect.left,
-        top: rect.top,
-        dockSide: buttonDockSide,
+      shellRoot.addEventListener('click', (event) => {
+        const actionNode = event.target?.closest?.('[data-action]');
+        const action = actionNode?.dataset?.action;
+        if (action) onAction(action, event, actionNode);
       });
-      if (isPanelOpen) positionPanelNearButton();
-    });
 
-    setStatus(t('statusIdle'), 'idle');
+      window.addEventListener('resize', () => {
+        onResize(refs);
+      });
+
+      return {
+        refs,
+        setStatus,
+        openPanel,
+        closePanel,
+        scheduleResize: schedulePanelResize,
+      };
+    }
+
+    return { mount };
+  }
+
+  function handleShellAction(action, event) {
+    if (action === 'toggle') {
+      if (suppressNextButtonClick) {
+        suppressNextButtonClick = false;
+        return;
+      }
+
+      activateCompassButton();
+      return;
+    }
+
+    if (action === 'close') {
+      closePanel();
+      return;
+    }
+
+    if (action === 'refresh') {
+      runAndRender().catch(() => {});
+      return;
+    }
+
+    if (action === 'switch-view' && latestResult) {
+      const nextView = event.target?.closest?.('[data-view]')?.dataset?.view;
+      if (nextView) {
+        activePanelView = nextView;
+        renderResult(latestResult);
+      }
+      return;
+    }
+
+    if (action === 'export-archive') {
+      exportSnapshotArchive().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
+        alert(`${SCRIPT_NAME} ${t('exportFailed', { error: error?.message || error })}`);
+      });
+      return;
+    }
+
+    if (action === 'import-archive') {
+      importSnapshotArchive().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
+        alert(`${SCRIPT_NAME} ${t('importFailed', { error: error?.message || error })}`);
+      });
+      return;
+    }
+
+    if (action === 'show-details' && latestResult) {
+      isDetailsOpen = true;
+      renderResult(latestResult);
+      return;
+    }
+
+    if (action === 'hide-details' && latestResult) {
+      isDetailsOpen = false;
+      renderResult(latestResult);
+    }
+  }
+
+  function handleShellResize() {
+    if (!button) return;
+    const rect = getExpandedButtonRect() || button.getBoundingClientRect();
+    applyButtonPosition({
+      left: rect.left,
+      top: rect.top,
+      dockSide: buttonDockSide,
+    });
+    if (isPanelOpen) positionPanelNearButton();
+  }
+
+  function createUi() {
+    floatingPanelShell = createFloatingPanelShell({
+      rootId: ROOT_ID,
+      markupHtml: floatingPanelMarkupHtml,
+      installShellStyles: installStyles,
+      onMount(refs) {
+        root = refs.root;
+        button = refs.button;
+        panel = refs.panel;
+        statusNode = refs.statusNode;
+        contentNode = refs.contentNode;
+
+        applyButtonPosition(loadButtonPosition());
+        installDrag();
+        installOutsideClose();
+        setStatus(t('statusIdle'), 'idle');
+      },
+      onAction: handleShellAction,
+      onResize: handleShellResize,
+    }).mount();
   }
 
   async function runCompass() {

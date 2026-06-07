@@ -7,6 +7,7 @@ const {
   createSnapshotArchiveQuery,
   createSnapshotArchiveStore,
   normalizeSnapshotArchive,
+  previewImportArchiveDocument,
 } = globalThis.CodexQuotaCompassArchiveLib;
 
 function createFixtureResult(overrides = {}) {
@@ -136,6 +137,92 @@ test('importArchiveDocument merges new Quota Snapshots and skips duplicate Snaps
   assert.deepEqual(firstImport.report, { added: 1, skipped: 0, invalid: 0 });
   assert.deepEqual(secondImport.report, { added: 0, skipped: 1, invalid: 0 });
   assert.equal(secondImport.summary.snapshotCount, 1);
+});
+
+test('two device Snapshot Archives converge after exchanging Snapshot Exports', async () => {
+  const deviceAStorage = createMemoryStore();
+  const deviceAStore = createSnapshotArchiveStore({
+    read: deviceAStorage.read,
+    write: deviceAStorage.write,
+    now: () => '2026-05-30T10:00:00.000Z',
+    createId: () => 'device-a-snapshot',
+    scriptVersion: '0.1.9',
+  });
+  const deviceBStorage = createMemoryStore();
+  const deviceBStore = createSnapshotArchiveStore({
+    read: deviceBStorage.read,
+    write: deviceBStorage.write,
+    now: () => '2026-05-31T10:00:00.000Z',
+    createId: () => 'device-b-snapshot',
+    scriptVersion: '0.1.9',
+  });
+
+  await deviceAStore.saveSnapshot(createFixtureResult(), { capturedAt: '2026-05-30T10:00:00.000Z' });
+  await deviceBStore.saveSnapshot(createFixtureResult({
+    本月初至今: {
+      ...createFixtureResult().本月初至今,
+      汇总: {
+        ...createFixtureResult().本月初至今.汇总,
+        累计Credits: 456,
+      },
+    },
+  }), { capturedAt: '2026-05-31T10:00:00.000Z' });
+
+  const exportA = await deviceAStore.buildExportDocument();
+  const exportB = await deviceBStore.buildExportDocument();
+
+  await deviceAStore.importArchiveDocument(exportB);
+  await deviceBStore.importArchiveDocument(exportA);
+
+  const idsA = normalizeSnapshotArchive(deviceAStorage.dump()).snapshots.map((snapshot) => snapshot.snapshotId);
+  const idsB = normalizeSnapshotArchive(deviceBStorage.dump()).snapshots.map((snapshot) => snapshot.snapshotId);
+
+  assert.deepEqual(idsA, ['device-a-snapshot', 'device-b-snapshot']);
+  assert.deepEqual(idsB, idsA);
+});
+
+test('previewImportArchiveDocument reports incoming changes without writing storage', async () => {
+  const storage = createMemoryStore();
+  const store = createSnapshotArchiveStore({
+    read: storage.read,
+    write: storage.write,
+    now: () => '2026-05-30T10:00:00.000Z',
+    createId: () => 'snapshot-1',
+    scriptVersion: '0.1.9',
+  });
+
+  await store.saveSnapshot(createFixtureResult());
+  const beforePreview = storage.dump();
+  const preview = await store.previewImportArchiveDocument({
+    format: 'codex-quota-compass.snapshot-archive',
+    version: 1,
+    exportedAt: '2026-05-30T11:00:00.000Z',
+    snapshotCount: 2,
+    snapshots: [
+      beforePreview.snapshots[0],
+      {
+        snapshotId: 'snapshot-2',
+        capturedAt: '2026-05-31T10:00:00.000Z',
+        scriptVersion: '0.1.9',
+        periodSummaries: {},
+        periodDetails: {},
+        sourceContext: {},
+        windowSnapshot: [],
+      },
+      { snapshotId: 'invalid-without-captured-at' },
+    ],
+  });
+
+  assert.deepEqual(preview.report, { added: 1, skipped: 1, invalid: 1 });
+  assert.equal(preview.summary.snapshotCount, 2);
+  assert.equal(storage.dump(), beforePreview);
+
+  const directPreview = previewImportArchiveDocument(beforePreview, {
+    format: 'codex-quota-compass.snapshot-archive',
+    version: 1,
+    snapshots: [{ snapshotId: 'invalid-without-captured-at' }],
+  });
+  assert.deepEqual(directPreview.report, { added: 0, skipped: 0, invalid: 1 });
 });
 
 test('normalizeSnapshotArchive upgrades a legacy snapshot array into the Snapshot Archive shape', () => {

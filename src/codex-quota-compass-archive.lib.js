@@ -259,6 +259,23 @@
     };
   }
 
+  function previewImportArchiveDocument(currentArchive, documentObject) {
+    if (!isPlainObject(documentObject) || documentObject.format !== EXPORT_FORMAT || documentObject.version !== EXPORT_VERSION) {
+      throw new Error('Unsupported Snapshot Export document.');
+    }
+
+    const merged = mergeSnapshots(
+      currentArchive,
+      Array.isArray(documentObject.snapshots) ? documentObject.snapshots : [],
+    );
+
+    return {
+      archive: merged.archive,
+      summary: summarizeSnapshotArchive(merged.archive),
+      report: merged.report,
+    };
+  }
+
   function toNumber(value) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -431,12 +448,12 @@
         return buildSnapshotExportDocument(await loadArchive(), now());
       },
 
-      async importArchiveDocument(documentObject) {
-        if (!isPlainObject(documentObject) || documentObject.format !== EXPORT_FORMAT || documentObject.version !== EXPORT_VERSION) {
-          throw new Error('Unsupported Snapshot Export document.');
-        }
+      async previewImportArchiveDocument(documentObject) {
+        return previewImportArchiveDocument(await loadArchive(), documentObject);
+      },
 
-        const merged = mergeSnapshots(await loadArchive(), Array.isArray(documentObject.snapshots) ? documentObject.snapshots : []);
+      async importArchiveDocument(documentObject) {
+        const merged = previewImportArchiveDocument(await loadArchive(), documentObject);
         const nextArchive = await writeArchive(merged.archive);
 
         return {
@@ -470,6 +487,7 @@
     summarizeSnapshotArchive,
     queryArchiveUsage,
     buildSnapshotExportDocument,
+    previewImportArchiveDocument,
     mergeSnapshots,
     createSnapshotArchiveStore,
   });
