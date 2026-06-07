@@ -180,3 +180,41 @@ Implemented architecture-report candidates for tab content, responsive data view
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Bootstrap frontend guidelines
+
+**Date**: 2026-06-08
+**Task**: Bootstrap frontend guidelines
+**Branch**: `master`
+
+### Summary
+
+Completed and tracked the Trellis frontend bootstrap guidelines, verified repository checks, and archived the bootstrap task.
+
+### Main Changes
+
+- Verified `00-bootstrap-guidelines` acceptance criteria and current frontend spec coverage.
+- Added the previously ignored frontend guideline files to version control with precise path staging.
+- Added the referenced code reuse and cross-layer thinking guides so the guide index links resolve in cloned workspaces.
+- Archived the bootstrap task under `.trellis/tasks/archive/2026-06/00-bootstrap-guidelines`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4b92cff` | `docs(trellis): complete frontend bootstrap guidelines` |
+
+### Testing
+
+- [OK] `npm run lint`
+- [OK] `npm test`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
