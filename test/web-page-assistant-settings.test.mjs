@@ -1,45 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import vm from 'node:vm';
+import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
 
 await import('../src/web-page-assistant-settings.lib.js');
 
 const pageKey = 'https://example.com/path?a=1';
 const siteKey = 'example.com';
-const contractStart = '// WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START';
-const contractEnd = '// WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_END';
 
-async function loadInstallableContract() {
-  const userscriptPath = path.resolve(import.meta.dirname, '../src/web-page-assistant.user.js');
-  const content = await readFile(userscriptPath, 'utf8');
-  const startIndex = content.indexOf(contractStart);
-  const endIndex = content.indexOf(contractEnd);
-
-  assert.notEqual(startIndex, -1, 'installable settings contract start marker is missing');
-  assert.notEqual(endIndex, -1, 'installable settings contract end marker is missing');
-  assert.ok(endIndex > startIndex, 'installable settings contract markers are out of order');
-
-  const block = content.slice(startIndex + contractStart.length, endIndex);
-  const source = `
-    (() => {
-      const MIN_INTERVAL_MS = 1000;
-      const MAX_INTERVAL_MS = 60 * 60 * 1000;
-      const DEFAULT_UNLOCKER_OPTIONS = {
-        allowSelection: true,
-        allowCopy: true,
-        allowContextMenu: true,
-        allowDrag: false,
-        suppressBeforeUnload: false,
-      };
-      ${block}
-      return createPageAssistantSettingsContract();
-    })()
-  `;
-
-  return vm.runInThisContext(source);
-}
+const loadInstallableContract = () => loadInstallableBlock({
+  markerPrefix: 'WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT',
+  prefixSource: `
+    const MIN_INTERVAL_MS = 1000;
+    const MAX_INTERVAL_MS = 60 * 60 * 1000;
+    const DEFAULT_UNLOCKER_OPTIONS = {
+      allowSelection: true,
+      allowCopy: true,
+      allowContextMenu: true,
+      allowDrag: false,
+      suppressBeforeUnload: false,
+    };
+  `,
+  returnExpression: 'createPageAssistantSettingsContract()',
+});
 
 const libraryContract = globalThis.WebPageAssistantSettingsLib;
 const installableContract = await loadInstallableContract();

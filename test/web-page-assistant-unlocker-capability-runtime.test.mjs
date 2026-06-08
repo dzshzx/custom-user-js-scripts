@@ -1,30 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import vm from 'node:vm';
+import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
 
-const blockStart = '// WEB_PAGE_ASSISTANT_UNLOCKER_RUNTIME_START';
-const blockEnd = '// WEB_PAGE_ASSISTANT_UNLOCKER_RUNTIME_END';
-
-async function loadUnlockerRuntimeFactory() {
-  const userscriptPath = path.resolve(import.meta.dirname, '../src/web-page-assistant.user.js');
-  const content = await readFile(userscriptPath, 'utf8');
-  const startIndex = content.indexOf(blockStart);
-  const endIndex = content.indexOf(blockEnd);
-
-  assert.notEqual(startIndex, -1, 'unlocker runtime start marker is missing');
-  assert.notEqual(endIndex, -1, 'unlocker runtime end marker is missing');
-  assert.ok(endIndex > startIndex, 'unlocker runtime markers are out of order');
-
-  const block = content.slice(startIndex + blockStart.length, endIndex);
-  return vm.runInThisContext(`
-    (() => {
-      ${block}
-      return createUnlockerRuntime;
-    })()
-  `);
-}
+const loadUnlockerRuntimeFactory = () => loadInstallableBlock({
+  markerPrefix: 'WEB_PAGE_ASSISTANT_UNLOCKER_RUNTIME',
+  returnExpression: 'createUnlockerRuntime',
+});
 
 function createTarget() {
   const listeners = [];

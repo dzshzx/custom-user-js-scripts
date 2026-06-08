@@ -1,31 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import vm from 'node:vm';
+import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
 
-const blockStart = '// WEB_PAGE_ASSISTANT_STORAGE_PORT_START';
-const blockEnd = '// WEB_PAGE_ASSISTANT_STORAGE_PORT_END';
-
-async function loadStoragePortFactory() {
-  const userscriptPath = path.resolve(import.meta.dirname, '../src/web-page-assistant.user.js');
-  const content = await readFile(userscriptPath, 'utf8');
-  const startIndex = content.indexOf(blockStart);
-  const endIndex = content.indexOf(blockEnd);
-
-  assert.notEqual(startIndex, -1, 'storage port start marker is missing');
-  assert.notEqual(endIndex, -1, 'storage port end marker is missing');
-  assert.ok(endIndex > startIndex, 'storage port markers are out of order');
-
-  const block = content.slice(startIndex + blockStart.length, endIndex);
-  return vm.runInThisContext(`
-    (() => {
-      const SCRIPT_NAME = 'Web Page Assistant';
-      ${block}
-      return createWebPageAssistantStoragePort;
-    })()
-  `);
-}
+const loadStoragePortFactory = () => loadInstallableBlock({
+  markerPrefix: 'WEB_PAGE_ASSISTANT_STORAGE_PORT',
+  prefixSource: "const SCRIPT_NAME = 'Web Page Assistant';",
+  returnExpression: 'createWebPageAssistantStoragePort',
+});
 
 function createLocalStorage(initial = {}) {
   const store = new Map(Object.entries(initial));
