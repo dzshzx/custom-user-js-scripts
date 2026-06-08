@@ -101,11 +101,6 @@
   let dialog;
   let activeDialogTab = 'refresh';
   let countdownNodes = [];
-  let targetTime = 0;
-  let remainingWhenPaused = 0;
-  let isPaused = false;
-  let timerId = null;
-  let isRefreshing = false;
   let hasRootListener = false;
 
   // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START
@@ -1394,6 +1389,148 @@
     defaultIntervalMs: 5 * 60 * 1000,
   });
 
+  // WEB_PAGE_ASSISTANT_REFRESH_RUNTIME_START
+  function createRefreshRuntime(adapters) {
+    const {
+      minIntervalMs,
+      tickMs,
+      now,
+      setInterval: setTimer,
+      clearInterval: clearTimer,
+      reload,
+      onStateChange,
+    } = adapters;
+    const emptyState = {
+      activeMatch: null,
+      targetTime: 0,
+      remainingWhenPaused: 0,
+      isPaused: false,
+      isRefreshing: false,
+      timerId: null,
+    };
+    let state = { ...emptyState };
+
+    function clearActiveTimer() {
+      if (!state.timerId) return;
+      clearTimer(state.timerId);
+      state = { ...state, timerId: null };
+    }
+
+    function snapshot() {
+      const remainingMs = state.activeMatch
+        ? state.isPaused
+          ? state.remainingWhenPaused
+          : Math.max(0, state.targetTime - now())
+        : 0;
+      return {
+        activeMatch: state.activeMatch,
+        isPaused: state.isPaused,
+        isRefreshing: state.isRefreshing,
+        remainingMs,
+      };
+    }
+
+    function emit() {
+      onStateChange(snapshot());
+    }
+
+    function tick() {
+      if (!state.activeMatch || state.isPaused || state.isRefreshing) {
+        emit();
+        return;
+      }
+
+      const remainingMs = state.targetTime - now();
+      emit();
+      if (remainingMs > 0) return;
+
+      state = { ...state, isRefreshing: true };
+      clearActiveTimer();
+      emit();
+      reload();
+    }
+
+    function startTimer() {
+      clearActiveTimer();
+      if (!state.activeMatch || state.isPaused) {
+        emit();
+        return;
+      }
+
+      state = { ...state, timerId: setTimer(tick, tickMs) };
+      tick();
+    }
+
+    function restart(activeMatch) {
+      clearActiveTimer();
+      if (!activeMatch) {
+        state = { ...emptyState };
+        emit();
+        return;
+      }
+
+      state = {
+        ...emptyState,
+        activeMatch,
+        targetTime: now() + activeMatch.setting.intervalMs,
+      };
+      startTimer();
+    }
+
+    function stop() {
+      clearActiveTimer();
+      state = { ...emptyState };
+      emit();
+    }
+
+    function togglePause() {
+      if (!state.activeMatch) return snapshot();
+
+      if (state.isPaused) {
+        state = {
+          ...state,
+          targetTime: now() + state.remainingWhenPaused,
+          remainingWhenPaused: 0,
+          isPaused: false,
+        };
+        startTimer();
+        return snapshot();
+      }
+
+      state = {
+        ...state,
+        remainingWhenPaused: Math.max(minIntervalMs, state.targetTime - now()),
+        isPaused: true,
+      };
+      clearActiveTimer();
+      emit();
+      return snapshot();
+    }
+
+    return {
+      restart,
+      stop,
+      togglePause,
+      getState: snapshot,
+      tick,
+    };
+  }
+  // WEB_PAGE_ASSISTANT_REFRESH_RUNTIME_END
+
+  const refreshRuntime = createRefreshRuntime({
+    minIntervalMs: MIN_INTERVAL_MS,
+    tickMs: TICK_MS,
+    now: () => Date.now(),
+    setInterval: (handler, delay) => window.setInterval(handler, delay),
+    clearInterval: (timer) => window.clearInterval(timer),
+    reload: () => location.reload(),
+    onStateChange(state) {
+      activeMatch = state.activeMatch;
+      updatePauseButton();
+      updateCountdownText();
+    },
+  });
+
   function defaultWidgetPosition() {
     return {
       left: window.innerWidth - WIDGET_WIDTH - DEFAULT_WIDGET_OFFSET,
@@ -1846,52 +1983,25 @@
     refreshUnlockerState();
   }
 
-  function stopTimer() {
-    if (timerId) {
-      clearInterval(timerId);
-      timerId = null;
-    }
-  }
-
-  function startTimer() {
-    stopTimer();
-    if (!activeMatch || isPaused) return;
-
-    timerId = window.setInterval(tickCountdown, TICK_MS);
-    tickCountdown();
-  }
-
   function restartActiveCountdown() {
-    activeMatch = resolveActiveSetting(settings);
-    isPaused = false;
-    remainingWhenPaused = 0;
-    isRefreshing = false;
-
-    if (!activeMatch) {
-      stopTimer();
-      renderWidget();
-      return;
-    }
-
-    targetTime = Date.now() + activeMatch.setting.intervalMs;
+    refreshRuntime.restart(resolveActiveSetting(settings));
     renderWidget();
-    startTimer();
+    updatePauseButton();
+    updateCountdownText();
   }
 
   function updateCountdownText() {
     if (!countdownNodes.length) return;
 
-    if (!activeMatch) {
+    const runtimeState = refreshRuntime.getState();
+    if (!runtimeState.activeMatch) {
       for (const node of countdownNodes) {
         node.textContent = '--:--';
       }
       return;
     }
 
-    const remainingMs = isPaused
-      ? remainingWhenPaused
-      : Math.max(0, targetTime - Date.now());
-    const text = formatCountdown(remainingMs);
+    const text = formatCountdown(runtimeState.remainingMs);
     for (const node of countdownNodes) {
       node.textContent = text;
     }
@@ -1900,39 +2010,11 @@
   function updatePauseButton() {
     const pauseButton = widget?.querySelector('[data-part-action="toggle-pause"]');
     if (!pauseButton) return;
-    pauseButton.textContent = isPaused ? '继续' : '暂停';
-  }
-
-  function tickCountdown() {
-    if (!activeMatch || isPaused || isRefreshing) return;
-
-    const remainingMs = targetTime - Date.now();
-    updateCountdownText();
-
-    if (remainingMs <= 0) {
-      isRefreshing = true;
-      stopTimer();
-      location.reload();
-    }
+    pauseButton.textContent = refreshRuntime.getState().isPaused ? '继续' : '暂停';
   }
 
   function togglePause() {
-    if (!activeMatch) return;
-
-    if (isPaused) {
-      targetTime = Date.now() + remainingWhenPaused;
-      remainingWhenPaused = 0;
-      isPaused = false;
-      updatePauseButton();
-      startTimer();
-      return;
-    }
-
-    remainingWhenPaused = Math.max(MIN_INTERVAL_MS, targetTime - Date.now());
-    isPaused = true;
-    stopTimer();
-    updatePauseButton();
-    updateCountdownText();
+    refreshRuntime.togglePause();
   }
 
   function stopEvent(event) {
