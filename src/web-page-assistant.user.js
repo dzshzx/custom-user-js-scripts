@@ -1187,12 +1187,11 @@
   }
 
   function getSelectedScope() {
-    const selected = dialog?.querySelector('input[name="part-scope"]:checked')?.value;
-    return selected === 'site' ? 'site' : 'page';
+    return dialogContract.readSelectedScope(dialog);
   }
 
   function setMessage(text, tone = 'info') {
-    const messageNode = dialog?.querySelector('[data-part-role="message"]');
+    const messageNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.message));
     if (!messageNode) return;
 
     messageNode.textContent = text;
@@ -1221,6 +1220,179 @@
   function defaultUnlockerSetting(overrides = {}) {
     return PageAssistantSettings.defaultUnlockerSetting(overrides);
   }
+
+  // WEB_PAGE_ASSISTANT_DIALOG_CONTRACT_START
+  function createPageAssistantDialogContract(adapters) {
+    const {
+      settingsContract,
+      defaultUnlockerSetting,
+      formatInterval,
+      defaultIntervalMs,
+    } = adapters;
+    const tabs = { refresh: 'refresh', unlocker: 'unlocker' };
+    const roles = {
+      status: 'status',
+      pageKey: 'page-key',
+      siteKey: 'site-key',
+      presets: 'presets',
+      customValue: 'custom-value',
+      customUnit: 'custom-unit',
+      message: 'message',
+      unlockerStatus: 'unlocker-status',
+      unlockerPageKey: 'unlocker-page-key',
+      unlockerSiteKey: 'unlocker-site-key',
+      unlockerEnabled: 'unlocker-enabled',
+      unlockerSelection: 'unlocker-selection',
+      unlockerCopy: 'unlocker-copy',
+      unlockerContextMenu: 'unlocker-context-menu',
+      unlockerDrag: 'unlocker-drag',
+      unlockerBeforeUnload: 'unlocker-beforeunload',
+    };
+    const actions = {
+      savePreset: 'save-preset',
+      deletePage: 'delete-page',
+      deleteSite: 'delete-site',
+      deleteUnlockerPage: 'delete-unlocker-page',
+      deleteUnlockerSite: 'delete-unlocker-site',
+    };
+
+    function roleSelector(role) {
+      return `[data-part-role="${role}"]`;
+    }
+
+    function actionSelector(action) {
+      return `[data-part-action="${action}"]`;
+    }
+
+    function normalizeTab(value, fallback = tabs.refresh) {
+      return value === tabs.unlocker || value === tabs.refresh ? value : fallback;
+    }
+
+    function focusRoleForTab(tab) {
+      return normalizeTab(tab) === tabs.unlocker ? roles.unlockerEnabled : roles.customValue;
+    }
+
+    function readSelectedScope(dialogNode) {
+      const selected = dialogNode?.querySelector('input[name="part-scope"]:checked')?.value;
+      return selected === 'site' ? 'site' : 'page';
+    }
+
+    function isChecked(dialogNode, role) {
+      return dialogNode?.querySelector(roleSelector(role))?.checked === true;
+    }
+
+    function createViewModel(input) {
+      const nextTab = normalizeTab(input.preferredTab, input.activeTab);
+      const selectedScope = input.preferredScope
+        || input.activeRefreshMatch?.scope
+        || input.activeUnlockerMatch?.scope
+        || 'page';
+      const pageSetting = settingsContract.getRefreshSetting(input.settings, 'page', input.pageKey);
+      const siteSetting = settingsContract.getRefreshSetting(input.settings, 'site', input.siteKey);
+      const pageUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, 'page', input.pageKey);
+      const siteUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, 'site', input.siteKey);
+      const scopedUnlockerSetting = selectedScope === 'site' ? siteUnlockerSetting : pageUnlockerSetting;
+      const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
+      const customInterval = defaultInterval % (60 * 1000) === 0
+        ? { value: String(defaultInterval / (60 * 1000)), unit: 'minutes' }
+        : { value: String(Math.round(defaultInterval / 1000)), unit: 'seconds' };
+
+      return {
+        message: input.message || '',
+        activeTab: nextTab,
+        selectedScope,
+        pageSetting,
+        siteSetting,
+        pageUnlockerSetting,
+        siteUnlockerSetting,
+        unlockerFormSetting: scopedUnlockerSetting || defaultUnlockerSetting({ enabled: false }),
+        customInterval,
+        statusText: input.statusText,
+        unlockerStatusText: input.unlockerStatusText,
+        pageRefreshText: `页面：${input.pageKey}${pageSetting ? `（${formatInterval(pageSetting.intervalMs)}）` : '（未设置）'}`,
+        siteRefreshText: `站点：${input.siteKey}${siteSetting ? `（${formatInterval(siteSetting.intervalMs)}）` : '（未设置）'}`,
+        pageUnlockerText: `页面：${input.pageKey}${pageUnlockerSetting ? '（已保存）' : '（未设置）'}`,
+        siteUnlockerText: `站点：${input.siteKey}${siteUnlockerSetting ? '（已保存）' : '（未设置）'}`,
+        focusRole: focusRoleForTab(nextTab),
+      };
+    }
+
+    function applyModel(dialogNode, model, presets) {
+      const textByRole = [
+        [roles.status, model.statusText],
+        [roles.pageKey, model.pageRefreshText],
+        [roles.siteKey, model.siteRefreshText],
+        [roles.unlockerStatus, model.unlockerStatusText],
+        [roles.unlockerPageKey, model.pageUnlockerText],
+        [roles.unlockerSiteKey, model.siteUnlockerText],
+      ];
+      for (const [role, text] of textByRole) {
+        const node = dialogNode.querySelector(roleSelector(role));
+        if (node) node.textContent = text;
+      }
+
+      const scopeInput = dialogNode.querySelector(`input[name="part-scope"][value="${model.selectedScope}"]`);
+      if (scopeInput) scopeInput.checked = true;
+
+      const presetsNode = dialogNode.querySelector(roleSelector(roles.presets));
+      for (const preset of presets) {
+        const presetButton = dialogNode.ownerDocument.createElement('button');
+        presetButton.type = 'button';
+        presetButton.className = 'part-preset';
+        presetButton.dataset.partAction = actions.savePreset;
+        presetButton.dataset.intervalMs = String(preset.ms);
+        presetButton.textContent = preset.label;
+        presetsNode.append(presetButton);
+      }
+
+      dialogNode.querySelector(roleSelector(roles.customValue)).value = model.customInterval.value;
+      dialogNode.querySelector(roleSelector(roles.customUnit)).value = model.customInterval.unit;
+      dialogNode.querySelector(actionSelector(actions.deletePage)).disabled = !model.pageSetting;
+      dialogNode.querySelector(actionSelector(actions.deleteSite)).disabled = !model.siteSetting;
+      dialogNode.querySelector(roleSelector(roles.unlockerEnabled)).checked = model.unlockerFormSetting.enabled;
+      dialogNode.querySelector(roleSelector(roles.unlockerSelection)).checked = model.unlockerFormSetting.allowSelection;
+      dialogNode.querySelector(roleSelector(roles.unlockerCopy)).checked = model.unlockerFormSetting.allowCopy;
+      dialogNode.querySelector(roleSelector(roles.unlockerContextMenu)).checked = model.unlockerFormSetting.allowContextMenu;
+      dialogNode.querySelector(roleSelector(roles.unlockerDrag)).checked = model.unlockerFormSetting.allowDrag;
+      dialogNode.querySelector(roleSelector(roles.unlockerBeforeUnload)).checked = model.unlockerFormSetting.suppressBeforeUnload;
+      dialogNode.querySelector(actionSelector(actions.deleteUnlockerPage)).disabled = !model.pageUnlockerSetting;
+      dialogNode.querySelector(actionSelector(actions.deleteUnlockerSite)).disabled = !model.siteUnlockerSetting;
+      dialogNode.querySelector(roleSelector(model.focusRole))?.focus();
+    }
+
+    function readUnlockerFormSetting(dialogNode) {
+      return defaultUnlockerSetting({
+        enabled: isChecked(dialogNode, roles.unlockerEnabled),
+        allowSelection: isChecked(dialogNode, roles.unlockerSelection),
+        allowCopy: isChecked(dialogNode, roles.unlockerCopy),
+        allowContextMenu: isChecked(dialogNode, roles.unlockerContextMenu),
+        allowDrag: isChecked(dialogNode, roles.unlockerDrag),
+        suppressBeforeUnload: isChecked(dialogNode, roles.unlockerBeforeUnload),
+      });
+    }
+
+    return {
+      roles,
+      tabs,
+      actions,
+      roleSelector,
+      actionSelector,
+      normalizeTab,
+      focusRoleForTab,
+      readSelectedScope,
+      createViewModel,
+      applyModel,
+      readUnlockerFormSetting,
+    };
+  }
+  // WEB_PAGE_ASSISTANT_DIALOG_CONTRACT_END
+
+  const dialogContract = createPageAssistantDialogContract({
+    settingsContract: PageAssistantSettings,
+    defaultUnlockerSetting,
+    formatInterval,
+    defaultIntervalMs: 5 * 60 * 1000,
+  });
 
   function defaultWidgetPosition() {
     return {
@@ -1446,39 +1618,19 @@
   }
 
   function createDialogViewModel(message = '', preferredScope = null, preferredTab = null) {
-    const nextTab = preferredTab === 'unlocker' ? 'unlocker' : preferredTab === 'refresh' ? 'refresh' : activeDialogTab;
-    const selectedScope = preferredScope || activeMatch?.scope || activeUnlockerMatch?.scope || 'page';
-    const pageSetting = PageAssistantSettings.getRefreshSetting(settings, 'page', currentPageKey);
-    const siteSetting = PageAssistantSettings.getRefreshSetting(settings, 'site', currentSiteKey);
-    const pageUnlockerSetting = PageAssistantSettings.getUnlockerSetting(settings, 'page', currentPageKey);
-    const siteUnlockerSetting = PageAssistantSettings.getUnlockerSetting(settings, 'site', currentSiteKey);
-    const scopedUnlockerSetting = selectedScope === 'site'
-      ? siteUnlockerSetting
-      : pageUnlockerSetting;
-    const unlockerFormSetting = scopedUnlockerSetting || defaultUnlockerSetting({ enabled: false });
-    const defaultInterval = activeMatch?.setting.intervalMs || 5 * 60 * 1000;
-    const customInterval = defaultInterval % (60 * 1000) === 0
-      ? { value: String(defaultInterval / (60 * 1000)), unit: 'minutes' }
-      : { value: String(Math.round(defaultInterval / 1000)), unit: 'seconds' };
-
-    return {
+    return dialogContract.createViewModel({
       message,
-      activeTab: nextTab,
-      selectedScope,
-      pageSetting,
-      siteSetting,
-      pageUnlockerSetting,
-      siteUnlockerSetting,
-      unlockerFormSetting,
-      customInterval,
+      preferredScope,
+      preferredTab,
+      activeTab: activeDialogTab,
+      activeRefreshMatch: activeMatch,
+      activeUnlockerMatch,
+      settings,
+      pageKey: currentPageKey,
+      siteKey: currentSiteKey,
       statusText: currentStatusText(),
       unlockerStatusText: unlockerStatusText(),
-      pageRefreshText: `页面：${currentPageKey}${pageSetting ? `（${formatInterval(pageSetting.intervalMs)}）` : '（未设置）'}`,
-      siteRefreshText: `站点：${currentSiteKey}${siteSetting ? `（${formatInterval(siteSetting.intervalMs)}）` : '（未设置）'}`,
-      pageUnlockerText: `页面：${currentPageKey}${pageUnlockerSetting ? '（已保存）' : '（未设置）'}`,
-      siteUnlockerText: `站点：${currentSiteKey}${siteUnlockerSetting ? '（已保存）' : '（未设置）'}`,
-      focusRole: nextTab === 'unlocker' ? 'unlocker-enabled' : 'custom-value',
-    };
+    });
   }
 
   function renderDialog(message = '', preferredScope = null, preferredTab = null) {
@@ -1631,45 +1783,8 @@
 
     dialog.append(panel);
     root.append(dialog);
-
-    dialog.querySelector('[data-part-role="status"]').textContent = model.statusText;
-    dialog.querySelector('[data-part-role="page-key"]').textContent = model.pageRefreshText;
-    dialog.querySelector('[data-part-role="site-key"]').textContent = model.siteRefreshText;
-    dialog.querySelector('[data-part-role="unlocker-status"]').textContent = model.unlockerStatusText;
-    dialog.querySelector('[data-part-role="unlocker-page-key"]').textContent = model.pageUnlockerText;
-    dialog.querySelector('[data-part-role="unlocker-site-key"]').textContent = model.siteUnlockerText;
-
-    const scopeInput = dialog.querySelector(`input[name="part-scope"][value="${model.selectedScope}"]`);
-    if (scopeInput) scopeInput.checked = true;
-
-    const presetsNode = dialog.querySelector('[data-part-role="presets"]');
-    for (const preset of PRESETS) {
-      const presetButton = document.createElement('button');
-      presetButton.type = 'button';
-      presetButton.className = 'part-preset';
-      presetButton.dataset.partAction = 'save-preset';
-      presetButton.dataset.intervalMs = String(preset.ms);
-      presetButton.textContent = preset.label;
-      presetsNode.append(presetButton);
-    }
-
-    const customValue = dialog.querySelector('[data-part-role="custom-value"]');
-    const customUnit = dialog.querySelector('[data-part-role="custom-unit"]');
-    customValue.value = model.customInterval.value;
-    customUnit.value = model.customInterval.unit;
-
-    dialog.querySelector('[data-part-action="delete-page"]').disabled = !model.pageSetting;
-    dialog.querySelector('[data-part-action="delete-site"]').disabled = !model.siteSetting;
-    dialog.querySelector('[data-part-role="unlocker-enabled"]').checked = model.unlockerFormSetting.enabled;
-    dialog.querySelector('[data-part-role="unlocker-selection"]').checked = model.unlockerFormSetting.allowSelection;
-    dialog.querySelector('[data-part-role="unlocker-copy"]').checked = model.unlockerFormSetting.allowCopy;
-    dialog.querySelector('[data-part-role="unlocker-context-menu"]').checked = model.unlockerFormSetting.allowContextMenu;
-    dialog.querySelector('[data-part-role="unlocker-drag"]').checked = model.unlockerFormSetting.allowDrag;
-    dialog.querySelector('[data-part-role="unlocker-beforeunload"]').checked = model.unlockerFormSetting.suppressBeforeUnload;
-    dialog.querySelector('[data-part-action="delete-unlocker-page"]').disabled = !model.pageUnlockerSetting;
-    dialog.querySelector('[data-part-action="delete-unlocker-site"]').disabled = !model.siteUnlockerSetting;
+    dialogContract.applyModel(dialog, model, PRESETS);
     setMessage(model.message);
-    dialog.querySelector(`[data-part-role="${model.focusRole}"]`)?.focus();
   }
 
   function closeDialog() {
@@ -1679,8 +1794,8 @@
   }
 
   function parseCustomInterval() {
-    const valueNode = dialog?.querySelector('[data-part-role="custom-value"]');
-    const unitNode = dialog?.querySelector('[data-part-role="custom-unit"]');
+    const valueNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.customValue));
+    const unitNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.customUnit));
     const amount = Number(valueNode?.value);
     const unit = unitNode?.value === 'minutes' ? 'minutes' : 'seconds';
     const ms = amount * (unit === 'minutes' ? 60 * 1000 : 1000);
@@ -1711,14 +1826,7 @@
   }
 
   function readUnlockerFormSetting() {
-    return defaultUnlockerSetting({
-      enabled: dialog?.querySelector('[data-part-role="unlocker-enabled"]')?.checked === true,
-      allowSelection: dialog?.querySelector('[data-part-role="unlocker-selection"]')?.checked === true,
-      allowCopy: dialog?.querySelector('[data-part-role="unlocker-copy"]')?.checked === true,
-      allowContextMenu: dialog?.querySelector('[data-part-role="unlocker-context-menu"]')?.checked === true,
-      allowDrag: dialog?.querySelector('[data-part-role="unlocker-drag"]')?.checked === true,
-      suppressBeforeUnload: dialog?.querySelector('[data-part-role="unlocker-beforeunload"]')?.checked === true,
-    });
+    return dialogContract.readUnlockerFormSetting(dialog);
   }
 
   async function saveUnlockerSetting(scope, unlockerSetting) {
