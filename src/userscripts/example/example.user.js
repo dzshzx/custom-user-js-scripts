@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Example Custom User Script
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.0
+// @version      0.1.1
 // @description  Example template for browser userscripts.
 // @author       dzshzx
 // @match        https://example.com/*
