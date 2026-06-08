@@ -57,7 +57,14 @@ Migrated the auto refresh userscript to a web-page-assistant entry point, kept t
 
 ### Main Changes
 
-(Add details)
+- Planned the compact collapsed-tab interaction with `ui-ux-pro-max`.
+- Added `aria-expanded` synchronization for the Quota Compass floating trigger
+  on mount, open, and close.
+- Kept the panel hidden by default and left open/close behavior behind the
+  existing trigger click.
+- Changed the trigger cursor to `pointer`, while preserving `grabbing` during
+  drag interactions.
+- Bumped `package.json` to `0.1.3` and Codex Quota Compass to `0.2.7`.
 
 ### Git Commits
 
@@ -67,7 +74,10 @@ Migrated the auto refresh userscript to a web-page-assistant entry point, kept t
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `node --test test/codex-quota-compass-panel-shell.test.mjs`
+- [OK] `npm test`
+- [OK] `npm run lint`
+- [OK] `git diff --check`
 
 ### Status
 
@@ -283,6 +293,39 @@ Implemented the first three architecture review candidates: extracted panel rend
 | `b9479b2` | (see git log) |
 | `5df666e` | (see git log) |
 | `9e4eacd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 9: Keep quota compass panel collapsed by default
+
+**Date**: 2026-06-08
+**Task**: Keep quota compass panel collapsed by default
+**Branch**: `master`
+
+### Summary
+
+Used ui-ux-pro-max to plan a compact data-dashboard interaction, then made the Codex Quota Compass floating trigger default to collapsed with aria-expanded state synchronized on mount/open/close. Bumped package and userscript patch versions, validated with tests, lint, and diff whitespace check.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `25a43dc` | (see git log) |
 
 ### Testing
 
