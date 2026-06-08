@@ -1,0 +1,33 @@
+{
+  "id": "repository-structure-docs-governance",
+  "name": "repository-structure-docs-governance",
+  "title": "Repository structure and documentation governance",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "dzshzx",
+  "assignee": "dzshzx",
+  "createdAt": "2026-06-08",
+  "completedAt": "2026-06-08",
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-08-docs-spec-boundaries",
+    "06-08-local-tooling-script-governance",
+    "06-08-web-page-assistant-source-module-split",
+    "06-08-codex-quota-panel-module-governance",
+    "06-08-repository-governance-integration-verification",
+    "06-08-installable-userscript-layout-migration"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
