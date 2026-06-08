@@ -74,8 +74,10 @@ test('createSnapshotSyncPort routes queryUsage and validates store availability'
   });
 
   const day = await port.queryUsage({ mode: 'day', startDate: '2026-05-01', endDate: '2026-05-02' });
+  const month = await port.queryUsage({ mode: 'month' });
   assert.equal(day.mode, 'day');
-  assert.deepEqual(calls, ['day']);
+  assert.equal(month.mode, 'month');
+  assert.deepEqual(calls, ['day', 'month']);
 
   const unavailablePort = createSnapshotSyncPort({ archiveStore: null });
   await assert.rejects(

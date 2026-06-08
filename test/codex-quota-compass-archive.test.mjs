@@ -352,4 +352,8 @@ test('queryHistory returns latest period summaries and snapshot timeline', async
 
   const directQuery = createSnapshotArchiveQuery(storage.dump());
   assert.equal(directQuery.latestPeriodSummaries().month.summary.totalCredits, 300);
+  assert.equal(directQuery.queryPeriodSummaries({ periodDays: 30 }).rolling.summary.periodDays, 30);
+  assert.equal(directQuery.queryLatestUsage({ mode: 'month' }).summary.totalCredits, 300);
+  assert.equal(directQuery.queryTimeline({ limit: 1 }).length, 1);
+  assert.equal(directQuery.queryTimeline({ limit: 1 })[0].snapshotId, 'snapshot-2');
 });

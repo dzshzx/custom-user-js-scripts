@@ -292,7 +292,7 @@
       };
     }
 
-    function latestPeriodSummaries(query = {}) {
+    function queryPeriodSummaries(query = {}) {
       return {
         rolling: periodSummary('rolling', { periodDays: Number(query.periodDays) || null }),
         month: periodSummary('monthToDate'),
@@ -300,8 +300,8 @@
       };
     }
 
-    function snapshotTimeline(limit = 12) {
-      const count = Math.max(0, Number(limit) || 0);
+    function queryTimeline(query = {}) {
+      const count = Math.max(0, Number(query.limit ?? query.timelineLimit ?? 12) || 0);
       return normalized.snapshots
         .slice(count ? -count : 0)
         .reverse()
@@ -315,29 +315,39 @@
         }));
     }
 
+    function queryLatestUsage(query = {}) {
+      const mode = query.mode || 'day';
+      const periods = queryPeriodSummaries(query);
+      if (mode === 'rolling') return periods.rolling;
+      if (mode === 'month') return periods.month;
+      if (mode === 'sinceReset') return periods.sinceReset;
+      return dailyUsageForLatestSinceReset(query);
+    }
+
+    function queryHistory(query = {}) {
+      const periods = queryPeriodSummaries(query);
+      return {
+        day: dailyUsageForLatestSinceReset(query),
+        rolling: periods.rolling,
+        month: periods.month,
+        sinceReset: periods.sinceReset,
+        timeline: queryTimeline(query),
+      };
+    }
+
     return {
       dailyUsageForLatestSinceReset,
-      latestPeriodSummaries,
-      snapshotTimeline,
-      queryHistory(query = {}) {
-        const periods = latestPeriodSummaries(query);
-        return {
-          day: dailyUsageForLatestSinceReset(query),
-          rolling: periods.rolling,
-          month: periods.month,
-          sinceReset: periods.sinceReset,
-          timeline: snapshotTimeline(query.timelineLimit ?? 12),
-        };
-      },
+      latestPeriodSummaries: queryPeriodSummaries,
+      snapshotTimeline: (limit = 12) => queryTimeline({ limit }),
+      queryLatestUsage,
+      queryPeriodSummaries,
+      queryTimeline,
+      queryHistory,
     };
   }
 
   function queryArchiveUsage(archive, query = {}) {
-    const mode = query.mode || 'day';
-    const archiveQuery = createSnapshotArchiveQuery(archive);
-    if (mode === 'rolling') return archiveQuery.latestPeriodSummaries(query).rolling;
-    if (mode === 'month') return archiveQuery.latestPeriodSummaries(query).month;
-    return archiveQuery.dailyUsageForLatestSinceReset(query);
+    return createSnapshotArchiveQuery(archive).queryLatestUsage(query);
   }
 
   function createSnapshotArchiveStore({
@@ -414,11 +424,11 @@
       },
 
       async queryArchiveUsage(query) {
-        return queryArchiveUsage(await loadArchive(), query);
+        return createSnapshotArchiveQuery(await loadArchive()).queryLatestUsage(query || {});
       },
 
       async queryHistory(query) {
-        return createSnapshotArchiveQuery(await loadArchive()).queryHistory(query);
+        return createSnapshotArchiveQuery(await loadArchive()).queryHistory(query || {});
       },
     };
   }
