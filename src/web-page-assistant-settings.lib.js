@@ -11,6 +11,7 @@
     suppressBeforeUnload: false,
   };
 
+  // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START
   function emptySettings() {
     return {
       version: 2,
@@ -187,24 +188,33 @@
     return next;
   }
 
-  globalScope.WebPageAssistantSettingsLib = {
-    MIN_INTERVAL_MS,
-    MAX_INTERVAL_MS,
-    DEFAULT_UNLOCKER_OPTIONS,
-    emptySettings,
-    isValidIntervalMs,
-    normalizeSettings,
-    normalizeRefreshSetting,
-    normalizeUnlockerSetting,
-    hasUnlockerAction,
-    resolveActiveRefreshSetting,
-    resolveActiveUnlockerSetting,
-    getRefreshSetting,
-    getUnlockerSetting,
-    setRefreshSetting,
-    deleteRefreshSetting,
-    defaultUnlockerSetting,
-    setUnlockerSetting,
-    deleteUnlockerSetting,
-  };
+  function createPageAssistantSettingsContract() {
+    return {
+      MIN_INTERVAL_MS,
+      MAX_INTERVAL_MS,
+      DEFAULT_UNLOCKER_OPTIONS,
+      empty: emptySettings,
+      emptySettings,
+      isValidIntervalMs,
+      normalize: normalizeSettings,
+      normalizeSettings,
+      normalizeRefreshSetting,
+      normalizeUnlockerSetting,
+      hasUnlockerAction,
+      resolveActiveRefresh: resolveActiveRefreshSetting,
+      resolveActiveRefreshSetting,
+      resolveActiveUnlocker: resolveActiveUnlockerSetting,
+      resolveActiveUnlockerSetting,
+      getRefreshSetting,
+      getUnlockerSetting,
+      setRefreshSetting,
+      deleteRefreshSetting,
+      defaultUnlockerSetting,
+      setUnlockerSetting,
+      deleteUnlockerSetting,
+    };
+  }
+  // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_END
+
+  globalScope.WebPageAssistantSettingsLib = createPageAssistantSettingsContract();
 }(globalThis));

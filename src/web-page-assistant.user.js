@@ -108,6 +108,7 @@
   let isRefreshing = false;
   let hasRootListener = false;
 
+  // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START
   function emptySettings() {
     return {
       version: 2,
@@ -210,13 +211,40 @@
     };
   }
 
+  function hasUnlockerAction(setting) {
+    return Boolean(
+      setting?.enabled
+        && (
+          setting.allowSelection
+          || setting.allowCopy
+          || setting.allowContextMenu
+          || setting.allowDrag
+          || setting.suppressBeforeUnload
+        ),
+    );
+  }
+
   function createPageAssistantSettingsContract() {
     return {
+      MIN_INTERVAL_MS,
+      MAX_INTERVAL_MS,
+      DEFAULT_UNLOCKER_OPTIONS,
       empty: emptySettings,
+      emptySettings,
+      isValidIntervalMs,
       normalize: normalizeSettings,
+      normalizeSettings,
       normalizeRefreshSetting,
       normalizeUnlockerSetting,
       hasUnlockerAction,
+      defaultUnlockerSetting(overrides = {}) {
+        return normalizeUnlockerSetting({
+          enabled: true,
+          ...DEFAULT_UNLOCKER_OPTIONS,
+          ...overrides,
+          updatedAt: Date.now(),
+        });
+      },
       resolveActiveRefresh(sourceSettings, keys) {
         const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, normalizeRefreshSetting);
         const pageSetting = normalizeRefreshSetting(refreshSettings.pages[keys.pageKey]);
@@ -239,6 +267,9 @@
 
         return null;
       },
+      resolveActiveRefreshSetting(sourceSettings, keys) {
+        return this.resolveActiveRefresh(sourceSettings, keys);
+      },
       resolveActiveUnlocker(sourceSettings, keys) {
         const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, normalizeUnlockerSetting);
         const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[keys.pageKey]);
@@ -260,6 +291,9 @@
         }
 
         return null;
+      },
+      resolveActiveUnlockerSetting(sourceSettings, keys) {
+        return this.resolveActiveUnlocker(sourceSettings, keys);
       },
       getRefreshSetting(sourceSettings, scope, key) {
         const settingsSource = normalizeSettings(sourceSettings);
@@ -306,6 +340,7 @@
       },
     };
   }
+  // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_END
 
   function maybePromise(value) {
     return value && typeof value.then === 'function' ? value : Promise.resolve(value);
@@ -401,19 +436,6 @@
       pageKey: currentPageKey,
       siteKey: currentSiteKey,
     });
-  }
-
-  function hasUnlockerAction(setting) {
-    return Boolean(
-      setting?.enabled
-        && (
-          setting.allowSelection
-          || setting.allowCopy
-          || setting.allowContextMenu
-          || setting.allowDrag
-          || setting.suppressBeforeUnload
-        ),
-    );
   }
 
   function resolveActiveUnlockerSetting(sourceSettings = settings) {
@@ -1126,12 +1148,7 @@
   }
 
   function defaultUnlockerSetting(overrides = {}) {
-    return normalizeUnlockerSetting({
-      enabled: true,
-      ...DEFAULT_UNLOCKER_OPTIONS,
-      ...overrides,
-      updatedAt: Date.now(),
-    });
+    return PageAssistantSettings.defaultUnlockerSetting(overrides);
   }
 
   function defaultWidgetPosition() {
