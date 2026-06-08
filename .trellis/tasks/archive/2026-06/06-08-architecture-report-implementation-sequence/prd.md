@@ -27,8 +27,8 @@ Implement the first three architecture report candidates in order, one child tas
 - [x] `npm test` passes after the child sequence.
 - [x] `npm run lint` passes after the child sequence.
 - [x] Relevant installable userscript `@version` fields are incremented exactly once at the end when they match `x.y.z`.
-- [ ] Final changes are pushed to `origin/master`, or merged to `master` first if implemented from another branch.
-- [ ] Parent task is archived after final integration and push.
+- [x] Final changes are pushed to `origin/master`, or merged to `master` first if implemented from another branch.
+- [x] Parent task is archived after final integration and push.
 
 ## Notes
 
