@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.9
+// @version      0.2.10
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -41,7 +41,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.2.9';
+  const SCRIPT_VERSION = '0.2.10';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
 
   let statusNode;
