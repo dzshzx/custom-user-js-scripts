@@ -1,0 +1,31 @@
+{
+  "id": "web-page-assistant-runtime-follow-up",
+  "name": "web-page-assistant-runtime-follow-up",
+  "title": "Web Page Assistant architecture runtime follow-up",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "dzshzx",
+  "assignee": "dzshzx",
+  "createdAt": "2026-06-08",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-08-web-page-assistant-session-runtime",
+    "06-08-web-page-assistant-widget-layout-runtime",
+    "06-08-web-page-assistant-unlocker-capability-runtime",
+    "06-08-web-page-assistant-installable-block-loader"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
