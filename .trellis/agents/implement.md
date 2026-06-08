@@ -1,6 +1,9 @@
 ---
 name: implement
+description: |
+  Code implementation expert for the Trellis channel runtime. Understands specs and task artifacts, then implements features. No git commit allowed.
 provider: codex
+labels: [trellis, implement]
 ---
 
 # Trellis Channel Worker: implement

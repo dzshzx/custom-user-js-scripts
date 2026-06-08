@@ -1,6 +1,9 @@
 ---
 name: check
+description: |
+  Code quality auditor for the Trellis channel runtime. Reviews uncommitted diffs against task artifacts and specs, self-fixes allowed issues, and reports verification results.
 provider: codex
+labels: [trellis, check]
 ---
 
 # Trellis Channel Worker: check
