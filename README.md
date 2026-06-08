@@ -1,35 +1,78 @@
 # Custom User JS Scripts
 
-用于编写、整理和改写浏览器用户脚本的项目仓库。适合 Tampermonkey、Violentmonkey、Greasemonkey 等用户脚本管理器。
+这个仓库存放可直接安装到 Tampermonkey、Violentmonkey、Greasemonkey 等脚本管理器的浏览器 userscript，也包含少量本地辅助工具。
 
-## 文档入口
+## 可安装脚本
 
-- [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
-- [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：当前可安装 userscript 列表和安装说明。
-- [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：飞书二维码登录、页面图片导出和飞书主图 userscript 说明。
-- [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。
-- [docs/frontend-design-guidelines.md](docs/frontend-design-guidelines.md)：注入式 userscript UI 的设计约定。
-- [CONTEXT.md](CONTEXT.md)：稳定领域词汇表，只记录业务术语。
+| 脚本 | 适用页面 | 用途 | 安装入口 |
+| --- | --- | --- | --- |
+| Web Page Assistant / 网页助手 | `*://*/*` | 管理网页自动刷新，并可按需解除复制、选择、右键菜单、拖拽和离开确认限制。 | [web-page-assistant.user.js](src/userscripts/web-page-assistant/web-page-assistant.user.js) |
+| Codex Quota Compass | `https://chatgpt.com/*` | 查看 Codex 用量、保存本地快照、导出 / 导入用量归档。 | [codex-quota-compass.user.js](src/userscripts/codex-quota-compass/codex-quota-compass.user.js) |
+| Feishu Preview Image Export | `https://mi.feishu.cn/file/*` | 从飞书文件预览页导出当前最大可见图片。 | [feishu-preview-image-export.user.js](src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js) |
 
-## 目录结构
+安装方式：
+
+1. 安装一个 userscript 管理器，例如 Tampermonkey、Violentmonkey 或 Greasemonkey。
+2. 打开上表里的 `.user.js` 文件。
+3. 在 GitHub 文件页点 `Raw`，或把脚本内容复制到脚本管理器的新建脚本里。
+4. 安装前检查脚本管理器提示的 `@match` 和 `@grant` 是否符合预期。
+
+更完整的安装列表和迁移说明见 [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)。
+
+## Web Page Assistant / 网页助手
+
+网页助手是一个通用网页辅助脚本，安装后会在页面右下角显示一个浮动控件。它的配置支持“当前页面”和“整个站点”两个范围。
+
+主要能力：
+
+- 自动刷新：为当前页面或整个站点设置刷新间隔，支持预设时间和自定义时间。
+- 刷新控制：浮动控件显示倒计时，可暂停、继续或删除当前刷新规则。
+- 网页限制解除：可按需允许文本选择、复制 / 剪切、右键菜单、拖拽，并可抑制离开页面确认。
+- 持久设置：优先使用 userscript manager storage；运行环境不支持时回退到页面 `localStorage`。
+
+使用注意：
+
+- 脚本运行范围是 `*://*/*`，安装时会看到较宽的授权提示；不需要时可以在脚本管理器里禁用。
+- “限制解除”只影响浏览器页面事件，不绕过登录、权限、付费墙或服务端限制。
+- 该脚本通过 `@require` 加载同目录的 settings、storage 和 refresh support modules，手动安装时应使用安装入口文件，不要只复制单个 support module。
+
+## Codex Quota Compass
+
+Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript 菜单命令读取当前 Codex 用量并保存本地历史。
+
+它会把每次成功运行的结果保存为一条 `Quota Snapshot`，并维护本地 `Snapshot Archive`。你可以从面板导出完整归档，也可以通过 userscript 菜单导出 / 导入 JSON，用于手动备份或跨设备迁移。
+
+注意事项：
+
+- 归档里保存的是经过整理的用量信息，不保存 Cookie、Token 或原始私有接口响应。
+- 导入是 merge 语义，会跳过重复快照，不会覆盖整个本地归档。
+- 当前只支持完整 JSON 归档导出 / 导入。
+
+领域词汇见 [CONTEXT.md](CONTEXT.md)。
+
+## Feishu Preview Image Export
+
+Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜单命令从当前页面找最大的可见图片并下载。它适合处理飞书文件页里“预览图可见但原图入口不好找”的场景。
+
+本仓库还提供两个本地 Feishu Playwright 工具：
+
+- `scripts/feishu/login-qr.mjs`：导出登录二维码并保存浏览器登录态。
+- `scripts/feishu/export-image.mjs`：使用已有登录态打开飞书文件页并导出当前最大可见图片。
+
+使用说明见 [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)。
+
+## 仓库结构
 
 ```text
 .
-├── docs/                 # 人类可读文档、脚本说明和运行手册
+├── docs/                 # 脚本说明、运行手册和项目约定
 ├── scripts/              # 本地辅助脚本
 ├── snippets/             # 可复用代码片段
-├── src/userscripts/      # installable userscript 和同脚本支持模块
+├── src/userscripts/      # 可安装 userscript 和同脚本 support modules
 └── test/                 # Node 测试
 ```
 
-## 快速开始
-
-1. 复制现有 `.user.js` 或从 [src/userscripts/example/example.user.js](src/userscripts/example/example.user.js) 开始。
-2. 按 [docs/script-template.md](docs/script-template.md) 修改 `@name`、`@match`、`@grant` 等 metadata。
-3. 在浏览器 userscript 管理器中新建脚本，粘贴或安装 `.user.js` 内容。
-4. 如果脚本注入 UI，先看 [docs/frontend-design-guidelines.md](docs/frontend-design-guidelines.md)。
-
-## 常用命令
+## 开发与验证
 
 ```bash
 npm run lint
@@ -38,15 +81,12 @@ npm test
 
 `npm run lint` 检查 installable userscript metadata；`npm test` 运行 Node 测试。
 
-## 当前脚本
+新建脚本可从 [src/userscripts/example/example.user.js](src/userscripts/example/example.user.js) 开始，并参考 [docs/script-template.md](docs/script-template.md)。有注入 UI 的脚本先看 [docs/frontend-design-guidelines.md](docs/frontend-design-guidelines.md)。
 
-- [Installable userscripts](docs/scripts/installable-userscripts.md)
-- [Feishu tools and userscript](docs/scripts/feishu-tools.md)
+## 文档入口
 
-## 开发约定
-
-- 每个用户脚本使用 `.user.js` 后缀。
-- 一个文件尽量只解决一个网页或一个功能问题。
-- 改写已有脚本时，在文件头部或 `docs/` 中记录来源、修改点和适用版本。
-- 有注入 UI 的脚本遵守 `docs/frontend-design-guidelines.md`。
-- 不把账号密码、Cookie、Token 等敏感信息写入脚本。
+- [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
+- [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
+- [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：飞书工具和飞书主图 userscript 说明。
+- [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。
+- [CONTEXT.md](CONTEXT.md)：稳定领域词汇表。
