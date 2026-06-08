@@ -86,8 +86,9 @@
 
   const currentPageKey = `${location.origin}${location.pathname}${location.search}`;
   const currentSiteKey = location.hostname;
+  const PageAssistantSettings = createPageAssistantSettingsContract();
 
-  let settings = emptySettings();
+  let settings = PageAssistantSettings.empty();
   let activeMatch = null;
   let activeUnlockerMatch = null;
   let root;
@@ -208,6 +209,103 @@
     };
   }
 
+  function createPageAssistantSettingsContract() {
+    return {
+      empty: emptySettings,
+      normalize: normalizeSettings,
+      normalizeRefreshSetting,
+      normalizeUnlockerSetting,
+      hasUnlockerAction,
+      resolveActiveRefresh(sourceSettings, keys) {
+        const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, normalizeRefreshSetting);
+        const pageSetting = normalizeRefreshSetting(refreshSettings.pages[keys.pageKey]);
+        if (pageSetting) {
+          return {
+            scope: 'page',
+            key: keys.pageKey,
+            setting: pageSetting,
+          };
+        }
+
+        const siteSetting = normalizeRefreshSetting(refreshSettings.sites[keys.siteKey]);
+        if (siteSetting) {
+          return {
+            scope: 'site',
+            key: keys.siteKey,
+            setting: siteSetting,
+          };
+        }
+
+        return null;
+      },
+      resolveActiveUnlocker(sourceSettings, keys) {
+        const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, normalizeUnlockerSetting);
+        const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[keys.pageKey]);
+        if (hasUnlockerAction(pageSetting)) {
+          return {
+            scope: 'page',
+            key: keys.pageKey,
+            setting: pageSetting,
+          };
+        }
+
+        const siteSetting = normalizeUnlockerSetting(unlockerSettings.sites[keys.siteKey]);
+        if (hasUnlockerAction(siteSetting)) {
+          return {
+            scope: 'site',
+            key: keys.siteKey,
+            setting: siteSetting,
+          };
+        }
+
+        return null;
+      },
+      getRefreshSetting(sourceSettings, scope, key) {
+        const settingsSource = normalizeSettings(sourceSettings);
+        const bucket = scope === 'site' ? settingsSource.refresh.sites : settingsSource.refresh.pages;
+        return normalizeRefreshSetting(bucket[key]);
+      },
+      getUnlockerSetting(sourceSettings, scope, key) {
+        const settingsSource = normalizeSettings(sourceSettings);
+        const bucket = scope === 'site' ? settingsSource.unlocker.sites : settingsSource.unlocker.pages;
+        return normalizeUnlockerSetting(bucket[key]);
+      },
+      setRefreshSetting(sourceSettings, scope, key, intervalMs, updatedAt = Date.now()) {
+        const next = normalizeSettings(sourceSettings);
+        const bucket = scope === 'site' ? next.refresh.sites : next.refresh.pages;
+        bucket[key] = {
+          intervalMs,
+          updatedAt,
+        };
+        return normalizeSettings(next);
+      },
+      deleteRefreshSetting(sourceSettings, scope, key) {
+        const next = normalizeSettings(sourceSettings);
+        const bucket = scope === 'site' ? next.refresh.sites : next.refresh.pages;
+        delete bucket[key];
+        return next;
+      },
+      setUnlockerSetting(sourceSettings, scope, key, unlockerSetting, updatedAt = Date.now()) {
+        const normalized = normalizeUnlockerSetting(unlockerSetting);
+        if (!normalized) return normalizeSettings(sourceSettings);
+
+        const next = normalizeSettings(sourceSettings);
+        const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
+        bucket[key] = {
+          ...normalized,
+          updatedAt,
+        };
+        return normalizeSettings(next);
+      },
+      deleteUnlockerSetting(sourceSettings, scope, key) {
+        const next = normalizeSettings(sourceSettings);
+        const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
+        delete bucket[key];
+        return next;
+      },
+    };
+  }
+
   function maybePromise(value) {
     return value && typeof value.then === 'function' ? value : Promise.resolve(value);
   }
@@ -215,21 +313,21 @@
   async function readStoredSettings() {
     try {
       if (typeof GM_getValue === 'function') {
-        return normalizeSettings(await maybePromise(GM_getValue(STORAGE_KEY, emptySettings())));
+        return PageAssistantSettings.normalize(await maybePromise(GM_getValue(STORAGE_KEY, PageAssistantSettings.empty())));
       }
 
       if (typeof GM !== 'undefined' && typeof GM.getValue === 'function') {
-        return normalizeSettings(await GM.getValue(STORAGE_KEY, emptySettings()));
+        return PageAssistantSettings.normalize(await GM.getValue(STORAGE_KEY, PageAssistantSettings.empty()));
       }
     } catch (error) {
       console.warn(`${SCRIPT_NAME}: failed to read userscript storage.`, error);
     }
 
     try {
-      return normalizeSettings(JSON.parse(localStorage.getItem(FALLBACK_STORAGE_KEY) || 'null'));
+      return PageAssistantSettings.normalize(JSON.parse(localStorage.getItem(FALLBACK_STORAGE_KEY) || 'null'));
     } catch (error) {
       console.warn(`${SCRIPT_NAME}: failed to read fallback storage.`, error);
-      return emptySettings();
+      return PageAssistantSettings.empty();
     }
   }
 
@@ -255,7 +353,7 @@
   }
 
   async function writeStoredSettings(nextSettings) {
-    const normalized = normalizeSettings(nextSettings);
+    const normalized = PageAssistantSettings.normalize(nextSettings);
 
     try {
       if (typeof GM_setValue === 'function') {
@@ -298,26 +396,10 @@
   }
 
   function resolveActiveSetting(sourceSettings = settings) {
-    const refreshSettings = normalizeScopedSettings(sourceSettings.refresh, normalizeRefreshSetting);
-    const pageSetting = normalizeRefreshSetting(refreshSettings.pages[currentPageKey]);
-    if (pageSetting) {
-      return {
-        scope: 'page',
-        key: currentPageKey,
-        setting: pageSetting,
-      };
-    }
-
-    const siteSetting = normalizeRefreshSetting(refreshSettings.sites[currentSiteKey]);
-    if (siteSetting) {
-      return {
-        scope: 'site',
-        key: currentSiteKey,
-        setting: siteSetting,
-      };
-    }
-
-    return null;
+    return PageAssistantSettings.resolveActiveRefresh(sourceSettings, {
+      pageKey: currentPageKey,
+      siteKey: currentSiteKey,
+    });
   }
 
   function hasUnlockerAction(setting) {
@@ -334,26 +416,10 @@
   }
 
   function resolveActiveUnlockerSetting(sourceSettings = settings) {
-    const unlockerSettings = normalizeScopedSettings(sourceSettings.unlocker, normalizeUnlockerSetting);
-    const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[currentPageKey]);
-    if (hasUnlockerAction(pageSetting)) {
-      return {
-        scope: 'page',
-        key: currentPageKey,
-        setting: pageSetting,
-      };
-    }
-
-    const siteSetting = normalizeUnlockerSetting(unlockerSettings.sites[currentSiteKey]);
-    if (hasUnlockerAction(siteSetting)) {
-      return {
-        scope: 'site',
-        key: currentSiteKey,
-        setting: siteSetting,
-      };
-    }
-
-    return null;
+    return PageAssistantSettings.resolveActiveUnlocker(sourceSettings, {
+      pageKey: currentPageKey,
+      siteKey: currentSiteKey,
+    });
   }
 
   function onReady(callback) {
@@ -1291,10 +1357,10 @@
 
     activeDialogTab = preferredTab === 'unlocker' ? 'unlocker' : preferredTab === 'refresh' ? 'refresh' : activeDialogTab;
     const selectedScope = preferredScope || activeMatch?.scope || activeUnlockerMatch?.scope || 'page';
-    const pageSetting = normalizeRefreshSetting(settings.refresh.pages[currentPageKey]);
-    const siteSetting = normalizeRefreshSetting(settings.refresh.sites[currentSiteKey]);
-    const pageUnlockerSetting = normalizeUnlockerSetting(settings.unlocker.pages[currentPageKey]);
-    const siteUnlockerSetting = normalizeUnlockerSetting(settings.unlocker.sites[currentSiteKey]);
+    const pageSetting = PageAssistantSettings.getRefreshSetting(settings, 'page', currentPageKey);
+    const siteSetting = PageAssistantSettings.getRefreshSetting(settings, 'site', currentSiteKey);
+    const pageUnlockerSetting = PageAssistantSettings.getUnlockerSetting(settings, 'page', currentPageKey);
+    const siteUnlockerSetting = PageAssistantSettings.getUnlockerSetting(settings, 'site', currentSiteKey);
     const scopedUnlockerSetting = selectedScope === 'site'
       ? siteUnlockerSetting
       : pageUnlockerSetting;
@@ -1515,27 +1581,15 @@
   }
 
   async function saveSetting(scope, intervalMs) {
-    const next = normalizeSettings(settings);
-    const bucket = scope === 'site' ? next.refresh.sites : next.refresh.pages;
     const key = scope === 'site' ? currentSiteKey : currentPageKey;
-
-    bucket[key] = {
-      intervalMs,
-      updatedAt: Date.now(),
-    };
-
+    const next = PageAssistantSettings.setRefreshSetting(settings, scope, key, intervalMs);
     settings = await writeStoredSettings(next);
     restartActiveCountdown();
   }
 
   async function deleteSetting(scope) {
-    const next = normalizeSettings(settings);
-    if (scope === 'site') {
-      delete next.refresh.sites[currentSiteKey];
-    } else {
-      delete next.refresh.pages[currentPageKey];
-    }
-
+    const key = scope === 'site' ? currentSiteKey : currentPageKey;
+    const next = PageAssistantSettings.deleteRefreshSetting(settings, scope, key);
     settings = await writeStoredSettings(next);
     restartActiveCountdown();
   }
@@ -1552,29 +1606,18 @@
   }
 
   async function saveUnlockerSetting(scope, unlockerSetting) {
-    const normalized = normalizeUnlockerSetting(unlockerSetting);
+    const normalized = PageAssistantSettings.normalizeUnlockerSetting(unlockerSetting);
     if (!normalized) return;
 
-    const next = normalizeSettings(settings);
-    const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
     const key = scope === 'site' ? currentSiteKey : currentPageKey;
-    bucket[key] = {
-      ...normalized,
-      updatedAt: Date.now(),
-    };
-
+    const next = PageAssistantSettings.setUnlockerSetting(settings, scope, key, normalized);
     settings = await writeStoredSettings(next);
     refreshUnlockerState();
   }
 
   async function deleteUnlockerSetting(scope) {
-    const next = normalizeSettings(settings);
-    if (scope === 'site') {
-      delete next.unlocker.sites[currentSiteKey];
-    } else {
-      delete next.unlocker.pages[currentPageKey];
-    }
-
+    const key = scope === 'site' ? currentSiteKey : currentPageKey;
+    const next = PageAssistantSettings.deleteUnlockerSetting(settings, scope, key);
     settings = await writeStoredSettings(next);
     refreshUnlockerState();
   }
