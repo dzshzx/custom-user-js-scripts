@@ -15,11 +15,11 @@ Implement report candidate 3 by narrowing Codex Quota Compass panel renderer and
 
 ## Acceptance Criteria
 
-- [ ] `codex-quota-compass-panel-renderer.lib.js` is materially smaller and below the 600-line soft target when practical.
-- [ ] Renderer style/view responsibilities are behind named script-scoped modules.
-- [ ] Existing panel renderer and panel view model tests pass.
-- [ ] `npm test` passes.
-- [ ] `npm run lint` passes.
+- [x] `codex-quota-compass-panel-renderer.lib.js` is materially smaller and below the 600-line soft target when practical.
+- [x] Renderer style/view responsibilities are behind named script-scoped modules.
+- [x] Existing panel renderer and panel view model tests pass.
+- [x] `npm test` passes.
+- [x] `npm run lint` passes.
 - [ ] Child changes are committed before parent final integration.
 
 ## Notes

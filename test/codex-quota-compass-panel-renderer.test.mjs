@@ -1,9 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js');
 
 const { createQuotaPanelRenderer } = globalThis.CodexQuotaCompassPanelRendererLib;
+const userscriptPath = path.resolve(
+  import.meta.dirname,
+  '../src/userscripts/codex-quota-compass/codex-quota-compass.user.js',
+);
+const rendererStylesRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js';
+const userscriptContent = await readFile(userscriptPath, 'utf8');
 
 const labels = {
   actionRetry: 'Retry',
@@ -46,6 +55,13 @@ function t(key, variables = {}) {
 function createRenderer() {
   return createQuotaPanelRenderer({ t, debugKey: '__debugKey' });
 }
+
+test('installable metadata requires the panel renderer styles library', () => {
+  assert.equal(
+    userscriptContent.includes(`// @require      ${rendererStylesRequireUrl}`),
+    true,
+  );
+});
 
 test('renderLoading and renderError return escaped panel states', () => {
   const renderer = createRenderer();
