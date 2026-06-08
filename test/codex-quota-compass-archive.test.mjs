@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+await import('../src/codex-quota-compass-contract.lib.js');
 await import('../src/codex-quota-compass-archive.lib.js');
 
 const {

@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+await import('../src/codex-quota-compass-contract.lib.js');
 await import('../src/codex-quota-compass-core.lib.js');
 
 const {
   buildQuotaSnapshotResult,
   createQuotaCalculator,
   createQuotaPanelViewModel,
+  createSnapshotSyncStatus,
   rollingPeriodKey,
   createSnapshotSyncPort,
 } = globalThis.CodexQuotaCompassCoreLib;
@@ -377,4 +379,35 @@ test('createSnapshotSyncPort reports local-only fallback sync status', () => {
   assert.equal(status.crossDeviceCapable, false);
   assert.equal(status.localOnly, true);
   assert.match(status.reason, /local/i);
+});
+
+test('createSnapshotSyncStatus derives GM, localStorage, pending, and unavailable states', () => {
+  assert.deepEqual(createSnapshotSyncStatus({ id: 'gm', label: 'GM storage' }), {
+    backendId: 'gm',
+    backendLabel: 'GM storage',
+    crossDeviceCapable: true,
+    localOnly: false,
+    reason: 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.',
+  });
+  assert.deepEqual(createSnapshotSyncStatus({ id: 'localStorage', label: 'localStorage' }), {
+    backendId: 'localStorage',
+    backendLabel: 'localStorage',
+    crossDeviceCapable: false,
+    localOnly: true,
+    reason: 'localStorage is browser-local and will not sync personal usage history across devices.',
+  });
+  assert.deepEqual(createSnapshotSyncStatus({ id: 'pending', label: 'pending' }), {
+    backendId: 'pending',
+    backendLabel: 'pending',
+    crossDeviceCapable: false,
+    localOnly: false,
+    reason: 'Snapshot Archive storage has not been loaded yet.',
+  });
+  assert.deepEqual(createSnapshotSyncStatus(null), {
+    backendId: 'unavailable',
+    backendLabel: 'unavailable',
+    crossDeviceCapable: false,
+    localOnly: false,
+    reason: 'Snapshot Archive storage is unavailable.',
+  });
 });

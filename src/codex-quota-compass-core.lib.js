@@ -4,10 +4,16 @@
   const LIB_NAME = 'CodexQuotaCompassCoreLib';
   const MAIN_PRIMARY_WINDOW_KEY = 'main.primaryWindow';
   const MAIN_SEVEN_DAY_WINDOW_KEY = 'main.sevenDayWindow';
+  const contractLib = globalObject.CodexQuotaCompassContractLib;
 
-  function rollingPeriodKey(result) {
-    return Object.keys(result || {}).find((key) => /^近\d+天$/.test(key)) || '';
+  if (!contractLib?.createQuotaSnapshotAccess || !contractLib?.rollingPeriodKey) {
+    throw new Error('CodexQuotaCompassContractLib is required before CodexQuotaCompassCoreLib.');
   }
+
+  const {
+    createQuotaSnapshotAccess,
+    rollingPeriodKey,
+  } = contractLib;
 
   function toNumber(value) {
     return Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -23,10 +29,6 @@
 
   function lastItem(items) {
     return items.length ? items[items.length - 1] : undefined;
-  }
-
-  function isMainSevenDayWindow(row) {
-    return row?.窗口Key === MAIN_SEVEN_DAY_WINDOW_KEY || row?.名称 === '主限制 - 7天窗口';
   }
 
   function ymdUTC(value) {
@@ -467,18 +469,23 @@
     return { run };
   }
 
-  function normalizePanelSyncStatus(syncStatus, storageBackend) {
-    const backendId = syncStatus?.backendId || storageBackend?.id || 'pending';
-    const backendLabel = syncStatus?.backendLabel || storageBackend?.label || backendId;
-    const crossDeviceCapable = Boolean(syncStatus?.crossDeviceCapable ?? backendId === 'gm');
-    const localOnly = Boolean(syncStatus?.localOnly ?? backendId === 'localStorage');
-    const reason = syncStatus?.reason || (
-      backendId === 'gm'
-        ? 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.'
-        : backendId === 'localStorage'
-          ? 'localStorage is browser-local and will not sync personal usage history across devices.'
-          : 'Snapshot Archive storage has not been loaded yet.'
-    );
+  function createSnapshotSyncStatus(backendInfo) {
+    const backendId = backendInfo?.backendId || backendInfo?.id || 'unavailable';
+    const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
+    const crossDeviceCapable = backendId === 'gm';
+    const localOnly = backendId === 'localStorage';
+    const reason = (() => {
+      if (backendId === 'gm') {
+        return 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.';
+      }
+      if (backendId === 'localStorage') {
+        return 'localStorage is browser-local and will not sync personal usage history across devices.';
+      }
+      if (backendId === 'pending') {
+        return 'Snapshot Archive storage has not been loaded yet.';
+      }
+      return 'Snapshot Archive storage is unavailable.';
+    })();
 
     return {
       backendId,
@@ -487,6 +494,12 @@
       localOnly,
       reason,
     };
+  }
+
+  function normalizePanelSyncStatus(syncStatus, storageBackend) {
+    return createSnapshotSyncStatus(syncStatus
+      ? { ...storageBackend, ...syncStatus }
+      : (storageBackend || { id: 'pending', label: 'pending' }));
   }
 
   function createSyncBanner(syncStatus) {
@@ -589,7 +602,7 @@
     ];
   }
 
-  function createDetailsSections({ weekly, sinceReset, month, rolling, result }) {
+  function createDetailsSections({ weekly, sinceReset, month, rolling, windows }) {
     return [
       dataView('details-weekly-estimate', 'sectionWeeklyEstimate', [weekly], [
         dataColumn('已用百分比', { priority: 'primary' }),
@@ -614,7 +627,7 @@
         dataColumn('累计线程数', { priority: 'debug' }),
         dataColumn('累计轮数', { priority: 'debug' }),
       ]),
-      dataView('details-windows', 'sectionWindows', result?.限制窗口概览 || [], [
+      dataView('details-windows', 'sectionWindows', windows, [
         dataColumn('名称', { priority: 'primary', wrap: true }),
         dataColumn('已用百分比', { priority: 'primary' }),
         dataColumn('窗口天数', { priority: 'secondary' }),
@@ -625,7 +638,7 @@
     ];
   }
 
-  function createPanelViews({ weekly, sinceReset, month, rolling, result, historyUsage, archiveHealth, transfer }) {
+  function createPanelViews({ weekly, sinceReset, month, rolling, windows, historyUsage, archiveHealth, transfer }) {
     const tabs = [
       { id: 'overview', labelKey: 'tabOverview' },
       { id: 'history', labelKey: 'tabHistory' },
@@ -652,7 +665,7 @@
           id: 'details',
           labelKey: 'tabDetails',
           kind: 'sections',
-          sections: createDetailsSections({ weekly, sinceReset, month, rolling, result }),
+          sections: createDetailsSections({ weekly, sinceReset, month, rolling, windows }),
         },
         archive: {
           id: 'archive',
@@ -737,12 +750,13 @@
     storageBackend,
     syncStatus,
   }) {
-    const rollingKey = rollingPeriodKey(result);
-    const weekly = result?.主7天窗口_上次重置至今?.反推周额度 || {};
-    const sinceReset = result?.主7天窗口_上次重置至今?.汇总 || {};
-    const month = result?.本月初至今?.汇总 || {};
-    const rolling = rollingKey ? result?.[rollingKey]?.汇总 || {} : {};
-    const mainSevenDayWindow = (result?.限制窗口概览 || []).find(isMainSevenDayWindow) || null;
+    const snapshotAccess = createQuotaSnapshotAccess(result);
+    const rollingKey = snapshotAccess.rollingKey;
+    const weekly = snapshotAccess.sinceReset.weeklyEstimate;
+    const sinceReset = snapshotAccess.sinceReset.summary;
+    const month = snapshotAccess.monthToDate.summary;
+    const rolling = snapshotAccess.rolling.summary;
+    const mainSevenDayWindow = snapshotAccess.mainSevenDayWindow;
     const recentSnapshots = Array.isArray(archiveSummary?.recentSnapshots)
       ? archiveSummary.recentSnapshots.slice(0, 5).map((row) => ({
         capturedAt: row?.capturedAt || '-',
@@ -775,7 +789,7 @@
       sinceReset,
       month,
       rolling,
-      result,
+      windows: snapshotAccess.windows,
       historyUsage,
       archiveHealth,
       transfer,
@@ -799,9 +813,9 @@
         month,
         mainSevenDayWindow,
       }),
-      rollingRows: rollingKey ? result?.[rollingKey]?.每日明细 || [] : [],
-      sinceResetRows: result?.主7天窗口_上次重置至今?.每日明细 || [],
-      sinceResetClients: result?.主7天窗口_上次重置至今?.客户端汇总 || [],
+      rollingRows: snapshotAccess.rolling.dailyRows,
+      sinceResetRows: snapshotAccess.sinceReset.dailyRows,
+      sinceResetClients: snapshotAccess.sinceReset.clientSummaries,
       mainSevenDayWindow,
       history: {
         dayRows: historyUsage?.day?.rows || [],
@@ -824,30 +838,7 @@
   function createSnapshotSyncPort({ archiveStore, getBackendInfo = () => null }) {
     function getSyncStatus() {
       const backendInfo = typeof getBackendInfo === 'function' ? getBackendInfo() : null;
-      const backendId = backendInfo?.id || 'unavailable';
-      const backendLabel = backendInfo?.label || backendId;
-      const crossDeviceCapable = backendId === 'gm';
-      const localOnly = backendId === 'localStorage';
-      const reason = (() => {
-        if (backendId === 'gm') {
-          return 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.';
-        }
-        if (backendId === 'localStorage') {
-          return 'localStorage is browser-local and will not sync personal usage history across devices.';
-        }
-        if (backendId === 'pending') {
-          return 'Snapshot Archive storage has not been loaded yet.';
-        }
-        return 'Snapshot Archive storage is unavailable.';
-      })();
-
-      return {
-        backendId,
-        backendLabel,
-        crossDeviceCapable,
-        localOnly,
-        reason,
-      };
+      return createSnapshotSyncStatus(backendInfo);
     }
 
     async function getLocalSummary() {
@@ -930,6 +921,7 @@
     buildQuotaSnapshotResult,
     createQuotaCalculator,
     createQuotaPanelViewModel,
+    createSnapshotSyncStatus,
     createSnapshotSyncPort,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

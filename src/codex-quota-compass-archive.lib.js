@@ -5,7 +5,16 @@
   const ARCHIVE_SCHEMA_VERSION = 1;
   const EXPORT_FORMAT = 'codex-quota-compass.snapshot-archive';
   const EXPORT_VERSION = 1;
-  const MAIN_SEVEN_DAY_WINDOW_KEY = 'main.sevenDayWindow';
+  const contractLib = globalObject.CodexQuotaCompassContractLib;
+
+  if (!contractLib?.projectQuotaSnapshotForArchive || !contractLib?.isMainSevenDayWindow) {
+    throw new Error('CodexQuotaCompassContractLib is required before CodexQuotaCompassArchiveLib.');
+  }
+
+  const {
+    isMainSevenDayWindow,
+    projectQuotaSnapshotForArchive,
+  } = contractLib;
 
   function isPlainObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -35,14 +44,6 @@
     return snapshots
       .slice()
       .sort((left, right) => String(left.capturedAt || '').localeCompare(String(right.capturedAt || '')));
-  }
-
-  function rollingPeriodKey(result) {
-    return Object.keys(result || {}).find((key) => /^近\d+天$/.test(key)) || '';
-  }
-
-  function isMainSevenDayWindow(row) {
-    return row?.窗口Key === MAIN_SEVEN_DAY_WINDOW_KEY || row?.名称 === '主限制 - 7天窗口';
   }
 
   function normalizeDailyRows(rows) {
@@ -131,71 +132,11 @@
       throw new Error('Cannot create Quota Snapshot without a result object.');
     }
 
-    const rollingKey = rollingPeriodKey(result);
-    const sinceReset = result['主7天窗口_上次重置至今'] || {};
-    const monthToDate = result['本月初至今'] || {};
-    const rolling = rollingKey ? (result[rollingKey] || {}) : {};
-    const weeklyEstimate = sinceReset['反推周额度'] || {};
-
     return normalizeSnapshot({
       snapshotId,
       capturedAt,
       scriptVersion,
-      sourceContext: {
-        dateBucketMode: result?.配置?.日期桶模式 || '',
-        usdPerCredit: result?.配置?.USD_PER_CREDIT ?? null,
-        rollingDays: result?.配置?.ROLLING_DAYS ?? null,
-        browserTimeZone: result?.时区诊断?.浏览器本地时区 || '',
-        apiEndExclusiveDate: result?.时区诊断?.API_end_date_排他 || '',
-      },
-      windowSnapshot: result['限制窗口概览'] || [],
-      periodSummaries: {
-        sinceReset: {
-          periodKey: 'sinceReset',
-          label: sinceReset?.汇总?.范围 || '',
-          startDate: sinceReset?.汇总?.API_start_date || '',
-          endExclusiveDate: sinceReset?.汇总?.API_end_date_排他 || '',
-          totalCredits: sinceReset?.汇总?.累计Credits ?? null,
-          totalUsd: sinceReset?.汇总?.累计折算USD ?? null,
-          returnedBuckets: sinceReset?.汇总?.返回日期桶数 ?? null,
-          usedPercent: weeklyEstimate?.已用百分比 ?? null,
-        },
-        monthToDate: {
-          periodKey: 'monthToDate',
-          label: monthToDate?.汇总?.范围 || '',
-          startDate: monthToDate?.汇总?.API_start_date || '',
-          endExclusiveDate: monthToDate?.汇总?.API_end_date_排他 || '',
-          totalCredits: monthToDate?.汇总?.累计Credits ?? null,
-          totalUsd: monthToDate?.汇总?.累计折算USD ?? null,
-          returnedBuckets: monthToDate?.汇总?.返回日期桶数 ?? null,
-        },
-        rolling: {
-          periodKey: 'rolling',
-          label: rolling?.汇总?.范围 || rollingKey,
-          periodName: rollingKey,
-          startDate: rolling?.汇总?.API_start_date || '',
-          endExclusiveDate: rolling?.汇总?.API_end_date_排他 || '',
-          totalCredits: rolling?.汇总?.累计Credits ?? null,
-          totalUsd: rolling?.汇总?.累计折算USD ?? null,
-          returnedBuckets: rolling?.汇总?.返回日期桶数 ?? null,
-        },
-      },
-      periodDetails: {
-        sinceReset: {
-          dailyBuckets: sinceReset['每日明细'] || [],
-          clientSummaries: sinceReset['客户端汇总'] || [],
-          weeklyEstimate,
-        },
-        monthToDate: {
-          dailyBuckets: monthToDate['每日明细'] || [],
-          clientSummaries: monthToDate['客户端汇总'] || [],
-        },
-        rolling: {
-          periodName: rollingKey,
-          dailyBuckets: rolling['每日明细'] || [],
-          clientSummaries: rolling['客户端汇总'] || [],
-        },
-      },
+      ...projectQuotaSnapshotForArchive(result),
     });
   }
 
