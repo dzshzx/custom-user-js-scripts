@@ -21,12 +21,12 @@ Implement the first three architecture report candidates in order, one child tas
 
 ## Acceptance Criteria
 
-- [ ] Child task 1 is archived after implementation, validation, and commit.
-- [ ] Child task 2 is archived after implementation, validation, and commit.
-- [ ] Child task 3 is archived after implementation, validation, and commit.
-- [ ] `npm test` passes after the child sequence.
-- [ ] `npm run lint` passes after the child sequence.
-- [ ] Relevant installable userscript `@version` fields are incremented exactly once at the end when they match `x.y.z`.
+- [x] Child task 1 is archived after implementation, validation, and commit.
+- [x] Child task 2 is archived after implementation, validation, and commit.
+- [x] Child task 3 is archived after implementation, validation, and commit.
+- [x] `npm test` passes after the child sequence.
+- [x] `npm run lint` passes after the child sequence.
+- [x] Relevant installable userscript `@version` fields are incremented exactly once at the end when they match `x.y.z`.
 - [ ] Final changes are pushed to `origin/master`, or merged to `master` first if implemented from another branch.
 - [ ] Parent task is archived after final integration and push.
 
