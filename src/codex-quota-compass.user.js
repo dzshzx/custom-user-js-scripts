@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.4
+// @version      0.2.5
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -36,12 +36,12 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.2.4';
+  const SCRIPT_VERSION = '0.2.5';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
 
   let statusNode;
   let contentNode;
-  let activePanelView = 'overview';
+  let activePanelView = 'details';
   let latestError;
   let latestResult = null;
   let latestHistoryUsage = null;
@@ -438,9 +438,8 @@
     const tabs = Array.isArray(model?.tabs) && model.tabs.length
       ? model.tabs
       : [
-        { id: 'overview', labelKey: 'tabOverview' },
-        { id: 'history', labelKey: 'tabHistory' },
         { id: 'details', labelKey: 'tabDetails' },
+        { id: 'history', labelKey: 'tabHistory' },
         { id: 'archive', labelKey: 'tabArchiveWorkspace' },
       ];
     return `
@@ -527,7 +526,7 @@
       activePanelView = tabs[0].id;
     }
 
-    const view = viewModel?.views?.[activePanelView] || viewModel?.views?.overview;
+    const view = viewModel?.views?.[activePanelView] || viewModel?.views?.details;
     if (view?.kind === 'archiveWorkspace') {
       return archiveViewHtml(viewModel);
     }

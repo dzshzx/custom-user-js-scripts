@@ -535,22 +535,6 @@
     };
   }
 
-  function createOverviewSections({ weekly, sinceReset, month, rolling, archiveHealth }) {
-    return [
-      dataView('overview-status', 'sectionOverviewSummary', [
-        { item: '7 天已用', value: weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-' },
-        { item: '上次重置至今', value: sinceReset.累计折算USD, detail: `${sinceReset.累计Credits ?? '-'} Credits` },
-        { item: '本月累计', value: month.累计折算USD, detail: `${month.累计Credits ?? '-'} Credits` },
-        { item: '近30天', value: rolling.累计折算USD, detail: `${rolling.累计Credits ?? '-'} Credits` },
-        { item: '用量记录', value: archiveHealth.snapshotCount, detail: archiveHealth.storageBackendLabel },
-      ], [
-        dataColumn('item', { labelKey: 'columnItem', priority: 'primary' }),
-        dataColumn('value', { labelKey: 'columnValue', priority: 'primary' }),
-        dataColumn('detail', { labelKey: 'columnDetail', priority: 'secondary', wrap: true }),
-      ]),
-    ];
-  }
-
   function createHistorySections(historyUsage) {
     const dayRows = historyUsage?.day?.rows || [];
     const daySummary = historyUsage?.day?.summary || {};
@@ -619,23 +603,16 @@
     ];
   }
 
-  function createPanelViews({ weekly, sinceReset, month, rolling, windows, historyUsage, archiveHealth, transfer }) {
+  function createPanelViews({ weekly, sinceReset, month, rolling, windows, historyUsage, transfer }) {
     const tabs = [
-      { id: 'overview', labelKey: 'tabOverview' },
-      { id: 'history', labelKey: 'tabHistory' },
       { id: 'details', labelKey: 'tabDetails' },
+      { id: 'history', labelKey: 'tabHistory' },
       { id: 'archive', labelKey: 'tabArchiveWorkspace' },
     ];
 
     return {
       tabs,
       views: {
-        overview: {
-          id: 'overview',
-          labelKey: 'tabOverview',
-          kind: 'sections',
-          sections: createOverviewSections({ weekly, sinceReset, month, rolling, archiveHealth }),
-        },
         history: {
           id: 'history',
           labelKey: 'tabHistory',
@@ -772,7 +749,6 @@
       rolling,
       windows: snapshotAccess.windows,
       historyUsage,
-      archiveHealth,
       transfer,
     });
 

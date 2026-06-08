@@ -171,9 +171,8 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   assert.equal(model.archiveHealth.snapshotCount, 1);
   assert.equal(model.archiveHealth.hasSnapshots, true);
   assert.deepEqual(model.transfer.actions.map((action) => action.action), ['export-archive', 'import-archive']);
-  assert.deepEqual(model.tabs.map((tab) => tab.id), ['overview', 'history', 'details', 'archive']);
+  assert.deepEqual(model.tabs.map((tab) => tab.id), ['details', 'history', 'archive']);
   assert.equal(model.tabs.some((tab) => tab.id === 'transfer'), false);
-  assert.equal(model.views.overview.sections.length > 0, true);
   assert.equal(model.views.details.sections[2].id, 'details-windows');
   assert.equal(
     model.views.details.sections[2].columns.find((column) => column.key === '本轮开始_本地').truncate,
