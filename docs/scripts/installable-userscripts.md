@@ -15,12 +15,13 @@ installable userscript 已按脚本级目录放在 `src/userscripts/<script-id>/
 - 在网页上提供可配置的页面辅助能力。
 - 包含设置、刷新、session、unlocker 能力和浮动控件。
 - 当前脚本运行范围较广，安装前应确认目标用户脚本管理器的授权提示。
+- 安装入口通过 `@require` 加载同目录的 settings、storage 和 refresh support modules。
 
 迁移说明：
 
 - 旧路径：`src/web-page-assistant.user.js`
 - 新路径：`src/userscripts/web-page-assistant/web-page-assistant.user.js`
-- `@downloadURL` 和 `@updateURL` 已指向新路径。
+- `@downloadURL`、`@updateURL` 和 `@require` 已指向新路径。
 
 ## Codex Quota Compass
 

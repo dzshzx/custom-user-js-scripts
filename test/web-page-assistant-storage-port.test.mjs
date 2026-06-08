@@ -1,12 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
-const loadStoragePortFactory = () => loadInstallableBlock({
-  markerPrefix: 'WEB_PAGE_ASSISTANT_STORAGE_PORT',
-  prefixSource: "const SCRIPT_NAME = 'Web Page Assistant';",
-  returnExpression: 'createWebPageAssistantStoragePort',
-});
+await import('../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js');
+
+const userscriptPath = path.resolve(
+  import.meta.dirname,
+  '../src/userscripts/web-page-assistant/web-page-assistant.user.js',
+);
+const storageRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js';
+const userscriptContent = await readFile(userscriptPath, 'utf8');
 
 function createLocalStorage(initial = {}) {
   const store = new Map(Object.entries(initial));
@@ -45,6 +49,7 @@ function normalizeWidgetPosition(value) {
 
 function baseAdapters(overrides = {}) {
   return {
+    scriptName: 'Web Page Assistant',
     settingsContract: createSettingsContract(),
     normalizeWidgetPosition,
     storageKey: 'settings',
@@ -60,7 +65,15 @@ function baseAdapters(overrides = {}) {
   };
 }
 
-const createWebPageAssistantStoragePort = await loadStoragePortFactory();
+const createWebPageAssistantStoragePort = globalThis.WebPageAssistantStorageLib.createWebPageAssistantStoragePort;
+
+test('installable metadata requires the storage library', () => {
+  assert.equal(
+    userscriptContent.includes(`// @require      ${storageRequireUrl}`),
+    true,
+  );
+  assert.equal(userscriptContent.includes('WEB_PAGE_ASSISTANT_STORAGE_PORT_START'), false);
+});
 
 test('storage port reads and writes settings through legacy GM storage first', async () => {
   const gmWrites = [];

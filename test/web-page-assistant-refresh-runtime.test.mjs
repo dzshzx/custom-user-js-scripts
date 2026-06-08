@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
-const loadRefreshRuntimeFactory = () => loadInstallableBlock({
-  markerPrefix: 'WEB_PAGE_ASSISTANT_REFRESH_RUNTIME',
-  returnExpression: 'createRefreshRuntime',
-});
+await import('../src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js');
+
+const userscriptPath = path.resolve(
+  import.meta.dirname,
+  '../src/userscripts/web-page-assistant/web-page-assistant.user.js',
+);
+const refreshRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js';
+const userscriptContent = await readFile(userscriptPath, 'utf8');
 
 function createHarness() {
   let nowMs = 0;
@@ -48,7 +53,15 @@ function createHarness() {
   };
 }
 
-createHarness.factory = await loadRefreshRuntimeFactory();
+createHarness.factory = globalThis.WebPageAssistantRefreshLib.createRefreshRuntime;
+
+test('installable metadata requires the refresh runtime library', () => {
+  assert.equal(
+    userscriptContent.includes(`// @require      ${refreshRequireUrl}`),
+    true,
+  );
+  assert.equal(userscriptContent.includes('WEB_PAGE_ASSISTANT_REFRESH_RUNTIME_START'), false);
+});
 
 test('refresh runtime starts active countdown and emits remaining time', () => {
   const harness = createHarness();

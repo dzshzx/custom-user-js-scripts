@@ -13,6 +13,9 @@
 // @description:zh-TW 網頁助手：按頁面或站點管理自動重新整理，並可解除複製、選取、右鍵選單、拖曳和離開確認限制。
 // @author       dzshzx
 // @match        *://*/*
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
@@ -40,8 +43,24 @@
   const WIDGET_POSITION_KEY = 'pageAutoRefreshTimerWidgetPosition';
   const FALLBACK_STORAGE_KEY = `__${STORAGE_KEY}`;
   const FALLBACK_WIDGET_POSITION_KEY = `__${WIDGET_POSITION_KEY}`;
-  const MIN_INTERVAL_MS = 1000;
-  const MAX_INTERVAL_MS = 60 * 60 * 1000;
+  const PageAssistantSettings = globalThis.WebPageAssistantSettingsLib;
+  if (!PageAssistantSettings) {
+    throw new Error(`${SCRIPT_NAME}: WebPageAssistantSettingsLib is not loaded.`);
+  }
+  const WebPageAssistantStorage = globalThis.WebPageAssistantStorageLib;
+  if (!WebPageAssistantStorage) {
+    throw new Error(`${SCRIPT_NAME}: WebPageAssistantStorageLib is not loaded.`);
+  }
+  const { createWebPageAssistantStoragePort } = WebPageAssistantStorage;
+  const WebPageAssistantRefresh = globalThis.WebPageAssistantRefreshLib;
+  if (!WebPageAssistantRefresh) {
+    throw new Error(`${SCRIPT_NAME}: WebPageAssistantRefreshLib is not loaded.`);
+  }
+  const { createRefreshRuntime } = WebPageAssistantRefresh;
+  const MIN_INTERVAL_MS = PageAssistantSettings.MIN_INTERVAL_MS;
+  const MAX_INTERVAL_MS = PageAssistantSettings.MAX_INTERVAL_MS;
+  const isValidIntervalMs = PageAssistantSettings.isValidIntervalMs;
+  const hasUnlockerAction = PageAssistantSettings.hasUnlockerAction;
   const TICK_MS = 1000;
   const WIDGET_BUTTON_SIZE = 52;
   const WIDGET_WIDTH = 154;
@@ -60,13 +79,6 @@
     { label: '30 分钟', ms: 30 * 60 * 1000 },
     { label: '60 分钟', ms: 60 * 60 * 1000 },
   ];
-  const DEFAULT_UNLOCKER_OPTIONS = {
-    allowSelection: true,
-    allowCopy: true,
-    allowContextMenu: true,
-    allowDrag: false,
-    suppressBeforeUnload: false,
-  };
   // Icons are sourced from Lucide (https://lucide.dev), ISC License.
   // Copyright (c) 2026 Lucide Icons and Contributors.
   const LUCIDE_REFRESH_CW_ICON_HTML = `
@@ -86,7 +98,6 @@
 
   const currentPageKey = `${location.origin}${location.pathname}${location.search}`;
   const currentSiteKey = location.hostname;
-  const PageAssistantSettings = createPageAssistantSettingsContract();
 
   let settings = PageAssistantSettings.empty();
   let activeMatch = null;
@@ -103,94 +114,8 @@
   let widgetLayoutRuntime;
   let unlockerRuntime;
 
-  // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START
-  function emptySettings() {
-    return {
-      version: 2,
-      refresh: {
-        pages: {},
-        sites: {},
-      },
-      unlocker: {
-        pages: {},
-        sites: {},
-      },
-    };
-  }
-
   function isRecord(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-  }
-
-  function isValidIntervalMs(value) {
-    return Number.isFinite(value) && value >= MIN_INTERVAL_MS && value <= MAX_INTERVAL_MS;
-  }
-
-  function emptyScopedSettings() {
-    return {
-      pages: {},
-      sites: {},
-    };
-  }
-
-  function normalizeRefreshSetting(value) {
-    if (!isRecord(value)) return null;
-
-    const intervalMs = Number(value.intervalMs);
-    if (!isValidIntervalMs(intervalMs)) return null;
-
-    return {
-      intervalMs: Math.round(intervalMs),
-      updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : Date.now(),
-    };
-  }
-
-  function normalizeUnlockerSetting(value) {
-    if (!isRecord(value)) return null;
-
-    const enabled = Boolean(value.enabled);
-    const next = {
-      enabled,
-      allowSelection: value.allowSelection !== false,
-      allowCopy: value.allowCopy !== false,
-      allowContextMenu: value.allowContextMenu !== false,
-      allowDrag: value.allowDrag === true,
-      suppressBeforeUnload: value.suppressBeforeUnload === true,
-      updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : Date.now(),
-    };
-
-    return next;
-  }
-
-  function normalizeScopedSettings(value, normalizer) {
-    const next = emptyScopedSettings();
-    const source = isRecord(value) ? value : {};
-
-    for (const [key, setting] of Object.entries(isRecord(source.pages) ? source.pages : {})) {
-      const normalized = normalizer(setting);
-      if (normalized) next.pages[key] = normalized;
-    }
-
-    for (const [key, setting] of Object.entries(isRecord(source.sites) ? source.sites : {})) {
-      const normalized = normalizer(setting);
-      if (normalized) next.sites[key] = normalized;
-    }
-
-    return next;
-  }
-
-  function normalizeSettings(value) {
-    const next = emptySettings();
-    const source = isRecord(value) ? value : {};
-    const refreshSource = isRecord(source.refresh)
-      ? source.refresh
-      : { pages: source.pages, sites: source.sites };
-    const unlockerSource = isRecord(source.unlocker) ? source.unlocker : {};
-
-    next.refresh = normalizeScopedSettings(refreshSource, normalizeRefreshSetting);
-    next.unlocker = normalizeScopedSettings(unlockerSource, normalizeUnlockerSetting);
-
-    return next;
   }
 
   function normalizeWidgetPosition(value) {
@@ -206,282 +131,8 @@
     };
   }
 
-  function hasUnlockerAction(setting) {
-    return Boolean(
-      setting?.enabled
-        && (
-          setting.allowSelection
-          || setting.allowCopy
-          || setting.allowContextMenu
-          || setting.allowDrag
-          || setting.suppressBeforeUnload
-        ),
-    );
-  }
-
-  function createPageAssistantSettingsContract() {
-    return {
-      MIN_INTERVAL_MS,
-      MAX_INTERVAL_MS,
-      DEFAULT_UNLOCKER_OPTIONS,
-      empty: emptySettings,
-      emptySettings,
-      isValidIntervalMs,
-      normalize: normalizeSettings,
-      normalizeSettings,
-      normalizeRefreshSetting,
-      normalizeUnlockerSetting,
-      hasUnlockerAction,
-      defaultUnlockerSetting(overrides = {}) {
-        return normalizeUnlockerSetting({
-          enabled: true,
-          ...DEFAULT_UNLOCKER_OPTIONS,
-          ...overrides,
-          updatedAt: Date.now(),
-        });
-      },
-      resolveActiveRefresh(sourceSettings, keys) {
-        const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, normalizeRefreshSetting);
-        const pageSetting = normalizeRefreshSetting(refreshSettings.pages[keys.pageKey]);
-        if (pageSetting) {
-          return {
-            scope: 'page',
-            key: keys.pageKey,
-            setting: pageSetting,
-          };
-        }
-
-        const siteSetting = normalizeRefreshSetting(refreshSettings.sites[keys.siteKey]);
-        if (siteSetting) {
-          return {
-            scope: 'site',
-            key: keys.siteKey,
-            setting: siteSetting,
-          };
-        }
-
-        return null;
-      },
-      resolveActiveRefreshSetting(sourceSettings, keys) {
-        return this.resolveActiveRefresh(sourceSettings, keys);
-      },
-      resolveActiveUnlocker(sourceSettings, keys) {
-        const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, normalizeUnlockerSetting);
-        const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[keys.pageKey]);
-        if (hasUnlockerAction(pageSetting)) {
-          return {
-            scope: 'page',
-            key: keys.pageKey,
-            setting: pageSetting,
-          };
-        }
-
-        const siteSetting = normalizeUnlockerSetting(unlockerSettings.sites[keys.siteKey]);
-        if (hasUnlockerAction(siteSetting)) {
-          return {
-            scope: 'site',
-            key: keys.siteKey,
-            setting: siteSetting,
-          };
-        }
-
-        return null;
-      },
-      resolveActiveUnlockerSetting(sourceSettings, keys) {
-        return this.resolveActiveUnlocker(sourceSettings, keys);
-      },
-      getRefreshSetting(sourceSettings, scope, key) {
-        const settingsSource = normalizeSettings(sourceSettings);
-        const bucket = scope === 'site' ? settingsSource.refresh.sites : settingsSource.refresh.pages;
-        return normalizeRefreshSetting(bucket[key]);
-      },
-      getUnlockerSetting(sourceSettings, scope, key) {
-        const settingsSource = normalizeSettings(sourceSettings);
-        const bucket = scope === 'site' ? settingsSource.unlocker.sites : settingsSource.unlocker.pages;
-        return normalizeUnlockerSetting(bucket[key]);
-      },
-      setRefreshSetting(sourceSettings, scope, key, intervalMs, updatedAt = Date.now()) {
-        const next = normalizeSettings(sourceSettings);
-        const bucket = scope === 'site' ? next.refresh.sites : next.refresh.pages;
-        bucket[key] = {
-          intervalMs,
-          updatedAt,
-        };
-        return normalizeSettings(next);
-      },
-      deleteRefreshSetting(sourceSettings, scope, key) {
-        const next = normalizeSettings(sourceSettings);
-        const bucket = scope === 'site' ? next.refresh.sites : next.refresh.pages;
-        delete bucket[key];
-        return next;
-      },
-      setUnlockerSetting(sourceSettings, scope, key, unlockerSetting, updatedAt = Date.now()) {
-        const normalized = normalizeUnlockerSetting(unlockerSetting);
-        if (!normalized) return normalizeSettings(sourceSettings);
-
-        const next = normalizeSettings(sourceSettings);
-        const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
-        bucket[key] = {
-          ...normalized,
-          updatedAt,
-        };
-        return normalizeSettings(next);
-      },
-      deleteUnlockerSetting(sourceSettings, scope, key) {
-        const next = normalizeSettings(sourceSettings);
-        const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
-        delete bucket[key];
-        return next;
-      },
-    };
-  }
-  // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_END
-
-  function maybePromise(value) {
-    return value && typeof value.then === 'function' ? value : Promise.resolve(value);
-  }
-
-  // WEB_PAGE_ASSISTANT_STORAGE_PORT_START
-  function createWebPageAssistantStoragePort(adapters) {
-    const {
-      settingsContract,
-      normalizeWidgetPosition: normalizePosition,
-      storageKey,
-      widgetPositionKey,
-      fallbackStorageKey,
-      fallbackWidgetPositionKey,
-      gmGetValue,
-      gmSetValue,
-      gmRegisterMenuCommand,
-      gmApi,
-      localStorageAdapter,
-      logger,
-      toPromise,
-    } = adapters;
-
-    async function readPrimaryValue(key, fallbackValue) {
-      if (typeof gmGetValue === 'function') {
-        return {
-          available: true,
-          value: await toPromise(gmGetValue(key, fallbackValue)),
-        };
-      }
-
-      if (gmApi && typeof gmApi.getValue === 'function') {
-        return {
-          available: true,
-          value: await gmApi.getValue(key, fallbackValue),
-        };
-      }
-
-      return { available: false, value: fallbackValue };
-    }
-
-    async function writePrimaryValue(key, value) {
-      if (typeof gmSetValue === 'function') {
-        await toPromise(gmSetValue(key, value));
-        return true;
-      }
-
-      if (gmApi && typeof gmApi.setValue === 'function') {
-        await gmApi.setValue(key, value);
-        return true;
-      }
-
-      return false;
-    }
-
-    function readFallbackJson(key, normalizer, fallbackValue, warning) {
-      try {
-        return normalizer(JSON.parse(localStorageAdapter.getItem(key) || 'null')) || fallbackValue;
-      } catch (error) {
-        logger.warn(warning, error);
-        return fallbackValue;
-      }
-    }
-
-    function writeFallbackJson(key, value) {
-      localStorageAdapter.setItem(key, JSON.stringify(value));
-    }
-
-    return {
-      async readSettings() {
-        try {
-          const primary = await readPrimaryValue(storageKey, settingsContract.empty());
-          if (primary.available) return settingsContract.normalize(primary.value);
-        } catch (error) {
-          logger.warn(`${SCRIPT_NAME}: failed to read userscript storage.`, error);
-        }
-
-        return readFallbackJson(
-          fallbackStorageKey,
-          settingsContract.normalize,
-          settingsContract.empty(),
-          `${SCRIPT_NAME}: failed to read fallback storage.`,
-        );
-      },
-      async readWidgetPosition() {
-        try {
-          const primary = await readPrimaryValue(widgetPositionKey, null);
-          if (primary.available) return normalizePosition(primary.value);
-        } catch (error) {
-          logger.warn(`${SCRIPT_NAME}: failed to read widget position.`, error);
-        }
-
-        return readFallbackJson(
-          fallbackWidgetPositionKey,
-          normalizePosition,
-          null,
-          `${SCRIPT_NAME}: failed to read fallback widget position.`,
-        );
-      },
-      async writeSettings(nextSettings) {
-        const normalized = settingsContract.normalize(nextSettings);
-
-        try {
-          if (await writePrimaryValue(storageKey, normalized)) return normalized;
-        } catch (error) {
-          logger.warn(`${SCRIPT_NAME}: failed to write userscript storage.`, error);
-        }
-
-        writeFallbackJson(fallbackStorageKey, normalized);
-        return normalized;
-      },
-      async writeWidgetPosition(position) {
-        const normalized = normalizePosition(position);
-        if (!normalized) return null;
-
-        try {
-          if (await writePrimaryValue(widgetPositionKey, normalized)) return normalized;
-        } catch (error) {
-          logger.warn(`${SCRIPT_NAME}: failed to write widget position.`, error);
-        }
-
-        writeFallbackJson(fallbackWidgetPositionKey, normalized);
-        return normalized;
-      },
-      registerSettingsMenu(label, callback) {
-        try {
-          if (typeof gmRegisterMenuCommand === 'function') {
-            gmRegisterMenuCommand(label, callback);
-            return true;
-          }
-
-          if (gmApi && typeof gmApi.registerMenuCommand === 'function') {
-            gmApi.registerMenuCommand(label, callback);
-            return true;
-          }
-        } catch (error) {
-          logger.warn(`${SCRIPT_NAME}: failed to register menu command.`, error);
-        }
-
-        return false;
-      },
-    };
-  }
-  // WEB_PAGE_ASSISTANT_STORAGE_PORT_END
-
   const storagePort = createWebPageAssistantStoragePort({
+    scriptName: SCRIPT_NAME,
     settingsContract: PageAssistantSettings,
     normalizeWidgetPosition,
     storageKey: STORAGE_KEY,
@@ -494,7 +145,6 @@
     gmApi: typeof GM !== 'undefined' ? GM : null,
     localStorageAdapter: localStorage,
     logger: console,
-    toPromise: maybePromise,
   });
 
   function resolveActiveSetting(sourceSettings = settings) {
@@ -1378,134 +1028,6 @@
     formatInterval,
     defaultIntervalMs: 5 * 60 * 1000,
   });
-
-  // WEB_PAGE_ASSISTANT_REFRESH_RUNTIME_START
-  function createRefreshRuntime(adapters) {
-    const {
-      minIntervalMs,
-      tickMs,
-      now,
-      setInterval: setTimer,
-      clearInterval: clearTimer,
-      reload,
-      onStateChange,
-    } = adapters;
-    const emptyState = {
-      activeMatch: null,
-      targetTime: 0,
-      remainingWhenPaused: 0,
-      isPaused: false,
-      isRefreshing: false,
-      timerId: null,
-    };
-    let state = { ...emptyState };
-
-    function clearActiveTimer() {
-      if (!state.timerId) return;
-      clearTimer(state.timerId);
-      state = { ...state, timerId: null };
-    }
-
-    function snapshot() {
-      const remainingMs = state.activeMatch
-        ? state.isPaused
-          ? state.remainingWhenPaused
-          : Math.max(0, state.targetTime - now())
-        : 0;
-      return {
-        activeMatch: state.activeMatch,
-        isPaused: state.isPaused,
-        isRefreshing: state.isRefreshing,
-        remainingMs,
-      };
-    }
-
-    function emit() {
-      onStateChange(snapshot());
-    }
-
-    function tick() {
-      if (!state.activeMatch || state.isPaused || state.isRefreshing) {
-        emit();
-        return;
-      }
-
-      const remainingMs = state.targetTime - now();
-      emit();
-      if (remainingMs > 0) return;
-
-      state = { ...state, isRefreshing: true };
-      clearActiveTimer();
-      emit();
-      reload();
-    }
-
-    function startTimer() {
-      clearActiveTimer();
-      if (!state.activeMatch || state.isPaused) {
-        emit();
-        return;
-      }
-
-      state = { ...state, timerId: setTimer(tick, tickMs) };
-      tick();
-    }
-
-    function restart(activeMatch) {
-      clearActiveTimer();
-      if (!activeMatch) {
-        state = { ...emptyState };
-        emit();
-        return;
-      }
-
-      state = {
-        ...emptyState,
-        activeMatch,
-        targetTime: now() + activeMatch.setting.intervalMs,
-      };
-      startTimer();
-    }
-
-    function stop() {
-      clearActiveTimer();
-      state = { ...emptyState };
-      emit();
-    }
-
-    function togglePause() {
-      if (!state.activeMatch) return snapshot();
-
-      if (state.isPaused) {
-        state = {
-          ...state,
-          targetTime: now() + state.remainingWhenPaused,
-          remainingWhenPaused: 0,
-          isPaused: false,
-        };
-        startTimer();
-        return snapshot();
-      }
-
-      state = {
-        ...state,
-        remainingWhenPaused: Math.max(minIntervalMs, state.targetTime - now()),
-        isPaused: true,
-      };
-      clearActiveTimer();
-      emit();
-      return snapshot();
-    }
-
-    return {
-      restart,
-      stop,
-      togglePause,
-      getState: snapshot,
-      tick,
-    };
-  }
-  // WEB_PAGE_ASSISTANT_REFRESH_RUNTIME_END
 
   const refreshRuntime = createRefreshRuntime({
     minIntervalMs: MIN_INTERVAL_MS,
