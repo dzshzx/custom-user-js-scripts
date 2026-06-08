@@ -175,8 +175,6 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     true,
   );
   assert.deepEqual(model.views.archive.actionIds, ['export-archive', 'import-archive']);
-  assert.equal(model.primaryMetrics.find((metric) => metric.id === 'sevenDayUsedPercent').hintKey, 'metricHintMainSevenDayWindow');
-  assert.notEqual(model.primaryMetrics.find((metric) => metric.id === 'sevenDayUsedPercent').hint, 'secondary_window');
   assert.deepEqual(model.primaryMetrics.map((metric) => metric.id), [
     'remainingUsdIncludingReset',
     'remainingUsdExcludingReset',
@@ -187,6 +185,13 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     'monthTotal',
     'resetCountdown',
   ]);
+  assert.equal(model.primaryMetrics.find((metric) => metric.id === 'resetCountdown').hours, 12);
+  for (const metric of model.primaryMetrics) {
+    assert.equal(Object.hasOwn(metric, 'credits'), false, `${metric.id} exposes secondary credits`);
+    assert.equal(Object.hasOwn(metric, 'hint'), false, `${metric.id} exposes secondary hint`);
+    assert.equal(Object.hasOwn(metric, 'hintKey'), false, `${metric.id} exposes secondary hint key`);
+    assert.equal(Object.hasOwn(metric, 'windowRow'), false, `${metric.id} exposes raw reset window`);
+  }
 });
 
 test('createQuotaPanelViewModel marks localStorage archive as local-only sync', () => {

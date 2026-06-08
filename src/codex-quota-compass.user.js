@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.1
+// @version      0.2.2
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -30,7 +30,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.2.1';
+  const SCRIPT_VERSION = '0.2.2';
   const DEFAULT_LOCALE = 'zh-CN';
   const I18N_MESSAGES = {
     'zh-CN': {
@@ -75,7 +75,6 @@
       metricSevenDayUsedPercent: '7 天已用',
       metricSinceResetTotal: '上次重置至今',
       metricMonthTotal: '本月累计',
-      metricHintMainSevenDayWindow: '主 7 天窗口',
       transferNote: '导入和导出可用于跨设备同步快照归档。',
       syncBannerGmTitle: '跨设备同步路径可用',
       syncBannerGmDetail: '正在使用 {backend}。如果用户脚本管理器同步已开启，个人用量历史可随脚本存储同步。',
@@ -103,7 +102,6 @@
       tableNoData: '暂无数据',
       tablePreviewHint: '仅显示前 {visible} 条，共 {total} 条。需要完整调试输出时，先设置 window.{debugKey} = true 后刷新。',
       resetCountdown: '距离重置',
-      mainWindowFallback: '主 7 天窗口',
       menuRun: '运行 Codex Quota Compass',
       menuExport: '导出快照归档',
       menuImport: '导入快照归档',
@@ -159,7 +157,6 @@
       metricSevenDayUsedPercent: '7-day used',
       metricSinceResetTotal: 'Since reset',
       metricMonthTotal: 'Month total',
-      metricHintMainSevenDayWindow: 'Primary 7-day window',
       transferNote: 'Import and export can sync snapshot archives across devices.',
       syncBannerGmTitle: 'Cross-device sync path available',
       syncBannerGmDetail: 'Using {backend}. If userscript-manager sync is enabled, personal usage history can sync with script storage.',
@@ -187,7 +184,6 @@
       tableNoData: 'No data',
       tablePreviewHint: 'Showing first {visible} of {total} rows. For full debug output, set window.{debugKey} = true and refresh.',
       resetCountdown: 'Reset in',
-      mainWindowFallback: 'Primary 7-day window',
       menuRun: 'Run Codex Quota Compass',
       menuExport: 'Export Snapshot Archive',
       menuImport: 'Import Snapshot Archive',
@@ -420,13 +416,8 @@
   }
 
   function archiveSummaryHtml(model = createArchivePanelModel(latestArchiveSummary, latestImportReport)) {
-    const archiveActions = detailActionsHtml([
-      { action: 'export-archive', label: t('archiveExportAction') },
-      { action: 'import-archive', label: t('archiveImportAction') },
-    ]);
-
     if (!model.isLoaded) {
-      return `<div class="cqc-empty">${escapeHtml(t('archiveEmpty'))}</div>${archiveActions}`;
+      return `<div class="cqc-empty">${escapeHtml(t('archiveEmpty'))}</div>`;
     }
 
     const overviewColumns = [
@@ -444,12 +435,12 @@
     const overview = dataViewHtml({
       id: 'archive-overview',
       rows: [
-      {
-        [overviewColumns[0]]: model.snapshotCount,
-        [overviewColumns[1]]: model.earliestCapturedAt || '-',
-        [overviewColumns[2]]: model.latestCapturedAt || '-',
-        [overviewColumns[3]]: model.storageBackend?.label || '-',
-      },
+        {
+          [overviewColumns[0]]: model.snapshotCount,
+          [overviewColumns[1]]: model.earliestCapturedAt || '-',
+          [overviewColumns[2]]: model.latestCapturedAt || '-',
+          [overviewColumns[3]]: model.storageBackend?.label || '-',
+        },
       ],
       columns: overviewColumns.map((column) => ({
         key: column,
@@ -464,10 +455,10 @@
       ? dataViewHtml({
         id: 'archive-recent',
         rows: model.recentSnapshots.map((row) => ({
-        [recentColumns[0]]: row.capturedAt,
-        [recentColumns[1]]: row.snapshotId,
-        [recentColumns[2]]: row.monthlyCredits,
-        [recentColumns[3]]: row.weeklyUsedPercent,
+          [recentColumns[0]]: row.capturedAt,
+          [recentColumns[1]]: row.snapshotId,
+          [recentColumns[2]]: row.monthlyCredits,
+          [recentColumns[3]]: row.weeklyUsedPercent,
         })),
         columns: recentColumns.map((column) => ({
           key: column,
@@ -482,7 +473,14 @@
       ? `<div class="cqc-table-note">${escapeHtml(t('archiveLatestImport', { added: model.importReport.added, skipped: model.importReport.skipped, invalid: model.importReport.invalid }))}</div>`
       : '';
 
-    return `${overview}${importReport}${recent}${archiveActions}`;
+    return `${overview}${importReport}${recent}`;
+  }
+
+  function archiveTransferActionsHtml() {
+    return detailActionsHtml([
+      { action: 'export-archive', label: t('archiveExportAction') },
+      { action: 'import-archive', label: t('archiveImportAction') },
+    ]);
   }
 
   function loadButtonPosition() {
@@ -776,10 +774,6 @@
       : `$${formatMetricDecimal(value)}`;
   }
 
-  function creditsMetricHint(value) {
-    return `${formatMetricDecimal(value)} Credits`;
-  }
-
   function formatHoursDuration(hours) {
     const numericHours = Number(hours);
     if (!Number.isFinite(numericHours)) return '-';
@@ -794,28 +788,23 @@
     return `${minutes} 分钟`;
   }
 
-  function creditMetricHtml(label, usd, credits) {
-    return metricHtml(label, usdMetricValue(usd), creditsMetricHint(credits));
+  function creditMetricHtml(label, usd) {
+    return metricHtml(label, usdMetricValue(usd));
   }
 
-  function resetMetricHtml(windowRow) {
-    return metricHtml(
-      t('resetCountdown'),
-      formatHoursDuration(windowRow?.距离重置小时),
-      windowRow?.下次重置_本地 || t('mainWindowFallback'),
-    );
+  function resetMetricHtml(hours) {
+    return metricHtml(t('resetCountdown'), formatHoursDuration(hours));
   }
 
   function primaryMetricHtml(metric) {
     const label = metric?.labelKey ? t(metric.labelKey) : (metric?.label || '-');
-    const hint = metric?.hintKey ? t(metric.hintKey) : metric?.hint;
     if (metric?.type === 'credit') {
-      return creditMetricHtml(label, metric.usd, metric.credits);
+      return creditMetricHtml(label, metric.usd);
     }
     if (metric?.type === 'reset') {
-      return resetMetricHtml(metric.windowRow);
+      return resetMetricHtml(metric.hours);
     }
-    return metricHtml(label, metric?.value, hint);
+    return metricHtml(label, metric?.value);
   }
 
   function syncBannerHtml(banner) {
@@ -931,6 +920,7 @@
       ${syncBannerHtml(model?.syncBanner)}
       ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(model?.archive))}
       <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
+      ${archiveTransferActionsHtml()}
     `;
   }
 

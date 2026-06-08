@@ -340,7 +340,7 @@
 
       if (usedRatio <= 0) {
         return {
-          依据: '主 7 天窗口',
+          依据: '主限制 - 7天窗口',
           已用百分比: usedPercent,
           说明: '已用比例为 0，无法反推总额度。',
         };
@@ -352,7 +352,7 @@
       const remainingWithoutResetDay = Math.max(0, totalWithoutResetDay - excludedCredits);
 
       return {
-        依据: '主 7 天窗口',
+        依据: '主限制 - 7天窗口',
         已用百分比: usedPercent,
         已用比例小数: roundNumber(usedRatio, 4),
         剩余比例小数: roundNumber(1 - usedRatio, 4),
@@ -381,7 +381,7 @@
       const windows = collectWindows(usage);
 
       if (!usage?.rate_limit?.secondary_window) {
-        throw new Error('没有找到 usage.rate_limit.secondary_window，无法反推主 7 天窗口。');
+        throw new Error('没有找到 usage.rate_limit.secondary_window，无法反推主限制 - 7天窗口。');
       }
 
       const mainSecondary = parseWindow(windowIdentity({
@@ -678,7 +678,6 @@
         labelKey: 'metricRemainingUsdIncludingReset',
         label: '剩余 USD · 含重置日',
         usd: weekly.剩余USD_包含重置日口径,
-        credits: weekly.剩余Credits_包含重置日口径,
       },
       {
         id: 'remainingUsdExcludingReset',
@@ -686,7 +685,6 @@
         labelKey: 'metricRemainingUsdExcludingReset',
         label: '剩余 USD · 排除重置日',
         usd: weekly.剩余USD_排除重置日口径,
-        credits: weekly.剩余Credits_排除重置日口径,
       },
       {
         id: 'weeklyTotalIncludingReset',
@@ -694,7 +692,6 @@
         labelKey: 'metricWeeklyTotalIncludingReset',
         label: '周总额度 · 含重置日',
         usd: weekly.反推周总USD_包含重置日,
-        credits: weekly.反推周总Credits_包含重置日,
       },
       {
         id: 'weeklyTotalExcludingReset',
@@ -702,7 +699,6 @@
         labelKey: 'metricWeeklyTotalExcludingReset',
         label: '周总额度 · 排除重置日',
         usd: weekly.反推周总USD_排除重置日,
-        credits: weekly.反推周总Credits_排除重置日,
       },
       {
         id: 'sevenDayUsedPercent',
@@ -710,8 +706,6 @@
         labelKey: 'metricSevenDayUsedPercent',
         label: '7 天已用',
         value: weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-',
-        hintKey: 'metricHintMainSevenDayWindow',
-        hint: '主 7 天窗口',
       },
       {
         id: 'sinceResetTotal',
@@ -719,7 +713,6 @@
         labelKey: 'metricSinceResetTotal',
         label: '上次重置至今',
         usd: sinceReset.累计折算USD,
-        credits: sinceReset.累计Credits,
       },
       {
         id: 'monthTotal',
@@ -727,12 +720,11 @@
         labelKey: 'metricMonthTotal',
         label: '本月累计',
         usd: month.累计折算USD,
-        credits: month.累计Credits,
       },
       {
         id: 'resetCountdown',
         type: 'reset',
-        windowRow: mainSevenDayWindow,
+        hours: mainSevenDayWindow?.距离重置小时,
       },
     ];
   }
