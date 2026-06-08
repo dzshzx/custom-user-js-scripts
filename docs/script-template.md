@@ -1,6 +1,6 @@
 # Script Template Notes
 
-复制 `src/example.user.js` 创建新脚本时，优先修改这些字段：
+复制当前模板脚本创建新脚本时，优先修改这些字段。后续源码迁移完成后，新脚本默认放在 `src/userscripts/<script-id>/<script-id>.user.js`。
 
 - `@name`: 脚本名称。
 - `@name:zh-CN` / `@name:en`: 脚本有中文用户界面或跨语言使用场景时，补充本地化名称。
@@ -13,8 +13,8 @@
 
 改名或迁移已安装脚本文件时：
 
-- 旧 `src/*.user.js` 路径保留至少一个桥接版本，不要直接删除。
-- 旧文件的 `@downloadURL` 和 `@updateURL` 指向新的 raw 文件地址。
+- 单人自用脚本可以直接迁移到新路径，但必须同步更新 README/docs 链接、测试路径、`@downloadURL`、`@updateURL` 和 `@require`。
+- 面向多人或公开安装的脚本，旧路径保留至少一个桥接版本，不要直接删除。
 - 新文件保留完整实现，后续以新文件为主维护。
 - 保持原有存储 key，除非任务明确要求迁移用户数据。
 - 不要在同一次迁移里同时改 `@name`、`@namespace` 和文件路径，除非已经测试目标脚本管理器不会安装出重复脚本。

@@ -19,7 +19,7 @@ on the declared fields, grants, match patterns, update URLs, and run timing.
 
 Keep data-shape assumptions close to the code that consumes them. For complex
 logic, prefer named parsing and summarizing helpers over inline assumptions.
-Current examples in `src/codex-quota-compass.user.js` include:
+Current examples in the Codex Quota Compass userscript include:
 
 - `parseWindow(label, w)` for rate-limit window rows.
 - `parseDailyRows(json)` for daily usage rows.
@@ -69,7 +69,7 @@ and `looksLikeJwt(s)` are the project pattern.
 - Do not assume private API response shapes without guards.
 - Do not write unchecked JSON from `localStorage` directly into layout or
   network parameters.
-- Do not add TypeScript-only syntax to `src/*.user.js`; userscript managers
-  need runnable JavaScript.
+- Do not add TypeScript-only syntax to installable `.user.js` files;
+  userscript managers need runnable JavaScript.
 - Do not add npm imports to installable userscripts unless a bundling step is
   introduced and documented.

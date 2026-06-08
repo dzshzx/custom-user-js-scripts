@@ -10,9 +10,11 @@ This is a small browser userscript workspace for Tampermonkey,
 Violentmonkey, Greasemonkey, and similar managers. The "frontend" layer is
 plain browser JavaScript, not a React or TypeScript application.
 
-Source userscripts live in `src/*.user.js`, reusable snippets live in
-`snippets/`, local Node tooling lives in `scripts/`, and project notes live in
-`docs/`.
+The current transitional source layout still has userscripts in `src/`, but
+the target layout is script-scoped: installable entrypoints and same-script
+support modules live under `src/userscripts/<script-id>/`. Reusable snippets
+live in `snippets/`, local Node tooling lives in `scripts/`, and human-facing
+project notes live in `docs/`.
 
 ---
 

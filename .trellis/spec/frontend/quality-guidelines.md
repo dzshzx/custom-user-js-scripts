@@ -9,8 +9,8 @@
 Quality in this repository is mostly about installability, browser safety,
 host-page isolation, and not leaking private user data. The current automated
 check is `npm run lint`, which runs `scripts/check-userscripts.mjs` and
-verifies that every `src/**/*.user.js` file has a userscript metadata block
-and required metadata fields.
+verifies that installable `.user.js` files under `src/` have a userscript
+metadata block and required metadata fields.
 
 ---
 
@@ -32,13 +32,15 @@ and required metadata fields.
 ## Required Patterns
 
 - Every installable script must live under `src/` and use the `.user.js`
-  suffix.
+  suffix. The target layout is `src/userscripts/<script-id>/<script-id>.user.js`.
 - Every userscript must start with a `// ==UserScript==` metadata block.
 - Required metadata fields are `@name`, `@namespace`, `@version`,
   `@description`, and `@match`.
 - Do not update `@version` as part of ordinary feature, UI, or bug-fix
   changes. Bump userscript versions only when the user explicitly asks for a
   version update.
+- When moving installable userscript files, update `@downloadURL`,
+  `@updateURL`, and `@require` paths intentionally in the same task.
 - Keep `@grant none` unless the script actually uses a userscript manager API.
 - Wrap runtime code in an IIFE with `'use strict'`.
 - Scope injected UI with a stable root id and script-specific class prefix.

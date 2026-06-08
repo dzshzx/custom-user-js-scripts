@@ -17,7 +17,7 @@ userscript manager menu commands, and fetch wrappers.
 
 The default userscript lifecycle is:
 
-1. Put metadata at the top of `src/*.user.js`.
+1. Put metadata at the top of each installable `.user.js` entrypoint.
 2. Use `@run-at document-idle` unless the feature explicitly needs earlier
    DOM access.
 3. Wrap runtime code in an IIFE with `'use strict'`.
@@ -59,7 +59,7 @@ other operations that do not need to be visible during normal page use.
 
 Use native `fetch` inside userscripts. Keep one helper responsible for
 request options and error handling. The current reference is `apiGet(path)` in
-`src/codex-quota-compass.user.js`, which:
+the Codex Quota Compass userscript, which:
 
 - Uses `credentials: 'include'` for same-origin authenticated page APIs.
 - Adds an Authorization header only after an access token is discovered.

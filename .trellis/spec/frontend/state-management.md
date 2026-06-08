@@ -20,7 +20,7 @@ bundling/runtime model that justifies it.
 ### Module State
 
 Use module-scope `let` variables inside the IIFE for UI references and
-page-lifetime state. `src/codex-quota-compass.user.js` uses this for
+page-lifetime state. The Codex Quota Compass userscript uses this for
 `root`, `panel`, `button`, `isPanelOpen`, `isDetailsOpen`, `latestError`,
 `latestResult`, `pendingRunPromise`, and related UI flags.
 

@@ -10,7 +10,7 @@ There is no framework component layer in this repository. Userscript UI is
 plain DOM plus injected CSS. Treat "components" as small rendering and setup
 functions inside a `.user.js` file.
 
-The current reference is `src/codex-quota-compass.user.js`, which builds a
+The current reference is the Codex Quota Compass userscript, which builds a
 floating button, panel, metric cards, tables, loading state, and error state
 without React or a build step.
 
@@ -28,7 +28,7 @@ Use one stable root element per injected UI. The current pattern is:
   `contentNode` are kept in module scope inside the IIFE.
 
 When rendering dynamic HTML strings, escape dynamic values. The current helper
-is `escapeHtml(value)` in `src/codex-quota-compass.user.js`. Prefer
+is `escapeHtml(value)` in the Codex Quota Compass userscript. Prefer
 `textContent` for simple text updates, as `setStatus(text, tone)` does.
 
 ---
