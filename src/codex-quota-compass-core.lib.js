@@ -548,7 +548,7 @@
         { item: '上次重置至今', value: sinceReset.累计折算USD, detail: `${sinceReset.累计Credits ?? '-'} Credits` },
         { item: '本月累计', value: month.累计折算USD, detail: `${month.累计Credits ?? '-'} Credits` },
         { item: '近30天', value: rolling.累计折算USD, detail: `${rolling.累计Credits ?? '-'} Credits` },
-        { item: '归档快照', value: archiveHealth.snapshotCount, detail: archiveHealth.storageBackendLabel },
+        { item: '用量记录', value: archiveHealth.snapshotCount, detail: archiveHealth.storageBackendLabel },
       ], [
         dataColumn('item', { labelKey: 'columnItem', priority: 'primary' }),
         dataColumn('value', { labelKey: 'columnValue', priority: 'primary' }),
