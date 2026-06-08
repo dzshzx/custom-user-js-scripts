@@ -15,11 +15,11 @@ Implement report candidate 2 by extracting Web Page Assistant UI presentation ma
 
 ## Acceptance Criteria
 
-- [ ] `web-page-assistant.user.js` no longer owns the bulk of scoped CSS and dialog/widget markup.
-- [ ] Presentation module exposes a small interface that the entrypoint can use for rendering and role/action helpers.
-- [ ] Existing dialog contract and widget behavior tests pass.
-- [ ] `npm test` passes.
-- [ ] `npm run lint` passes.
+- [x] `web-page-assistant.user.js` no longer owns the bulk of scoped CSS and dialog/widget markup.
+- [x] Presentation module exposes a small interface that the entrypoint can use for rendering and role/action helpers.
+- [x] Existing dialog contract and widget behavior tests pass.
+- [x] `npm test` passes.
+- [x] `npm run lint` passes.
 - [ ] Child changes are committed before child 3 starts.
 
 ## Notes

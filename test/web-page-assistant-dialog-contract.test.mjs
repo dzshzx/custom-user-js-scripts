@@ -1,11 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
-const loadDialogContractFactory = () => loadInstallableBlock({
-  markerPrefix: 'WEB_PAGE_ASSISTANT_DIALOG_CONTRACT',
-  returnExpression: 'createPageAssistantDialogContract',
-});
+await import('../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js');
+
+const userscriptPath = path.resolve(
+  import.meta.dirname,
+  '../src/userscripts/web-page-assistant/web-page-assistant.user.js',
+);
+const presentationRequireUrls = [
+  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.js',
+  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-presentation-dialog-styles.lib.js',
+  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js',
+];
+const userscriptContent = await readFile(userscriptPath, 'utf8');
 
 function createSettingsContract() {
   return {
@@ -51,7 +60,17 @@ function createFakeDialog(checkedRoles) {
   };
 }
 
-createDialogContract.factory = await loadDialogContractFactory();
+createDialogContract.factory = globalThis.WebPageAssistantPresentationLib.createPageAssistantDialogContract;
+
+test('installable metadata requires the presentation libraries', () => {
+  for (const requireUrl of presentationRequireUrls) {
+    assert.equal(
+      userscriptContent.includes(`// @require      ${requireUrl}`),
+      true,
+    );
+  }
+  assert.equal(userscriptContent.includes('WEB_PAGE_ASSISTANT_DIALOG_CONTRACT_START'), false);
+});
 
 test('dialog contract normalizes tabs and focus roles', () => {
   const contract = createDialogContract();
