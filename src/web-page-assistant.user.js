@@ -88,6 +88,7 @@
   const currentSiteKey = location.hostname;
   const PageAssistantSettings = createPageAssistantSettingsContract();
   const rootActionHandlers = createRootActionHandlers();
+  const unlockerRuntime = createUnlockerRuntime();
 
   let settings = PageAssistantSettings.empty();
   let activeMatch = null;
@@ -106,7 +107,6 @@
   let timerId = null;
   let isRefreshing = false;
   let hasRootListener = false;
-  let unlockerCleanup = [];
 
   function emptySettings() {
     return {
@@ -1750,61 +1750,62 @@
     return undefined;
   }
 
-  function uninstallUnlocker() {
-    for (const cleanup of unlockerCleanup) {
-      cleanup();
+  function createUnlockerRuntime() {
+    const capabilitySpecs = [
+      { option: 'allowSelection', target: () => document, type: 'selectstart', handler: stopEvent },
+      { option: 'allowCopy', target: () => document, type: 'copy', handler: stopEvent },
+      { option: 'allowCopy', target: () => document, type: 'cut', handler: stopEvent },
+      { option: 'allowContextMenu', target: () => document, type: 'contextmenu', handler: stopEvent },
+      { option: 'allowDrag', target: () => document, type: 'dragstart', handler: stopEvent },
+      { option: 'suppressBeforeUnload', target: () => window, type: 'beforeunload', handler: stopBeforeUnload },
+    ];
+    let cleanupStack = [];
+
+    function addListener(target, type, handler) {
+      target.addEventListener(type, handler, true);
+      cleanupStack.push(() => target.removeEventListener(type, handler, true));
     }
-    unlockerCleanup = [];
 
-    const style = document.getElementById(UNLOCKER_STYLE_ID);
-    if (style) style.remove();
-  }
+    function installSelectionStyle(setting) {
+      if (!setting.allowSelection || document.getElementById(UNLOCKER_STYLE_ID)) return;
 
-  function addUnlockerListener(target, type, handler) {
-    target.addEventListener(type, handler, true);
-    unlockerCleanup.push(() => target.removeEventListener(type, handler, true));
-  }
+      const style = document.createElement('style');
+      style.id = UNLOCKER_STYLE_ID;
+      style.textContent = `
+        html :not(#${ROOT_ID}):not(#${ROOT_ID} *) {
+          -webkit-user-select: text !important;
+          user-select: text !important;
+        }
+      `;
+      document.documentElement.append(style);
+    }
 
-  function installUnlockerStyles(setting) {
-    if (!setting.allowSelection || document.getElementById(UNLOCKER_STYLE_ID)) return;
+    return {
+      install(setting) {
+        this.uninstall();
+        if (!hasUnlockerAction(setting)) return;
 
-    const style = document.createElement('style');
-    style.id = UNLOCKER_STYLE_ID;
-    style.textContent = `
-      html :not(#${ROOT_ID}):not(#${ROOT_ID} *) {
-        -webkit-user-select: text !important;
-        user-select: text !important;
-      }
-    `;
-    document.documentElement.append(style);
+        installSelectionStyle(setting);
+        for (const spec of capabilitySpecs) {
+          if (setting[spec.option]) {
+            addListener(spec.target(), spec.type, spec.handler);
+          }
+        }
+      },
+      uninstall() {
+        for (const cleanup of cleanupStack) {
+          cleanup();
+        }
+        cleanupStack = [];
+
+        const style = document.getElementById(UNLOCKER_STYLE_ID);
+        if (style) style.remove();
+      },
+    };
   }
 
   function installUnlocker(setting) {
-    uninstallUnlocker();
-    if (!hasUnlockerAction(setting)) return;
-
-    installUnlockerStyles(setting);
-
-    if (setting.allowSelection) {
-      addUnlockerListener(document, 'selectstart', stopEvent);
-    }
-
-    if (setting.allowCopy) {
-      addUnlockerListener(document, 'copy', stopEvent);
-      addUnlockerListener(document, 'cut', stopEvent);
-    }
-
-    if (setting.allowContextMenu) {
-      addUnlockerListener(document, 'contextmenu', stopEvent);
-    }
-
-    if (setting.allowDrag) {
-      addUnlockerListener(document, 'dragstart', stopEvent);
-    }
-
-    if (setting.suppressBeforeUnload) {
-      addUnlockerListener(window, 'beforeunload', stopBeforeUnload);
-    }
+    unlockerRuntime.install(setting);
   }
 
   function refreshUnlockerState() {
