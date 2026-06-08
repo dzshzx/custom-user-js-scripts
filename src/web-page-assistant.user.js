@@ -346,90 +346,161 @@
     return value && typeof value.then === 'function' ? value : Promise.resolve(value);
   }
 
-  async function readStoredSettings() {
-    try {
-      if (typeof GM_getValue === 'function') {
-        return PageAssistantSettings.normalize(await maybePromise(GM_getValue(STORAGE_KEY, PageAssistantSettings.empty())));
+  // WEB_PAGE_ASSISTANT_STORAGE_PORT_START
+  function createWebPageAssistantStoragePort(adapters) {
+    const {
+      settingsContract,
+      normalizeWidgetPosition: normalizePosition,
+      storageKey,
+      widgetPositionKey,
+      fallbackStorageKey,
+      fallbackWidgetPositionKey,
+      gmGetValue,
+      gmSetValue,
+      gmRegisterMenuCommand,
+      gmApi,
+      localStorageAdapter,
+      logger,
+      toPromise,
+    } = adapters;
+
+    async function readPrimaryValue(key, fallbackValue) {
+      if (typeof gmGetValue === 'function') {
+        return {
+          available: true,
+          value: await toPromise(gmGetValue(key, fallbackValue)),
+        };
       }
 
-      if (typeof GM !== 'undefined' && typeof GM.getValue === 'function') {
-        return PageAssistantSettings.normalize(await GM.getValue(STORAGE_KEY, PageAssistantSettings.empty()));
-      }
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to read userscript storage.`, error);
-    }
-
-    try {
-      return PageAssistantSettings.normalize(JSON.parse(localStorage.getItem(FALLBACK_STORAGE_KEY) || 'null'));
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to read fallback storage.`, error);
-      return PageAssistantSettings.empty();
-    }
-  }
-
-  async function readStoredWidgetPosition() {
-    try {
-      if (typeof GM_getValue === 'function') {
-        return normalizeWidgetPosition(await maybePromise(GM_getValue(WIDGET_POSITION_KEY, null)));
+      if (gmApi && typeof gmApi.getValue === 'function') {
+        return {
+          available: true,
+          value: await gmApi.getValue(key, fallbackValue),
+        };
       }
 
-      if (typeof GM !== 'undefined' && typeof GM.getValue === 'function') {
-        return normalizeWidgetPosition(await GM.getValue(WIDGET_POSITION_KEY, null));
+      return { available: false, value: fallbackValue };
+    }
+
+    async function writePrimaryValue(key, value) {
+      if (typeof gmSetValue === 'function') {
+        await toPromise(gmSetValue(key, value));
+        return true;
       }
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to read widget position.`, error);
+
+      if (gmApi && typeof gmApi.setValue === 'function') {
+        await gmApi.setValue(key, value);
+        return true;
+      }
+
+      return false;
     }
 
-    try {
-      return normalizeWidgetPosition(JSON.parse(localStorage.getItem(FALLBACK_WIDGET_POSITION_KEY) || 'null'));
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to read fallback widget position.`, error);
-      return null;
+    function readFallbackJson(key, normalizer, fallbackValue, warning) {
+      try {
+        return normalizer(JSON.parse(localStorageAdapter.getItem(key) || 'null')) || fallbackValue;
+      } catch (error) {
+        logger.warn(warning, error);
+        return fallbackValue;
+      }
     }
-  }
 
-  async function writeStoredSettings(nextSettings) {
-    const normalized = PageAssistantSettings.normalize(nextSettings);
+    function writeFallbackJson(key, value) {
+      localStorageAdapter.setItem(key, JSON.stringify(value));
+    }
 
-    try {
-      if (typeof GM_setValue === 'function') {
-        await maybePromise(GM_setValue(STORAGE_KEY, normalized));
+    return {
+      async readSettings() {
+        try {
+          const primary = await readPrimaryValue(storageKey, settingsContract.empty());
+          if (primary.available) return settingsContract.normalize(primary.value);
+        } catch (error) {
+          logger.warn(`${SCRIPT_NAME}: failed to read userscript storage.`, error);
+        }
+
+        return readFallbackJson(
+          fallbackStorageKey,
+          settingsContract.normalize,
+          settingsContract.empty(),
+          `${SCRIPT_NAME}: failed to read fallback storage.`,
+        );
+      },
+      async readWidgetPosition() {
+        try {
+          const primary = await readPrimaryValue(widgetPositionKey, null);
+          if (primary.available) return normalizePosition(primary.value);
+        } catch (error) {
+          logger.warn(`${SCRIPT_NAME}: failed to read widget position.`, error);
+        }
+
+        return readFallbackJson(
+          fallbackWidgetPositionKey,
+          normalizePosition,
+          null,
+          `${SCRIPT_NAME}: failed to read fallback widget position.`,
+        );
+      },
+      async writeSettings(nextSettings) {
+        const normalized = settingsContract.normalize(nextSettings);
+
+        try {
+          if (await writePrimaryValue(storageKey, normalized)) return normalized;
+        } catch (error) {
+          logger.warn(`${SCRIPT_NAME}: failed to write userscript storage.`, error);
+        }
+
+        writeFallbackJson(fallbackStorageKey, normalized);
         return normalized;
-      }
+      },
+      async writeWidgetPosition(position) {
+        const normalized = normalizePosition(position);
+        if (!normalized) return null;
 
-      if (typeof GM !== 'undefined' && typeof GM.setValue === 'function') {
-        await GM.setValue(STORAGE_KEY, normalized);
+        try {
+          if (await writePrimaryValue(widgetPositionKey, normalized)) return normalized;
+        } catch (error) {
+          logger.warn(`${SCRIPT_NAME}: failed to write widget position.`, error);
+        }
+
+        writeFallbackJson(fallbackWidgetPositionKey, normalized);
         return normalized;
-      }
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to write userscript storage.`, error);
-    }
+      },
+      registerSettingsMenu(label, callback) {
+        try {
+          if (typeof gmRegisterMenuCommand === 'function') {
+            gmRegisterMenuCommand(label, callback);
+            return true;
+          }
 
-    localStorage.setItem(FALLBACK_STORAGE_KEY, JSON.stringify(normalized));
-    return normalized;
+          if (gmApi && typeof gmApi.registerMenuCommand === 'function') {
+            gmApi.registerMenuCommand(label, callback);
+            return true;
+          }
+        } catch (error) {
+          logger.warn(`${SCRIPT_NAME}: failed to register menu command.`, error);
+        }
+
+        return false;
+      },
+    };
   }
+  // WEB_PAGE_ASSISTANT_STORAGE_PORT_END
 
-  async function writeStoredWidgetPosition(position) {
-    const normalized = normalizeWidgetPosition(position);
-    if (!normalized) return null;
-
-    try {
-      if (typeof GM_setValue === 'function') {
-        await maybePromise(GM_setValue(WIDGET_POSITION_KEY, normalized));
-        return normalized;
-      }
-
-      if (typeof GM !== 'undefined' && typeof GM.setValue === 'function') {
-        await GM.setValue(WIDGET_POSITION_KEY, normalized);
-        return normalized;
-      }
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to write widget position.`, error);
-    }
-
-    localStorage.setItem(FALLBACK_WIDGET_POSITION_KEY, JSON.stringify(normalized));
-    return normalized;
-  }
+  const storagePort = createWebPageAssistantStoragePort({
+    settingsContract: PageAssistantSettings,
+    normalizeWidgetPosition,
+    storageKey: STORAGE_KEY,
+    widgetPositionKey: WIDGET_POSITION_KEY,
+    fallbackStorageKey: FALLBACK_STORAGE_KEY,
+    fallbackWidgetPositionKey: FALLBACK_WIDGET_POSITION_KEY,
+    gmGetValue: typeof GM_getValue === 'function' ? GM_getValue : null,
+    gmSetValue: typeof GM_setValue === 'function' ? GM_setValue : null,
+    gmRegisterMenuCommand: typeof GM_registerMenuCommand === 'function' ? GM_registerMenuCommand : null,
+    gmApi: typeof GM !== 'undefined' ? GM : null,
+    localStorageAdapter: localStorage,
+    logger: console,
+    toPromise: maybePromise,
+  });
 
   function resolveActiveSetting(sourceSettings = settings) {
     return PageAssistantSettings.resolveActiveRefresh(sourceSettings, {
@@ -1360,7 +1431,7 @@
         const rect = widget.getBoundingClientRect();
         const next = clampWidgetPosition({ left: rect.left, top: rect.top });
         applyWidgetPosition(next);
-        writeStoredWidgetPosition(next).catch((error) => {
+        storagePort.writeWidgetPosition(next).catch((error) => {
           console.warn(`${SCRIPT_NAME}: failed to persist widget position.`, error);
         });
       }
@@ -1628,14 +1699,14 @@
   async function saveSetting(scope, intervalMs) {
     const key = scope === 'site' ? currentSiteKey : currentPageKey;
     const next = PageAssistantSettings.setRefreshSetting(settings, scope, key, intervalMs);
-    settings = await writeStoredSettings(next);
+    settings = await storagePort.writeSettings(next);
     restartActiveCountdown();
   }
 
   async function deleteSetting(scope) {
     const key = scope === 'site' ? currentSiteKey : currentPageKey;
     const next = PageAssistantSettings.deleteRefreshSetting(settings, scope, key);
-    settings = await writeStoredSettings(next);
+    settings = await storagePort.writeSettings(next);
     restartActiveCountdown();
   }
 
@@ -1656,14 +1727,14 @@
 
     const key = scope === 'site' ? currentSiteKey : currentPageKey;
     const next = PageAssistantSettings.setUnlockerSetting(settings, scope, key, normalized);
-    settings = await writeStoredSettings(next);
+    settings = await storagePort.writeSettings(next);
     refreshUnlockerState();
   }
 
   async function deleteUnlockerSetting(scope) {
     const key = scope === 'site' ? currentSiteKey : currentPageKey;
     const next = PageAssistantSettings.deleteUnlockerSetting(settings, scope, key);
-    settings = await writeStoredSettings(next);
+    settings = await storagePort.writeSettings(next);
     refreshUnlockerState();
   }
 
@@ -1937,24 +2008,13 @@
   }
 
   function registerMenu() {
-    try {
-      if (typeof GM_registerMenuCommand === 'function') {
-        GM_registerMenuCommand('网页助手设置', () => onReady(() => renderDialog()));
-        return;
-      }
-
-      if (typeof GM !== 'undefined' && typeof GM.registerMenuCommand === 'function') {
-        GM.registerMenuCommand('网页助手设置', () => onReady(() => renderDialog()));
-      }
-    } catch (error) {
-      console.warn(`${SCRIPT_NAME}: failed to register menu command.`, error);
-    }
+    storagePort.registerSettingsMenu('网页助手设置', () => onReady(() => renderDialog()));
   }
 
   async function init() {
     [settings, widgetPosition] = await Promise.all([
-      readStoredSettings(),
-      readStoredWidgetPosition(),
+      storagePort.readSettings(),
+      storagePort.readWidgetPosition(),
 	    ]);
 	    activeMatch = resolveActiveSetting(settings);
 	    activeUnlockerMatch = resolveActiveUnlockerSetting(settings);
