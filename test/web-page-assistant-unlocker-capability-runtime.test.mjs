@@ -1,11 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
 
-const loadUnlockerRuntimeFactory = () => loadInstallableBlock({
-  markerPrefix: 'WEB_PAGE_ASSISTANT_UNLOCKER_RUNTIME',
-  returnExpression: 'createUnlockerRuntime',
-});
+await import('../src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.js');
+
+const { createUnlockerRuntime } = globalThis.WebPageAssistantUnlockerLib;
 
 function createTarget() {
   const listeners = [];
@@ -93,7 +91,7 @@ function createHarness(options = {}) {
   };
 }
 
-createHarness.factory = await loadUnlockerRuntimeFactory();
+createHarness.factory = createUnlockerRuntime;
 
 test('unlocker runtime installs capability listeners and selection style', () => {
   const harness = createHarness();

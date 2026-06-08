@@ -1,11 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
 
-const loadSessionFactory = () => loadInstallableBlock({
-  markerPrefix: 'WEB_PAGE_ASSISTANT_SESSION',
-  returnExpression: 'createWebPageAssistantSession',
-});
+await import('../src/userscripts/web-page-assistant/web-page-assistant-session.lib.js');
+
+const { createWebPageAssistantSession } = globalThis.WebPageAssistantSessionLib;
 
 function createSettingsContract() {
   function ensureSettings(settings) {
@@ -155,7 +153,7 @@ function createHarness(overrides = {}) {
   };
 }
 
-createHarness.factory = await loadSessionFactory();
+createHarness.factory = createWebPageAssistantSession;
 
 test('session saves preset refresh settings and restarts countdown through one interface', async () => {
   const harness = createHarness();

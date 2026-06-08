@@ -1,12 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
 
-const loadWidgetLayoutRuntimeFactory = () => loadInstallableBlock({
-  markerPrefix: 'WEB_PAGE_ASSISTANT_WIDGET_LAYOUT_RUNTIME',
-  prefixSource: "const SCRIPT_NAME = 'Web Page Assistant';",
-  returnExpression: 'createWidgetLayoutRuntime',
-});
+await import('../src/userscripts/web-page-assistant/web-page-assistant-widget-layout.lib.js');
+
+const { createWidgetLayoutRuntime } = globalThis.WebPageAssistantWidgetLayoutLib;
 
 function createClassList() {
   const values = new Set();
@@ -184,7 +181,7 @@ function createHarness(options = {}) {
   return { runtime, viewport, persisted, positions, warnings, timers };
 }
 
-createHarness.factory = await loadWidgetLayoutRuntimeFactory();
+createHarness.factory = createWidgetLayoutRuntime;
 
 test('widget layout runtime clamps saved position inside viewport', () => {
   const harness = createHarness();

@@ -16,6 +16,9 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-session.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-widget-layout.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
@@ -57,6 +60,21 @@
     throw new Error(`${SCRIPT_NAME}: WebPageAssistantRefreshLib is not loaded.`);
   }
   const { createRefreshRuntime } = WebPageAssistantRefresh;
+  const WebPageAssistantSession = globalThis.WebPageAssistantSessionLib;
+  if (!WebPageAssistantSession?.createWebPageAssistantSession) {
+    throw new Error(`${SCRIPT_NAME}: WebPageAssistantSessionLib is not loaded.`);
+  }
+  const { createWebPageAssistantSession } = WebPageAssistantSession;
+  const WebPageAssistantWidgetLayout = globalThis.WebPageAssistantWidgetLayoutLib;
+  if (!WebPageAssistantWidgetLayout?.createWidgetLayoutRuntime) {
+    throw new Error(`${SCRIPT_NAME}: WebPageAssistantWidgetLayoutLib is not loaded.`);
+  }
+  const { createWidgetLayoutRuntime } = WebPageAssistantWidgetLayout;
+  const WebPageAssistantUnlocker = globalThis.WebPageAssistantUnlockerLib;
+  if (!WebPageAssistantUnlocker?.createUnlockerRuntime) {
+    throw new Error(`${SCRIPT_NAME}: WebPageAssistantUnlockerLib is not loaded.`);
+  }
+  const { createUnlockerRuntime } = WebPageAssistantUnlocker;
   const MIN_INTERVAL_MS = PageAssistantSettings.MIN_INTERVAL_MS;
   const MAX_INTERVAL_MS = PageAssistantSettings.MAX_INTERVAL_MS;
   const isValidIntervalMs = PageAssistantSettings.isValidIntervalMs;
@@ -1043,208 +1061,6 @@
     },
   });
 
-  // WEB_PAGE_ASSISTANT_SESSION_START
-  function createWebPageAssistantSession(adapters) {
-    const {
-      settingsContract,
-      storagePort,
-      refreshRuntime,
-      getSettings,
-      setSettings,
-      getActiveMatch,
-      setActiveMatch,
-      setActiveUnlockerMatch,
-      getPageKey,
-      getSiteKey,
-      getSelectedScope,
-      parseCustomInterval,
-      readUnlockerFormSetting,
-      resolveActiveSetting,
-      resolveActiveUnlockerSetting,
-      renderDialog,
-      renderWidget,
-      updatePauseButton,
-      updateCountdownText,
-      installUnlocker,
-      setMessage,
-      scopeLabel,
-      formatInterval,
-    } = adapters;
-    const supportedActions = new Set([
-      'open-settings',
-      'switch-tab',
-      'close-dialog',
-      'toggle-pause',
-      'save-preset',
-      'save-custom',
-      'delete-page',
-      'delete-site',
-      'save-unlocker',
-      'delete-unlocker-page',
-      'delete-unlocker-site',
-      'disable-active',
-    ]);
-
-    function keyForScope(scope) {
-      return scope === 'site' ? getSiteKey() : getPageKey();
-    }
-
-    function canHandle(action) {
-      return supportedActions.has(action);
-    }
-
-    async function writeSettings(nextSettings) {
-      const next = await storagePort.writeSettings(nextSettings);
-      setSettings(next);
-      return next;
-    }
-
-    function restartActiveCountdown() {
-      refreshRuntime.restart(resolveActiveSetting(getSettings()));
-      renderWidget();
-      updatePauseButton();
-      updateCountdownText();
-    }
-
-    function refreshUnlockerState() {
-      const activeUnlockerMatch = resolveActiveUnlockerSetting(getSettings());
-      setActiveUnlockerMatch(activeUnlockerMatch);
-      installUnlocker(activeUnlockerMatch?.setting);
-      return activeUnlockerMatch;
-    }
-
-    async function saveSetting(scope, intervalMs) {
-      const next = settingsContract.setRefreshSetting(getSettings(), scope, keyForScope(scope), intervalMs);
-      await writeSettings(next);
-      restartActiveCountdown();
-    }
-
-    async function deleteSetting(scope) {
-      const next = settingsContract.deleteRefreshSetting(getSettings(), scope, keyForScope(scope));
-      await writeSettings(next);
-      restartActiveCountdown();
-    }
-
-    async function saveUnlockerSetting(scope, unlockerSetting) {
-      const normalized = settingsContract.normalizeUnlockerSetting(unlockerSetting);
-      if (!normalized) return;
-
-      const next = settingsContract.setUnlockerSetting(getSettings(), scope, keyForScope(scope), normalized);
-      await writeSettings(next);
-      refreshUnlockerState();
-    }
-
-    async function deleteUnlockerSetting(scope) {
-      const next = settingsContract.deleteUnlockerSetting(getSettings(), scope, keyForScope(scope));
-      await writeSettings(next);
-      refreshUnlockerState();
-    }
-
-    async function dispatch(action, actionNode) {
-      if (action === 'open-settings') {
-        renderDialog('', null, 'refresh');
-        return;
-      }
-
-      if (action === 'switch-tab') {
-        renderDialog('', getSelectedScope(), actionNode.dataset.partTab);
-        return;
-      }
-
-      if (action === 'close-dialog') {
-        adapters.closeDialog();
-        return;
-      }
-
-      if (action === 'toggle-pause') {
-        refreshRuntime.togglePause();
-        return;
-      }
-
-      if (action === 'save-preset') {
-        const intervalMs = Number(actionNode.dataset.intervalMs);
-        const scope = getSelectedScope();
-        if (!settingsContract.isValidIntervalMs(intervalMs)) {
-          setMessage('预设刷新时间无效。', 'error');
-          return;
-        }
-
-        await saveSetting(scope, intervalMs);
-        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(intervalMs)} 刷新一次。`, scope, 'refresh');
-        return;
-      }
-
-      if (action === 'save-custom') {
-        const parsed = parseCustomInterval();
-        if (parsed.error) {
-          setMessage(parsed.error, 'error');
-          return;
-        }
-
-        const scope = getSelectedScope();
-        await saveSetting(scope, parsed.intervalMs);
-        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`, scope, 'refresh');
-        return;
-      }
-
-      if (action === 'delete-page') {
-        await deleteSetting('page');
-        renderDialog('已删除当前页面设置。', 'page', 'refresh');
-        return;
-      }
-
-      if (action === 'delete-site') {
-        await deleteSetting('site');
-        renderDialog('已删除整个站点设置。', 'site', 'refresh');
-        return;
-      }
-
-      if (action === 'save-unlocker') {
-        const scope = getSelectedScope();
-        const unlockerSetting = readUnlockerFormSetting();
-        await saveUnlockerSetting(scope, unlockerSetting);
-        renderDialog(unlockerSetting.enabled
-          ? `已保存到${scopeLabel(scope)}：${adapters.unlockerStatusText(unlockerSetting)}`
-          : `已保存到${scopeLabel(scope)}：网页限制解除关闭。`, scope, 'unlocker');
-        return;
-      }
-
-      if (action === 'delete-unlocker-page') {
-        await deleteUnlockerSetting('page');
-        renderDialog('已删除当前页面限制解除设置。', 'page', 'unlocker');
-        return;
-      }
-
-      if (action === 'delete-unlocker-site') {
-        await deleteUnlockerSetting('site');
-        renderDialog('已删除整个站点限制解除设置。', 'site', 'unlocker');
-        return;
-      }
-
-      if (action === 'disable-active') {
-        const activeMatch = getActiveMatch();
-        if (!activeMatch) return;
-
-        const disabledScope = activeMatch.scope;
-        setActiveMatch(null);
-        await deleteSetting(disabledScope);
-        if (adapters.hasDialog()) renderDialog(`已停用${scopeLabel(disabledScope)}自动刷新。`, disabledScope, 'refresh');
-      }
-    }
-
-    return {
-      canHandle,
-      dispatch,
-      saveSetting,
-      deleteSetting,
-      saveUnlockerSetting,
-      deleteUnlockerSetting,
-      restartActiveCountdown,
-      refreshUnlockerState,
-    };
-  }
-  // WEB_PAGE_ASSISTANT_SESSION_END
-
   webPageAssistantSession = createWebPageAssistantSession({
     settingsContract: PageAssistantSettings,
     storagePort,
@@ -1284,220 +1100,6 @@
     return Math.min(Math.max(min, value), max);
   }
 
-  // WEB_PAGE_ASSISTANT_WIDGET_LAYOUT_RUNTIME_START
-  function createWidgetLayoutRuntime(adapters) {
-    const {
-      normalizeWidgetPosition,
-      clampNumber,
-      getViewportSize,
-      persistPosition,
-      onPositionChange,
-      setTimeout,
-      logger,
-      constants,
-    } = adapters;
-    let widget = null;
-    let widgetButton = null;
-    let position = null;
-    let suppressExpansion = false;
-
-    function defaultPosition() {
-      const viewport = getViewportSize();
-      return {
-        left: viewport.width - constants.widgetWidth - constants.defaultOffset,
-        top: viewport.height - constants.widgetHeight - constants.defaultOffset,
-      };
-    }
-
-    function clampPosition(nextPosition) {
-      const viewport = getViewportSize();
-      const source = normalizeWidgetPosition(nextPosition) || defaultPosition();
-      const maxLeft = Math.max(constants.safeMargin, viewport.width - constants.widgetWidth - constants.safeMargin);
-      const maxTop = Math.max(constants.safeMargin, viewport.height - constants.widgetHeight - constants.safeMargin);
-
-      return {
-        left: Math.min(Math.max(constants.safeMargin, source.left), maxLeft),
-        top: Math.min(Math.max(constants.safeMargin, source.top), maxTop),
-      };
-    }
-
-    function positionPanel() {
-      if (!widget) return null;
-
-      const panel = widget.querySelector('.part-widget-panel');
-      if (!panel) return null;
-
-      const viewport = getViewportSize();
-      const widgetRect = widget.getBoundingClientRect();
-      const panelWidth = Math.min(
-        constants.panelWidth,
-        Math.max(constants.buttonSize, viewport.width - constants.safeMargin * 2),
-      );
-      const panelHeight = panel.offsetHeight;
-      const maxLeft = Math.max(constants.safeMargin, viewport.width - panelWidth - constants.safeMargin);
-      const panelLeft = clampNumber(
-        widgetRect.right - panelWidth,
-        constants.safeMargin,
-        maxLeft,
-      );
-
-      const aboveTop = widgetRect.top - panelHeight - constants.panelGap;
-      const belowTop = widgetRect.top + constants.widgetHeight + constants.panelGap;
-      const maxTop = Math.max(constants.safeMargin, viewport.height - panelHeight - constants.safeMargin);
-      const shouldPlaceBelow = aboveTop < constants.safeMargin && belowTop <= maxTop;
-      const panelTop = clampNumber(
-        shouldPlaceBelow ? belowTop : aboveTop,
-        constants.safeMargin,
-        maxTop,
-      );
-      const placement = {
-        left: Math.round(panelLeft - widgetRect.left),
-        top: Math.round(panelTop - widgetRect.top),
-        width: Math.round(panelWidth),
-        origin: shouldPlaceBelow ? 'top right' : 'bottom right',
-      };
-
-      panel.style.setProperty('--part-panel-left', `${placement.left}px`);
-      panel.style.setProperty('--part-panel-top', `${placement.top}px`);
-      panel.style.setProperty('--part-panel-width', `${placement.width}px`);
-      panel.style.setProperty('--part-panel-origin', placement.origin);
-      return placement;
-    }
-
-    function applyPosition(nextPosition = position) {
-      if (!widget) return null;
-
-      position = clampPosition(nextPosition);
-      onPositionChange(position);
-      widget.style.left = `${position.left}px`;
-      widget.style.top = `${position.top}px`;
-      widget.style.right = 'auto';
-      widget.style.bottom = 'auto';
-      positionPanel();
-      return position;
-    }
-
-    function setExpanded(isExpanded) {
-      if (!widget) return;
-      if (suppressExpansion && isExpanded) return;
-      widget.classList.toggle('is-expanded', isExpanded);
-    }
-
-    function installExpansion() {
-      widget.addEventListener('mouseenter', () => setExpanded(true));
-      widget.addEventListener('mouseleave', () => setExpanded(false));
-      widget.addEventListener('focusin', () => setExpanded(true));
-      widget.addEventListener('focusout', (event) => {
-        if (!event.relatedTarget || !widget.contains(event.relatedTarget)) {
-          setExpanded(false);
-        }
-      });
-    }
-
-    function installDrag() {
-      let dragState = null;
-
-      widgetButton.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0) return;
-
-        const rect = widget.getBoundingClientRect();
-        dragState = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          startLeft: rect.left,
-          startTop: rect.top,
-          moved: false,
-        };
-
-        widget.classList.add('is-dragging');
-        try {
-          widgetButton.setPointerCapture(event.pointerId);
-        } catch {
-          // Some synthetic or older pointer implementations do not support capture.
-        }
-      });
-
-      widgetButton.addEventListener('pointermove', (event) => {
-        if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-        const dx = event.clientX - dragState.startX;
-        const dy = event.clientY - dragState.startY;
-        if (Math.abs(dx) + Math.abs(dy) > 4) {
-          dragState.moved = true;
-          suppressExpansion = true;
-          setExpanded(false);
-        }
-
-        if (!dragState.moved) return;
-
-        applyPosition({
-          left: dragState.startLeft + dx,
-          top: dragState.startTop + dy,
-        });
-      });
-
-      function finishDrag(event) {
-        if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-        const moved = dragState.moved;
-        dragState = null;
-        widget.classList.remove('is-dragging');
-
-        try {
-          if (widgetButton.hasPointerCapture(event.pointerId)) {
-            widgetButton.releasePointerCapture(event.pointerId);
-          }
-        } catch {
-          // Ignore pointer capture implementations that cannot report synthetic pointers.
-        }
-
-        if (moved) {
-          const rect = widget.getBoundingClientRect();
-          const next = clampPosition({ left: rect.left, top: rect.top });
-          applyPosition(next);
-          persistPosition(next).catch((error) => {
-            logger.warn(`${SCRIPT_NAME}: failed to persist widget position.`, error);
-          });
-        }
-
-        setTimeout(() => {
-          suppressExpansion = false;
-        }, 0);
-      }
-
-      widgetButton.addEventListener('pointerup', finishDrag);
-      widgetButton.addEventListener('pointercancel', finishDrag);
-    }
-
-    function attach(nextWidget, nextWidgetButton, initialPosition) {
-      widget = nextWidget;
-      widgetButton = nextWidgetButton;
-      if (initialPosition) position = normalizeWidgetPosition(initialPosition);
-      installExpansion();
-      installDrag();
-    }
-
-    function getPosition() {
-      return position;
-    }
-
-    function isExpansionSuppressed() {
-      return suppressExpansion;
-    }
-
-    return {
-      attach,
-      applyPosition,
-      positionPanel,
-      setExpanded,
-      clampPosition,
-      getPosition,
-      isExpansionSuppressed,
-    };
-  }
-  // WEB_PAGE_ASSISTANT_WIDGET_LAYOUT_RUNTIME_END
-
   widgetLayoutRuntime = createWidgetLayoutRuntime({
     normalizeWidgetPosition,
     clampNumber,
@@ -1511,6 +1113,7 @@
     },
     setTimeout: (handler, delay) => window.setTimeout(handler, delay),
     logger: console,
+    scriptName: SCRIPT_NAME,
     constants: {
       buttonSize: WIDGET_BUTTON_SIZE,
       widgetWidth: WIDGET_WIDTH,
@@ -1801,98 +1404,6 @@
     if (!pauseButton) return;
     pauseButton.textContent = refreshRuntime.getState().isPaused ? '继续' : '暂停';
   }
-
-  // WEB_PAGE_ASSISTANT_UNLOCKER_RUNTIME_START
-  function createUnlockerRuntime(adapters) {
-    const {
-      hasUnlockerAction,
-      rootContainsTarget,
-      getDocumentTarget,
-      getWindowTarget,
-      getStyle,
-      installStyle,
-      removeStyle,
-      rootId,
-    } = adapters;
-    const capabilitySpecs = [
-      { option: 'allowSelection', label: '选择文本', target: getDocumentTarget, type: 'selectstart', handler: stopEvent },
-      { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'copy', handler: stopEvent },
-      { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'cut', handler: stopEvent },
-      { option: 'allowContextMenu', label: '右键菜单', target: getDocumentTarget, type: 'contextmenu', handler: stopEvent },
-      { option: 'allowDrag', label: '拖拽', target: getDocumentTarget, type: 'dragstart', handler: stopEvent },
-      { option: 'suppressBeforeUnload', label: '离开提示', target: getWindowTarget, type: 'beforeunload', handler: stopBeforeUnload },
-    ];
-    let cleanupStack = [];
-
-    function stopEvent(event) {
-      if (rootContainsTarget(event.target)) return;
-      event.stopPropagation();
-    }
-
-    function stopBeforeUnload(event) {
-      event.stopImmediatePropagation();
-      event.returnValue = undefined;
-      return undefined;
-    }
-
-    function addListener(target, type, handler) {
-      target.addEventListener(type, handler, true);
-      cleanupStack.push(() => target.removeEventListener(type, handler, true));
-    }
-
-    function installSelectionStyle(setting) {
-      if (!setting.allowSelection || getStyle()) return;
-
-      installStyle(`
-        html :not(#${rootId}):not(#${rootId} *) {
-          -webkit-user-select: text !important;
-          user-select: text !important;
-        }
-      `);
-    }
-
-    function describe(setting, scopeText) {
-      if (!setting?.enabled) return '当前未启用网页限制解除。';
-
-      const labels = [];
-      const seenOptions = new Set();
-      for (const spec of capabilitySpecs) {
-        if (!setting[spec.option] || seenOptions.has(spec.option)) continue;
-        labels.push(spec.label);
-        seenOptions.add(spec.option);
-      }
-
-      if (!labels.length) return '网页限制解除已保存，但没有启用任何能力。';
-      return `${scopeText}已启用：${labels.join('、')}。`;
-    }
-
-    return {
-      describe,
-      getCapabilitySpecs() {
-        return capabilitySpecs.map(({ option, label, type }) => ({ option, label, type }));
-      },
-      install(setting) {
-        this.uninstall();
-        if (!hasUnlockerAction(setting)) return;
-
-        installSelectionStyle(setting);
-        for (const spec of capabilitySpecs) {
-          if (setting[spec.option]) {
-            addListener(spec.target(), spec.type, spec.handler);
-          }
-        }
-      },
-      uninstall() {
-        for (const cleanup of cleanupStack) {
-          cleanup();
-        }
-        cleanupStack = [];
-
-        removeStyle();
-      },
-    };
-  }
-  // WEB_PAGE_ASSISTANT_UNLOCKER_RUNTIME_END
 
   unlockerRuntime = createUnlockerRuntime({
     hasUnlockerAction,
