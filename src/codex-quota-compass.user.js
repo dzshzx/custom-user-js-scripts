@@ -14,6 +14,7 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-core.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-runtime.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-panel-shell.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-storage.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-archive.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-sync.lib.js
 // @grant        GM_getValue
@@ -37,13 +38,6 @@
   const ROOT_ID = 'codex-quota-compass-root';
   const SCRIPT_VERSION = '0.2.3';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
-  const SNAPSHOT_ARCHIVE_KEY = 'codexQuotaCompassSnapshotArchive';
-  const SNAPSHOT_ARCHIVE_FALLBACK_KEY = 'codexQuotaCompassSnapshotArchiveFallback';
-  const STORAGE_BACKENDS = {
-    pending: { id: 'pending', label: 'pending' },
-    gm: { id: 'gm', label: 'GM storage' },
-    localStorage: { id: 'localStorage', label: 'localStorage' },
-  };
 
   let statusNode;
   let contentNode;
@@ -60,13 +54,19 @@
   const coreLib = globalThis.CodexQuotaCompassCoreLib;
   const runtimeLib = globalThis.CodexQuotaCompassRuntimeLib;
   const panelShellLib = globalThis.CodexQuotaCompassPanelShellLib;
+  const storageLib = globalThis.CodexQuotaCompassStorageLib;
   const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
   const syncLib = globalThis.CodexQuotaCompassSyncLib;
   if (!i18nLib?.createQuotaCompassTranslator) {
     throw new Error('CodexQuotaCompassI18nLib translator is unavailable.');
   }
   const { t } = i18nLib.createQuotaCompassTranslator({ navigator: globalThis.navigator });
-  const archiveStoragePort = createSnapshotArchiveStoragePort();
+  if (!storageLib?.createSnapshotArchiveStoragePort) {
+    throw new Error('CodexQuotaCompassStorageLib storage port is unavailable.');
+  }
+  const archiveStoragePort = storageLib.createSnapshotArchiveStoragePort({
+    scriptName: SCRIPT_NAME,
+  });
   const archiveStore = archiveLib
     ? archiveLib.createSnapshotArchiveStore({
       read: archiveStoragePort.read,
@@ -90,10 +90,6 @@
     return window[DEBUG_KEY] === true;
   }
 
-  function maybePromise(value) {
-    return value && typeof value.then === 'function' ? value : Promise.resolve(value);
-  }
-
   function escapeHtml(value) {
     return String(value ?? '')
       .replaceAll('&', '&amp;')
@@ -111,85 +107,6 @@
 
   function safeRows(rows, limit = 12) {
     return Array.isArray(rows) ? rows.slice(0, limit) : [];
-  }
-
-  function createSnapshotArchiveStoragePort() {
-    let backendInfo = STORAGE_BACKENDS.pending;
-
-    async function readFromGmStorage() {
-      if (typeof GM_getValue === 'function') {
-        return await maybePromise(GM_getValue(SNAPSHOT_ARCHIVE_KEY, null));
-      }
-
-      if (typeof GM !== 'undefined' && typeof GM.getValue === 'function') {
-        return await GM.getValue(SNAPSHOT_ARCHIVE_KEY, null);
-      }
-
-      throw new Error('GM storage is unavailable.');
-    }
-
-    async function writeToGmStorage(nextArchive) {
-      if (typeof GM_setValue === 'function') {
-        await maybePromise(GM_setValue(SNAPSHOT_ARCHIVE_KEY, nextArchive));
-        return nextArchive;
-      }
-
-      if (typeof GM !== 'undefined' && typeof GM.setValue === 'function') {
-        await GM.setValue(SNAPSHOT_ARCHIVE_KEY, nextArchive);
-        return nextArchive;
-      }
-
-      throw new Error('GM storage is unavailable.');
-    }
-
-    function readFromLocalStorage() {
-      return JSON.parse(localStorage.getItem(SNAPSHOT_ARCHIVE_FALLBACK_KEY) || 'null');
-    }
-
-    function writeToLocalStorage(nextArchive) {
-      localStorage.setItem(SNAPSHOT_ARCHIVE_FALLBACK_KEY, JSON.stringify(nextArchive));
-      return nextArchive;
-    }
-
-    return {
-      async read() {
-        try {
-          const archive = await readFromGmStorage();
-          backendInfo = STORAGE_BACKENDS.gm;
-          return archive;
-        } catch (error) {
-          console.warn(`${SCRIPT_NAME}: failed to read userscript archive storage.`, error);
-        }
-
-        try {
-          const archive = readFromLocalStorage();
-          backendInfo = STORAGE_BACKENDS.localStorage;
-          return archive;
-        } catch (error) {
-          console.warn(`${SCRIPT_NAME}: failed to read fallback archive storage.`, error);
-          backendInfo = STORAGE_BACKENDS.localStorage;
-          return null;
-        }
-      },
-
-      async write(nextArchive) {
-        try {
-          await writeToGmStorage(nextArchive);
-          backendInfo = STORAGE_BACKENDS.gm;
-          return nextArchive;
-        } catch (error) {
-          console.warn(`${SCRIPT_NAME}: failed to write userscript archive storage.`, error);
-        }
-
-        writeToLocalStorage(nextArchive);
-        backendInfo = STORAGE_BACKENDS.localStorage;
-        return nextArchive;
-      },
-
-      getBackendInfo() {
-        return backendInfo;
-      },
-    };
   }
 
   async function refreshArchiveSummary() {
