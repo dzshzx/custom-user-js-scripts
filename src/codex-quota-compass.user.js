@@ -12,6 +12,7 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-contract.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-i18n.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-core.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-panel-view-model.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-runtime.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-panel-shell.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-panel-renderer.lib.js
@@ -53,6 +54,7 @@
   let floatingPanelShell = null;
   const i18nLib = globalThis.CodexQuotaCompassI18nLib;
   const coreLib = globalThis.CodexQuotaCompassCoreLib;
+  const panelViewModelLib = globalThis.CodexQuotaCompassPanelViewModelLib;
   const runtimeLib = globalThis.CodexQuotaCompassRuntimeLib;
   const panelShellLib = globalThis.CodexQuotaCompassPanelShellLib;
   const panelRendererLib = globalThis.CodexQuotaCompassPanelRendererLib;
@@ -70,6 +72,9 @@
     t,
     debugKey: DEBUG_KEY,
   });
+  if (!panelViewModelLib?.createQuotaPanelViewModel) {
+    throw new Error('CodexQuotaCompassPanelViewModelLib view model is unavailable.');
+  }
   if (!storageLib?.createSnapshotArchiveStoragePort) {
     throw new Error('CodexQuotaCompassStorageLib storage port is unavailable.');
   }
@@ -131,11 +136,7 @@
 
   function renderResult(result) {
     if (!contentNode) return;
-    if (!coreLib?.createQuotaPanelViewModel) {
-      throw new Error('CodexQuotaCompassCoreLib panel view model is unavailable.');
-    }
-
-    const viewModel = coreLib.createQuotaPanelViewModel({
+    const viewModel = panelViewModelLib.createQuotaPanelViewModel({
       result,
       historyUsage: latestHistoryUsage,
       archiveSummary: latestArchiveSummary,
