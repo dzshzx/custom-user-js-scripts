@@ -96,12 +96,12 @@
   let widget;
   let widgetButton;
   let widgetPosition = null;
-  let suppressWidgetExpansion = false;
   let dialog;
   let activeDialogTab = 'refresh';
   let countdownNodes = [];
   let hasRootListener = false;
   let webPageAssistantSession;
+  let widgetLayoutRuntime;
 
   // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START
   function emptySettings() {
@@ -1768,74 +1768,247 @@
     formatInterval,
   });
 
-  function defaultWidgetPosition() {
-    return {
-      left: window.innerWidth - WIDGET_WIDTH - DEFAULT_WIDGET_OFFSET,
-      top: window.innerHeight - WIDGET_HEIGHT - DEFAULT_WIDGET_OFFSET,
-    };
-  }
-
-  function clampWidgetPosition(position) {
-    const source = normalizeWidgetPosition(position) || defaultWidgetPosition();
-    const maxLeft = Math.max(WIDGET_SAFE_MARGIN, window.innerWidth - WIDGET_WIDTH - WIDGET_SAFE_MARGIN);
-    const maxTop = Math.max(WIDGET_SAFE_MARGIN, window.innerHeight - WIDGET_HEIGHT - WIDGET_SAFE_MARGIN);
-
-    return {
-      left: Math.min(Math.max(WIDGET_SAFE_MARGIN, source.left), maxLeft),
-      top: Math.min(Math.max(WIDGET_SAFE_MARGIN, source.top), maxTop),
-    };
-  }
-
   function clampNumber(value, min, max) {
     return Math.min(Math.max(min, value), max);
   }
 
-  function positionWidgetPanel() {
-    if (!widget) return;
+  // WEB_PAGE_ASSISTANT_WIDGET_LAYOUT_RUNTIME_START
+  function createWidgetLayoutRuntime(adapters) {
+    const {
+      normalizeWidgetPosition,
+      clampNumber,
+      getViewportSize,
+      persistPosition,
+      onPositionChange,
+      setTimeout,
+      logger,
+      constants,
+    } = adapters;
+    let widget = null;
+    let widgetButton = null;
+    let position = null;
+    let suppressExpansion = false;
 
-    const panel = widget.querySelector('.part-widget-panel');
-    if (!panel) return;
+    function defaultPosition() {
+      const viewport = getViewportSize();
+      return {
+        left: viewport.width - constants.widgetWidth - constants.defaultOffset,
+        top: viewport.height - constants.widgetHeight - constants.defaultOffset,
+      };
+    }
 
-    const widgetRect = widget.getBoundingClientRect();
-    const panelWidth = Math.min(
-      WIDGET_PANEL_WIDTH,
-      Math.max(WIDGET_BUTTON_SIZE, window.innerWidth - WIDGET_SAFE_MARGIN * 2),
-    );
-    const panelHeight = panel.offsetHeight;
-    const maxLeft = Math.max(WIDGET_SAFE_MARGIN, window.innerWidth - panelWidth - WIDGET_SAFE_MARGIN);
-    const panelLeft = clampNumber(
-      widgetRect.right - panelWidth,
-      WIDGET_SAFE_MARGIN,
-      maxLeft,
-    );
+    function clampPosition(nextPosition) {
+      const viewport = getViewportSize();
+      const source = normalizeWidgetPosition(nextPosition) || defaultPosition();
+      const maxLeft = Math.max(constants.safeMargin, viewport.width - constants.widgetWidth - constants.safeMargin);
+      const maxTop = Math.max(constants.safeMargin, viewport.height - constants.widgetHeight - constants.safeMargin);
 
-    const aboveTop = widgetRect.top - panelHeight - WIDGET_PANEL_GAP;
-    const belowTop = widgetRect.top + WIDGET_HEIGHT + WIDGET_PANEL_GAP;
-    const maxTop = Math.max(WIDGET_SAFE_MARGIN, window.innerHeight - panelHeight - WIDGET_SAFE_MARGIN);
-    const shouldPlaceBelow = aboveTop < WIDGET_SAFE_MARGIN && belowTop <= maxTop;
-    const panelTop = clampNumber(
-      shouldPlaceBelow ? belowTop : aboveTop,
-      WIDGET_SAFE_MARGIN,
-      maxTop,
-    );
+      return {
+        left: Math.min(Math.max(constants.safeMargin, source.left), maxLeft),
+        top: Math.min(Math.max(constants.safeMargin, source.top), maxTop),
+      };
+    }
 
-    panel.style.setProperty('--part-panel-left', `${Math.round(panelLeft - widgetRect.left)}px`);
-    panel.style.setProperty('--part-panel-top', `${Math.round(panelTop - widgetRect.top)}px`);
-    panel.style.setProperty('--part-panel-width', `${Math.round(panelWidth)}px`);
-    panel.style.setProperty('--part-panel-origin', shouldPlaceBelow ? 'top right' : 'bottom right');
+    function positionPanel() {
+      if (!widget) return null;
+
+      const panel = widget.querySelector('.part-widget-panel');
+      if (!panel) return null;
+
+      const viewport = getViewportSize();
+      const widgetRect = widget.getBoundingClientRect();
+      const panelWidth = Math.min(
+        constants.panelWidth,
+        Math.max(constants.buttonSize, viewport.width - constants.safeMargin * 2),
+      );
+      const panelHeight = panel.offsetHeight;
+      const maxLeft = Math.max(constants.safeMargin, viewport.width - panelWidth - constants.safeMargin);
+      const panelLeft = clampNumber(
+        widgetRect.right - panelWidth,
+        constants.safeMargin,
+        maxLeft,
+      );
+
+      const aboveTop = widgetRect.top - panelHeight - constants.panelGap;
+      const belowTop = widgetRect.top + constants.widgetHeight + constants.panelGap;
+      const maxTop = Math.max(constants.safeMargin, viewport.height - panelHeight - constants.safeMargin);
+      const shouldPlaceBelow = aboveTop < constants.safeMargin && belowTop <= maxTop;
+      const panelTop = clampNumber(
+        shouldPlaceBelow ? belowTop : aboveTop,
+        constants.safeMargin,
+        maxTop,
+      );
+      const placement = {
+        left: Math.round(panelLeft - widgetRect.left),
+        top: Math.round(panelTop - widgetRect.top),
+        width: Math.round(panelWidth),
+        origin: shouldPlaceBelow ? 'top right' : 'bottom right',
+      };
+
+      panel.style.setProperty('--part-panel-left', `${placement.left}px`);
+      panel.style.setProperty('--part-panel-top', `${placement.top}px`);
+      panel.style.setProperty('--part-panel-width', `${placement.width}px`);
+      panel.style.setProperty('--part-panel-origin', placement.origin);
+      return placement;
+    }
+
+    function applyPosition(nextPosition = position) {
+      if (!widget) return null;
+
+      position = clampPosition(nextPosition);
+      onPositionChange(position);
+      widget.style.left = `${position.left}px`;
+      widget.style.top = `${position.top}px`;
+      widget.style.right = 'auto';
+      widget.style.bottom = 'auto';
+      positionPanel();
+      return position;
+    }
+
+    function setExpanded(isExpanded) {
+      if (!widget) return;
+      if (suppressExpansion && isExpanded) return;
+      widget.classList.toggle('is-expanded', isExpanded);
+    }
+
+    function installExpansion() {
+      widget.addEventListener('mouseenter', () => setExpanded(true));
+      widget.addEventListener('mouseleave', () => setExpanded(false));
+      widget.addEventListener('focusin', () => setExpanded(true));
+      widget.addEventListener('focusout', (event) => {
+        if (!event.relatedTarget || !widget.contains(event.relatedTarget)) {
+          setExpanded(false);
+        }
+      });
+    }
+
+    function installDrag() {
+      let dragState = null;
+
+      widgetButton.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+
+        const rect = widget.getBoundingClientRect();
+        dragState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startLeft: rect.left,
+          startTop: rect.top,
+          moved: false,
+        };
+
+        widget.classList.add('is-dragging');
+        try {
+          widgetButton.setPointerCapture(event.pointerId);
+        } catch {
+          // Some synthetic or older pointer implementations do not support capture.
+        }
+      });
+
+      widgetButton.addEventListener('pointermove', (event) => {
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+        const dx = event.clientX - dragState.startX;
+        const dy = event.clientY - dragState.startY;
+        if (Math.abs(dx) + Math.abs(dy) > 4) {
+          dragState.moved = true;
+          suppressExpansion = true;
+          setExpanded(false);
+        }
+
+        if (!dragState.moved) return;
+
+        applyPosition({
+          left: dragState.startLeft + dx,
+          top: dragState.startTop + dy,
+        });
+      });
+
+      function finishDrag(event) {
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+        const moved = dragState.moved;
+        dragState = null;
+        widget.classList.remove('is-dragging');
+
+        try {
+          if (widgetButton.hasPointerCapture(event.pointerId)) {
+            widgetButton.releasePointerCapture(event.pointerId);
+          }
+        } catch {
+          // Ignore pointer capture implementations that cannot report synthetic pointers.
+        }
+
+        if (moved) {
+          const rect = widget.getBoundingClientRect();
+          const next = clampPosition({ left: rect.left, top: rect.top });
+          applyPosition(next);
+          persistPosition(next).catch((error) => {
+            logger.warn(`${SCRIPT_NAME}: failed to persist widget position.`, error);
+          });
+        }
+
+        setTimeout(() => {
+          suppressExpansion = false;
+        }, 0);
+      }
+
+      widgetButton.addEventListener('pointerup', finishDrag);
+      widgetButton.addEventListener('pointercancel', finishDrag);
+    }
+
+    function attach(nextWidget, nextWidgetButton, initialPosition) {
+      widget = nextWidget;
+      widgetButton = nextWidgetButton;
+      if (initialPosition) position = normalizeWidgetPosition(initialPosition);
+      installExpansion();
+      installDrag();
+    }
+
+    function getPosition() {
+      return position;
+    }
+
+    function isExpansionSuppressed() {
+      return suppressExpansion;
+    }
+
+    return {
+      attach,
+      applyPosition,
+      positionPanel,
+      setExpanded,
+      clampPosition,
+      getPosition,
+      isExpansionSuppressed,
+    };
   }
+  // WEB_PAGE_ASSISTANT_WIDGET_LAYOUT_RUNTIME_END
 
-  function applyWidgetPosition(position = widgetPosition) {
-    if (!widget) return;
-
-    const next = clampWidgetPosition(position);
-    widgetPosition = next;
-    widget.style.left = `${next.left}px`;
-    widget.style.top = `${next.top}px`;
-    widget.style.right = 'auto';
-    widget.style.bottom = 'auto';
-    positionWidgetPanel();
-  }
+  widgetLayoutRuntime = createWidgetLayoutRuntime({
+    normalizeWidgetPosition,
+    clampNumber,
+    getViewportSize: () => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }),
+    persistPosition: (positionToPersist) => storagePort.writeWidgetPosition(positionToPersist),
+    onPositionChange(nextPosition) {
+      widgetPosition = nextPosition;
+    },
+    setTimeout: (handler, delay) => window.setTimeout(handler, delay),
+    logger: console,
+    constants: {
+      buttonSize: WIDGET_BUTTON_SIZE,
+      widgetWidth: WIDGET_WIDTH,
+      widgetHeight: WIDGET_HEIGHT,
+      panelWidth: WIDGET_PANEL_WIDTH,
+      panelGap: WIDGET_PANEL_GAP,
+      safeMargin: WIDGET_SAFE_MARGIN,
+      defaultOffset: DEFAULT_WIDGET_OFFSET,
+    },
+  });
 
   function createWidgetViewModel() {
     if (!activeMatch) return null;
@@ -1885,110 +2058,11 @@
     countdownNodes = [...widget.querySelectorAll('[data-part-role="countdown"]')];
     widgetButton = widget.querySelector('.part-widget-button');
     widget.querySelector('[data-part-role="widget-summary"]').textContent = model.summary;
-    installWidgetExpansion();
-    installWidgetDrag();
+    widgetLayoutRuntime.attach(widget, widgetButton, widgetPosition);
     root.append(widget);
-    applyWidgetPosition();
-    positionWidgetPanel();
+    widgetLayoutRuntime.applyPosition();
     updatePauseButton();
     updateCountdownText();
-  }
-
-  function setWidgetExpanded(isExpanded) {
-    if (!widget) return;
-    if (suppressWidgetExpansion && isExpanded) return;
-    widget.classList.toggle('is-expanded', isExpanded);
-  }
-
-  function installWidgetExpansion() {
-    if (!widget) return;
-
-    widget.addEventListener('mouseenter', () => setWidgetExpanded(true));
-    widget.addEventListener('mouseleave', () => setWidgetExpanded(false));
-    widget.addEventListener('focusin', () => setWidgetExpanded(true));
-    widget.addEventListener('focusout', (event) => {
-      if (!event.relatedTarget || !widget.contains(event.relatedTarget)) {
-        setWidgetExpanded(false);
-      }
-    });
-  }
-
-  function installWidgetDrag() {
-    if (!widget || !widgetButton) return;
-
-    let dragState = null;
-
-    widgetButton.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) return;
-
-      const rect = widget.getBoundingClientRect();
-      dragState = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        startLeft: rect.left,
-        startTop: rect.top,
-        moved: false,
-      };
-
-      widget.classList.add('is-dragging');
-      try {
-        widgetButton.setPointerCapture(event.pointerId);
-      } catch {
-        // Some synthetic or older pointer implementations do not support capture.
-      }
-    });
-
-    widgetButton.addEventListener('pointermove', (event) => {
-      if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-      const dx = event.clientX - dragState.startX;
-      const dy = event.clientY - dragState.startY;
-      if (Math.abs(dx) + Math.abs(dy) > 4) {
-        dragState.moved = true;
-        suppressWidgetExpansion = true;
-        setWidgetExpanded(false);
-      }
-
-      if (!dragState.moved) return;
-
-      applyWidgetPosition({
-        left: dragState.startLeft + dx,
-        top: dragState.startTop + dy,
-      });
-    });
-
-    function finishDrag(event) {
-      if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-      const moved = dragState.moved;
-      dragState = null;
-      widget.classList.remove('is-dragging');
-
-      try {
-        if (widgetButton.hasPointerCapture(event.pointerId)) {
-          widgetButton.releasePointerCapture(event.pointerId);
-        }
-      } catch {
-        // Ignore pointer capture implementations that cannot report synthetic pointers.
-      }
-
-      if (moved) {
-        const rect = widget.getBoundingClientRect();
-        const next = clampWidgetPosition({ left: rect.left, top: rect.top });
-        applyWidgetPosition(next);
-        storagePort.writeWidgetPosition(next).catch((error) => {
-          console.warn(`${SCRIPT_NAME}: failed to persist widget position.`, error);
-        });
-      }
-
-      window.setTimeout(() => {
-        suppressWidgetExpansion = false;
-      }, 0);
-    }
-
-    widgetButton.addEventListener('pointerup', finishDrag);
-    widgetButton.addEventListener('pointercancel', finishDrag);
   }
 
   function createDialogViewModel(message = '', preferredScope = null, preferredTab = null) {
@@ -2336,7 +2410,7 @@
 	    activeMatch = resolveActiveSetting(settings);
 	    activeUnlockerMatch = resolveActiveUnlockerSetting(settings);
 	    registerMenu();
-	    window.addEventListener('resize', () => applyWidgetPosition());
+	    window.addEventListener('resize', () => widgetLayoutRuntime.applyPosition());
 	    refreshUnlockerState();
 
 	    if (activeMatch) {
