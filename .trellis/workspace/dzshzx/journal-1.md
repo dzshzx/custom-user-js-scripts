@@ -375,3 +375,40 @@ Implemented the Web Page Assistant session, widget layout, unlocker capability, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Repository governance parent task
+
+**Date**: 2026-06-08
+**Task**: Repository governance parent task
+**Branch**: `master`
+
+### Summary
+
+Completed the repository governance parent flow: clarified README/docs/spec boundaries, grouped Feishu tools, migrated installable userscripts to script-scoped layout, split Web Page Assistant support modules, split Codex Quota panel shell view modules, verified integration, and archived all six children plus the parent.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c990a80` | (see git log) |
+| `59a0909` | (see git log) |
+| `257b9aa` | (see git log) |
+| `7182985` | (see git log) |
+| `41dbeff` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
