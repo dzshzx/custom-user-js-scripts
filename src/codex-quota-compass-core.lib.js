@@ -469,37 +469,18 @@
     return { run };
   }
 
-  function createSnapshotSyncStatus(backendInfo) {
-    const backendId = backendInfo?.backendId || backendInfo?.id || 'unavailable';
-    const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
-    const crossDeviceCapable = backendId === 'gm';
-    const localOnly = backendId === 'localStorage';
-    const reason = (() => {
-      if (backendId === 'gm') {
-        return 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.';
-      }
-      if (backendId === 'localStorage') {
-        return 'localStorage is browser-local and will not sync personal usage history across devices.';
-      }
-      if (backendId === 'pending') {
-        return 'Snapshot Archive storage has not been loaded yet.';
-      }
-      return 'Snapshot Archive storage is unavailable.';
-    })();
+  function normalizePanelSyncStatus(syncStatus, storageBackend) {
+    const source = syncStatus || storageBackend || { id: 'pending', label: 'pending' };
+    const backendId = source.backendId || source.id || 'pending';
+    const backendLabel = source.backendLabel || source.label || backendId;
 
     return {
       backendId,
       backendLabel,
-      crossDeviceCapable,
-      localOnly,
-      reason,
+      crossDeviceCapable: Boolean(source.crossDeviceCapable),
+      localOnly: Boolean(source.localOnly),
+      reason: source.reason || '',
     };
-  }
-
-  function normalizePanelSyncStatus(syncStatus, storageBackend) {
-    return createSnapshotSyncStatus(syncStatus
-      ? { ...storageBackend, ...syncStatus }
-      : (storageBackend || { id: 'pending', label: 'pending' }));
   }
 
   function createSyncBanner(syncStatus) {
@@ -835,93 +816,10 @@
     };
   }
 
-  function createSnapshotSyncPort({ archiveStore, getBackendInfo = () => null }) {
-    function getSyncStatus() {
-      const backendInfo = typeof getBackendInfo === 'function' ? getBackendInfo() : null;
-      return createSnapshotSyncStatus(backendInfo);
-    }
-
-    async function getLocalSummary() {
-      if (!archiveStore) return null;
-      return archiveStore.summarizeArchive();
-    }
-
-    async function saveLocalSnapshot(result) {
-      if (!archiveStore) return { summary: null, report: null, snapshot: null, archive: null };
-      return archiveStore.saveSnapshot(result);
-    }
-
-    async function buildSyncPayload() {
-      if (!archiveStore) {
-        throw new Error('Snapshot Archive library is unavailable.');
-      }
-      return archiveStore.buildExportDocument();
-    }
-
-    async function previewIncomingArchive(documentObject) {
-      if (!archiveStore) {
-        throw new Error('Snapshot Archive library is unavailable.');
-      }
-      if (typeof archiveStore.previewImportArchiveDocument !== 'function') {
-        throw new Error('Snapshot Archive preview interface is unavailable.');
-      }
-      return archiveStore.previewImportArchiveDocument(documentObject);
-    }
-
-    async function mergeIncomingArchive(documentObject) {
-      if (!archiveStore) {
-        throw new Error('Snapshot Archive library is unavailable.');
-      }
-      return archiveStore.importArchiveDocument(documentObject);
-    }
-
-    async function queryUsage(query) {
-      if (!archiveStore) {
-        throw new Error('Snapshot Archive library is unavailable.');
-      }
-      if (typeof archiveStore.queryArchiveUsage !== 'function') {
-        throw new Error('Snapshot Archive query interface is unavailable.');
-      }
-      return archiveStore.queryArchiveUsage(query || {});
-    }
-
-    async function queryHistory(query) {
-      if (!archiveStore) {
-        throw new Error('Snapshot Archive library is unavailable.');
-      }
-      if (typeof archiveStore.queryHistory === 'function') {
-        return archiveStore.queryHistory(query || {});
-      }
-      return {
-        day: await queryUsage({ ...(query || {}), mode: 'day' }),
-        rolling: await queryUsage({ ...(query || {}), mode: 'rolling' }),
-        month: await queryUsage({ ...(query || {}), mode: 'month' }),
-        timeline: [],
-      };
-    }
-
-    return {
-      getLocalSummary,
-      summarize: getLocalSummary,
-      saveLocalSnapshot,
-      saveLatestResult: saveLocalSnapshot,
-      buildSyncPayload,
-      exportArchive: buildSyncPayload,
-      previewIncomingArchive,
-      mergeIncomingArchive,
-      importArchiveDocument: mergeIncomingArchive,
-      getSyncStatus,
-      queryUsage,
-      queryHistory,
-    };
-  }
-
   globalObject[LIB_NAME] = {
     rollingPeriodKey,
     buildQuotaSnapshotResult,
     createQuotaCalculator,
     createQuotaPanelViewModel,
-    createSnapshotSyncStatus,
-    createSnapshotSyncPort,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

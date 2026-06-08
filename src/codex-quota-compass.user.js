@@ -14,6 +14,7 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-runtime.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-panel-shell.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-archive.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/codex-quota-compass-sync.lib.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
@@ -225,6 +226,7 @@
   const runtimeLib = globalThis.CodexQuotaCompassRuntimeLib;
   const panelShellLib = globalThis.CodexQuotaCompassPanelShellLib;
   const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
+  const syncLib = globalThis.CodexQuotaCompassSyncLib;
   const archiveStoragePort = createSnapshotArchiveStoragePort();
   const archiveStore = archiveLib
     ? archiveLib.createSnapshotArchiveStore({
@@ -233,8 +235,8 @@
       scriptVersion: SCRIPT_VERSION,
     })
     : null;
-  const syncPort = coreLib?.createSnapshotSyncPort
-    ? coreLib.createSnapshotSyncPort({ archiveStore, getBackendInfo: archiveStoragePort.getBackendInfo })
+  const syncPort = syncLib?.createSnapshotSyncPort
+    ? syncLib.createSnapshotSyncPort({ archiveStore, getBackendInfo: archiveStoragePort.getBackendInfo })
     : null;
 
   function isUsagePage() {
