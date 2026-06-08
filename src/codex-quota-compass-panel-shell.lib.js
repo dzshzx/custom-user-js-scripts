@@ -28,7 +28,7 @@
 
   function createShellMarkup(labels = {}) {
     return `
-      <button type="button" class="cqc-button" data-action="toggle" aria-label="${escapeHtml(labels.buttonAriaOpen || '')}">
+      <button type="button" class="cqc-button" data-action="toggle" aria-expanded="false" aria-label="${escapeHtml(labels.buttonAriaOpen || '')}">
         <span class="cqc-dot" aria-hidden="true"></span>
         <span class="cqc-button-text">
           <span class="cqc-button-title">${escapeHtml(labels.buttonTitle || '')}</span>
@@ -90,7 +90,7 @@
         background: rgba(248, 250, 252, 0.95);
         color: var(--cqc-text);
         box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
-        cursor: grab;
+        cursor: pointer;
         pointer-events: auto;
         user-select: none;
         backdrop-filter: blur(18px);
@@ -104,7 +104,8 @@
           box-shadow 160ms ease;
       }
 
-      .cqc-button:active {
+      .cqc-button:active,
+      .cqc-button.is-dragging {
         cursor: grabbing;
       }
 
@@ -454,6 +455,10 @@
       statusNode.dataset.tone = tone;
     }
 
+    function syncPanelExpandedState() {
+      button?.setAttribute?.('aria-expanded', isPanelOpen ? 'true' : 'false');
+    }
+
     function loadButtonPosition() {
       try {
         const parsed = JSON.parse(storage?.getItem(positionKey) || 'null');
@@ -731,6 +736,7 @@
       if (!sourceRect) return;
 
       isPanelOpen = true;
+      syncPanelExpandedState();
       button.classList.add('is-active');
       panel.hidden = false;
       panel.classList.remove('is-open', 'is-closing');
@@ -753,6 +759,7 @@
       windowObject.clearTimeout(panelCloseTimer);
 
       isPanelOpen = false;
+      syncPanelExpandedState();
       const sourceRect = getExpandedButtonRect();
       panel.classList.remove('is-open');
       panel.classList.add('is-closing');
@@ -918,6 +925,7 @@
       installDrag();
       installOutsideClose();
       setStatus(labels.statusIdle || '', 'idle');
+      syncPanelExpandedState();
 
       return api;
     }

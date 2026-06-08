@@ -45,6 +45,7 @@ class FakeElement {
     this.hidden = false;
     this.textContent = '';
     this.id = '';
+    this.attributes = new Map();
   }
 
   set innerHTML(value) {
@@ -79,6 +80,14 @@ class FakeElement {
   addEventListener(type, listener) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
     this.listeners.get(type).push(listener);
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, String(value));
+  }
+
+  getAttribute(name) {
+    return this.attributes.get(name) ?? null;
   }
 
   dispatchEvent(event) {
@@ -133,6 +142,7 @@ class FakeElement {
     clone.id = this.id;
     clone.hidden = this.hidden;
     clone.textContent = this.textContent;
+    clone.attributes = new Map(this.attributes);
     clone.dataset = { ...this.dataset };
     clone.style = { ...this.style };
     clone.classList.add(...this.classList.values);
@@ -186,6 +196,7 @@ function createNode(tagName, classNames = [], options = {}) {
 
 function createShellChildren(root) {
   const button = createNode('button', ['cqc-button'], { dataset: { action: 'toggle' } });
+  button.setAttribute('aria-expanded', 'false');
   button.append(createNode('span', ['cqc-dot']));
   const buttonText = createNode('span', ['cqc-button-text']);
   buttonText.append(createNode('span', ['cqc-button-title'], { textContent: 'Quota' }));
@@ -289,6 +300,9 @@ test('createFloatingPanelShell mounts shell and preserves injected position key'
   const refs = shell.refs();
 
   assert.equal(refs.root.id, 'cqc-test-root');
+  assert.equal(shell.isOpen(), false);
+  assert.equal(refs.panel.hidden, true);
+  assert.equal(refs.button.getAttribute('aria-expanded'), 'false');
   assert.equal(refs.statusNode.textContent, 'Idle');
   assert.deepEqual(mountedStorage.reads, ['codexQuotaCompassButtonPosition']);
   assert.equal(refs.button.style.left, '8px');
@@ -321,6 +335,7 @@ test('createFloatingPanelShell opens, resizes, and closes panel state', () => {
   assert.equal(refs.panel.hidden, false);
   assert.equal(refs.panel.classList.contains('is-open'), true);
   assert.equal(refs.button.classList.contains('is-active'), true);
+  assert.equal(refs.button.getAttribute('aria-expanded'), 'true');
 
   shell.schedulePanelResize();
   assert.equal(refs.panel.style.width, '560px');
@@ -329,4 +344,5 @@ test('createFloatingPanelShell opens, resizes, and closes panel state', () => {
   assert.equal(shell.isOpen(), false);
   assert.equal(refs.panel.hidden, true);
   assert.equal(refs.button.classList.contains('is-active'), false);
+  assert.equal(refs.button.getAttribute('aria-expanded'), 'false');
 });
