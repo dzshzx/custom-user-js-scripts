@@ -26,8 +26,8 @@ Implement the four architecture candidates from `.scratch/reports/architecture-r
 - [x] Final `npm test` passes.
 - [x] Final `npm run lint` passes.
 - [x] Patch version is incremented when `package.json` version matches numeric `x.y.z`.
-- [ ] Parent task is archived after final validation and version bump.
-- [ ] Final `master` state is pushed to `origin`.
+- [x] Parent task is archived after final validation and version bump.
+- [x] Final `master` state is pushed to `origin`.
 
 ## Notes
 
