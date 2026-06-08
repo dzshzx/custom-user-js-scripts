@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/codex-quota-compass-contract.lib.js');
-await import('../src/codex-quota-compass-core.lib.js');
-await import('../src/codex-quota-compass-runtime.lib.js');
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js');
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js');
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js');
 
 const { createDefaultQuotaRuntimeConfig, createQuotaRuntime } = globalThis.CodexQuotaCompassRuntimeLib;
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/codex-quota-compass-storage.lib.js');
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js');
 
 const {
   DEFAULT_ARCHIVE_KEY,

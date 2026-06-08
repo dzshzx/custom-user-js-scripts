@@ -18,13 +18,13 @@
 ├── docs/                 # 人类可读文档、脚本说明和运行手册
 ├── scripts/              # 本地辅助脚本
 ├── snippets/             # 可复用代码片段
-├── src/                  # 当前 userscript 源码；后续按脚本归入子目录
+├── src/userscripts/      # installable userscript 和同脚本支持模块
 └── test/                 # Node 测试
 ```
 
 ## 快速开始
 
-1. 复制现有 `.user.js` 或从 [src/example.user.js](src/example.user.js) 开始。
+1. 复制现有 `.user.js` 或从 [src/userscripts/example/example.user.js](src/userscripts/example/example.user.js) 开始。
 2. 按 [docs/script-template.md](docs/script-template.md) 修改 `@name`、`@match`、`@grant` 等 metadata。
 3. 在浏览器 userscript 管理器中新建脚本，粘贴或安装 `.user.js` 内容。
 4. 如果脚本注入 UI，先看 [docs/frontend-design-guidelines.md](docs/frontend-design-guidelines.md)。

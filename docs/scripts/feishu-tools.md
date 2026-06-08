@@ -62,7 +62,7 @@ node scripts/feishu/export-image.mjs \
 
 安装入口：
 
-- [../../src/feishu-preview-image-export.user.js](../../src/feishu-preview-image-export.user.js)
+- [../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js](../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js)
 
 行为：
 
@@ -70,3 +70,9 @@ node scripts/feishu/export-image.mjs \
 - 从当前页面里找最大的可见图片
 - 优先用 `GM_download` 下载
 - 下载文件名默认取当前飞书文档标题
+
+迁移说明：
+
+- 旧路径：`src/feishu-preview-image-export.user.js`
+- 新路径：`src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`
+- 当前脚本没有 `@downloadURL` / `@updateURL`；如已手动安装，直接用新路径重新安装即可。

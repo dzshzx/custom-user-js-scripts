@@ -1,6 +1,6 @@
 # Script Template Notes
 
-复制当前模板脚本创建新脚本时，优先修改这些字段。后续源码迁移完成后，新脚本默认放在 `src/userscripts/<script-id>/<script-id>.user.js`。
+复制当前模板脚本创建新脚本时，优先修改这些字段。新脚本默认放在 `src/userscripts/<script-id>/<script-id>.user.js`。
 
 - `@name`: 脚本名称。
 - `@name:zh-CN` / `@name:en`: 脚本有中文用户界面或跨语言使用场景时，补充本地化名称。

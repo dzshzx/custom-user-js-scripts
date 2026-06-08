@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadInstallableBlock } from './helpers/installable-block-loader.mjs';
 
-await import('../src/web-page-assistant-settings.lib.js');
+await import('../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js');
 
 const pageKey = 'https://example.com/path?a=1';
 const siteKey = 'example.com';

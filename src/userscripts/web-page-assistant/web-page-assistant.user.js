@@ -22,8 +22,8 @@
 // @run-at       document-idle
 // @homepageURL  https://github.com/dzshzx/custom-user-js-scripts
 // @supportURL   https://github.com/dzshzx/custom-user-js-scripts/issues
-// @downloadURL  https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/web-page-assistant.user.js
-// @updateURL    https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/web-page-assistant.user.js
+// @downloadURL  https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant.user.js
+// @updateURL    https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant.user.js
 // @license      MIT
 // ==/UserScript==
 

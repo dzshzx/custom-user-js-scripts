@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 
-const defaultUserscriptPath = path.resolve(import.meta.dirname, '../../src/web-page-assistant.user.js');
+const defaultUserscriptPath = path.resolve(import.meta.dirname, '../../src/userscripts/web-page-assistant/web-page-assistant.user.js');
 
 export async function readInstallableBlock(markerPrefix, options = {}) {
   const userscriptPath = options.userscriptPath || defaultUserscriptPath;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/codex-quota-compass-panel-shell.lib.js');
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js');
 
 const { createFloatingPanelShell } = globalThis.CodexQuotaCompassPanelShellLib;
 

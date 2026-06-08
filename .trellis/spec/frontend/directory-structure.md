@@ -29,15 +29,13 @@ support modules loaded through userscript metadata or test loaders.
 `-- test/                 # Node tests for scripts and tooling
 ```
 
-The repository is currently migrating from the old flat `src/*.user.js` layout
-to the target `src/userscripts/<script-id>/` layout. During migration, update
-tests, metadata URLs, and documentation links in the same task that moves the
-files.
+The repository uses a script-scoped layout. When moving or adding a script,
+update tests, metadata URLs, and documentation links in the same task.
 
-- `src/example.user.js` is the current minimal metadata and IIFE template until
-  the layout migration moves it.
-- `src/codex-quota-compass.user.js` is the current installable entrypoint for a
-  complex userscript with support modules.
+- `src/userscripts/example/example.user.js` is the minimal metadata and IIFE
+  template.
+- `src/userscripts/codex-quota-compass/codex-quota-compass.user.js` is the
+  installable entrypoint for a complex userscript with support modules.
 - `snippets/dom-ready.js` contains a small reusable DOM readiness helper.
 - `scripts/check-userscripts.mjs` is the local lint script run by
   `npm run lint`.
@@ -91,8 +89,8 @@ configuration belongs in `docs/agents/`. Implementation rules belong in
 - Metadata fields are part of the install contract. At minimum, keep
   `@name`, `@namespace`, `@version`, `@description`, and `@match`.
 - Use `@grant none` when no userscript manager API is required. Add specific
-  grants only when code actually calls that API, as
-  `src/codex-quota-compass.user.js` does for `GM_registerMenuCommand`.
+  grants only when code actually calls that API, as the Codex Quota Compass
+  userscript does for `GM_registerMenuCommand`.
 
 ## Moving or Renaming Userscripts
 
@@ -129,7 +127,7 @@ has been tested in the target userscript manager.
 
 ## Examples
 
-Use `src/example.user.js` as the current template until the layout migration
-moves it. Use the Codex Quota Compass area as the current reference for a
-complex userscript that injects UI, stores browser-local UI state, calls page
-APIs, and avoids exposing tokens in normal output.
+Use `src/userscripts/example/example.user.js` as the current template. Use the
+Codex Quota Compass area as the current reference for a complex userscript that
+injects UI, stores browser-local UI state, calls page APIs, and avoids exposing
+tokens in normal output.
