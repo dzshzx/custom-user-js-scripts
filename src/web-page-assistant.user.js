@@ -87,7 +87,6 @@
   const currentPageKey = `${location.origin}${location.pathname}${location.search}`;
   const currentSiteKey = location.hostname;
   const PageAssistantSettings = createPageAssistantSettingsContract();
-  const unlockerRuntime = createUnlockerRuntime();
 
   let settings = PageAssistantSettings.empty();
   let activeMatch = null;
@@ -102,6 +101,7 @@
   let hasRootListener = false;
   let webPageAssistantSession;
   let widgetLayoutRuntime;
+  let unlockerRuntime;
 
   // WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START
   function emptySettings() {
@@ -1199,17 +1199,7 @@
   }
 
   function unlockerStatusText(setting = activeUnlockerMatch?.setting) {
-    if (!setting?.enabled) return '当前未启用网页限制解除。';
-
-    const labels = [];
-    if (setting.allowSelection) labels.push('选择文本');
-    if (setting.allowCopy) labels.push('复制/剪切');
-    if (setting.allowContextMenu) labels.push('右键菜单');
-    if (setting.allowDrag) labels.push('拖拽');
-    if (setting.suppressBeforeUnload) labels.push('离开提示');
-
-    if (!labels.length) return '网页限制解除已保存，但没有启用任何能力。';
-    return `${scopeLabel(activeUnlockerMatch?.scope || getSelectedScope())}已启用：${labels.join('、')}。`;
+    return unlockerRuntime.describe(setting, scopeLabel(activeUnlockerMatch?.scope || getSelectedScope()));
   }
 
   function defaultUnlockerSetting(overrides = {}) {
@@ -2290,27 +2280,38 @@
     pauseButton.textContent = refreshRuntime.getState().isPaused ? '继续' : '暂停';
   }
 
-  function stopEvent(event) {
-    if (root?.contains(event.target)) return;
-    event.stopPropagation();
-  }
-
-  function stopBeforeUnload(event) {
-    event.stopImmediatePropagation();
-    event.returnValue = undefined;
-    return undefined;
-  }
-
-  function createUnlockerRuntime() {
+  // WEB_PAGE_ASSISTANT_UNLOCKER_RUNTIME_START
+  function createUnlockerRuntime(adapters) {
+    const {
+      hasUnlockerAction,
+      rootContainsTarget,
+      getDocumentTarget,
+      getWindowTarget,
+      getStyle,
+      installStyle,
+      removeStyle,
+      rootId,
+    } = adapters;
     const capabilitySpecs = [
-      { option: 'allowSelection', target: () => document, type: 'selectstart', handler: stopEvent },
-      { option: 'allowCopy', target: () => document, type: 'copy', handler: stopEvent },
-      { option: 'allowCopy', target: () => document, type: 'cut', handler: stopEvent },
-      { option: 'allowContextMenu', target: () => document, type: 'contextmenu', handler: stopEvent },
-      { option: 'allowDrag', target: () => document, type: 'dragstart', handler: stopEvent },
-      { option: 'suppressBeforeUnload', target: () => window, type: 'beforeunload', handler: stopBeforeUnload },
+      { option: 'allowSelection', label: '选择文本', target: getDocumentTarget, type: 'selectstart', handler: stopEvent },
+      { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'copy', handler: stopEvent },
+      { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'cut', handler: stopEvent },
+      { option: 'allowContextMenu', label: '右键菜单', target: getDocumentTarget, type: 'contextmenu', handler: stopEvent },
+      { option: 'allowDrag', label: '拖拽', target: getDocumentTarget, type: 'dragstart', handler: stopEvent },
+      { option: 'suppressBeforeUnload', label: '离开提示', target: getWindowTarget, type: 'beforeunload', handler: stopBeforeUnload },
     ];
     let cleanupStack = [];
+
+    function stopEvent(event) {
+      if (rootContainsTarget(event.target)) return;
+      event.stopPropagation();
+    }
+
+    function stopBeforeUnload(event) {
+      event.stopImmediatePropagation();
+      event.returnValue = undefined;
+      return undefined;
+    }
 
     function addListener(target, type, handler) {
       target.addEventListener(type, handler, true);
@@ -2318,20 +2319,36 @@
     }
 
     function installSelectionStyle(setting) {
-      if (!setting.allowSelection || document.getElementById(UNLOCKER_STYLE_ID)) return;
+      if (!setting.allowSelection || getStyle()) return;
 
-      const style = document.createElement('style');
-      style.id = UNLOCKER_STYLE_ID;
-      style.textContent = `
-        html :not(#${ROOT_ID}):not(#${ROOT_ID} *) {
+      installStyle(`
+        html :not(#${rootId}):not(#${rootId} *) {
           -webkit-user-select: text !important;
           user-select: text !important;
         }
-      `;
-      document.documentElement.append(style);
+      `);
+    }
+
+    function describe(setting, scopeText) {
+      if (!setting?.enabled) return '当前未启用网页限制解除。';
+
+      const labels = [];
+      const seenOptions = new Set();
+      for (const spec of capabilitySpecs) {
+        if (!setting[spec.option] || seenOptions.has(spec.option)) continue;
+        labels.push(spec.label);
+        seenOptions.add(spec.option);
+      }
+
+      if (!labels.length) return '网页限制解除已保存，但没有启用任何能力。';
+      return `${scopeText}已启用：${labels.join('、')}。`;
     }
 
     return {
+      describe,
+      getCapabilitySpecs() {
+        return capabilitySpecs.map(({ option, label, type }) => ({ option, label, type }));
+      },
       install(setting) {
         this.uninstall();
         if (!hasUnlockerAction(setting)) return;
@@ -2349,11 +2366,30 @@
         }
         cleanupStack = [];
 
-        const style = document.getElementById(UNLOCKER_STYLE_ID);
-        if (style) style.remove();
+        removeStyle();
       },
     };
   }
+  // WEB_PAGE_ASSISTANT_UNLOCKER_RUNTIME_END
+
+  unlockerRuntime = createUnlockerRuntime({
+    hasUnlockerAction,
+    rootContainsTarget: (target) => Boolean(root?.contains(target)),
+    getDocumentTarget: () => document,
+    getWindowTarget: () => window,
+    getStyle: () => document.getElementById(UNLOCKER_STYLE_ID),
+    installStyle(cssText) {
+      const style = document.createElement('style');
+      style.id = UNLOCKER_STYLE_ID;
+      style.textContent = cssText;
+      document.documentElement.append(style);
+    },
+    removeStyle() {
+      const style = document.getElementById(UNLOCKER_STYLE_ID);
+      if (style) style.remove();
+    },
+    rootId: ROOT_ID,
+  });
 
   function installUnlocker(setting) {
     unlockerRuntime.install(setting);
