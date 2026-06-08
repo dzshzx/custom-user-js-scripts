@@ -4,7 +4,7 @@
 
 ## QR Login Helper
 
-`scripts/feishu-login-qr.mjs` 用 Playwright 打开目标飞书页面，直接从登录页二维码 `<img>` 元素导出 PNG，并在扫码成功后保存浏览器登录态。
+`scripts/feishu/login-qr.mjs` 用 Playwright 打开目标飞书页面，直接从登录页二维码 `<img>` 元素导出 PNG，并在扫码成功后保存浏览器登录态。
 
 首次使用前，确保 Playwright 在本机 npm 缓存里可用：
 
@@ -15,7 +15,7 @@ npx --yes playwright --version
 常用命令：
 
 ```bash
-node scripts/feishu-login-qr.mjs --refresh --tenant "小米合作伙伴"
+node scripts/feishu/login-qr.mjs --refresh --tenant "小米合作伙伴"
 ```
 
 默认行为：
@@ -37,10 +37,10 @@ node scripts/feishu-login-qr.mjs --refresh --tenant "小米合作伙伴"
 
 ## Image Export Helper
 
-`scripts/feishu-export-image.mjs` 使用已有登录态打开飞书文件页，进入演示视图后导出当前页面里最大的可见图片。
+`scripts/feishu/export-image.mjs` 使用已有登录态打开飞书文件页，进入演示视图后导出当前页面里最大的可见图片。
 
 ```bash
-node scripts/feishu-export-image.mjs \
+node scripts/feishu/export-image.mjs \
   --profile-dir /home/ubuntu/.local/share/codex-browser/feishu-login/replay-profile-20260525-143617
 ```
 

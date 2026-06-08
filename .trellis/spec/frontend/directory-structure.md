@@ -65,6 +65,12 @@ Local development tools belong in `scripts/`. Tooling files use Node ESM, as
 shown by `scripts/check-userscripts.mjs` and `"type": "module"` in
 `package.json`.
 
+Repository validators that run as routine checks stay at `scripts/` root and
+should usually be exposed through `package.json`. Operational tool families
+belong in subdirectories when they share a platform, credentials, output
+directory, or runbook; for example, Feishu Playwright utilities live under
+`scripts/feishu/`.
+
 Human-facing project notes and script runbooks belong in `docs/`. Agent
 configuration belongs in `docs/agents/`. Implementation rules belong in
 `.trellis/spec/`, and domain vocabulary belongs in `CONTEXT.md`.
@@ -80,6 +86,8 @@ configuration belongs in `docs/agents/`. Implementation rules belong in
 - Same-script libraries: `kebab-case.lib.js`, kept next to the entrypoint.
 - Snippets: `kebab-case.js`, for example `snippets/dom-ready.js`.
 - Node tools: `kebab-case.mjs`, for example `scripts/check-userscripts.mjs`.
+- Tool family commands: `scripts/<family>/<command>.mjs`, for example
+  `scripts/feishu/login-qr.mjs`.
 - Metadata fields are part of the install contract. At minimum, keep
   `@name`, `@namespace`, `@version`, `@description`, and `@match`.
 - Use `@grant none` when no userscript manager API is required. Add specific

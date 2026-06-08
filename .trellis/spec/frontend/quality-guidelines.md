@@ -68,6 +68,8 @@ userscript in a browser userscript manager when feasible. Check at least:
 
 For changes under `scripts/`, run the script through the npm command or a
 direct Node command that exercises the changed path.
+For operational tool families under `scripts/<family>/`, also run each moved
+tool with `--help` to catch stale usage text.
 
 ---
 

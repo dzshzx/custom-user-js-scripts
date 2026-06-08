@@ -16,7 +16,7 @@ const DIRECT_PROXY_ARGS = ['--proxy-server=direct://', '--proxy-bypass-list=*']
 
 function printHelp() {
   console.log(`Usage:
-  node scripts/feishu-login-qr.mjs [options]
+  node scripts/feishu/login-qr.mjs [options]
 
 Options:
   --url <url>                 Target Feishu URL to open
