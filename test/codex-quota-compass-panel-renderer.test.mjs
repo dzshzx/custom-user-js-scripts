@@ -191,4 +191,6 @@ test('installStyles installs content styles once', () => {
   assert.equal(appended.length, 1);
   assert.equal(appended[0].id, 'root-style');
   assert.match(appended[0].textContent, /\.cqc-tabs/);
+  assert.match(appended[0].textContent, /@container \(max-width: 720px\)/);
+  assert.match(appended[0].textContent, /\.cqc-data-view\[data-compact="true"\] \.cqc-data-table/);
 });

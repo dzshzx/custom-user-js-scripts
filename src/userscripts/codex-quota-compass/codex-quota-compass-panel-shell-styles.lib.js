@@ -297,6 +297,7 @@
       }
 
       .cqc-content {
+        container-type: inline-size;
         height: calc(100% - 49px);
         overflow: auto;
         padding: 14px;

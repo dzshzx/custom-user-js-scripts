@@ -18,6 +18,7 @@ test('createShellStyles renders scoped shell CSS with injected layout constants'
   assert.match(css, /#quota-root/);
   assert.match(css, /width: 180px/);
   assert.match(css, /min-width: 44px/);
+  assert.match(css, /container-type: inline-size/);
   assert.match(css, /left 250ms linear/);
   assert.match(css, /left 500ms ease-out/);
   assert.match(css, /prefers-color-scheme: dark/);

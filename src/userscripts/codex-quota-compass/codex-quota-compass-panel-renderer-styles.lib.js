@@ -292,6 +292,20 @@
           }
         }
 
+        @container (max-width: 720px) {
+          .cqc-metrics {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .cqc-data-view[data-compact="true"] .cqc-data-table {
+            display: none;
+          }
+
+          .cqc-data-view[data-compact="true"] .cqc-compact-list {
+            display: block;
+          }
+        }
+
         @media (max-width: 720px) {
           .cqc-metrics {
             grid-template-columns: repeat(2, minmax(0, 1fr));
