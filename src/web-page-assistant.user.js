@@ -87,6 +87,7 @@
   const currentPageKey = `${location.origin}${location.pathname}${location.search}`;
   const currentSiteKey = location.hostname;
   const PageAssistantSettings = createPageAssistantSettingsContract();
+  const rootActionHandlers = createRootActionHandlers();
 
   let settings = PageAssistantSettings.empty();
   let activeMatch = null;
@@ -1202,6 +1203,14 @@
     positionWidgetPanel();
   }
 
+  function createWidgetViewModel() {
+    if (!activeMatch) return null;
+
+    return {
+      summary: currentStatusText(),
+    };
+  }
+
   function renderWidget() {
     ensureRoot();
 
@@ -1212,7 +1221,8 @@
       countdownNodes = [];
     }
 
-    if (!activeMatch) return;
+    const model = createWidgetViewModel();
+    if (!model) return;
 
     widget = document.createElement('section');
     widget.className = 'part-widget';
@@ -1240,7 +1250,7 @@
 
     countdownNodes = [...widget.querySelectorAll('[data-part-role="countdown"]')];
     widgetButton = widget.querySelector('.part-widget-button');
-    widget.querySelector('[data-part-role="widget-summary"]').textContent = currentStatusText();
+    widget.querySelector('[data-part-role="widget-summary"]').textContent = model.summary;
     installWidgetExpansion();
     installWidgetDrag();
     root.append(widget);
@@ -1347,15 +1357,8 @@
     widgetButton.addEventListener('pointercancel', finishDrag);
   }
 
-  function renderDialog(message = '', preferredScope = null, preferredTab = null) {
-    ensureRoot();
-
-    if (dialog) {
-      dialog.remove();
-      dialog = null;
-    }
-
-    activeDialogTab = preferredTab === 'unlocker' ? 'unlocker' : preferredTab === 'refresh' ? 'refresh' : activeDialogTab;
+  function createDialogViewModel(message = '', preferredScope = null, preferredTab = null) {
+    const nextTab = preferredTab === 'unlocker' ? 'unlocker' : preferredTab === 'refresh' ? 'refresh' : activeDialogTab;
     const selectedScope = preferredScope || activeMatch?.scope || activeUnlockerMatch?.scope || 'page';
     const pageSetting = PageAssistantSettings.getRefreshSetting(settings, 'page', currentPageKey);
     const siteSetting = PageAssistantSettings.getRefreshSetting(settings, 'site', currentSiteKey);
@@ -1365,6 +1368,41 @@
       ? siteUnlockerSetting
       : pageUnlockerSetting;
     const unlockerFormSetting = scopedUnlockerSetting || defaultUnlockerSetting({ enabled: false });
+    const defaultInterval = activeMatch?.setting.intervalMs || 5 * 60 * 1000;
+    const customInterval = defaultInterval % (60 * 1000) === 0
+      ? { value: String(defaultInterval / (60 * 1000)), unit: 'minutes' }
+      : { value: String(Math.round(defaultInterval / 1000)), unit: 'seconds' };
+
+    return {
+      message,
+      activeTab: nextTab,
+      selectedScope,
+      pageSetting,
+      siteSetting,
+      pageUnlockerSetting,
+      siteUnlockerSetting,
+      unlockerFormSetting,
+      customInterval,
+      statusText: currentStatusText(),
+      unlockerStatusText: unlockerStatusText(),
+      pageRefreshText: `页面：${currentPageKey}${pageSetting ? `（${formatInterval(pageSetting.intervalMs)}）` : '（未设置）'}`,
+      siteRefreshText: `站点：${currentSiteKey}${siteSetting ? `（${formatInterval(siteSetting.intervalMs)}）` : '（未设置）'}`,
+      pageUnlockerText: `页面：${currentPageKey}${pageUnlockerSetting ? '（已保存）' : '（未设置）'}`,
+      siteUnlockerText: `站点：${currentSiteKey}${siteUnlockerSetting ? '（已保存）' : '（未设置）'}`,
+      focusRole: nextTab === 'unlocker' ? 'unlocker-enabled' : 'custom-value',
+    };
+  }
+
+  function renderDialog(message = '', preferredScope = null, preferredTab = null) {
+    ensureRoot();
+
+    if (dialog) {
+      dialog.remove();
+      dialog = null;
+    }
+
+    const model = createDialogViewModel(message, preferredScope, preferredTab);
+    activeDialogTab = model.activeTab;
 
     dialog = document.createElement('div');
     dialog.className = 'part-backdrop';
@@ -1389,8 +1427,8 @@
           </button>
         </div>
         <div class="part-tabs" role="tablist" aria-label="网页助手功能">
-          <button type="button" class="part-tab" role="tab" aria-selected="${activeDialogTab === 'refresh'}" data-part-action="switch-tab" data-part-tab="refresh">自动刷新</button>
-          <button type="button" class="part-tab" role="tab" aria-selected="${activeDialogTab === 'unlocker'}" data-part-action="switch-tab" data-part-tab="unlocker">限制解除</button>
+          <button type="button" class="part-tab" role="tab" aria-selected="${model.activeTab === 'refresh'}" data-part-action="switch-tab" data-part-tab="refresh">自动刷新</button>
+          <button type="button" class="part-tab" role="tab" aria-selected="${model.activeTab === 'unlocker'}" data-part-action="switch-tab" data-part-tab="unlocker">限制解除</button>
         </div>
 	      </div>
 	      <div class="part-dialog-body">
@@ -1410,7 +1448,7 @@
 	          </div>
 	        </section>
 
-	        <section class="part-tab-panel" data-part-tab-panel="refresh"${activeDialogTab === 'refresh' ? '' : ' hidden'}>
+        <section class="part-tab-panel" data-part-tab-panel="refresh"${model.activeTab === 'refresh' ? '' : ' hidden'}>
           <section class="part-section">
             <p class="part-section-title">当前状态</p>
             <div class="part-status-box">
@@ -1447,7 +1485,7 @@
           </section>
         </section>
 
-        <section class="part-tab-panel" data-part-tab-panel="unlocker"${activeDialogTab === 'unlocker' ? '' : ' hidden'}>
+        <section class="part-tab-panel" data-part-tab-panel="unlocker"${model.activeTab === 'unlocker' ? '' : ' hidden'}>
 	          <section class="part-section">
 	            <p class="part-section-title">当前状态</p>
 	            <div class="part-status-box">
@@ -1506,14 +1544,14 @@
     dialog.append(panel);
     root.append(dialog);
 
-    dialog.querySelector('[data-part-role="status"]').textContent = currentStatusText();
-    dialog.querySelector('[data-part-role="page-key"]').textContent = `页面：${currentPageKey}${pageSetting ? `（${formatInterval(pageSetting.intervalMs)}）` : '（未设置）'}`;
-    dialog.querySelector('[data-part-role="site-key"]').textContent = `站点：${currentSiteKey}${siteSetting ? `（${formatInterval(siteSetting.intervalMs)}）` : '（未设置）'}`;
-    dialog.querySelector('[data-part-role="unlocker-status"]').textContent = unlockerStatusText();
-    dialog.querySelector('[data-part-role="unlocker-page-key"]').textContent = `页面：${currentPageKey}${pageUnlockerSetting ? '（已保存）' : '（未设置）'}`;
-    dialog.querySelector('[data-part-role="unlocker-site-key"]').textContent = `站点：${currentSiteKey}${siteUnlockerSetting ? '（已保存）' : '（未设置）'}`;
+    dialog.querySelector('[data-part-role="status"]').textContent = model.statusText;
+    dialog.querySelector('[data-part-role="page-key"]').textContent = model.pageRefreshText;
+    dialog.querySelector('[data-part-role="site-key"]').textContent = model.siteRefreshText;
+    dialog.querySelector('[data-part-role="unlocker-status"]').textContent = model.unlockerStatusText;
+    dialog.querySelector('[data-part-role="unlocker-page-key"]').textContent = model.pageUnlockerText;
+    dialog.querySelector('[data-part-role="unlocker-site-key"]').textContent = model.siteUnlockerText;
 
-    const scopeInput = dialog.querySelector(`input[name="part-scope"][value="${selectedScope}"]`);
+    const scopeInput = dialog.querySelector(`input[name="part-scope"][value="${model.selectedScope}"]`);
     if (scopeInput) scopeInput.checked = true;
 
     const presetsNode = dialog.querySelector('[data-part-role="presets"]');
@@ -1527,33 +1565,23 @@
       presetsNode.append(presetButton);
     }
 
-    const defaultInterval = activeMatch?.setting.intervalMs || 5 * 60 * 1000;
     const customValue = dialog.querySelector('[data-part-role="custom-value"]');
     const customUnit = dialog.querySelector('[data-part-role="custom-unit"]');
-    if (defaultInterval % (60 * 1000) === 0) {
-      customValue.value = String(defaultInterval / (60 * 1000));
-      customUnit.value = 'minutes';
-    } else {
-      customValue.value = String(Math.round(defaultInterval / 1000));
-      customUnit.value = 'seconds';
-    }
+    customValue.value = model.customInterval.value;
+    customUnit.value = model.customInterval.unit;
 
-    dialog.querySelector('[data-part-action="delete-page"]').disabled = !pageSetting;
-    dialog.querySelector('[data-part-action="delete-site"]').disabled = !siteSetting;
-    dialog.querySelector('[data-part-role="unlocker-enabled"]').checked = unlockerFormSetting.enabled;
-    dialog.querySelector('[data-part-role="unlocker-selection"]').checked = unlockerFormSetting.allowSelection;
-    dialog.querySelector('[data-part-role="unlocker-copy"]').checked = unlockerFormSetting.allowCopy;
-    dialog.querySelector('[data-part-role="unlocker-context-menu"]').checked = unlockerFormSetting.allowContextMenu;
-    dialog.querySelector('[data-part-role="unlocker-drag"]').checked = unlockerFormSetting.allowDrag;
-    dialog.querySelector('[data-part-role="unlocker-beforeunload"]').checked = unlockerFormSetting.suppressBeforeUnload;
-    dialog.querySelector('[data-part-action="delete-unlocker-page"]').disabled = !pageUnlockerSetting;
-    dialog.querySelector('[data-part-action="delete-unlocker-site"]').disabled = !siteUnlockerSetting;
-    setMessage(message);
-    if (activeDialogTab === 'unlocker') {
-      dialog.querySelector('[data-part-role="unlocker-enabled"]')?.focus();
-    } else {
-      customValue.focus();
-    }
+    dialog.querySelector('[data-part-action="delete-page"]').disabled = !model.pageSetting;
+    dialog.querySelector('[data-part-action="delete-site"]').disabled = !model.siteSetting;
+    dialog.querySelector('[data-part-role="unlocker-enabled"]').checked = model.unlockerFormSetting.enabled;
+    dialog.querySelector('[data-part-role="unlocker-selection"]').checked = model.unlockerFormSetting.allowSelection;
+    dialog.querySelector('[data-part-role="unlocker-copy"]').checked = model.unlockerFormSetting.allowCopy;
+    dialog.querySelector('[data-part-role="unlocker-context-menu"]').checked = model.unlockerFormSetting.allowContextMenu;
+    dialog.querySelector('[data-part-role="unlocker-drag"]').checked = model.unlockerFormSetting.allowDrag;
+    dialog.querySelector('[data-part-role="unlocker-beforeunload"]').checked = model.unlockerFormSetting.suppressBeforeUnload;
+    dialog.querySelector('[data-part-action="delete-unlocker-page"]').disabled = !model.pageUnlockerSetting;
+    dialog.querySelector('[data-part-action="delete-unlocker-site"]').disabled = !model.siteUnlockerSetting;
+    setMessage(model.message);
+    dialog.querySelector(`[data-part-role="${model.focusRole}"]`)?.focus();
   }
 
   function closeDialog() {
@@ -1784,11 +1812,81 @@
     installUnlocker(activeUnlockerMatch?.setting);
   }
 
+  function createRootActionHandlers() {
+    return {
+      'open-settings': async () => {
+        renderDialog('', null, 'refresh');
+      },
+      'switch-tab': async (actionNode) => {
+        renderDialog('', getSelectedScope(), actionNode.dataset.partTab);
+      },
+      'close-dialog': async () => {
+        closeDialog();
+      },
+      'toggle-pause': async () => {
+        togglePause();
+      },
+      'save-preset': async (actionNode) => {
+        const intervalMs = Number(actionNode.dataset.intervalMs);
+        const scope = getSelectedScope();
+        if (!isValidIntervalMs(intervalMs)) {
+          setMessage('预设刷新时间无效。', 'error');
+          return;
+        }
+
+        await saveSetting(scope, intervalMs);
+        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(intervalMs)} 刷新一次。`, scope, 'refresh');
+      },
+      'save-custom': async () => {
+        const parsed = parseCustomInterval();
+        if (parsed.error) {
+          setMessage(parsed.error, 'error');
+          return;
+        }
+
+        const scope = getSelectedScope();
+        await saveSetting(scope, parsed.intervalMs);
+        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`, scope, 'refresh');
+      },
+      'delete-page': async () => {
+        await deleteSetting('page');
+        renderDialog('已删除当前页面设置。', 'page', 'refresh');
+      },
+      'delete-site': async () => {
+        await deleteSetting('site');
+        renderDialog('已删除整个站点设置。', 'site', 'refresh');
+      },
+      'save-unlocker': async () => {
+        const scope = getSelectedScope();
+        const unlockerSetting = readUnlockerFormSetting();
+        await saveUnlockerSetting(scope, unlockerSetting);
+        renderDialog(unlockerSetting.enabled
+          ? `已保存到${scopeLabel(scope)}：${unlockerStatusText(unlockerSetting)}`
+          : `已保存到${scopeLabel(scope)}：网页限制解除关闭。`, scope, 'unlocker');
+      },
+      'delete-unlocker-page': async () => {
+        await deleteUnlockerSetting('page');
+        renderDialog('已删除当前页面限制解除设置。', 'page', 'unlocker');
+      },
+      'delete-unlocker-site': async () => {
+        await deleteUnlockerSetting('site');
+        renderDialog('已删除整个站点限制解除设置。', 'site', 'unlocker');
+      },
+      'disable-active': async () => {
+        if (!activeMatch) return;
+        const disabledScope = activeMatch.scope;
+        await deleteSetting(disabledScope);
+        if (dialog) renderDialog(`已停用${scopeLabel(disabledScope)}自动刷新。`, disabledScope, 'refresh');
+      },
+    };
+  }
+
   async function handleRootClick(event) {
     const actionNode = event.target?.closest?.('[data-part-action]');
     if (!actionNode || !root?.contains(actionNode)) return;
 
     const action = actionNode.dataset.partAction;
+    const handler = rootActionHandlers[action];
 
     if (action === 'close-dialog' && dialog && actionNode === dialog && event.target === dialog) {
       closeDialog();
@@ -1799,96 +1897,13 @@
       return;
     }
 
+    if (!handler) return;
+
     event.preventDefault();
     event.stopPropagation();
 
     try {
-      if (action === 'open-settings') {
-        renderDialog('', null, 'refresh');
-        return;
-      }
-
-      if (action === 'switch-tab') {
-        renderDialog('', getSelectedScope(), actionNode.dataset.partTab);
-        return;
-      }
-
-      if (action === 'close-dialog') {
-        closeDialog();
-        return;
-      }
-
-      if (action === 'toggle-pause') {
-        togglePause();
-        return;
-      }
-
-      if (action === 'save-preset') {
-        const intervalMs = Number(actionNode.dataset.intervalMs);
-        const scope = getSelectedScope();
-        if (!isValidIntervalMs(intervalMs)) {
-          setMessage('预设刷新时间无效。', 'error');
-          return;
-        }
-
-        await saveSetting(scope, intervalMs);
-        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(intervalMs)} 刷新一次。`, scope, 'refresh');
-        return;
-      }
-
-      if (action === 'save-custom') {
-        const parsed = parseCustomInterval();
-        if (parsed.error) {
-          setMessage(parsed.error, 'error');
-          return;
-        }
-
-        const scope = getSelectedScope();
-        await saveSetting(scope, parsed.intervalMs);
-        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`, scope, 'refresh');
-        return;
-      }
-
-      if (action === 'delete-page') {
-        await deleteSetting('page');
-        renderDialog('已删除当前页面设置。', 'page', 'refresh');
-        return;
-      }
-
-	      if (action === 'delete-site') {
-	        await deleteSetting('site');
-	        renderDialog('已删除整个站点设置。', 'site', 'refresh');
-	        return;
-	      }
-
-	      if (action === 'save-unlocker') {
-	        const scope = getSelectedScope();
-	        const unlockerSetting = readUnlockerFormSetting();
-	        await saveUnlockerSetting(scope, unlockerSetting);
-	        renderDialog(unlockerSetting.enabled
-	          ? `已保存到${scopeLabel(scope)}：${unlockerStatusText(unlockerSetting)}`
-	          : `已保存到${scopeLabel(scope)}：网页限制解除关闭。`, scope, 'unlocker');
-	        return;
-	      }
-
-	      if (action === 'delete-unlocker-page') {
-	        await deleteUnlockerSetting('page');
-	        renderDialog('已删除当前页面限制解除设置。', 'page', 'unlocker');
-	        return;
-	      }
-
-	      if (action === 'delete-unlocker-site') {
-	        await deleteUnlockerSetting('site');
-	        renderDialog('已删除整个站点限制解除设置。', 'site', 'unlocker');
-	        return;
-	      }
-
-	      if (action === 'disable-active') {
-        if (!activeMatch) return;
-        const disabledScope = activeMatch.scope;
-        await deleteSetting(disabledScope);
-        if (dialog) renderDialog(`已停用${scopeLabel(disabledScope)}自动刷新。`, disabledScope, 'refresh');
-      }
+      await handler(actionNode);
     } catch (error) {
       console.warn(`${SCRIPT_NAME}: action failed.`, error);
       setMessage('操作失败，请查看浏览器控制台。', 'error');
