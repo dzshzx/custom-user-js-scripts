@@ -85,6 +85,8 @@ npm test
 
 ## 文档入口
 
+- [PRODUCT.md](PRODUCT.md)：产品上下文、用户、边界、数据原则和版本策略。
+- [DESIGN.md](DESIGN.md)：注入式 userscript UI 的设计上下文和组件规则。
 - [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
 - [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：飞书工具和飞书主图 userscript 说明。
