@@ -17,10 +17,6 @@ project_doc_fallback_filenames = ["AGENTS.md"]
 # Codex 0.129+ additionally gates each installed hook behind a one-time
 # `/hooks` TUI review; until the user approves it, the hook stays inactive.
 
-# Trellis dispatch mode is managed by `.trellis/config.yaml` via
-# `codex.dispatch_mode`; do not duplicate that setting in this project-level
-# Codex config.
-#
 # NOTE: Trellis intentionally does NOT write a [features.multi_agent_v2]
 # block here. Codex CLI changed `features` deserialization between 0.130
 # and 0.131: the structured table form (with max_concurrent_threads_per_session
