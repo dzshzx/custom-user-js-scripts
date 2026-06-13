@@ -1,6 +1,6 @@
 {
   "name": "custom-user-js-scripts",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "description": "A personal workspace for writing and modifying browser userscripts.",
   "author": "dzshzx <dzshzx0930+github@gmail.com>",

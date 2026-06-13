@@ -234,21 +234,32 @@
       || null;
   }
 
-  function archiveDocumentFromGist(gist, filename, now) {
+  function validateArchiveDocument(documentObject) {
+    if (documentObject?.format !== EXPORT_FORMAT || documentObject?.version !== EXPORT_VERSION) {
+      throw new Error('GitHub Gist archive file is not a supported Snapshot Export.');
+    }
+    return documentObject;
+  }
+
+  async function archiveDocumentFromGist(gist, filename, now, requestJson) {
     const file = gist?.files?.[filename];
     if (!file) return createEmptyExportDocument(now());
     if (file.truncated) {
-      throw new Error('GitHub Gist archive file is too large for API sync.');
+      if (!file.raw_url) {
+        throw new Error('GitHub Gist archive file is truncated and has no raw URL.');
+      }
+
+      return validateArchiveDocument(await requestJson({
+        method: 'GET',
+        url: file.raw_url,
+        headers: { Accept: 'application/json' },
+      }));
     }
 
     const content = String(file.content || '').trim();
     if (!content) return createEmptyExportDocument(now());
 
-    const parsed = JSON.parse(content);
-    if (parsed?.format !== EXPORT_FORMAT || parsed?.version !== EXPORT_VERSION) {
-      throw new Error('GitHub Gist archive file is not a supported Snapshot Export.');
-    }
-    return parsed;
+    return validateArchiveDocument(JSON.parse(content));
   }
 
   function archiveFilePayload(archive, exportedAt) {
@@ -406,7 +417,7 @@
           };
         }
 
-        const remoteDocument = archiveDocumentFromGist(gist, settings.filename, now);
+        const remoteDocument = await archiveDocumentFromGist(gist, settings.filename, now, requestJson);
         const imported = await archiveStore.importArchiveDocument(remoteDocument);
         const updatedGist = await gistApi.updateGist(gist.id, imported.archive, now());
         const savedSettings = await saveSettings({

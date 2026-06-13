@@ -100,6 +100,7 @@ function createMemorySettingsStore(initialSettings = null) {
 test('installable metadata grants only GitHub API manager requests for Gist sync', () => {
   assert.equal(userscriptContent.includes('// @grant        GM_xmlhttpRequest'), true);
   assert.equal(userscriptContent.includes('// @connect      api.github.com'), true);
+  assert.equal(userscriptContent.includes('// @connect      gist.githubusercontent.com'), true);
   assert.equal(userscriptContent.includes('// @connect      *'), false);
 });
 
@@ -210,6 +211,63 @@ test('syncNow finds existing archive gist, merges remote archive locally, and pa
   assert.equal(result.remoteReport.gistId, 'gist-1');
   assert.equal(result.settings.gistId, 'gist-1');
   assert.equal(result.settings.lastSyncedAt, '2026-06-13T12:30:00.000Z');
+  assert.deepEqual(
+    archive.dump().snapshots.map((snapshot) => snapshot.snapshotId),
+    ['local-snapshot', 'remote-snapshot'],
+  );
+});
+
+test('syncNow reads truncated archive files from the gist raw URL before patching', async () => {
+  const localSnapshot = createSnapshot('local-snapshot', '2026-06-13T10:00:00.000Z', 10);
+  const remoteSnapshot = createSnapshot('remote-snapshot', '2026-06-13T11:00:00.000Z', 20);
+  const rawUrl = 'https://gist.githubusercontent.com/user/gist/raw/hash/codex-quota-compass-snapshot-archive.v1.json';
+  const archive = createMemoryArchiveStore({ snapshots: [localSnapshot] });
+  const settingsStore = createMemorySettingsStore({
+    enabled: true,
+    token: 'secret-token',
+    gistId: 'gist-1',
+  });
+  const requests = [];
+  const client = createRemoteSyncClient({
+    archiveStore: archive.store,
+    settingsStore,
+    now: () => '2026-06-13T12:30:00.000Z',
+    requestJson: async (request) => {
+      requests.push(request);
+      if (request.method === 'GET' && request.url === `${GITHUB_API_BASE}/gists/gist-1`) {
+        return {
+          id: 'gist-1',
+          description: GIST_DESCRIPTION,
+          files: {
+            [GIST_FILENAME]: {
+              filename: GIST_FILENAME,
+              truncated: true,
+              raw_url: rawUrl,
+              content: '{"format":"truncated-partial',
+            },
+          },
+        };
+      }
+      if (request.method === 'GET' && request.url === rawUrl) {
+        assert.equal(Object.hasOwn(request.headers || {}, 'Authorization'), false);
+        return createExportDocument([remoteSnapshot]);
+      }
+      if (request.method === 'PATCH' && request.url === `${GITHUB_API_BASE}/gists/gist-1`) {
+        return createGist({ id: 'gist-1', snapshots: JSON.parse(request.body.files[GIST_FILENAME].content).snapshots });
+      }
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+  });
+
+  const result = await client.syncNow();
+
+  assert.equal(result.status, 'synced');
+  assert.deepEqual(requests.map((request) => request.url), [
+    `${GITHUB_API_BASE}/gists/gist-1`,
+    rawUrl,
+    `${GITHUB_API_BASE}/gists/gist-1`,
+  ]);
+  assert.deepEqual(result.localReport, { added: 1, skipped: 0, invalid: 0 });
   assert.deepEqual(
     archive.dump().snapshots.map((snapshot) => snapshot.snapshotId),
     ['local-snapshot', 'remote-snapshot'],
