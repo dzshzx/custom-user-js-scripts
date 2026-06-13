@@ -87,6 +87,8 @@ npm test
 
 `npm run lint` 检查 installable userscript metadata；`npm test` 运行 Node 测试。
 
+UI/UX（DOM 层）测试可选：仓库保持零依赖，不记录 DOM 测试库。本机启用时执行 `npm install --no-save --no-package-lock happy-dom`，相关测试会自动运行；未安装时这些测试自动跳过，`npm test` 仍然全绿。
+
 新建脚本可从 [src/userscripts/example/example.user.js](src/userscripts/example/example.user.js) 开始，并参考 [docs/script-template.md](docs/script-template.md)。有注入 UI 的脚本先看 [docs/frontend-design-guidelines.md](docs/frontend-design-guidelines.md)。
 
 ## 文档入口

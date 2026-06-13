@@ -149,6 +149,44 @@ test('renderResult renders metrics, tabs, archive actions, and active view', () 
   assert.match(rendered.html, /&lt;snapshot-2&gt;/);
 });
 
+test('renderResult renders an inline sync form seeded from remote sync status', () => {
+  const renderer = createRenderer();
+  const rendered = renderer.renderResult({
+    primaryMetrics: [],
+    tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
+    remoteSyncStatus: {
+      enabled: true,
+      configured: true,
+      hasToken: true,
+      gistId: '<my-gist>',
+      lastSyncedAt: '2026-06-13T10:00:00.000Z',
+      lastError: '',
+    },
+    archive: { isLoaded: false },
+    views: {
+      archive: {
+        kind: 'archiveWorkspace',
+        sections: [
+          { type: 'syncForm' },
+          { type: 'actions', actions: [{ action: 'export-archive', labelKey: 'archiveExportAction' }] },
+        ],
+      },
+    },
+  }, { activePanelView: 'archive' });
+
+  assert.match(rendered.html, /data-sync-form/);
+  assert.match(rendered.html, /data-field="token"/);
+  assert.match(rendered.html, /data-field="gistId"/);
+  assert.match(rendered.html, /data-field="enabled"[^>]* checked/);
+  assert.match(rendered.html, /data-action="save-remote-sync"/);
+  // Sync-now appears only when enabled and configured.
+  assert.match(rendered.html, /data-action="sync-remote"/);
+  // The stored gist id is echoed (escaped) into the input value.
+  assert.match(rendered.html, /value="&lt;my-gist&gt;"/);
+  // The token is never echoed back into the form.
+  assert.equal(rendered.html.includes('value="secret'), false);
+});
+
 test('renderResult falls back to first tab when active view is unavailable', () => {
   const renderer = createRenderer();
   const rendered = renderer.renderResult({

@@ -17,12 +17,31 @@
       #${rootId} {
         color-scheme: light dark;
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        /* Single source of truth for theming: light values here, dark overrides
+           only flip these variables in the prefers-color-scheme block below. */
         --cqc-primary: #10a37f;
-        --cqc-primary-soft: #34d399;
+        --cqc-primary-strong: #0f766e;
+        --cqc-primary-soft: rgba(16, 163, 127, 0.12);
+        --cqc-primary-border: rgba(16, 163, 127, 0.55);
+        --cqc-primary-ring: rgba(16, 163, 127, 0.18);
         --cqc-accent: #f59e0b;
         --cqc-surface: #ffffff;
-        --cqc-surface-muted: #f8fafc;
+        --cqc-surface-muted: #f7f7f8;
+        --cqc-surface-sunken: #f8fafc;
         --cqc-text: #202123;
+        --cqc-text-muted: #6e6e80;
+        --cqc-border: rgba(0, 0, 0, 0.1);
+        --cqc-border-strong: rgba(0, 0, 0, 0.16);
+        --cqc-row-hover: rgba(16, 163, 127, 0.06);
+        --cqc-danger: #d92d20;
+        --cqc-warning: #b45309;
+        --cqc-warning-surface: rgba(245, 158, 11, 0.1);
+        --cqc-warning-border: rgba(245, 158, 11, 0.32);
+        --cqc-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.22);
+        --cqc-shadow-button: 0 8px 28px rgba(0, 0, 0, 0.14);
+        --cqc-button-bg: rgba(248, 250, 252, 0.95);
+        --cqc-button-bg-docked: rgba(255, 255, 255, 0.62);
+        --cqc-button-bg-docked-active: rgba(255, 255, 255, 0.94);
         position: fixed;
         inset: 0;
         z-index: 2147483647;
@@ -43,12 +62,12 @@
         width: ${BUTTON_FULL_WIDTH}px;
         min-width: ${BUTTON_HEIGHT}px;
         height: 42px;
-        border: 1px solid rgba(0, 0, 0, 0.12);
+        border: 1px solid var(--cqc-border-strong);
         border-radius: 999px;
         padding: 0 14px;
-        background: rgba(248, 250, 252, 0.95);
+        background: var(--cqc-button-bg);
         color: var(--cqc-text);
-        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+        box-shadow: var(--cqc-shadow-button);
         cursor: pointer;
         pointer-events: auto;
         user-select: none;
@@ -69,15 +88,17 @@
       }
 
       .cqc-button.is-active {
-        border-color: rgba(30, 64, 175, 0.45);
-        box-shadow: 0 10px 32px rgba(30, 64, 175, 0.22);
+        border-color: var(--cqc-primary-border);
+        box-shadow: 0 10px 32px var(--cqc-primary-ring);
       }
 
       .cqc-button:focus-visible,
       .cqc-refresh:focus-visible,
       .cqc-icon-button:focus-visible,
-      .cqc-detail-footnote button:focus-visible {
-        outline: 2px solid var(--cqc-primary-soft);
+      .cqc-detail-footnote button:focus-visible,
+      .cqc-sync-form button:focus-visible,
+      .cqc-sync-form input:focus-visible {
+        outline: 2px solid var(--cqc-primary);
         outline-offset: 2px;
       }
 
@@ -86,7 +107,7 @@
         gap: 0;
         padding: 0;
         justify-content: center;
-        background: rgba(255, 255, 255, 0.62);
+        background: var(--cqc-button-bg-docked);
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
         opacity: 0.72;
       }
@@ -99,7 +120,7 @@
         gap: 8px;
         padding: 0 14px;
         justify-content: flex-start;
-        background: rgba(255, 255, 255, 0.94);
+        background: var(--cqc-button-bg-docked-active);
         opacity: 1;
       }
 
@@ -114,7 +135,7 @@
         gap: 0;
         padding: 0;
         justify-content: center;
-        background: rgba(255, 255, 255, 0.62);
+        background: var(--cqc-button-bg-docked);
         opacity: 0.72;
       }
 
@@ -152,7 +173,7 @@
         height: 10px;
         border-radius: 50%;
         background: var(--cqc-primary);
-        box-shadow: 0 0 0 4px rgba(30, 64, 175, 0.14);
+        box-shadow: 0 0 0 4px var(--cqc-primary-ring);
         flex: 0 0 auto;
       }
 
@@ -162,13 +183,13 @@
       }
 
       .cqc-status {
-        color: #6e6e80;
+        color: var(--cqc-text-muted);
         font-size: 11px;
       }
 
-      .cqc-status[data-tone="loading"] { color: #0f7f67; }
+      .cqc-status[data-tone="loading"] { color: var(--cqc-primary-strong); }
       .cqc-status[data-tone="success"] { color: var(--cqc-primary); }
-      .cqc-status[data-tone="error"] { color: #d92d20; }
+      .cqc-status[data-tone="error"] { color: var(--cqc-danger); }
 
       .cqc-panel {
         position: fixed;
@@ -178,11 +199,11 @@
         width: min(560px, calc(100vw - 32px));
         height: auto;
         max-height: min(760px, calc(100vh - 24px));
-        border: 1px solid rgba(0, 0, 0, 0.12);
+        border: 1px solid var(--cqc-border-strong);
         border-radius: 12px;
         background: var(--cqc-surface);
         color: var(--cqc-text);
-        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+        box-shadow: var(--cqc-shadow-panel);
         overflow: hidden;
         pointer-events: auto;
         opacity: 0;
@@ -216,8 +237,8 @@
         gap: 12px;
         min-height: 48px;
         padding: 12px 14px;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-        background: #f7f7f8;
+        border-bottom: 1px solid var(--cqc-border);
+        background: var(--cqc-surface-muted);
         opacity: 0;
         transition: opacity 120ms ease 80ms;
       }
@@ -239,10 +260,10 @@
 
       .cqc-icon-button,
       .cqc-refresh {
-        border: 1px solid rgba(0, 0, 0, 0.12);
+        border: 1px solid var(--cqc-border-strong);
         border-radius: 8px;
-        background: #ffffff;
-        color: #202123;
+        background: var(--cqc-surface);
+        color: var(--cqc-text);
         min-height: 32px;
         padding: 0 10px;
         font-size: 13px;
@@ -293,7 +314,8 @@
 
       .cqc-refresh:hover,
       .cqc-icon-button:hover {
-        background: #ececf1;
+        background: var(--cqc-surface-muted);
+        border-color: var(--cqc-primary-border);
       }
 
       .cqc-content {
@@ -332,39 +354,28 @@
       }
 
       @media (prefers-color-scheme: dark) {
-        .cqc-button,
-        .cqc-panel,
-        .cqc-icon-button,
-        .cqc-refresh {
-          background: #2f2f2f;
-          color: #ececf1;
-          border-color: rgba(255, 255, 255, 0.14);
-        }
-
-        .cqc-button.is-docked {
-          background: rgba(47, 47, 47, 0.64);
-          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
-        }
-
-        .cqc-button.is-docked:hover,
-        .cqc-button.is-docked:focus-visible,
-        .cqc-button.is-docked.is-active,
-        .cqc-button.is-docked.is-dragging {
-          background: rgba(47, 47, 47, 0.96);
-        }
-
-        .cqc-panel-header {
-          background: #212121;
-          border-color: rgba(255, 255, 255, 0.12);
-        }
-
-        .cqc-status {
-          color: #b4b4b4;
-        }
-
-        .cqc-refresh:hover,
-        .cqc-icon-button:hover {
-          background: #3f3f3f;
+        #${rootId} {
+          --cqc-primary: #19c37d;
+          --cqc-primary-strong: #34d399;
+          --cqc-primary-soft: rgba(25, 195, 125, 0.2);
+          --cqc-primary-border: rgba(25, 195, 125, 0.5);
+          --cqc-primary-ring: rgba(25, 195, 125, 0.22);
+          --cqc-surface: #2f2f2f;
+          --cqc-surface-muted: #212121;
+          --cqc-surface-sunken: #262626;
+          --cqc-text: #ececf1;
+          --cqc-text-muted: #b4b4b4;
+          --cqc-border: rgba(255, 255, 255, 0.12);
+          --cqc-border-strong: rgba(255, 255, 255, 0.18);
+          --cqc-row-hover: rgba(25, 195, 125, 0.14);
+          --cqc-warning: #fbbf24;
+          --cqc-warning-surface: rgba(245, 158, 11, 0.16);
+          --cqc-warning-border: rgba(245, 158, 11, 0.3);
+          --cqc-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.5);
+          --cqc-shadow-button: 0 8px 28px rgba(0, 0, 0, 0.4);
+          --cqc-button-bg: rgba(47, 47, 47, 0.95);
+          --cqc-button-bg-docked: rgba(47, 47, 47, 0.64);
+          --cqc-button-bg-docked-active: rgba(47, 47, 47, 0.96);
         }
       }
     `;

@@ -15,6 +15,7 @@ const {
   createJsonRequester,
   createRemoteSyncClient,
   normalizeSettings,
+  planRemoteSyncSave,
 } = globalThis.CodexQuotaCompassRemoteSyncLib;
 const { createSnapshotArchiveStore, normalizeSnapshotArchive } = globalThis.CodexQuotaCompassArchiveLib;
 const userscriptPath = path.resolve(
@@ -334,6 +335,110 @@ test('syncNow skips disabled or missing-token settings without network calls', a
   assert.equal(requests.length, 0);
 });
 
+test('syncNow paginates the gist list instead of creating a duplicate archive gist', async () => {
+  const localSnapshot = createSnapshot('local-snapshot', '2026-06-13T10:00:00.000Z', 10);
+  const remoteSnapshot = createSnapshot('remote-snapshot', '2026-06-13T11:00:00.000Z', 20);
+  const archive = createMemoryArchiveStore({ snapshots: [localSnapshot] });
+  const settingsStore = createMemorySettingsStore({ enabled: true, token: 'secret-token' });
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    id: `other-${index}`,
+    description: 'unrelated gist',
+    files: { 'note.txt': { filename: 'note.txt' } },
+  }));
+  const requests = [];
+  const client = createRemoteSyncClient({
+    archiveStore: archive.store,
+    settingsStore,
+    now: () => '2026-06-13T12:30:00.000Z',
+    requestJson: async (request) => {
+      requests.push(request);
+      if (request.url === `${GITHUB_API_BASE}/gists?per_page=100`) return firstPage;
+      if (request.url === `${GITHUB_API_BASE}/gists?per_page=100&page=2`) {
+        return [{ id: 'gist-2', description: GIST_DESCRIPTION, files: { [GIST_FILENAME]: { filename: GIST_FILENAME } } }];
+      }
+      if (request.url === `${GITHUB_API_BASE}/gists/gist-2` && request.method === 'GET') {
+        return createGist({ id: 'gist-2', snapshots: [remoteSnapshot] });
+      }
+      if (request.method === 'PATCH' && request.url === `${GITHUB_API_BASE}/gists/gist-2`) {
+        return createGist({ id: 'gist-2', snapshots: JSON.parse(request.body.files[GIST_FILENAME].content).snapshots });
+      }
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+  });
+
+  const result = await client.syncNow();
+
+  assert.equal(result.status, 'synced');
+  assert.equal(result.remoteReport.created, false);
+  assert.equal(result.settings.gistId, 'gist-2');
+  assert.equal(requests.some((request) => request.method === 'POST'), false);
+  assert.deepEqual(requests.slice(0, 2).map((request) => request.url), [
+    `${GITHUB_API_BASE}/gists?per_page=100`,
+    `${GITHUB_API_BASE}/gists?per_page=100&page=2`,
+  ]);
+});
+
+test('syncNow recovers from a stale gist id by rediscovering the archive gist', async () => {
+  const localSnapshot = createSnapshot('local-snapshot', '2026-06-13T10:00:00.000Z', 10);
+  const remoteSnapshot = createSnapshot('remote-snapshot', '2026-06-13T11:00:00.000Z', 20);
+  const archive = createMemoryArchiveStore({ snapshots: [localSnapshot] });
+  const settingsStore = createMemorySettingsStore({ enabled: true, token: 'secret-token', gistId: 'deleted-gist' });
+  const requests = [];
+  const client = createRemoteSyncClient({
+    archiveStore: archive.store,
+    settingsStore,
+    now: () => '2026-06-13T12:30:00.000Z',
+    requestJson: async (request) => {
+      requests.push(request);
+      if (request.url === `${GITHUB_API_BASE}/gists/deleted-gist`) {
+        throw Object.assign(new Error('GitHub Gist was not found (HTTP 404).'), { status: 404 });
+      }
+      if (request.url === `${GITHUB_API_BASE}/gists?per_page=100`) {
+        return [{ id: 'gist-7', description: GIST_DESCRIPTION, files: { [GIST_FILENAME]: { filename: GIST_FILENAME } } }];
+      }
+      if (request.url === `${GITHUB_API_BASE}/gists/gist-7` && request.method === 'GET') {
+        return createGist({ id: 'gist-7', snapshots: [remoteSnapshot] });
+      }
+      if (request.method === 'PATCH' && request.url === `${GITHUB_API_BASE}/gists/gist-7`) {
+        return createGist({ id: 'gist-7', snapshots: JSON.parse(request.body.files[GIST_FILENAME].content).snapshots });
+      }
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+  });
+
+  const result = await client.syncNow();
+
+  assert.equal(result.status, 'synced');
+  assert.equal(result.settings.gistId, 'gist-7');
+  assert.equal(settingsStore.dump().gistId, 'gist-7');
+});
+
+test('syncNow skips patching the gist when the remote already holds every local snapshot', async () => {
+  const shared = createSnapshot('shared-snapshot', '2026-06-13T10:00:00.000Z', 10);
+  const archive = createMemoryArchiveStore({ snapshots: [shared] });
+  const settingsStore = createMemorySettingsStore({ enabled: true, token: 'secret-token', gistId: 'gist-1' });
+  const requests = [];
+  const client = createRemoteSyncClient({
+    archiveStore: archive.store,
+    settingsStore,
+    now: () => '2026-06-13T12:30:00.000Z',
+    requestJson: async (request) => {
+      requests.push(request);
+      if (request.url === `${GITHUB_API_BASE}/gists/gist-1` && request.method === 'GET') {
+        return createGist({ id: 'gist-1', snapshots: [shared] });
+      }
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+  });
+
+  const result = await client.syncNow();
+
+  assert.equal(result.status, 'synced');
+  assert.equal(result.remoteReport.updated, false);
+  assert.equal(requests.length, 1);
+  assert.equal(requests.some((request) => request.method === 'PATCH'), false);
+});
+
 test('syncNow records request failures in settings and rethrows a clear error', async () => {
   const settingsStore = createMemorySettingsStore({
     enabled: true,
@@ -349,4 +454,62 @@ test('syncNow records request failures in settings and rethrows a clear error', 
 
   await assert.rejects(() => client.syncNow(), /server unavailable/);
   assert.equal(settingsStore.dump().lastError, 'server unavailable');
+});
+
+test('planRemoteSyncSave rejects enabling sync without any token', () => {
+  const decision = planRemoteSyncSave(
+    { token: '', gistId: '', enabled: true },
+    { hasToken: false },
+  );
+
+  assert.equal(decision.ok, false);
+  assert.equal(decision.reason, 'token-required');
+});
+
+test('planRemoteSyncSave enables with a fresh token and requests an immediate sync', () => {
+  const decision = planRemoteSyncSave(
+    { token: '  ghp_fresh  ', gistId: '', enabled: true },
+    { hasToken: false },
+  );
+
+  assert.equal(decision.ok, true);
+  assert.equal(decision.patch.enabled, true);
+  assert.equal(decision.patch.token, 'ghp_fresh');
+  assert.equal(decision.syncAfter, true);
+});
+
+test('planRemoteSyncSave keeps the stored token when the token field is left blank', () => {
+  const decision = planRemoteSyncSave(
+    { token: '', gistId: 'gist-9', enabled: true },
+    { hasToken: true },
+  );
+
+  assert.equal(decision.ok, true);
+  assert.equal(Object.hasOwn(decision.patch, 'token'), false);
+  assert.equal(decision.syncAfter, true);
+});
+
+test('planRemoteSyncSave disabling never triggers a follow-up sync', () => {
+  const decision = planRemoteSyncSave(
+    { token: '', gistId: 'gist-9', enabled: false },
+    { hasToken: true },
+  );
+
+  assert.equal(decision.ok, true);
+  assert.equal(decision.patch.enabled, false);
+  assert.equal(decision.syncAfter, false);
+});
+
+test('planRemoteSyncSave trims the gist id and keeps it as an explicit patch field', () => {
+  const trimmed = planRemoteSyncSave(
+    { token: 'ghp_x', gistId: '  gist-trim  ', enabled: true },
+    { hasToken: false },
+  );
+  assert.equal(trimmed.patch.gistId, 'gist-trim');
+
+  const blank = planRemoteSyncSave(
+    { token: 'ghp_x', gistId: '   ', enabled: true },
+    { hasToken: false },
+  );
+  assert.equal(blank.patch.gistId, '');
 });

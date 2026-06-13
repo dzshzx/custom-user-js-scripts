@@ -211,6 +211,52 @@
       `;
     }
 
+    function syncFormHtml(status = {}) {
+      const enabled = Boolean(status.enabled);
+      const hasToken = Boolean(status.hasToken);
+      const configured = Boolean(status.configured);
+      const gistId = status.gistId || '';
+      const lastSyncedAt = status.lastSyncedAt || '';
+      const lastError = status.lastError || '';
+      const statusLine = lastError
+        ? `<div class="cqc-sync-form-status" data-tone="error">${escapeHtml(t('remoteSyncStatusError', { error: lastError }))}</div>`
+        : `<div class="cqc-sync-form-status" data-tone="muted">${escapeHtml(lastSyncedAt ? t('remoteSyncLastSynced', { lastSyncedAt }) : t('remoteSyncNeverSynced'))}</div>`;
+      const syncNowButton = enabled && configured
+        ? `<button type="button" data-action="sync-remote">${escapeHtml(t('remoteSyncNowAction'))}</button>`
+        : '';
+
+      // A plain container (not a <form>) so pressing Enter never submits/reloads
+      // the host page, and no inline event handlers trip the site CSP.
+      return `
+        <div class="cqc-sync-form" data-sync-form>
+          <div class="cqc-sync-form-title">${escapeHtml(t('remoteSyncFormTitle'))}</div>
+          <div class="cqc-sync-field">
+            <span class="cqc-sync-field-label">
+              ${escapeHtml(t('remoteSyncTokenLabel'))}
+              <span class="cqc-sync-field-hint">${escapeHtml(hasToken ? t('remoteSyncTokenSavedHint') : t('remoteSyncTokenFieldHint'))}</span>
+            </span>
+            <input type="password" data-field="token" autocomplete="new-password" spellcheck="false" placeholder="${escapeHtml(hasToken ? t('remoteSyncTokenPlaceholderSet') : t('remoteSyncTokenPlaceholderNew'))}">
+          </div>
+          <div class="cqc-sync-field">
+            <span class="cqc-sync-field-label">
+              ${escapeHtml(t('remoteSyncGistIdLabel'))}
+              <span class="cqc-sync-field-hint">${escapeHtml(t('remoteSyncGistIdFieldHint'))}</span>
+            </span>
+            <input type="text" data-field="gistId" spellcheck="false" value="${escapeHtml(gistId)}" placeholder="${escapeHtml(t('remoteSyncGistIdPlaceholder'))}">
+          </div>
+          <label class="cqc-sync-toggle">
+            <input type="checkbox" data-field="enabled"${enabled ? ' checked' : ''}>
+            ${escapeHtml(t('remoteSyncEnableLabel'))}
+          </label>
+          ${statusLine}
+          <div class="cqc-sync-form-actions">
+            <button type="button" data-action="save-remote-sync" data-variant="primary">${escapeHtml(t('remoteSyncSaveAction'))}</button>
+            ${syncNowButton}
+          </div>
+        </div>
+      `;
+    }
+
     function sectionHtml(title, body) {
       return `
         <section class="cqc-section">
@@ -329,6 +375,9 @@
       if (section.type === 'syncBanner') {
         return syncBannerHtml(viewModel?.syncBanner);
       }
+      if (section.type === 'syncForm') {
+        return syncFormHtml(viewModel?.remoteSyncStatus);
+      }
       if (section.type === 'archiveSummary') {
         return sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(viewModel?.archive));
       }
@@ -421,6 +470,17 @@
       };
     }
 
+    // Used for tab switches: returns only the active view body so the caller can
+    // swap `.cqc-details` in place without rebuilding metrics or replaying the
+    // panel open animation.
+    function renderActiveView(viewModel, state = {}) {
+      const activePanelView = normalizeActivePanelView(viewModel, state.activePanelView);
+      return {
+        activePanelView,
+        html: activeViewHtml(viewModel, activePanelView),
+      };
+    }
+
     function renderLoading() {
       return `
         <div class="cqc-loading">
@@ -449,6 +509,7 @@
 
     return {
       renderResult,
+      renderActiveView,
       renderLoading,
       renderError,
       installStyles,

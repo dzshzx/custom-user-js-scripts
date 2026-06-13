@@ -21,6 +21,7 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-sync.lib.js
@@ -68,6 +69,7 @@
   const runtimeLib = globalThis.CodexQuotaCompassRuntimeLib;
   const panelShellLib = globalThis.CodexQuotaCompassPanelShellLib;
   const panelRendererLib = globalThis.CodexQuotaCompassPanelRendererLib;
+  const panelDomLib = globalThis.CodexQuotaCompassPanelDomLib;
   const storageLib = globalThis.CodexQuotaCompassStorageLib;
   const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
   const syncLib = globalThis.CodexQuotaCompassSyncLib;
@@ -78,6 +80,9 @@
   const { t } = i18nLib.createQuotaCompassTranslator({ navigator: globalThis.navigator });
   if (!panelRendererLib?.createQuotaPanelRenderer) {
     throw new Error('CodexQuotaCompassPanelRendererLib renderer is unavailable.');
+  }
+  if (!panelDomLib?.applyActiveView) {
+    throw new Error('CodexQuotaCompassPanelDomLib is unavailable.');
   }
   const panelRenderer = panelRendererLib.createQuotaPanelRenderer({
     t,
@@ -153,6 +158,8 @@
   }
 
   function refreshCurrentPanel() {
+    // Avoid clobbering a token/gist id the user is actively typing in the sync form.
+    if (panelDomLib.isSyncFormEditing(contentNode, document.activeElement)) return;
     if (latestResult && !latestError) {
       renderResult(latestResult);
     }
@@ -207,6 +214,13 @@
     const rendered = panelRenderer.renderResult(viewModel, { activePanelView });
     activePanelView = rendered.activePanelView;
     contentNode.innerHTML = rendered.html;
+    schedulePanelResize();
+  }
+
+  function switchPanelView(nextView) {
+    if (!contentNode || !latestPanelViewModel) return;
+    const rendered = panelRenderer.renderActiveView(latestPanelViewModel, { activePanelView: nextView });
+    activePanelView = panelDomLib.applyActiveView(contentNode, rendered);
     schedulePanelResize();
   }
 
@@ -313,52 +327,45 @@
     });
   }
 
-  async function configureRemoteSync() {
+  async function saveRemoteSyncFromForm() {
     if (!remoteSyncClient) {
       throw new Error(t('syncPortUnavailable'));
     }
 
-    const current = await remoteSyncClient.getStatus();
-    const token = prompt(
-      current.hasToken ? t('remoteSyncTokenKeepPrompt') : t('remoteSyncTokenPrompt'),
-      '',
-    );
-    if (token === null) return null;
+    const formValues = panelDomLib.readSyncFormValues(contentNode);
+    if (!formValues) return null;
 
-    const trimmedToken = String(token || '').trim();
-    if (!trimmedToken && !current.hasToken) {
+    const current = await remoteSyncClient.getStatus();
+    const decision = remoteSyncLib.planRemoteSyncSave(formValues, { hasToken: current.hasToken });
+
+    if (!decision.ok) {
+      setStatus(t('statusFailed'), 'error');
       alert(`${SCRIPT_NAME} ${t('remoteSyncTokenRequired')}`);
       return null;
     }
 
-    const gistId = prompt(t('remoteSyncGistIdPrompt'), current.gistId || '');
-    if (gistId === null) return null;
-
-    await remoteSyncClient.configure({
-      enabled: true,
-      gistId,
-      ...(trimmedToken ? { token: trimmedToken } : {}),
-    });
+    await remoteSyncClient.configure(decision.patch);
     await refreshRemoteSyncStatus();
     refreshCurrentPanel();
-    alert(`${SCRIPT_NAME} ${t('remoteSyncConfigSaved')}`);
+
+    // Sync immediately after enabling so the form reflects a real result instead
+    // of forcing a second manual click.
+    if (decision.syncAfter) {
+      await syncRemoteArchive();
+    } else {
+      setStatus(t('statusUpdated'), 'success');
+    }
     return latestRemoteSyncStatus;
   }
 
-  async function disableRemoteSync() {
-    if (!remoteSyncClient) {
-      throw new Error(t('syncPortUnavailable'));
+  function openSyncSettings() {
+    activePanelView = 'archive';
+    if (latestResult && !latestError) {
+      renderResult(latestResult);
+      if (!isPanelCurrentlyOpen()) openPanel();
+    } else {
+      runAndRender().catch(() => {});
     }
-
-    if (typeof confirm === 'function' && !confirm(t('remoteSyncDisableConfirm'))) {
-      return null;
-    }
-
-    await remoteSyncClient.configure({ enabled: false });
-    await refreshRemoteSyncStatus();
-    refreshCurrentPanel();
-    alert(`${SCRIPT_NAME} ${t('remoteSyncDisabled')}`);
-    return latestRemoteSyncStatus;
   }
 
   function handleShellAction(action, event) {
@@ -380,8 +387,7 @@
     if (action === 'switch-view' && latestResult) {
       const nextView = event.target?.closest?.('[data-view]')?.dataset?.view;
       if (nextView) {
-        activePanelView = nextView;
-        renderResult(latestResult);
+        switchPanelView(nextView);
       }
       return;
     }
@@ -402,10 +408,11 @@
       return;
     }
 
-    if (action === 'configure-remote-sync') {
-      configureRemoteSync().catch((error) => {
-        console.error(`[${SCRIPT_NAME}] Configure remote sync failed.`, error);
+    if (action === 'save-remote-sync') {
+      saveRemoteSyncFromForm().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Save remote sync failed.`, error);
         alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
+        setStatus(t('statusFailed'), 'error');
       });
       return;
     }
@@ -418,15 +425,6 @@
       });
       return;
     }
-
-    if (action === 'disable-remote-sync') {
-      disableRemoteSync().catch((error) => {
-        console.error(`[${SCRIPT_NAME}] Disable remote sync failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
-      });
-      return;
-    }
-
   }
 
   function createUi() {
@@ -633,10 +631,7 @@
       runAndRender().catch(() => {});
     });
     GM_registerMenuCommand(t('menuRemoteConfigure'), () => {
-      configureRemoteSync().catch((error) => {
-        console.error(`[${SCRIPT_NAME}] Configure remote sync failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
-      });
+      openSyncSettings();
     });
     GM_registerMenuCommand(t('menuRemoteSync'), () => {
       syncRemoteArchive().catch((error) => {

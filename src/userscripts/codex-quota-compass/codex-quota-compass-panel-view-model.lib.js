@@ -31,6 +31,7 @@
       enabled: Boolean(source.enabled),
       configured: Boolean(source.configured),
       endpoint: typeof source.endpoint === 'string' ? source.endpoint : '',
+      gistId: typeof source.gistId === 'string' ? source.gistId : '',
       hasToken: Boolean(source.hasToken),
       lastSyncedAt: typeof source.lastSyncedAt === 'string' ? source.lastSyncedAt : '',
       lastError: typeof source.lastError === 'string' ? source.lastError : '',
@@ -97,25 +98,13 @@
     };
   }
 
-  function createTransferActions(remoteSyncStatus) {
-    const actions = [
-      { action: 'configure-remote-sync', labelKey: 'remoteSyncConfigureAction' },
-    ];
-
-    if (remoteSyncStatus.enabled && remoteSyncStatus.configured) {
-      actions.push({ action: 'sync-remote', labelKey: 'remoteSyncNowAction' });
-    }
-
-    if (remoteSyncStatus.enabled) {
-      actions.push({ action: 'disable-remote-sync', labelKey: 'remoteSyncDisableAction' });
-    }
-
-    actions.push(
+  function createTransferActions() {
+    // Gist sync configuration now lives in the in-panel sync form; only the
+    // manual backup paths remain as footer actions.
+    return [
       { action: 'export-archive', labelKey: 'archiveExportAction' },
       { action: 'import-archive', labelKey: 'archiveImportAction' },
-    );
-
-    return actions;
+    ];
   }
 
   function dataColumn(key, options = {}) {
@@ -239,7 +228,7 @@
           kind: 'archiveWorkspace',
           actionIds: transfer.actions.map((action) => action.action),
           sections: [
-            { type: 'syncBanner' },
+            { type: 'syncForm' },
             { type: 'archiveSummary' },
             { type: 'note', noteKey: transfer.noteKey },
             { type: 'actions', actions: transfer.actions },
@@ -348,7 +337,7 @@
       noteKey: 'transferNote',
       syncStatus: normalizedSyncStatus,
       remoteSyncStatus: normalizedRemoteSyncStatus,
-      actions: createTransferActions(normalizedRemoteSyncStatus),
+      actions: createTransferActions(),
     };
     const panelViews = createPanelViews({
       weekly,

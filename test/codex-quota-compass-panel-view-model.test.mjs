@@ -75,9 +75,6 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   assert.equal(model.archiveHealth.snapshotCount, 1);
   assert.equal(model.archiveHealth.hasSnapshots, true);
   assert.deepEqual(model.transfer.actions.map((action) => action.action), [
-    'configure-remote-sync',
-    'sync-remote',
-    'disable-remote-sync',
     'export-archive',
     'import-archive',
   ]);
@@ -89,12 +86,11 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     true,
   );
   assert.deepEqual(model.views.archive.actionIds, [
-    'configure-remote-sync',
-    'sync-remote',
-    'disable-remote-sync',
     'export-archive',
     'import-archive',
   ]);
+  assert.equal(model.views.archive.sections[0].type, 'syncForm');
+  assert.equal(model.remoteSyncStatus.gistId, 'gist-1');
   assert.deepEqual(model.primaryMetrics.map((metric) => metric.id), [
     'remainingUsdIncludingReset',
     'remainingUsdExcludingReset',

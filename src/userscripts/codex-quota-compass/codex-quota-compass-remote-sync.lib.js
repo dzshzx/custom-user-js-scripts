@@ -15,6 +15,25 @@
     return value && typeof value.then === 'function' ? value : Promise.resolve(value);
   }
 
+  function describeHttpStatus(status) {
+    if (status === 401) {
+      return 'GitHub rejected the token (HTTP 401). Check the token and its Gists permission.';
+    }
+    if (status === 403) {
+      return 'GitHub denied the request (HTTP 403). The token may lack Gists scope or be rate limited.';
+    }
+    if (status === 404) {
+      return 'GitHub Gist was not found (HTTP 404).';
+    }
+    return `GitHub Gist sync request failed with HTTP ${status}.`;
+  }
+
+  function httpError(status) {
+    const error = new Error(describeHttpStatus(status));
+    error.status = status;
+    return error;
+  }
+
   function createClientId() {
     if (globalObject.crypto?.randomUUID) return globalObject.crypto.randomUUID();
     return `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -115,7 +134,7 @@
         });
 
         if (!response.ok) {
-          throw new Error(`GitHub Gist sync request failed with HTTP ${response.status}.`);
+          throw httpError(response.status);
         }
 
         const text = await response.text();
@@ -161,7 +180,7 @@
             const status = Number(response?.status) || 0;
             const text = String(response?.responseText || '');
             if (status < 200 || status >= 300) {
-              reject(new Error(`GitHub Gist sync request failed with HTTP ${status}.`));
+              reject(httpError(status));
               return;
             }
 
@@ -266,13 +285,15 @@
     return JSON.stringify(createArchiveExportDocument(archive, exportedAt), null, 2);
   }
 
+  const GIST_PAGE_SIZE = 100;
+  const GIST_MAX_PAGES = 10;
+
   function createGitHubGistApi({ requestJson, token, filename }) {
-    async function listGists() {
-      return requestJson({
-        method: 'GET',
-        url: `${GITHUB_API_BASE}/gists?per_page=100`,
-        headers: gitHubHeaders(token),
-      });
+    function listGistsPage(page) {
+      const url = page <= 1
+        ? `${GITHUB_API_BASE}/gists?per_page=${GIST_PAGE_SIZE}`
+        : `${GITHUB_API_BASE}/gists?per_page=${GIST_PAGE_SIZE}&page=${page}`;
+      return requestJson({ method: 'GET', url, headers: gitHubHeaders(token) });
     }
 
     async function getGist(gistId) {
@@ -316,7 +337,16 @@
     }
 
     async function findExistingArchiveGist() {
-      return pickArchiveGist(await listGists(), filename);
+      // Paginate so users with more than one page of gists do not silently miss
+      // their archive gist and create a duplicate on every sync.
+      for (let page = 1; page <= GIST_MAX_PAGES; page += 1) {
+        const gists = await listGistsPage(page);
+        const list = Array.isArray(gists) ? gists : [];
+        const match = pickArchiveGist(list, filename);
+        if (match) return match;
+        if (list.length < GIST_PAGE_SIZE) break;
+      }
+      return null;
     }
 
     return {
@@ -393,8 +423,17 @@
         });
         let gist = null;
         if (settings.gistId) {
-          gist = await gistApi.getGist(settings.gistId);
-        } else {
+          try {
+            gist = await gistApi.getGist(settings.gistId);
+          } catch (error) {
+            // A stored gist id can go stale if the gist was deleted remotely.
+            // Recover by rediscovering or recreating instead of failing forever.
+            if (error?.status !== 404) throw error;
+            gist = null;
+          }
+        }
+
+        if (!gist) {
           const candidate = await gistApi.findExistingArchiveGist();
           gist = candidate?.id ? await gistApi.getGist(candidate.id) : null;
         }
@@ -419,7 +458,13 @@
 
         const remoteDocument = await archiveDocumentFromGist(gist, settings.filename, now, requestJson);
         const imported = await archiveStore.importArchiveDocument(remoteDocument);
-        const updatedGist = await gistApi.updateGist(gist.id, imported.archive, now());
+        // Only write back when the merged archive holds snapshots the remote is
+        // missing; otherwise every page open would create a redundant gist revision.
+        const remoteCount = Array.isArray(remoteDocument.snapshots) ? remoteDocument.snapshots.length : 0;
+        const remoteNeedsUpdate = imported.archive.snapshots.length > remoteCount;
+        const updatedGist = remoteNeedsUpdate
+          ? await gistApi.updateGist(gist.id, imported.archive, now())
+          : gist;
         const savedSettings = await saveSettings({
           ...settings,
           gistId: updatedGist.id || gist.id,
@@ -430,7 +475,7 @@
         return {
           status: 'synced',
           settings: publicStatus(savedSettings),
-          remoteReport: { created: false, gistId: updatedGist.id || gist.id },
+          remoteReport: { created: false, updated: remoteNeedsUpdate, gistId: updatedGist.id || gist.id },
           localReport: imported.report,
           summary: imported.summary,
           archive: imported.archive,
@@ -467,6 +512,27 @@
     };
   }
 
+  function planRemoteSyncSave(formValues = {}, currentStatus = {}) {
+    const token = String(formValues.token || '').trim();
+    const gistId = String(formValues.gistId || '').trim();
+    const enabled = Boolean(formValues.enabled);
+    const hasToken = Boolean(currentStatus.hasToken);
+
+    if (enabled && !token && !hasToken) {
+      return { ok: false, reason: 'token-required' };
+    }
+
+    return {
+      ok: true,
+      patch: {
+        enabled,
+        gistId,
+        ...(token ? { token } : {}),
+      },
+      syncAfter: enabled && (Boolean(token) || hasToken),
+    };
+  }
+
   globalObject[LIB_NAME] = Object.freeze({
     GIST_DESCRIPTION,
     GIST_FILENAME,
@@ -479,5 +545,6 @@
     createGmSettingsStore,
     createRemoteSyncClient,
     normalizeSettings,
+    planRemoteSyncSave,
   });
 })(typeof globalThis !== 'undefined' ? globalThis : window);
