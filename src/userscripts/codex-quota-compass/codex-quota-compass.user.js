@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.10
+// @version      0.2.11
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -24,6 +24,8 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-sync.lib.js
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_addValueChangeListener
+// @grant        GM_removeValueChangeListener
 // @grant        GM_registerMenuCommand
 // @run-at       document-idle
 // @homepageURL  https://github.com/dzshzx/custom-user-js-scripts
@@ -41,7 +43,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.2.10';
+  const SCRIPT_VERSION = '0.2.11';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
 
   let statusNode;
@@ -83,6 +85,13 @@
   }
   const archiveStoragePort = storageLib.createSnapshotArchiveStoragePort({
     scriptName: SCRIPT_NAME,
+    normalizeArchive: archiveLib?.normalizeSnapshotArchive || null,
+    mergeArchives: archiveLib?.mergeSnapshots
+      ? (primaryArchive, fallbackArchive) => archiveLib.mergeSnapshots(
+        primaryArchive,
+        Array.isArray(fallbackArchive?.snapshots) ? fallbackArchive.snapshots : [],
+      )
+      : null,
   });
   const archiveStore = archiveLib
     ? archiveLib.createSnapshotArchiveStore({
@@ -111,6 +120,18 @@
     if (!syncPort) return null;
     latestArchiveSummary = await syncPort.summarize();
     return latestArchiveSummary;
+  }
+
+  function refreshArchiveViewAfterStorageChange() {
+    refreshArchiveSummary()
+      .then(() => {
+        if (latestResult && !latestError) {
+          renderResult(latestResult);
+        }
+      })
+      .catch((error) => {
+        console.warn(`${SCRIPT_NAME}: failed to refresh archive summary after storage change.`, error);
+      });
   }
 
   function setStatus(text, tone = 'idle') {
@@ -440,6 +461,9 @@
   createUi();
   refreshArchiveSummary().catch((error) => {
     console.warn(`${SCRIPT_NAME}: failed to load archive summary.`, error);
+  });
+  archiveStoragePort.subscribeToChanges?.(() => {
+    refreshArchiveViewAfterStorageChange();
   });
 
   if (typeof GM_registerMenuCommand === 'function') {

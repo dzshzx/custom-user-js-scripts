@@ -40,13 +40,13 @@
 
 Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript 菜单命令读取当前 Codex 用量并保存本地历史。
 
-它会把每次成功运行的结果保存为一条 `Quota Snapshot`，并维护本地 `Snapshot Archive`。你可以从面板导出完整归档，也可以通过 userscript 菜单导出 / 导入 JSON，用于手动备份或跨设备迁移。
+它会把每次成功运行的结果保存为一条 `Quota Snapshot`，并维护本地 `Snapshot Archive`。你可以从面板导出完整归档，也可以通过 userscript 菜单导出 / 导入 JSON，用于手动备份或跨设备迁移。脚本优先把归档写入 userscript manager storage；如果脚本管理器支持并启用了 WebDAV 等同步，这部分归档可以跟随管理器同步。
 
 注意事项：
 
 - 归档里保存的是经过整理的用量信息，不保存 Cookie、Token 或原始私有接口响应。
 - 导入是 merge 语义，会跳过重复快照，不会覆盖整个本地归档。
-- 当前只支持完整 JSON 归档导出 / 导入。
+- 脚本不会读取或保存 WebDAV 账号信息，也不会绕过脚本管理器自己的同步策略；运行环境不支持 GM storage 时会回退到当前浏览器的 `localStorage`。
 
 领域词汇见 [CONTEXT.md](CONTEXT.md)。
 
