@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js');
@@ -10,10 +12,16 @@ const {
   GIST_FILENAME,
   GITHUB_API_BASE,
   GITHUB_API_VERSION,
+  createJsonRequester,
   createRemoteSyncClient,
   normalizeSettings,
 } = globalThis.CodexQuotaCompassRemoteSyncLib;
 const { createSnapshotArchiveStore, normalizeSnapshotArchive } = globalThis.CodexQuotaCompassArchiveLib;
+const userscriptPath = path.resolve(
+  import.meta.dirname,
+  '../src/userscripts/codex-quota-compass/codex-quota-compass.user.js',
+);
+const userscriptContent = await readFile(userscriptPath, 'utf8');
 
 function createSnapshot(snapshotId, capturedAt, totalCredits = 1) {
   return {
@@ -88,6 +96,42 @@ function createMemorySettingsStore(initialSettings = null) {
     dump: () => settings,
   };
 }
+
+test('installable metadata grants only GitHub API manager requests for Gist sync', () => {
+  assert.equal(userscriptContent.includes('// @grant        GM_xmlhttpRequest'), true);
+  assert.equal(userscriptContent.includes('// @connect      api.github.com'), true);
+  assert.equal(userscriptContent.includes('// @connect      *'), false);
+});
+
+test('createJsonRequester prefers GM_xmlhttpRequest over page fetch to avoid host CSP blocks', async () => {
+  let fetchCalled = false;
+  const gmRequests = [];
+  const requestJson = createJsonRequester({
+    fetchImpl: async () => {
+      fetchCalled = true;
+      throw new Error('page fetch should not be used');
+    },
+    gmXmlhttpRequest: (request) => {
+      gmRequests.push(request);
+      request.onload({
+        status: 200,
+        responseText: '{"ok":true}',
+      });
+    },
+  });
+
+  const response = await requestJson({
+    method: 'GET',
+    url: `${GITHUB_API_BASE}/gists?per_page=100`,
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+
+  assert.deepEqual(response, { ok: true });
+  assert.equal(fetchCalled, false);
+  assert.equal(gmRequests.length, 1);
+  assert.equal(gmRequests[0].method, 'GET');
+  assert.equal(gmRequests[0].url, `${GITHUB_API_BASE}/gists?per_page=100`);
+});
 
 test('configure stores GitHub token privately and optional gist id publicly', async () => {
   const settingsStore = createMemorySettingsStore();

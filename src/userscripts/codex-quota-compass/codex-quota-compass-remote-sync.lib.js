@@ -134,6 +134,56 @@
     };
   }
 
+  function getGmXmlHttpRequest(options = {}) {
+    if (typeof options.gmXmlhttpRequest === 'function') return options.gmXmlhttpRequest;
+    if (typeof GM_xmlhttpRequest === 'function') return GM_xmlhttpRequest;
+    const gmApi = options.gm || (typeof GM !== 'undefined' ? GM : null);
+    if (typeof gmApi?.xmlHttpRequest === 'function') return gmApi.xmlHttpRequest.bind(gmApi);
+    if (typeof gmApi?.xmlhttpRequest === 'function') return gmApi.xmlhttpRequest.bind(gmApi);
+    return null;
+  }
+
+  function createGmJsonRequester(options = {}) {
+    const gmXmlhttpRequest = getGmXmlHttpRequest(options);
+    if (!gmXmlhttpRequest) {
+      throw new Error('GM_xmlhttpRequest is required for GitHub Gist sync.');
+    }
+
+    return function requestJson({ method, url, headers = {}, body, timeout = 15000 }) {
+      return new Promise((resolve, reject) => {
+        gmXmlhttpRequest({
+          method,
+          url,
+          timeout,
+          headers,
+          data: body === undefined ? undefined : JSON.stringify(body),
+          onload: (response) => {
+            const status = Number(response?.status) || 0;
+            const text = String(response?.responseText || '');
+            if (status < 200 || status >= 300) {
+              reject(new Error(`GitHub Gist sync request failed with HTTP ${status}.`));
+              return;
+            }
+
+            try {
+              resolve(text ? JSON.parse(text) : null);
+            } catch {
+              reject(new Error('GitHub Gist sync response is not valid JSON.'));
+            }
+          },
+          onerror: () => reject(new Error('GitHub Gist sync network request failed.')),
+          ontimeout: () => reject(new Error('GitHub Gist sync request timed out.')),
+        });
+      });
+    };
+  }
+
+  function createJsonRequester(options = {}) {
+    return getGmXmlHttpRequest(options)
+      ? createGmJsonRequester(options)
+      : createFetchJsonRequester(options);
+  }
+
   function createArchiveExportDocument(archive, exportedAt) {
     return {
       format: EXPORT_FORMAT,
@@ -269,7 +319,7 @@
   function createRemoteSyncClient({
     archiveStore,
     settingsStore = createGmSettingsStore(),
-    requestJson = createFetchJsonRequester(),
+    requestJson = createJsonRequester(),
     now = () => new Date().toISOString(),
     logger = globalObject.console,
     debounceMs = DEFAULT_SYNC_DEBOUNCE_MS,
@@ -413,6 +463,8 @@
     GITHUB_API_VERSION,
     REMOTE_SYNC_SETTINGS_KEY,
     createFetchJsonRequester,
+    createGmJsonRequester,
+    createJsonRequester,
     createGmSettingsStore,
     createRemoteSyncClient,
     normalizeSettings,
