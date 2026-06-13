@@ -28,9 +28,26 @@
     return Array.isArray(rows) ? rows.slice(0, limit) : [];
   }
 
-  function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug' } = {}) {
+  function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', formatTimestamp } = {}) {
     if (typeof t !== 'function') {
       throw new Error('Quota panel renderer requires a translator function.');
+    }
+
+    // Render stored UTC ISO timestamps in the viewer's own locale/timezone.
+    // No-arg toLocaleString() uses the host environment's timezone, which in the
+    // browser is the user's. Falls back to the raw value for unparseable input.
+    const formatLocalTimestamp = typeof formatTimestamp === 'function'
+      ? formatTimestamp
+      : (value) => {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+      };
+
+    // Guards empty/placeholder values (new Date(null) would wrongly become 1970)
+    // before localizing a captured/synced timestamp.
+    function displayTimestamp(value) {
+      if (!value || value === '-') return '-';
+      return formatLocalTimestamp(value);
     }
 
     function normalizeDataColumns(rows, columns) {
@@ -220,7 +237,7 @@
       const lastError = status.lastError || '';
       const statusLine = lastError
         ? `<div class="cqc-sync-form-status" data-tone="error">${escapeHtml(t('remoteSyncStatusError', { error: lastError }))}</div>`
-        : `<div class="cqc-sync-form-status" data-tone="muted">${escapeHtml(lastSyncedAt ? t('remoteSyncLastSynced', { lastSyncedAt }) : t('remoteSyncNeverSynced'))}</div>`;
+        : `<div class="cqc-sync-form-status" data-tone="muted">${escapeHtml(lastSyncedAt ? t('remoteSyncLastSynced', { lastSyncedAt: formatLocalTimestamp(lastSyncedAt) }) : t('remoteSyncNeverSynced'))}</div>`;
       const syncNowButton = enabled && configured
         ? `<button type="button" data-action="sync-remote">${escapeHtml(t('remoteSyncNowAction'))}</button>`
         : '';
@@ -298,8 +315,8 @@
         rows: [
           {
             [overviewColumns[0]]: model.snapshotCount,
-            [overviewColumns[1]]: model.earliestCapturedAt || '-',
-            [overviewColumns[2]]: model.latestCapturedAt || '-',
+            [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
+            [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
             [overviewColumns[3]]: model.storageBackend?.label || '-',
           },
         ],
@@ -317,7 +334,7 @@
         ? dataViewHtml({
           id: 'archive-recent',
           rows: recentSnapshots.map((row) => ({
-            [recentColumns[0]]: row.capturedAt,
+            [recentColumns[0]]: displayTimestamp(row.capturedAt),
             [recentColumns[1]]: row.snapshotId,
             [recentColumns[2]]: row.monthlyCredits,
             [recentColumns[3]]: row.weeklyUsedPercent,

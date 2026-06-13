@@ -187,6 +187,96 @@ test('renderResult renders an inline sync form seeded from remote sync status', 
   assert.equal(rendered.html.includes('value="secret'), false);
 });
 
+test('renderResult formats the last synced time through the injected timestamp formatter', () => {
+  const seen = [];
+  const renderer = createQuotaPanelRenderer({
+    t: (key, variables = {}) => (key === 'remoteSyncLastSynced' ? `Last synced: ${variables.lastSyncedAt}` : t(key, variables)),
+    debugKey: '__debugKey',
+    formatTimestamp: (value) => {
+      seen.push(value);
+      return 'LOCAL-TIME';
+    },
+  });
+  const rendered = renderer.renderResult({
+    primaryMetrics: [],
+    tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
+    remoteSyncStatus: {
+      enabled: true,
+      configured: true,
+      hasToken: true,
+      gistId: '',
+      lastSyncedAt: '2026-06-13T10:00:00.000Z',
+      lastError: '',
+    },
+    archive: { isLoaded: false },
+    views: {
+      archive: { kind: 'archiveWorkspace', sections: [{ type: 'syncForm' }] },
+    },
+  }, { activePanelView: 'archive' });
+
+  assert.deepEqual(seen, ['2026-06-13T10:00:00.000Z']);
+  assert.match(rendered.html, /Last synced: LOCAL-TIME/);
+});
+
+test('renderResult reformats a valid ISO sync time by default and keeps junk verbatim', () => {
+  function renderSyncForm(lastSyncedAt) {
+    const renderer = createQuotaPanelRenderer({
+      t: (key, variables = {}) => (key === 'remoteSyncLastSynced' ? `Last synced: ${variables.lastSyncedAt}` : t(key, variables)),
+      debugKey: '__debugKey',
+    });
+    return renderer.renderResult({
+      primaryMetrics: [],
+      tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
+      remoteSyncStatus: { enabled: true, configured: true, hasToken: true, gistId: '', lastSyncedAt, lastError: '' },
+      archive: { isLoaded: false },
+      views: { archive: { kind: 'archiveWorkspace', sections: [{ type: 'syncForm' }] } },
+    }, { activePanelView: 'archive' }).html;
+  }
+
+  // A valid ISO timestamp is localized, so the raw UTC string is not shown.
+  const iso = '2026-06-13T10:00:00.000Z';
+  const html = renderSyncForm(iso);
+  assert.match(html, /Last synced: /);
+  assert.equal(html.includes(`Last synced: ${iso}`), false);
+
+  // Unparseable input is preserved rather than turned into "Invalid Date".
+  assert.match(renderSyncForm('not-a-date'), /Last synced: not-a-date/);
+});
+
+test('renderResult localizes archive captured timestamps through the formatter', () => {
+  const seen = [];
+  const renderer = createQuotaPanelRenderer({
+    t,
+    debugKey: '__debugKey',
+    formatTimestamp: (value) => {
+      seen.push(value);
+      return `LOCAL(${value})`;
+    },
+  });
+  const rendered = renderer.renderResult({
+    primaryMetrics: [],
+    tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
+    archive: {
+      isLoaded: true,
+      snapshotCount: 2,
+      earliestCapturedAt: '2026-06-01T00:00:00.000Z',
+      latestCapturedAt: '2026-06-02T00:00:00.000Z',
+      storageBackend: { label: 'GM storage' },
+      recentSnapshots: [
+        { capturedAt: '2026-06-03T00:00:00.000Z', snapshotId: 's3', monthlyCredits: 12, weeklyUsedPercent: 30 },
+      ],
+    },
+    views: { archive: { kind: 'archiveWorkspace', sections: [{ type: 'archiveSummary' }] } },
+  }, { activePanelView: 'archive' });
+
+  assert.ok(seen.includes('2026-06-01T00:00:00.000Z'));
+  assert.ok(seen.includes('2026-06-02T00:00:00.000Z'));
+  assert.ok(seen.includes('2026-06-03T00:00:00.000Z'));
+  assert.match(rendered.html, /LOCAL\(2026-06-01T00:00:00\.000Z\)/);
+  // The raw ISO is never shown as a bare cell value.
+  assert.equal(/>\s*2026-06-01T00:00:00\.000Z\s*</.test(rendered.html), false);
+});
+
 test('renderResult falls back to first tab when active view is unavailable', () => {
   const renderer = createRenderer();
   const rendered = renderer.renderResult({
