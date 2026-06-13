@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.11
+// @version      0.2.12
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -22,6 +22,7 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-sync.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_addValueChangeListener
@@ -43,7 +44,7 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.2.11';
+  const SCRIPT_VERSION = '0.2.12';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
 
   let statusNode;
@@ -54,6 +55,7 @@
   let latestHistoryUsage = null;
   let latestPanelViewModel = null;
   let latestArchiveSummary = null;
+  let latestRemoteSyncStatus = null;
   let latestImportReport = null;
   let pendingRunPromise = null;
   let floatingPanelShell = null;
@@ -66,6 +68,7 @@
   const storageLib = globalThis.CodexQuotaCompassStorageLib;
   const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
   const syncLib = globalThis.CodexQuotaCompassSyncLib;
+  const remoteSyncLib = globalThis.CodexQuotaCompassRemoteSyncLib;
   if (!i18nLib?.createQuotaCompassTranslator) {
     throw new Error('CodexQuotaCompassI18nLib translator is unavailable.');
   }
@@ -103,6 +106,9 @@
   const syncPort = syncLib?.createSnapshotSyncPort
     ? syncLib.createSnapshotSyncPort({ archiveStore, getBackendInfo: archiveStoragePort.getBackendInfo })
     : null;
+  const remoteSyncClient = remoteSyncLib?.createRemoteSyncClient && archiveStore
+    ? remoteSyncLib.createRemoteSyncClient({ archiveStore })
+    : null;
 
   function isUsagePage() {
     return (
@@ -122,12 +128,37 @@
     return latestArchiveSummary;
   }
 
+  async function refreshRemoteSyncStatus() {
+    if (!remoteSyncClient) {
+      latestRemoteSyncStatus = null;
+      return null;
+    }
+
+    latestRemoteSyncStatus = await remoteSyncClient.getStatus();
+    return latestRemoteSyncStatus;
+  }
+
+  async function refreshHistoryUsageForResult(result) {
+    const sinceResetSummary = result?.主7天窗口_上次重置至今?.汇总 || {};
+    if (!syncPort?.queryHistory) return null;
+    latestHistoryUsage = await syncPort.queryHistory({
+      startDate: sinceResetSummary?.API_start_date,
+      endDate: sinceResetSummary?.API_end_date_排他,
+      periodDays: result?.配置?.ROLLING_DAYS,
+    });
+    return latestHistoryUsage;
+  }
+
+  function refreshCurrentPanel() {
+    if (latestResult && !latestError) {
+      renderResult(latestResult);
+    }
+  }
+
   function refreshArchiveViewAfterStorageChange() {
-    refreshArchiveSummary()
+    Promise.all([refreshArchiveSummary(), refreshRemoteSyncStatus()])
       .then(() => {
-        if (latestResult && !latestError) {
-          renderResult(latestResult);
-        }
+        refreshCurrentPanel();
       })
       .catch((error) => {
         console.warn(`${SCRIPT_NAME}: failed to refresh archive summary after storage change.`, error);
@@ -167,6 +198,7 @@
       importReport: latestImportReport,
       storageBackend: archiveStoragePort.getBackendInfo(),
       syncStatus: syncPort?.getSyncStatus ? syncPort.getSyncStatus() : null,
+      remoteSyncStatus: latestRemoteSyncStatus,
     });
     latestPanelViewModel = viewModel;
     const rendered = panelRenderer.renderResult(viewModel, { activePanelView });
@@ -199,14 +231,7 @@
 
     try {
       const result = await runAndReport({ silentAlert: true });
-      const sinceResetSummary = result?.主7天窗口_上次重置至今?.汇总 || {};
-      if (syncPort?.queryHistory) {
-        latestHistoryUsage = await syncPort.queryHistory({
-          startDate: sinceResetSummary?.API_start_date,
-          endDate: sinceResetSummary?.API_end_date_排他,
-          periodDays: result?.配置?.ROLLING_DAYS,
-        });
-      }
+      await refreshHistoryUsageForResult(result);
       renderResult(result);
       setStatus(t('statusUpdated'), 'success');
       return result;
@@ -227,6 +252,110 @@
     } else {
       runAndRender().catch(() => {});
     }
+  }
+
+  async function syncRemoteArchive(options = {}) {
+    if (!remoteSyncClient) {
+      throw new Error(t('syncPortUnavailable'));
+    }
+
+    if (!options.silent) setStatus(t('statusLoading'), 'loading');
+    const synced = await remoteSyncClient.syncNow();
+    latestRemoteSyncStatus = synced.settings || await remoteSyncClient.getStatus();
+
+    if (synced.status !== 'synced') {
+      refreshCurrentPanel();
+      if (!options.silent) {
+        alert(`${SCRIPT_NAME} ${t('remoteSyncSkipped', { status: synced.status })}`);
+        setStatus(t('statusUpdated'), 'success');
+      }
+      return synced;
+    }
+
+    latestArchiveSummary = synced.summary || await refreshArchiveSummary();
+    if (latestResult && !latestError) {
+      await refreshHistoryUsageForResult(latestResult);
+    }
+    refreshCurrentPanel();
+
+    if (!options.silent) {
+      alert(`${SCRIPT_NAME} ${t('remoteSyncDone', {
+        added: synced.localReport?.added || 0,
+        remoteAdded: synced.remoteReport?.added || 0,
+      })}`);
+      setStatus(t('statusUpdated'), 'success');
+    }
+    return synced;
+  }
+
+  function scheduleRemoteArchiveSync() {
+    if (!remoteSyncClient) return;
+    remoteSyncClient.scheduleSync({
+      onComplete: async (result) => {
+        latestRemoteSyncStatus = result.settings || await remoteSyncClient.getStatus();
+        if (result.status === 'synced') {
+          latestArchiveSummary = result.summary || await refreshArchiveSummary();
+        }
+        refreshCurrentPanel();
+      },
+      onError: async (error) => {
+        try {
+          await refreshRemoteSyncStatus();
+          refreshCurrentPanel();
+        } catch (statusError) {
+          console.warn(`${SCRIPT_NAME}: failed to refresh remote sync status after sync error.`, statusError);
+        }
+        console.warn(`${SCRIPT_NAME}: remote sync failed.`, error);
+      },
+    });
+  }
+
+  async function configureRemoteSync() {
+    if (!remoteSyncClient) {
+      throw new Error(t('syncPortUnavailable'));
+    }
+
+    const current = await remoteSyncClient.getStatus();
+    const token = prompt(
+      current.hasToken ? t('remoteSyncTokenKeepPrompt') : t('remoteSyncTokenPrompt'),
+      '',
+    );
+    if (token === null) return null;
+
+    const trimmedToken = String(token || '').trim();
+    if (!trimmedToken && !current.hasToken) {
+      alert(`${SCRIPT_NAME} ${t('remoteSyncTokenRequired')}`);
+      return null;
+    }
+
+    const gistId = prompt(t('remoteSyncGistIdPrompt'), current.gistId || '');
+    if (gistId === null) return null;
+
+    await remoteSyncClient.configure({
+      enabled: true,
+      gistId,
+      ...(trimmedToken ? { token: trimmedToken } : {}),
+    });
+    await refreshRemoteSyncStatus();
+    refreshCurrentPanel();
+    alert(`${SCRIPT_NAME} ${t('remoteSyncConfigSaved')}`);
+    return latestRemoteSyncStatus;
+  }
+
+  async function disableRemoteSync() {
+    if (!remoteSyncClient) {
+      throw new Error(t('syncPortUnavailable'));
+    }
+
+    if (typeof confirm === 'function' && !confirm(t('remoteSyncDisableConfirm'))) {
+      return null;
+    }
+
+    await remoteSyncClient.configure({ enabled: false });
+    await refreshRemoteSyncStatus();
+    refreshCurrentPanel();
+    alert(`${SCRIPT_NAME} ${t('remoteSyncDisabled')}`);
+    return latestRemoteSyncStatus;
   }
 
   function handleShellAction(action, event) {
@@ -266,6 +395,31 @@
       importSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
         alert(`${SCRIPT_NAME} ${t('importFailed', { error: error?.message || error })}`);
+      });
+      return;
+    }
+
+    if (action === 'configure-remote-sync') {
+      configureRemoteSync().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Configure remote sync failed.`, error);
+        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
+      });
+      return;
+    }
+
+    if (action === 'sync-remote') {
+      syncRemoteArchive().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Remote sync failed.`, error);
+        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
+        setStatus(t('statusFailed'), 'error');
+      });
+      return;
+    }
+
+    if (action === 'disable-remote-sync') {
+      disableRemoteSync().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Disable remote sync failed.`, error);
+        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
       });
       return;
     }
@@ -346,6 +500,7 @@
         try {
           const saved = await syncPort.saveLatestResult(result);
           latestArchiveSummary = saved.summary;
+          scheduleRemoteArchiveSync();
         } catch (archiveError) {
           console.error(`[${SCRIPT_NAME}] Snapshot Archive save failed.`, archiveError);
           if (!options.silentAlert) {
@@ -400,9 +555,7 @@
       JSON.stringify(exportDocument, null, 2),
     );
     latestArchiveSummary = await syncPort.summarize();
-    if (latestResult && !latestError) {
-      renderResult(latestResult);
-    }
+    refreshCurrentPanel();
     alert(`${SCRIPT_NAME} ${t('exportDone', { count: exportDocument.snapshotCount })}`);
   }
 
@@ -448,9 +601,8 @@
     const imported = await syncPort.importArchiveDocument(importDocument);
     latestArchiveSummary = imported.summary;
     latestImportReport = imported.report;
-    if (latestResult && !latestError) {
-      renderResult(latestResult);
-    }
+    scheduleRemoteArchiveSync();
+    refreshCurrentPanel();
     alert(`${SCRIPT_NAME} ${t('importDone', {
       added: imported.report.added,
       skipped: imported.report.skipped,
@@ -459,9 +611,16 @@
   }
 
   createUi();
-  refreshArchiveSummary().catch((error) => {
-    console.warn(`${SCRIPT_NAME}: failed to load archive summary.`, error);
-  });
+  Promise.all([refreshArchiveSummary(), refreshRemoteSyncStatus()])
+    .then(() => {
+      if (latestRemoteSyncStatus?.enabled && latestRemoteSyncStatus?.configured) {
+        return syncRemoteArchive({ silent: true });
+      }
+      return null;
+    })
+    .catch((error) => {
+      console.warn(`${SCRIPT_NAME}: failed to load archive or remote sync state.`, error);
+    });
   archiveStoragePort.subscribeToChanges?.(() => {
     refreshArchiveViewAfterStorageChange();
   });
@@ -469,6 +628,19 @@
   if (typeof GM_registerMenuCommand === 'function') {
     GM_registerMenuCommand(t('menuRun'), () => {
       runAndRender().catch(() => {});
+    });
+    GM_registerMenuCommand(t('menuRemoteConfigure'), () => {
+      configureRemoteSync().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Configure remote sync failed.`, error);
+        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
+      });
+    });
+    GM_registerMenuCommand(t('menuRemoteSync'), () => {
+      syncRemoteArchive().catch((error) => {
+        console.error(`[${SCRIPT_NAME}] Remote sync failed.`, error);
+        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
+        setStatus(t('statusFailed'), 'error');
+      });
     });
     GM_registerMenuCommand(t('menuExport'), () => {
       exportSnapshotArchive().catch((error) => {

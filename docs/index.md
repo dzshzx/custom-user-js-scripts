@@ -19,6 +19,7 @@
 ## Script Docs
 
 - [Installable userscripts](scripts/installable-userscripts.md)
+- [Codex Quota Gist sync](scripts/codex-quota-gist-sync.md)
 - [Feishu tools and userscript](scripts/feishu-tools.md)
 
 ## Project Conventions

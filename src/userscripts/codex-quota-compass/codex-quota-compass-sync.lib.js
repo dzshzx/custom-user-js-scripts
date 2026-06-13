@@ -6,11 +6,11 @@
   function createSnapshotSyncStatus(backendInfo) {
     const backendId = backendInfo?.backendId || backendInfo?.id || 'unavailable';
     const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
-    const crossDeviceCapable = backendId === 'gm';
-    const localOnly = backendId === 'localStorage';
+    const crossDeviceCapable = false;
+    const localOnly = backendId === 'gm' || backendId === 'localStorage';
     const reason = (() => {
       if (backendId === 'gm') {
-        return 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.';
+        return 'Userscript manager storage is local to this manager profile; use GitHub Gist sync for cross-device Snapshot Archive sync.';
       }
       if (backendId === 'localStorage') {
         return 'localStorage is browser-local and will not sync personal usage history across devices.';

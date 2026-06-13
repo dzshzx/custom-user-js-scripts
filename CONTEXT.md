@@ -1,6 +1,6 @@
 # Browser Userscript Workspace
 
-This repository contains standalone browser userscripts and small local tools that support them. The Codex Quota Compass area focuses on collecting, reviewing, and moving long-lived quota history across browsers and devices without depending on a custom backend.
+This repository contains standalone browser userscripts and small local tools that support them. The Codex Quota Compass area focuses on collecting, reviewing, and syncing long-lived quota history across browsers and devices through user-owned GitHub Gist storage.
 
 ## Language
 
@@ -20,10 +20,14 @@ _Avoid_: dump, raw payload, script backup
 Reading a snapshot export back into the local archive with validation, deduplication, and merge reporting.
 _Avoid_: restore overwrite, replay, blind append
 
+**Gist Sync**:
+The GitHub Gist based sync path where each user stores their own snapshot archive in their own GitHub account. The userscript finds or creates a secret gist, imports the remote snapshot export, and writes back the merged archive.
+_Avoid_: author-hosted server, WebDAV script sync, public shared database
+
 **Snapshot ID**:
 The stable identifier attached to one quota snapshot and used as the primary deduplication key during import or sync.
 _Avoid_: timestamp key, period key, row hash
 
 **Sync Path**:
-The supported way users move snapshot history between devices. For Codex Quota Compass, the primary sync path is manual JSON export/import over a local archive, with userscript-manager sync only as an optional enhancement.
-_Avoid_: cloud source of truth, account sync
+The supported way users move snapshot history between devices. For Codex Quota Compass, the primary public sync path is GitHub Gist sync; manual JSON export/import is a backup path.
+_Avoid_: userscript-manager WebDAV sync, author-hosted server, script backup

@@ -7,7 +7,7 @@
 | 脚本 | 适用页面 | 用途 | 安装入口 |
 | --- | --- | --- | --- |
 | Web Page Assistant / 网页助手 | `*://*/*` | 管理网页自动刷新，并可按需解除复制、选择、右键菜单、拖拽和离开确认限制。 | [web-page-assistant.user.js](src/userscripts/web-page-assistant/web-page-assistant.user.js) |
-| Codex Quota Compass | `https://chatgpt.com/*` | 查看 Codex 用量、保存本地快照、导出 / 导入用量归档。 | [codex-quota-compass.user.js](src/userscripts/codex-quota-compass/codex-quota-compass.user.js) |
+| Codex Quota Compass | `https://chatgpt.com/*` | 查看 Codex 用量、保存本地快照、远程同步、导出 / 导入用量归档。 | [codex-quota-compass.user.js](src/userscripts/codex-quota-compass/codex-quota-compass.user.js) |
 | Feishu Preview Image Export | `https://mi.feishu.cn/file/*` | 从飞书文件预览页导出当前最大可见图片。 | [feishu-preview-image-export.user.js](src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js) |
 
 安装方式：
@@ -38,15 +38,21 @@
 
 ## Codex Quota Compass
 
-Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript 菜单命令读取当前 Codex 用量并保存本地历史。
+Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript 菜单命令读取当前 Codex 用量并保存历史。
 
-它会把每次成功运行的结果保存为一条 `Quota Snapshot`，并维护本地 `Snapshot Archive`。你可以从面板导出完整归档，也可以通过 userscript 菜单导出 / 导入 JSON，用于手动备份或跨设备迁移。脚本优先把归档写入 userscript manager storage；如果脚本管理器支持并启用了 WebDAV 等同步，这部分归档可以跟随管理器同步。
+它会把每次成功运行的结果保存为一条 `Quota Snapshot`，并维护本地 `Snapshot Archive`。脚本管理器的 WebDAV 同步只能保证脚本代码和管理器设置同步，不作为 Codex 用量历史的可靠跨设备通道。
+
+跨设备自动同步走 GitHub Gist：用户配置自己的 GitHub token 后，脚本会在用户自己的 GitHub 账号里查找或创建一个 secret gist，并把 `Snapshot Archive` 保存为 JSON 文件。不同设备使用同一个 GitHub 账号和 token 后，会按 `Snapshot ID` 合并归档。你也可以从面板导出完整归档，或通过 userscript 菜单导出 / 导入 JSON，作为手动备份或迁移路径。
 
 注意事项：
 
 - 归档里保存的是经过整理的用量信息，不保存 Cookie、Token 或原始私有接口响应。
 - 导入是 merge 语义，会跳过重复快照，不会覆盖整个本地归档。
-- 脚本不会读取或保存 WebDAV 账号信息，也不会绕过脚本管理器自己的同步策略；运行环境不支持 GM storage 时会回退到当前浏览器的 `localStorage`。
+- GitHub token 保存在脚本管理器存储中，不写入仓库；建议使用 fine-grained token，并只授予 Gists read/write 权限。
+- Gist 使用 `public: false` 创建，是 unlisted secret gist，不应保存 Cookie、Token 或其他真正敏感信息。
+- 运行环境不支持 GM storage 时会回退到当前浏览器的 `localStorage`；跨设备同步仍需要配置 GitHub token。
+
+Gist 同步设置说明见 [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)。
 
 领域词汇见 [CONTEXT.md](CONTEXT.md)。
 
@@ -89,6 +95,7 @@ npm test
 - [DESIGN.md](DESIGN.md)：注入式 userscript UI 的设计上下文和组件规则。
 - [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
+- [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)：Codex Quota Compass GitHub Gist 同步说明。
 - [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：飞书工具和飞书主图 userscript 说明。
 - [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。
 - [CONTEXT.md](CONTEXT.md)：稳定领域词汇表。

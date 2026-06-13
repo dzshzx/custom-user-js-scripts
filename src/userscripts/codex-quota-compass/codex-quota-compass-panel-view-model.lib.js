@@ -24,10 +24,56 @@
     };
   }
 
-  function createSyncBanner(syncStatus) {
-    if (syncStatus.crossDeviceCapable) {
+  function normalizeRemoteSyncStatus(remoteSyncStatus) {
+    const source = remoteSyncStatus && typeof remoteSyncStatus === 'object' ? remoteSyncStatus : {};
+
+    return {
+      enabled: Boolean(source.enabled),
+      configured: Boolean(source.configured),
+      endpoint: typeof source.endpoint === 'string' ? source.endpoint : '',
+      hasToken: Boolean(source.hasToken),
+      lastSyncedAt: typeof source.lastSyncedAt === 'string' ? source.lastSyncedAt : '',
+      lastError: typeof source.lastError === 'string' ? source.lastError : '',
+    };
+  }
+
+  function createSyncBanner(syncStatus, remoteSyncStatus) {
+    if (remoteSyncStatus.enabled && remoteSyncStatus.configured) {
+      if (remoteSyncStatus.lastError) {
+        return {
+          tone: 'warning',
+          titleKey: 'remoteSyncErrorTitle',
+          detailKey: 'remoteSyncErrorDetail',
+          backendLabel: syncStatus.backendLabel,
+          endpoint: remoteSyncStatus.endpoint,
+          lastSyncedAt: remoteSyncStatus.lastSyncedAt,
+          lastError: remoteSyncStatus.lastError,
+        };
+      }
+
       return {
         tone: 'success',
+        titleKey: 'remoteSyncEnabledTitle',
+        detailKey: 'remoteSyncEnabledDetail',
+        backendLabel: syncStatus.backendLabel,
+        endpoint: remoteSyncStatus.endpoint,
+        lastSyncedAt: remoteSyncStatus.lastSyncedAt,
+      };
+    }
+
+    if (remoteSyncStatus.enabled) {
+      return {
+        tone: 'warning',
+        titleKey: 'remoteSyncMissingTitle',
+        detailKey: 'remoteSyncMissingDetail',
+        backendLabel: syncStatus.backendLabel,
+        endpoint: remoteSyncStatus.endpoint,
+      };
+    }
+
+    if (syncStatus.backendId === 'gm') {
+      return {
+        tone: 'warning',
         titleKey: 'syncBannerGmTitle',
         detailKey: 'syncBannerGmDetail',
         backendLabel: syncStatus.backendLabel,
@@ -49,6 +95,27 @@
       detailKey: 'syncBannerPendingDetail',
       backendLabel: syncStatus.backendLabel,
     };
+  }
+
+  function createTransferActions(remoteSyncStatus) {
+    const actions = [
+      { action: 'configure-remote-sync', labelKey: 'remoteSyncConfigureAction' },
+    ];
+
+    if (remoteSyncStatus.enabled && remoteSyncStatus.configured) {
+      actions.push({ action: 'sync-remote', labelKey: 'remoteSyncNowAction' });
+    }
+
+    if (remoteSyncStatus.enabled) {
+      actions.push({ action: 'disable-remote-sync', labelKey: 'remoteSyncDisableAction' });
+    }
+
+    actions.push(
+      { action: 'export-archive', labelKey: 'archiveExportAction' },
+      { action: 'import-archive', labelKey: 'archiveImportAction' },
+    );
+
+    return actions;
   }
 
   function dataColumn(key, options = {}) {
@@ -248,6 +315,7 @@
     importReport,
     storageBackend,
     syncStatus,
+    remoteSyncStatus,
   }) {
     const snapshotAccess = createQuotaSnapshotAccess(result);
     const rollingKey = snapshotAccess.rollingKey;
@@ -265,6 +333,7 @@
       }))
       : [];
     const normalizedSyncStatus = normalizePanelSyncStatus(syncStatus, storageBackend);
+    const normalizedRemoteSyncStatus = normalizeRemoteSyncStatus(remoteSyncStatus);
     const archiveHealth = {
       isLoaded: Boolean(archiveSummary),
       snapshotCount: archiveSummary?.snapshotCount || 0,
@@ -278,10 +347,8 @@
     const transfer = {
       noteKey: 'transferNote',
       syncStatus: normalizedSyncStatus,
-      actions: [
-        { action: 'export-archive', labelKey: 'archiveExportAction' },
-        { action: 'import-archive', labelKey: 'archiveImportAction' },
-      ],
+      remoteSyncStatus: normalizedRemoteSyncStatus,
+      actions: createTransferActions(normalizedRemoteSyncStatus),
     };
     const panelViews = createPanelViews({
       weekly,
@@ -300,7 +367,8 @@
       month,
       rolling,
       syncStatus: normalizedSyncStatus,
-      syncBanner: createSyncBanner(normalizedSyncStatus),
+      remoteSyncStatus: normalizedRemoteSyncStatus,
+      syncBanner: createSyncBanner(normalizedSyncStatus, normalizedRemoteSyncStatus),
       archiveHealth,
       transfer,
       tabs: panelViews.tabs,

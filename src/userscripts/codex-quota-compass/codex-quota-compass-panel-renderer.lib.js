@@ -197,7 +197,12 @@
 
     function syncBannerHtml(banner) {
       if (!banner) return '';
-      const variables = { backend: banner.backendLabel || '-' };
+      const variables = {
+        backend: banner.backendLabel || '-',
+        endpoint: banner.endpoint || '-',
+        lastSyncedAt: banner.lastSyncedAt || '-',
+        error: banner.lastError || '-',
+      };
       return `
         <div class="cqc-sync-banner" data-tone="${escapeHtml(banner.tone || 'muted')}">
           <strong>${escapeHtml(t(banner.titleKey, variables))}</strong>

@@ -43,9 +43,21 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     syncStatus: {
       backendId: 'gm',
       backendLabel: 'GM storage',
-      crossDeviceCapable: true,
-      localOnly: false,
-      reason: 'Userscript manager storage is available.',
+      crossDeviceCapable: false,
+      localOnly: true,
+      reason: 'Userscript manager storage is local.',
+    },
+    remoteSyncStatus: {
+      enabled: true,
+      configured: true,
+      endpoint: 'GitHub Gist gist-1',
+      provider: 'github-gist',
+      providerLabel: 'GitHub Gist',
+      gistId: 'gist-1',
+      filename: 'codex-quota-compass-snapshot-archive.v1.json',
+      hasToken: true,
+      lastSyncedAt: '2026-06-13T10:00:00.000Z',
+      lastError: '',
     },
   });
 
@@ -58,10 +70,17 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   assert.equal(model.archive.storageBackend.label, 'GM storage');
   assert.equal(model.archive.importReport.added, 1);
   assert.equal(model.syncBanner.tone, 'success');
-  assert.equal(model.syncBanner.titleKey, 'syncBannerGmTitle');
+  assert.equal(model.syncBanner.titleKey, 'remoteSyncEnabledTitle');
+  assert.equal(model.remoteSyncStatus.endpoint, 'GitHub Gist gist-1');
   assert.equal(model.archiveHealth.snapshotCount, 1);
   assert.equal(model.archiveHealth.hasSnapshots, true);
-  assert.deepEqual(model.transfer.actions.map((action) => action.action), ['export-archive', 'import-archive']);
+  assert.deepEqual(model.transfer.actions.map((action) => action.action), [
+    'configure-remote-sync',
+    'sync-remote',
+    'disable-remote-sync',
+    'export-archive',
+    'import-archive',
+  ]);
   assert.deepEqual(model.tabs.map((tab) => tab.id), ['details', 'history', 'archive']);
   assert.equal(model.tabs.some((tab) => tab.id === 'transfer'), false);
   assert.equal(model.views.details.sections[2].id, 'details-windows');
@@ -69,7 +88,13 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     model.views.details.sections[2].columns.find((column) => column.key === '本轮开始_本地').truncate,
     true,
   );
-  assert.deepEqual(model.views.archive.actionIds, ['export-archive', 'import-archive']);
+  assert.deepEqual(model.views.archive.actionIds, [
+    'configure-remote-sync',
+    'sync-remote',
+    'disable-remote-sync',
+    'export-archive',
+    'import-archive',
+  ]);
   assert.deepEqual(model.primaryMetrics.map((metric) => metric.id), [
     'remainingUsdIncludingReset',
     'remainingUsdExcludingReset',

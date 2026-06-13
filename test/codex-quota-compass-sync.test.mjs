@@ -50,7 +50,8 @@ test('createSnapshotSyncPort routes save/export/import through archive store sea
   assert.equal(imported.report.added, 1);
   assert.equal(history.timeline.length, 0);
   assert.equal(status.backendId, 'gm');
-  assert.equal(status.crossDeviceCapable, true);
+  assert.equal(status.crossDeviceCapable, false);
+  assert.equal(status.localOnly, true);
   assert.deepEqual(calls, ['save', 'export', 'preview', 'import', 'history']);
 
   const compatibilitySaved = await port.saveLatestResult({ 任意: true });
@@ -104,9 +105,9 @@ test('createSnapshotSyncStatus derives GM, localStorage, pending, and unavailabl
   assert.deepEqual(createSnapshotSyncStatus({ id: 'gm', label: 'GM storage' }), {
     backendId: 'gm',
     backendLabel: 'GM storage',
-    crossDeviceCapable: true,
-    localOnly: false,
-    reason: 'Userscript manager storage is available; cross-device sync depends on the manager sync setting.',
+    crossDeviceCapable: false,
+    localOnly: true,
+    reason: 'Userscript manager storage is local to this manager profile; use GitHub Gist sync for cross-device Snapshot Archive sync.',
   });
   assert.deepEqual(createSnapshotSyncStatus({ id: 'localStorage', label: 'localStorage' }), {
     backendId: 'localStorage',
