@@ -12,7 +12,7 @@ const DIRECT_PROXY_ARGS = ['--proxy-server=direct://', '--proxy-bypass-list=*']
 
 function printHelp() {
   console.log(`Usage:
-  node scripts/feishu/export-image.mjs [options]
+  node scripts/browser-tools/export-image.mjs [options]
 
 Options:
   --url <url>             Target Feishu file URL

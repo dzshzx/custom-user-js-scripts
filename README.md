@@ -60,10 +60,10 @@ Gist 同步设置说明见 [docs/scripts/codex-quota-gist-sync.md](docs/scripts/
 
 Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜单命令从当前页面找最大的可见图片并下载。它适合处理飞书文件页里“预览图可见但原图入口不好找”的场景。
 
-本仓库还提供两个本地 Feishu Playwright 工具：
+本仓库还提供两个本地浏览器工具：
 
-- `scripts/feishu/login-qr.mjs`：导出登录二维码并保存浏览器登录态。
-- `scripts/feishu/export-image.mjs`：使用已有登录态打开飞书文件页并导出当前最大可见图片。
+- `scripts/browser-tools/login-qr.mjs`：默认适配小米飞书，也可配置其他网站；导出登录二维码并保存浏览器登录态。
+- `scripts/browser-tools/export-image.mjs`：使用已有登录态打开飞书文件页并导出当前最大可见图片。
 
 使用说明见 [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)。
 
@@ -98,6 +98,6 @@ UI/UX（DOM 层）测试可选：仓库保持零依赖，不记录 DOM 测试库
 - [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
 - [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)：Codex Quota Compass GitHub Gist 同步说明。
-- [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：飞书工具和飞书主图 userscript 说明。
+- [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：二维码登录态捕获、飞书工具和飞书主图 userscript 说明。
 - [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。
 - [CONTEXT.md](CONTEXT.md)：稳定领域词汇表。

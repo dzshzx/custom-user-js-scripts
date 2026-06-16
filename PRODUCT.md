@@ -60,7 +60,7 @@ It finds the largest visible image in a Feishu file preview page and downloads
 it through the userscript menu. It is meant for pages where the preview image is
 visible but the original image entry is awkward to access.
 
-Local Feishu Playwright helpers support login-state capture and scripted image
+Local browser helpers support QR login-state capture and scripted Feishu image
 export, but the installable userscript remains browser-side.
 
 ## Core Jobs
