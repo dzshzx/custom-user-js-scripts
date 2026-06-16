@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-markup.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js');
 
@@ -347,4 +346,37 @@ test('createFloatingPanelShell opens, resizes, and closes panel state', () => {
   assert.equal(refs.panel.hidden, true);
   assert.equal(refs.button.classList.contains('is-active'), false);
   assert.equal(refs.button.getAttribute('aria-expanded'), 'false');
+});
+
+test('createFloatingPanelShell escapes labels in shell markup', () => {
+  const document = new FakeDocument();
+  const window = createWindowAdapter();
+  const storage = createStorage();
+  const shell = createFloatingPanelShell({
+    rootId: 'cqc-escape-test',
+    labels: {
+      panelTitle: 'Panel <title>',
+      buttonTitle: 'Quota & Usage',
+      buttonAriaOpen: 'Open <quota>',
+      statusIdle: 'Idle "now"',
+      actionRefresh: 'Refresh',
+      closeAria: 'Close',
+    },
+    positionKey: 'testPos',
+    document,
+    window,
+    storage,
+    onAction() {},
+  });
+  const mounted = shell.mount();
+  assert.ok(mounted);
+  const html = mounted.refs().root.innerHTML;
+  assert.match(html, /aria-label="Open &lt;quota&gt;"/);
+  assert.match(html, /Quota &amp; Usage/);
+  assert.match(html, /Idle &quot;now&quot;/);
+  assert.match(html, /Panel &lt;title&gt;/);
+  assert.match(html, /data-action="toggle"/);
+  assert.match(html, /data-action="refresh"/);
+  assert.match(html, /data-action="close"/);
+  assert.match(html, /class="cqc-content"/);
 });

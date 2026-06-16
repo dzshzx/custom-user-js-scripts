@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, createMemoryStorage, domSkip } from './helpers/dom-env.mjs';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-markup.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js');
 

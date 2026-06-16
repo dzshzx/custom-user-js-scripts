@@ -12,9 +12,40 @@
   const PANEL_CLOSE_ANIMATION_MS = PANEL_OPEN_ANIMATION_MS * 2;
   const PANEL_OPEN_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
   const PANEL_CLOSE_EASING = 'cubic-bezier(0.64, 0, 0.78, 0)';
-  const { createShellMarkup } = globalObject.CodexQuotaCompassPanelShellMarkupLib || {};
-  if (typeof createShellMarkup !== 'function') {
-    throw new Error(`${LIB_NAME} requires CodexQuotaCompassPanelShellMarkupLib.`);
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function createShellMarkup(labels = {}) {
+    return `
+      <button type="button" class="cqc-button" data-action="toggle" aria-expanded="false" aria-label="${escapeHtml(labels.buttonAriaOpen || '')}">
+        <span class="cqc-dot" aria-hidden="true"></span>
+        <span class="cqc-button-text">
+          <span class="cqc-button-title">${escapeHtml(labels.buttonTitle || '')}</span>
+          <span class="cqc-status" data-tone="idle">${escapeHtml(labels.statusIdle || '')}</span>
+        </span>
+      </button>
+      <div class="cqc-panel" hidden>
+        <div class="cqc-panel-header">
+          <div class="cqc-panel-title">
+            <span class="cqc-dot" aria-hidden="true"></span>
+            <span>${escapeHtml(labels.panelTitle || '')}</span>
+          </div>
+          <div class="cqc-panel-actions">
+            <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml(labels.actionRefresh || '')}</button>
+            <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || 'Close')}">
+              <span class="cqc-close-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+        <div class="cqc-content"></div>
+      </div>
+    `;
   }
   const { createShellStyles } = globalObject.CodexQuotaCompassPanelShellStylesLib || {};
   if (typeof createShellStyles !== 'function') {
