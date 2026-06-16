@@ -8,8 +8,11 @@
   const GITHUB_API_VERSION = '2026-03-10';
   const GIST_DESCRIPTION = 'Codex Quota Compass Snapshot Archive';
   const GIST_FILENAME = 'codex-quota-compass-snapshot-archive.v1.json';
-  const EXPORT_FORMAT = 'codex-quota-compass.snapshot-archive';
-  const EXPORT_VERSION = 1;
+  const archiveLib = globalObject.CodexQuotaCompassArchiveLib;
+  if (!archiveLib?.EXPORT_FORMAT || !archiveLib?.EXPORT_VERSION) {
+    throw new Error('CodexQuotaCompassArchiveLib is required before CodexQuotaCompassRemoteSyncLib.');
+  }
+  const { EXPORT_FORMAT, EXPORT_VERSION } = archiveLib;
 
   function maybePromise(value) {
     return value && typeof value.then === 'function' ? value : Promise.resolve(value);
