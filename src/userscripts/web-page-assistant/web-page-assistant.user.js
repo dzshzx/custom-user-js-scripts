@@ -123,7 +123,7 @@
   const currentPageKey = `${location.origin}${location.pathname}${location.search}`;
   const currentSiteKey = location.hostname;
 
-  let settings = PageAssistantSettings.empty();
+  let settings = PageAssistantSettings.emptySettings();
   let activeMatch = null;
   let activeUnlockerMatch = null;
   let root;
@@ -172,14 +172,14 @@
   });
 
   function resolveActiveSetting(sourceSettings = settings) {
-    return PageAssistantSettings.resolveActiveRefresh(sourceSettings, {
+    return PageAssistantSettings.resolveActiveRefreshSetting(sourceSettings, {
       pageKey: currentPageKey,
       siteKey: currentSiteKey,
     });
   }
 
   function resolveActiveUnlockerSetting(sourceSettings = settings) {
-    return PageAssistantSettings.resolveActiveUnlocker(sourceSettings, {
+    return PageAssistantSettings.resolveActiveUnlockerSetting(sourceSettings, {
       pageKey: currentPageKey,
       siteKey: currentSiteKey,
     });

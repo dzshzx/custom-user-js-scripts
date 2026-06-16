@@ -71,16 +71,16 @@
     return {
       async readSettings() {
         try {
-          const primary = await readPrimaryValue(storageKey, settingsContract.empty());
-          if (primary.available) return settingsContract.normalize(primary.value);
+          const primary = await readPrimaryValue(storageKey, settingsContract.emptySettings());
+          if (primary.available) return settingsContract.normalizeSettings(primary.value);
         } catch (error) {
           logger.warn(`${scriptName}: failed to read userscript storage.`, error);
         }
 
         return readFallbackJson(
           fallbackStorageKey,
-          settingsContract.normalize,
-          settingsContract.empty(),
+          settingsContract.normalizeSettings,
+          settingsContract.emptySettings(),
           `${scriptName}: failed to read fallback storage.`,
         );
       },
@@ -100,7 +100,7 @@
         );
       },
       async writeSettings(nextSettings) {
-        const normalized = settingsContract.normalize(nextSettings);
+        const normalized = settingsContract.normalizeSettings(nextSettings);
 
         try {
           if (await writePrimaryValue(storageKey, normalized)) return normalized;

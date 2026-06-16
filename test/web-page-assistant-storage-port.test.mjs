@@ -30,10 +30,10 @@ function createLocalStorage(initial = {}) {
 
 function createSettingsContract() {
   return {
-    empty() {
+    emptySettings() {
       return { version: 2, refresh: { pages: {}, sites: {} }, unlocker: { pages: {}, sites: {} } };
     },
-    normalize(value) {
+    normalizeSettings(value) {
       return { normalized: true, value };
     },
   };
@@ -80,7 +80,7 @@ test('storage port reads and writes settings through legacy GM storage first', a
   const port = createWebPageAssistantStoragePort(baseAdapters({
     gmGetValue(key, fallbackValue) {
       assert.equal(key, 'settings');
-      assert.deepEqual(fallbackValue, createSettingsContract().empty());
+      assert.deepEqual(fallbackValue, createSettingsContract().emptySettings());
       return { from: 'gm' };
     },
     gmSetValue(key, value) {
