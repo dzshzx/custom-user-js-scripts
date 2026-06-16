@@ -24,7 +24,6 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js
-// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-sync.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -72,7 +71,6 @@
   const panelDomLib = globalThis.CodexQuotaCompassPanelDomLib;
   const storageLib = globalThis.CodexQuotaCompassStorageLib;
   const archiveLib = globalThis.CodexQuotaCompassArchiveLib;
-  const syncLib = globalThis.CodexQuotaCompassSyncLib;
   const remoteSyncLib = globalThis.CodexQuotaCompassRemoteSyncLib;
   if (!i18nLib?.createQuotaCompassTranslator) {
     throw new Error('CodexQuotaCompassI18nLib translator is unavailable.');
@@ -111,9 +109,19 @@
       scriptVersion: SCRIPT_VERSION,
     })
     : null;
-  const syncPort = syncLib?.createSnapshotSyncPort
-    ? syncLib.createSnapshotSyncPort({ archiveStore, getBackendInfo: archiveStoragePort.getBackendInfo })
-    : null;
+  function createSnapshotSyncStatus(backendInfo) {
+    const backendId = backendInfo?.backendId || backendInfo?.id || 'unavailable';
+    const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
+    const localOnly = backendId === 'gm' || backendId === 'localStorage';
+    const reason = (() => {
+      if (backendId === 'gm') return 'Userscript manager storage is local to this manager profile; use GitHub Gist sync for cross-device Snapshot Archive sync.';
+      if (backendId === 'localStorage') return 'localStorage is browser-local and will not sync personal usage history across devices.';
+      if (backendId === 'pending') return 'Snapshot Archive storage has not been loaded yet.';
+      return 'Snapshot Archive storage is unavailable.';
+    })();
+    return { backendId, backendLabel, crossDeviceCapable: false, localOnly, reason };
+  }
+
   const remoteSyncClient = remoteSyncLib?.createRemoteSyncClient && archiveStore
     ? remoteSyncLib.createRemoteSyncClient({ archiveStore })
     : null;
@@ -131,8 +139,8 @@
   }
 
   async function refreshArchiveSummary() {
-    if (!syncPort) return null;
-    latestArchiveSummary = await syncPort.summarize();
+    if (!archiveStore) return null;
+    latestArchiveSummary = await archiveStore.summarizeArchive();
     return latestArchiveSummary;
   }
 
@@ -148,8 +156,8 @@
 
   async function refreshHistoryUsageForResult(result) {
     const sinceResetSummary = result?.主7天窗口_上次重置至今?.汇总 || {};
-    if (!syncPort?.queryHistory) return null;
-    latestHistoryUsage = await syncPort.queryHistory({
+    if (!archiveStore?.queryHistory) return null;
+    latestHistoryUsage = await archiveStore.queryHistory({
       startDate: sinceResetSummary?.API_start_date,
       endDate: sinceResetSummary?.API_end_date_排他,
       periodDays: result?.配置?.ROLLING_DAYS,
@@ -207,7 +215,7 @@
       archiveSummary: latestArchiveSummary,
       importReport: latestImportReport,
       storageBackend: archiveStoragePort.getBackendInfo(),
-      syncStatus: syncPort?.getSyncStatus ? syncPort.getSyncStatus() : null,
+      syncStatus: createSnapshotSyncStatus(archiveStoragePort.getBackendInfo()),
       remoteSyncStatus: latestRemoteSyncStatus,
     });
     latestPanelViewModel = viewModel;
@@ -495,9 +503,9 @@
       latestError = null;
       latestImportReport = null;
 
-      if (syncPort) {
+      if (archiveStore) {
         try {
-          const saved = await syncPort.saveLatestResult(result);
+          const saved = await archiveStore.saveSnapshot(result);
           latestArchiveSummary = saved.summary;
           scheduleRemoteArchiveSync();
         } catch (archiveError) {
@@ -544,16 +552,16 @@
   }
 
   async function exportSnapshotArchive() {
-    if (!syncPort) {
+    if (!archiveStore) {
       throw new Error(t('syncPortUnavailable'));
     }
 
-    const exportDocument = await syncPort.exportArchive();
+    const exportDocument = await archiveStore.buildExportDocument();
     downloadTextFile(
       'codex-quota-compass-snapshot-archive.v1.json',
       JSON.stringify(exportDocument, null, 2),
     );
-    latestArchiveSummary = await syncPort.summarize();
+    latestArchiveSummary = await archiveStore.summarizeArchive();
     refreshCurrentPanel();
     alert(`${SCRIPT_NAME} ${t('exportDone', { count: exportDocument.snapshotCount })}`);
   }
@@ -591,13 +599,13 @@
   }
 
   async function importSnapshotArchive() {
-    if (!syncPort) {
+    if (!archiveStore) {
       throw new Error(t('syncPortUnavailable'));
     }
 
     const fileText = await chooseImportFileText();
     const importDocument = JSON.parse(fileText);
-    const imported = await syncPort.importArchiveDocument(importDocument);
+    const imported = await archiveStore.importArchiveDocument(importDocument);
     latestArchiveSummary = imported.summary;
     latestImportReport = imported.report;
     scheduleRemoteArchiveSync();
