@@ -470,7 +470,6 @@
   }
 
   globalObject[LIB_NAME] = {
-    rollingPeriodKey,
     buildQuotaSnapshotResult,
     createQuotaCalculator,
   };

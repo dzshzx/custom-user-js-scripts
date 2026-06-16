@@ -7,8 +7,8 @@ await import('../src/userscripts/codex-quota-compass/codex-quota-compass-core.li
 const {
   buildQuotaSnapshotResult,
   createQuotaCalculator,
-  rollingPeriodKey,
 } = globalThis.CodexQuotaCompassCoreLib;
+const { rollingPeriodKey } = globalThis.CodexQuotaCompassContractLib;
 
 test('rollingPeriodKey returns the first matching rolling period key', () => {
   const key = rollingPeriodKey({
@@ -21,6 +21,7 @@ test('rollingPeriodKey returns the first matching rolling period key', () => {
 });
 
 test('core exports quota calculation interfaces only', () => {
+  assert.equal(Object.hasOwn(globalThis.CodexQuotaCompassCoreLib, 'rollingPeriodKey'), false);
   assert.equal(Object.hasOwn(globalThis.CodexQuotaCompassCoreLib, 'createSnapshotSyncPort'), false);
   assert.equal(Object.hasOwn(globalThis.CodexQuotaCompassCoreLib, 'createSnapshotSyncStatus'), false);
   assert.equal(Object.hasOwn(globalThis.CodexQuotaCompassCoreLib, 'createQuotaPanelViewModel'), false);
