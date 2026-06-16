@@ -9,7 +9,9 @@ Thumbs.db
 
 # Trellis local workspace and agent config
 .agents/
+.claude/
 .codex/
 .trellis/
 AGENTS.md
+CLAUDE.md
 .scratch/
