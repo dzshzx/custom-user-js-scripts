@@ -13,6 +13,8 @@
     throw new Error('CodexQuotaCompassArchiveLib is required before CodexQuotaCompassRemoteSyncLib.');
   }
   const { EXPORT_FORMAT, EXPORT_VERSION } = archiveLib;
+  // Read both the legacy full-snapshot doc (v1) and the new ledger doc (v2).
+  const SUPPORTED_IMPORT_VERSIONS = new Set([1, 2]);
 
   function maybePromise(value) {
     return value && typeof value.then === 'function' ? value : Promise.resolve(value);
@@ -207,13 +209,9 @@
   }
 
   function createArchiveExportDocument(archive, exportedAt) {
-    return {
-      format: EXPORT_FORMAT,
-      version: EXPORT_VERSION,
-      exportedAt,
-      snapshotCount: Array.isArray(archive?.snapshots) ? archive.snapshots.length : 0,
-      snapshots: Array.isArray(archive?.snapshots) ? archive.snapshots : [],
-    };
+    // Delegate to the archive lib so the pushed payload is the compact v2 shape
+    // (per-day ledger + last 5 snapshots) instead of full per-snapshot history.
+    return archiveLib.buildSnapshotExportDocument(archive || { snapshots: [] }, exportedAt);
   }
 
   function createEmptyExportDocument(exportedAt) {
@@ -257,7 +255,7 @@
   }
 
   function validateArchiveDocument(documentObject) {
-    if (documentObject?.format !== EXPORT_FORMAT || documentObject?.version !== EXPORT_VERSION) {
+    if (documentObject?.format !== EXPORT_FORMAT || !SUPPORTED_IMPORT_VERSIONS.has(documentObject?.version)) {
       throw new Error('GitHub Gist archive file is not a supported Snapshot Export.');
     }
     return documentObject;
@@ -285,7 +283,34 @@
   }
 
   function archiveFilePayload(archive, exportedAt) {
-    return JSON.stringify(createArchiveExportDocument(archive, exportedAt), null, 2);
+    // Compact (no pretty-print) to keep the synced blob small.
+    return JSON.stringify(createArchiveExportDocument(archive, exportedAt));
+  }
+
+  // Compare two export documents by the content that actually matters for sync
+  // convergence (ledger + retained snapshots), ignoring the always-changing
+  // `exportedAt` / `snapshotCount` envelope fields so an unchanged archive is
+  // not re-pushed on every page open.
+  function stableStringify(value) {
+    if (Array.isArray(value)) {
+      return `[${value.map(stableStringify).join(',')}]`;
+    }
+    if (value && typeof value === 'object') {
+      const keys = Object.keys(value).sort();
+      return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value ?? null);
+  }
+
+  function archiveContentKey(documentObject) {
+    return stableStringify({
+      ledger: (documentObject && documentObject.ledger) || {},
+      snapshots: Array.isArray(documentObject?.snapshots) ? documentObject.snapshots : [],
+    });
+  }
+
+  function sameArchiveContent(left, right) {
+    return archiveContentKey(left) === archiveContentKey(right);
   }
 
   const GIST_PAGE_SIZE = 100;
@@ -461,10 +486,23 @@
 
         const remoteDocument = await archiveDocumentFromGist(gist, settings.filename, now, requestJson);
         const imported = await archiveStore.importArchiveDocument(remoteDocument);
-        // Only write back when the merged archive holds snapshots the remote is
-        // missing; otherwise every page open would create a redundant gist revision.
-        const remoteCount = Array.isArray(remoteDocument.snapshots) ? remoteDocument.snapshots.length : 0;
-        const remoteNeedsUpdate = imported.archive.snapshots.length > remoteCount;
+        // Write back whenever the merged content (ledger or retained snapshots)
+        // differs from what the remote currently holds. A snapshot-count check is
+        // not enough: the ledger keeps growing one row per settled day while the
+        // snapshot list stays capped at 5, so a count comparison would never push
+        // newly settled days once the cap is reached. Comparing the stable content
+        // (ledger + snapshots, ignoring the always-changing exportedAt/snapshotCount)
+        // still avoids a redundant gist revision when nothing actually changed.
+        const mergedDocument = archiveLib.buildSnapshotExportDocument(imported.archive, exportedAt);
+        // Normalize the remote document through the same archive pipeline before
+        // comparing, so a v1 (no-ledger, raw-snapshot) remote and the merged v2
+        // document are compared on equal footing instead of always looking
+        // "different" due to shape/normalization noise.
+        const remoteNormalized = archiveLib.buildSnapshotExportDocument(
+          archiveLib.previewImportArchiveDocument({ snapshots: [] }, remoteDocument, Date.parse(exportedAt) || Date.now()).archive,
+          exportedAt,
+        );
+        const remoteNeedsUpdate = !sameArchiveContent(mergedDocument, remoteNormalized);
         const updatedGist = remoteNeedsUpdate
           ? await gistApi.updateGist(gist.id, imported.archive, now())
           : gist;

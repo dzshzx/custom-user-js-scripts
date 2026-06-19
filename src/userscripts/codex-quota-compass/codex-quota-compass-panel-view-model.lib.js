@@ -300,6 +300,7 @@
   function createQuotaPanelViewModel({
     result,
     historyUsage,
+    ledgerCost,
     archiveSummary,
     importReport,
     storageBackend,
@@ -378,6 +379,29 @@
         rollingSummary: historyUsage?.rolling?.summary || {},
         monthSummary: historyUsage?.month?.summary || {},
       },
+      cost: ledgerCost ? {
+        cycleStartDate: ledgerCost.cycleStartDate || null,
+        cycle: {
+          totalCredits: ledgerCost.cycle?.totalCredits || 0,
+          totalUsd: ledgerCost.cycle?.totalUsd || 0,
+        },
+        month: {
+          totalCredits: ledgerCost.month?.totalCredits || 0,
+          totalUsd: ledgerCost.month?.totalUsd || 0,
+        },
+        today: ledgerCost.daily?.inProgress
+          ? {
+            date: ledgerCost.daily.inProgress.date,
+            credits: ledgerCost.daily.inProgress.credits || 0,
+            usd: ledgerCost.daily.inProgress.usd || 0,
+          }
+          : null,
+        dailyRows: (ledgerCost.daily?.days || []).slice(0, 14).map((row) => ({
+          date: row.date,
+          credits: row.credits || 0,
+          usd: row.usd || 0,
+        })),
+      } : null,
       archive: {
         isLoaded: Boolean(archiveSummary),
         snapshotCount: archiveSummary?.snapshotCount || 0,

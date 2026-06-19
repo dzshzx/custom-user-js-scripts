@@ -2,19 +2,36 @@
   'use strict';
 
   const LIB_NAME = 'CodexQuotaCompassArchiveLib';
-  const ARCHIVE_SCHEMA_VERSION = 1;
+  const ARCHIVE_SCHEMA_VERSION = 2;
   const EXPORT_FORMAT = 'codex-quota-compass.snapshot-archive';
-  const EXPORT_VERSION = 1;
+  const EXPORT_VERSION = 2;
+  const SUPPORTED_EXPORT_VERSIONS = new Set([1, 2]);
+  const MAX_RETAINED_SNAPSHOTS = 5;
+  const DEFAULT_USD_PER_CREDIT = 40 / 1000;
   const contractLib = globalObject.CodexQuotaCompassContractLib;
+  const ledgerLib = globalObject.CodexQuotaCompassLedgerLib;
 
   if (!contractLib?.projectQuotaSnapshotForArchive || !contractLib?.isMainSevenDayWindow) {
     throw new Error('CodexQuotaCompassContractLib is required before CodexQuotaCompassArchiveLib.');
+  }
+
+  if (!ledgerLib?.foldSnapshotsIntoLedger || !ledgerLib?.mergeLedgers) {
+    throw new Error('CodexQuotaCompassLedgerLib is required before CodexQuotaCompassArchiveLib.');
   }
 
   const {
     isMainSevenDayWindow,
     projectQuotaSnapshotForArchive,
   } = contractLib;
+
+  const {
+    foldSnapshotsIntoLedger,
+    mergeLedgers,
+    normalizeLedger,
+    aggregateDaily,
+    aggregateCycle,
+    aggregateMonth,
+  } = ledgerLib;
 
   function isPlainObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -87,7 +104,51 @@
       schemaVersion: ARCHIVE_SCHEMA_VERSION,
       createdAt: typeof archiveObject.createdAt === 'string' ? archiveObject.createdAt : null,
       updatedAt: typeof archiveObject.updatedAt === 'string' ? archiveObject.updatedAt : null,
+      ledger: normalizeLedger(archiveObject.ledger),
       snapshots: sortSnapshotsByCaptureTime(snapshots),
+    };
+  }
+
+  function archiveUsdPerCredit(snapshots) {
+    const latest = Array.isArray(snapshots) ? snapshots[snapshots.length - 1] : null;
+    const value = Number(latest?.sourceContext?.usdPerCredit);
+    return Number.isFinite(value) && value > 0 ? value : DEFAULT_USD_PER_CREDIT;
+  }
+
+  // Fold all snapshots into the ledger (idempotent) and cap retained raw snapshots.
+  // `nowMs` drives the settle rule, so this runs where a clock is available.
+  function migrateArchive(rawArchive, nowMs = Date.now()) {
+    const normalized = normalizeSnapshotArchive(rawArchive);
+    const usdPerCredit = archiveUsdPerCredit(normalized.snapshots);
+    const ledger = foldSnapshotsIntoLedger(normalized.ledger, normalized.snapshots, nowMs, { usdPerCredit });
+    return {
+      schemaVersion: ARCHIVE_SCHEMA_VERSION,
+      createdAt: normalized.createdAt,
+      updatedAt: normalized.updatedAt,
+      ledger,
+      snapshots: normalized.snapshots.slice(-MAX_RETAINED_SNAPSHOTS),
+    };
+  }
+
+  function cycleStartDateFromArchive(archive) {
+    const snapshots = normalizeSnapshotArchive(archive).snapshots;
+    const latest = snapshots[snapshots.length - 1];
+    const win = Array.isArray(latest?.windowSnapshot)
+      ? latest.windowSnapshot.find(isMainSevenDayWindow)
+      : null;
+    const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(win?.['本轮开始_UTC'] || ''));
+    return match ? match[1] : null;
+  }
+
+  function buildLedgerCostViews(archive, options = {}) {
+    const migrated = migrateArchive(archive, options.nowMs);
+    const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
+    const cycleStartDate = options.cycleStartDate || cycleStartDateFromArchive(migrated);
+    return {
+      cycleStartDate,
+      daily: aggregateDaily(migrated.ledger, { nowMs, limit: options.dailyLimit }),
+      cycle: aggregateCycle(migrated.ledger, cycleStartDate, { nowMs }),
+      month: aggregateMonth(migrated.ledger, options.month, { nowMs }),
     };
   }
 
@@ -194,31 +255,51 @@
   }
 
   function buildSnapshotExportDocument(archive, exportedAt) {
-    const normalized = normalizeSnapshotArchive(archive);
+    const migrated = migrateArchive(archive, Date.parse(exportedAt) || Date.now());
 
     return {
       format: EXPORT_FORMAT,
       version: EXPORT_VERSION,
       exportedAt,
-      snapshotCount: normalized.snapshots.length,
-      snapshots: normalized.snapshots.map((snapshot) => sanitizeValue(snapshot)),
+      snapshotCount: migrated.snapshots.length,
+      ledger: migrated.ledger,
+      snapshots: migrated.snapshots.map((snapshot) => sanitizeValue(snapshot)),
     };
   }
 
-  function previewImportArchiveDocument(currentArchive, documentObject) {
-    if (!isPlainObject(documentObject) || documentObject.format !== EXPORT_FORMAT || documentObject.version !== EXPORT_VERSION) {
+  function previewImportArchiveDocument(currentArchive, documentObject, nowMs = Date.now()) {
+    if (!isPlainObject(documentObject)
+      || documentObject.format !== EXPORT_FORMAT
+      || !SUPPORTED_EXPORT_VERSIONS.has(documentObject.version)) {
       throw new Error('Unsupported Snapshot Export document.');
     }
 
-    const merged = mergeSnapshots(
-      currentArchive,
-      Array.isArray(documentObject.snapshots) ? documentObject.snapshots : [],
-    );
+    const current = migrateArchive(currentArchive, nowMs);
+    const incomingSnapshots = Array.isArray(documentObject.snapshots) ? documentObject.snapshots : [];
+
+    // Snapshot-level merge keeps the existing added/skipped/invalid report semantics.
+    const mergedSnap = mergeSnapshots({ snapshots: current.snapshots }, incomingSnapshots);
+    const usdPerCredit = archiveUsdPerCredit(mergedSnap.archive.snapshots);
+
+    // Ledger merge: current + (v2 doc ledger) + fold incoming snapshots (covers v1 docs and gaps).
+    let ledger = current.ledger;
+    if (isPlainObject(documentObject.ledger)) {
+      ledger = mergeLedgers(ledger, documentObject.ledger);
+    }
+    ledger = foldSnapshotsIntoLedger(ledger, incomingSnapshots, nowMs, { usdPerCredit });
+
+    const archive = {
+      schemaVersion: ARCHIVE_SCHEMA_VERSION,
+      createdAt: current.createdAt,
+      updatedAt: current.updatedAt,
+      ledger,
+      snapshots: mergedSnap.archive.snapshots.slice(-MAX_RETAINED_SNAPSHOTS),
+    };
 
     return {
-      archive: merged.archive,
-      summary: summarizeSnapshotArchive(merged.archive),
-      report: merged.report,
+      archive,
+      summary: summarizeSnapshotArchive(archive),
+      report: mergedSnap.report,
     };
   }
 
@@ -361,18 +442,23 @@
       throw new Error('Snapshot Archive store requires read and write functions.');
     }
 
+    function nowMs() {
+      const parsed = Date.parse(now());
+      return Number.isFinite(parsed) ? parsed : Date.now();
+    }
+
     async function loadArchive() {
-      return normalizeSnapshotArchive(await read());
+      return migrateArchive(await read(), nowMs());
     }
 
     async function writeArchive(archive) {
-      const normalized = normalizeSnapshotArchive(archive);
-      if (!normalized.createdAt) {
-        normalized.createdAt = now();
+      const migrated = migrateArchive(archive, nowMs());
+      if (!migrated.createdAt) {
+        migrated.createdAt = now();
       }
-      normalized.updatedAt = now();
-      await write(normalized);
-      return normalized;
+      migrated.updatedAt = now();
+      await write(migrated);
+      return migrated;
     }
 
     return {
@@ -390,7 +476,7 @@
           snapshotId: options.snapshotId || createId(),
         });
         const merged = mergeSnapshots(archive, [snapshot]);
-        const nextArchive = await writeArchive(merged.archive);
+        const nextArchive = await writeArchive({ ...archive, snapshots: merged.archive.snapshots });
 
         return {
           archive: nextArchive,
@@ -405,11 +491,19 @@
       },
 
       async previewImportArchiveDocument(documentObject) {
-        return previewImportArchiveDocument(await loadArchive(), documentObject);
+        return previewImportArchiveDocument(await loadArchive(), documentObject, nowMs());
+      },
+
+      async queryLedgerCost(options = {}) {
+        const archive = await loadArchive();
+        return buildLedgerCostViews(archive, {
+          nowMs: nowMs(),
+          ...options,
+        });
       },
 
       async importArchiveDocument(documentObject) {
-        const merged = previewImportArchiveDocument(await loadArchive(), documentObject);
+        const merged = previewImportArchiveDocument(await loadArchive(), documentObject, nowMs());
         const nextArchive = await writeArchive(merged.archive);
 
         return {
@@ -437,14 +531,18 @@
     ARCHIVE_SCHEMA_VERSION,
     EXPORT_FORMAT,
     EXPORT_VERSION,
+    MAX_RETAINED_SNAPSHOTS,
     createQuotaSnapshot,
     createSnapshotArchiveQuery,
     normalizeSnapshotArchive,
+    migrateArchive,
     summarizeSnapshotArchive,
     queryArchiveUsage,
     buildSnapshotExportDocument,
     previewImportArchiveDocument,
     mergeSnapshots,
+    cycleStartDateFromArchive,
+    buildLedgerCostViews,
     createSnapshotArchiveStore,
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

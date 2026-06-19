@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.1
+// @version      0.4.0
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -22,6 +22,7 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js
 // @grant        GM_getValue
@@ -55,6 +56,7 @@
   let latestError;
   let latestResult = null;
   let latestHistoryUsage = null;
+  let latestLedgerCost = null;
   let latestPanelViewModel = null;
   let latestArchiveSummary = null;
   let latestRemoteSyncStatus = null;
@@ -153,6 +155,14 @@
     return latestRemoteSyncStatus;
   }
 
+  function cycleStartDateFromResult(result) {
+    const windows = Array.isArray(result?.限制窗口概览) ? result.限制窗口概览 : [];
+    const win = windows.find((entry) => entry?.窗口Key === 'main.sevenDayWindow')
+      || windows.find((entry) => /7\s*天/.test(String(entry?.名称 || '')));
+    const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(win?.['本轮开始_UTC'] || ''));
+    return match ? match[1] : null;
+  }
+
   async function refreshHistoryUsageForResult(result) {
     const sinceResetSummary = result?.主7天窗口_上次重置至今?.汇总 || {};
     if (!archiveStore?.queryHistory) return null;
@@ -161,6 +171,11 @@
       endDate: sinceResetSummary?.API_end_date_排他,
       periodDays: result?.配置?.ROLLING_DAYS,
     });
+    if (archiveStore?.queryLedgerCost) {
+      latestLedgerCost = await archiveStore.queryLedgerCost({
+        cycleStartDate: cycleStartDateFromResult(result),
+      });
+    }
     return latestHistoryUsage;
   }
 
@@ -211,6 +226,7 @@
     const viewModel = panelViewModelLib.createQuotaPanelViewModel({
       result,
       historyUsage: latestHistoryUsage,
+      ledgerCost: latestLedgerCost,
       archiveSummary: latestArchiveSummary,
       importReport: latestImportReport,
       storageBackend: archiveStoragePort.getBackendInfo(),

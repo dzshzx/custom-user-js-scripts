@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js');
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js');
 
@@ -437,6 +438,63 @@ test('syncNow skips patching the gist when the remote already holds every local 
   assert.equal(result.remoteReport.updated, false);
   assert.equal(requests.length, 1);
   assert.equal(requests.some((request) => request.method === 'PATCH'), false);
+});
+
+test('syncNow pushes a settled ledger day the remote lacks even when snapshot counts match', async () => {
+  // Local archive: snapshots equal to the remote's, but the local ledger holds an
+  // extra settled day. A snapshot-count gate would miss this; the content gate must push it.
+  const sharedSnapshots = ['a', 'b', 'c', 'd', 'e'].map((id, index) => createSnapshot(
+    id,
+    `2026-06-1${index}T10:00:00.000Z`,
+    100 + index,
+  ));
+  const archive = createMemoryArchiveStore({
+    schemaVersion: 2,
+    snapshots: sharedSnapshots.map((snapshot) => ({ ...snapshot })),
+    ledger: {
+      '2026-06-09': {
+        date: '2026-06-09', credits: 999, usd: 39.96, settled: true, settledAt: '2026-06-10T00:20:00.000Z',
+      },
+    },
+  });
+  const settingsStore = createMemorySettingsStore({ enabled: true, token: 'secret-token', gistId: 'gist-1' });
+  const remoteDocument = {
+    format: 'codex-quota-compass.snapshot-archive',
+    version: 2,
+    exportedAt: '2026-06-20T00:00:00.000Z',
+    snapshotCount: sharedSnapshots.length,
+    snapshots: sharedSnapshots.map((snapshot) => ({ ...snapshot })),
+    ledger: {},
+  };
+  let patched = false;
+  const client = createRemoteSyncClient({
+    archiveStore: archive.store,
+    settingsStore,
+    now: () => '2026-06-20T12:30:00.000Z',
+    requestJson: async (request) => {
+      if (request.method === 'GET' && request.url === `${GITHUB_API_BASE}/gists/gist-1`) {
+        return {
+          id: 'gist-1',
+          description: GIST_DESCRIPTION,
+          files: { [GIST_FILENAME]: { filename: GIST_FILENAME, truncated: false, content: JSON.stringify(remoteDocument) } },
+        };
+      }
+      if (request.method === 'PATCH' && request.url === `${GITHUB_API_BASE}/gists/gist-1`) {
+        patched = true;
+        const pushed = JSON.parse(request.body.files[GIST_FILENAME].content);
+        assert.equal(pushed.version, 2);
+        assert.equal(Boolean(pushed.ledger['2026-06-09']), true, 'pushed payload carries the local-only settled day');
+        return createGist({ id: 'gist-1', snapshots: pushed.snapshots });
+      }
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+  });
+
+  const result = await client.syncNow();
+
+  assert.equal(result.status, 'synced');
+  assert.equal(patched, true, 'ledger growth must be pushed even when the snapshot list is unchanged');
+  assert.equal(result.remoteReport.updated, true);
 });
 
 test('syncNow records request failures in settings and rethrows a clear error', async () => {

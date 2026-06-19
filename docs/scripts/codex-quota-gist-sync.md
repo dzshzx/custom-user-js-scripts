@@ -39,22 +39,37 @@ Gist 中只有一个文件：
 codex-quota-compass-snapshot-archive.v1.json
 ```
 
-内容是标准 `Snapshot Export`：
+内容是标准 `Snapshot Export`。从 `version: 2` 起，文档由「按日成本账本（Cost Ledger）」加「最近 5 条原始快照」组成，不再每条快照内嵌完整的近 30 天 / 本月日明细：
 
 ```json
 {
   "format": "codex-quota-compass.snapshot-archive",
-  "version": 1,
-  "exportedAt": "2026-06-13T00:00:00.000Z",
+  "version": 2,
+  "exportedAt": "2026-06-19T00:00:00.000Z",
   "snapshotCount": 0,
+  "ledger": {
+    "2026-06-18": { "date": "2026-06-18", "credits": 3402.93, "usd": 136.12, "settled": true, "settledAt": "2026-06-19T00:15:00.000Z" }
+  },
   "snapshots": []
 }
 ```
 
+这样同步体积随**天数**线性增长（每天一行），不再随**同步次数**膨胀——这是相对旧版的关键改动。文件名仍保持 `codex-quota-compass-snapshot-archive.v1.json` 不变（改名会让已有 gist 失联、历史变孤儿），只是内容升级为 v2。
+
 同步是 merge 语义：
 
-- 优先按 `Snapshot ID` 去重。
-- 导入远端归档后写回合并后的完整归档。
+- 账本按日期合并：同一天取较大值（已结算日不回退），`settled` 只增不减。
+- 最近 5 条原始快照按 `Snapshot ID` 去重，仅保留最新 5 条。
+- 读取时兼容旧的 `version: 1`（全快照）文档：把其中每条快照的日明细一次性折叠进账本（幂等、无损），再按上述规则合并。
 - 不上传 Cookie、OpenAI Token、GitHub token、WebDAV 账号或原始私有接口响应。
+
+> 跨版本提示：升级到新脚本的设备只写 v2 内容；尚未升级的旧设备读到 v2 会同步报错（fail-closed，不丢数据），升级后即恢复。建议各设备一并升级。
+
+## 消耗成本视图与结算口径
+
+面板「历史」页提供「消耗成本（已结算）」：本周期、本月、以及每日已结算的 credits 与折算 USD（固定按 `0.04 USD/credit` 换算）。
+
+- **结算规则**：统计按 UTC 整日；某一天只有在它结束（即次日北京 08:00，对应 UTC 日结束）再加约 15 分钟缓冲后，才冻结为最终值。当天显示为「今日（暂估）」，不计入已结算总额。
+- **周期口径**：从当前 7 天窗口的「本轮开始」当天累计到今天；窗口在当日中途开始时，起始当日按整日计入（日粒度近似）。
 
 注意：GitHub secret gist 是 unlisted，不是端到端加密存储。当前脚本只上传整理后的用量快照，不应把真正敏感材料写入归档。

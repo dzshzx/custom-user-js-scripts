@@ -322,3 +322,23 @@ test('installStyles installs content styles once', () => {
   assert.match(appended[0].textContent, /@container \(max-width: 720px\)/);
   assert.match(appended[0].textContent, /\.cqc-data-view\[data-compact="true"\] \.cqc-data-table/);
 });
+
+test('history view renders the settled cost section', () => {
+  const renderer = createQuotaPanelRenderer({ t: (key) => key, debugKey: '__debugKey' });
+  const rendered = renderer.renderActiveView({
+    cost: {
+      cycleStartDate: '2026-06-01',
+      cycle: { totalCredits: 300, totalUsd: 12 },
+      month: { totalCredits: 300, totalUsd: 12 },
+      today: { date: '2026-06-05', credits: 50, usd: 2 },
+      dailyRows: [{ date: '2026-06-02', credits: 200, usd: 8 }],
+    },
+    history: {},
+    views: {},
+  }, { activePanelView: 'history' });
+
+  assert.match(rendered.html, /sectionCostLedger/);
+  assert.match(rendered.html, /costCycleNote/);
+  assert.match(rendered.html, /12\.00/);
+  assert.match(rendered.html, /2026-06-02/);
+});
