@@ -417,14 +417,45 @@
       return (view?.sections || []).map((section) => sectionFromModelHtml(section, viewModel)).join('');
     }
 
+    function costSectionHtml(model) {
+      const cost = model?.cost;
+      if (!cost) return '';
+      const round = (value) => Math.round(Number(value || 0));
+      const usd = (value) => Number(value || 0).toFixed(2);
+      const cycleLabel = t('costCycleLabel');
+      const monthLabel = t('costMonthLabel');
+      const summaryRow = {
+        [`${cycleLabel} USD`]: usd(cost.cycle.totalUsd),
+        [`${cycleLabel} Credits`]: round(cost.cycle.totalCredits),
+        [`${monthLabel} USD`]: usd(cost.month.totalUsd),
+        [`${monthLabel} Credits`]: round(cost.month.totalCredits),
+      };
+      if (cost.today) {
+        summaryRow[`${t('costTodayLabel')} USD`] = usd(cost.today.usd);
+      }
+      const summary = sectionHtml(t('sectionCostLedger'), `
+        ${tableHtml([summaryRow], { columns: Object.keys(summaryRow) })}
+        <div class="cqc-table-note">${escapeHtml(t('costCycleNote'))}</div>
+      `);
+      const dailyRows = Array.isArray(cost.dailyRows) ? cost.dailyRows : [];
+      const daily = dailyRows.length
+        ? sectionHtml(t('costSettledDaily'), tableHtml(
+          dailyRows.map((row) => ({ 日期桶: row.date, Credits: round(row.credits), 折算USD: usd(row.usd) })),
+          { columns: ['日期桶', 'Credits', '折算USD'] },
+        ))
+        : '';
+      return summary + daily;
+    }
+
     function historyViewHtml(model) {
+      const cost = costSectionHtml(model);
       const view = model?.views?.history;
-      if (view) return sectionsViewHtml(view, model);
+      if (view) return cost + sectionsViewHtml(view, model);
       const dayRows = model?.history?.dayRows || [];
       const daySummary = model?.history?.daySummary || {};
       const rollingSummary = model?.history?.rollingSummary || {};
       const monthSummary = model?.history?.monthSummary || {};
-      return `
+      return cost + `
         ${sectionHtml(t('sectionDailyQuery'), tableHtml(dayRows.map((row) => ({
           日期桶: row.date,
           Credits: row.credits,

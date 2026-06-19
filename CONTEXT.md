@@ -12,6 +12,10 @@ _Avoid_: run result, report cache, monthly report
 The long-lived local collection of quota snapshots stored by the userscript. It is the user's personal history for period review and data exchange.
 _Avoid_: database, cloud ledger, backup folder
 
+**Cost Ledger**:
+The per-UTC-day settled cost rollup derived from snapshots: one immutable record per date (credits and converted USD) once that UTC day has closed. It powers the daily / cycle / month consumption view and lets the synced archive keep only the last few raw snapshots instead of full per-snapshot daily history. Distinct from the Snapshot Archive, which holds whole snapshots.
+_Avoid_: usage cache, daily table, running total, cloud ledger
+
 **Snapshot Export**:
 A versioned JSON document produced from the snapshot archive for backup, transfer, or manual multi-device sync.
 _Avoid_: dump, raw payload, script backup

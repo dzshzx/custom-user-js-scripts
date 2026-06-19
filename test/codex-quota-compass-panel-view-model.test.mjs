@@ -204,3 +204,39 @@ test('panel mobile regression contract gives every tab content and compact long 
     true,
   );
 });
+
+test('createQuotaPanelViewModel surfaces ledger cost views', () => {
+  const result = buildQuotaSnapshotResult({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    diagnostics: {},
+    windows: [{ 窗口Key: 'main.sevenDayWindow', 名称: '主限制 - 7天窗口' }],
+    periods: {
+      sinceReset: { summary: {}, weeklyEstimate: {}, rows: [], clients: [] },
+      monthToDate: { summary: {}, rows: [], clients: [] },
+      rolling: { summary: {}, rows: [], clients: [] },
+    },
+  });
+
+  const withCost = createQuotaPanelViewModel({
+    result,
+    ledgerCost: {
+      cycleStartDate: '2026-06-01',
+      daily: {
+        totalCredits: 300,
+        totalUsd: 12,
+        days: [{ date: '2026-06-02', credits: 200, usd: 8 }],
+        inProgress: { date: '2026-06-05', credits: 50, usd: 2 },
+      },
+      cycle: { totalCredits: 300, totalUsd: 12 },
+      month: { totalCredits: 300, totalUsd: 12 },
+    },
+  });
+  assert.equal(withCost.cost.cycleStartDate, '2026-06-01');
+  assert.equal(withCost.cost.cycle.totalUsd, 12);
+  assert.equal(withCost.cost.month.totalCredits, 300);
+  assert.equal(withCost.cost.today.date, '2026-06-05');
+  assert.equal(withCost.cost.dailyRows.length, 1);
+
+  const withoutCost = createQuotaPanelViewModel({ result });
+  assert.equal(withoutCost.cost, null);
+});
