@@ -12,7 +12,6 @@
 | `CONTEXT.md` | 稳定领域词汇表；不要放实现计划、运行手册或任务记录。 |
 | `docs/` | 人类可读说明、脚本 runbook、项目约定。 |
 | `docs/scripts/` | 具体脚本或本地工具的使用说明。 |
-| `docs/agents/` | Agent skill 配置；不要混入用户脚本说明。 |
 | `.trellis/spec/` | 面向实现的规则、约束、检查点。 |
 | `.trellis/tasks/` | Trellis 任务计划和历史证据，不作为读者入口。 |
 
