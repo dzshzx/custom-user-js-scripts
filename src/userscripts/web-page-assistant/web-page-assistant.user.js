@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.2.8
+// @version      0.2.9
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -137,6 +137,7 @@
   let webPageAssistantSession;
   let widgetLayoutRuntime;
   let unlockerRuntime;
+  let initialStateReady = Promise.resolve();
 
   function isRecord(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -552,27 +553,39 @@
     renderDialog(`将保存到${scopeLabel(selectedScope)}。`, selectedScope, activeDialogTab);
   }
 
+  function openSettingsFromMenu() {
+    onReady(() => {
+      initialStateReady
+        .then(() => renderDialog())
+        .catch((error) => {
+          console.warn(`${SCRIPT_NAME}: failed to open settings menu.`, error);
+        });
+    });
+  }
+
   function registerMenu() {
-    storagePort.registerSettingsMenu('网页助手设置', () => onReady(() => renderDialog()));
+    storagePort.registerSettingsMenu('网页助手设置', openSettingsFromMenu);
   }
 
   async function init() {
+    registerMenu();
+
     [settings, widgetPosition] = await Promise.all([
       storagePort.readSettings(),
       storagePort.readWidgetPosition(),
-	    ]);
-	    activeMatch = resolveActiveSetting(settings);
-	    activeUnlockerMatch = resolveActiveUnlockerSetting(settings);
-	    registerMenu();
-	    window.addEventListener('resize', () => widgetLayoutRuntime.applyPosition());
-	    refreshUnlockerState();
+    ]);
+    activeMatch = resolveActiveSetting(settings);
+    activeUnlockerMatch = resolveActiveUnlockerSetting(settings);
+    window.addEventListener('resize', () => widgetLayoutRuntime.applyPosition());
+    refreshUnlockerState();
 
-	    if (activeMatch) {
+    if (activeMatch) {
       onReady(restartActiveCountdown);
     }
   }
 
-  init().catch((error) => {
+  initialStateReady = init();
+  initialStateReady.catch((error) => {
     console.warn(`${SCRIPT_NAME}: failed to initialize.`, error);
   });
 })();
