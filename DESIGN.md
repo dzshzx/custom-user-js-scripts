@@ -39,6 +39,8 @@ or an app trying to take over the host site.
 
 - Default to a restrained product palette: tinted neutral surfaces plus one
   primary accent.
+- Avoid pure `#000` / `#fff`. Tint neutral surfaces slightly toward the primary
+  hue so they do not read as harsh.
 - Use the primary accent for selected tabs, focus rings, status dots, and
   primary actions.
 - Use a separate low-saturation danger color for destructive actions.
@@ -139,6 +141,9 @@ or an app trying to take over the host site.
   `aria-hidden="true"`.
 - Tabs should preserve stable action IDs and selected state.
 - Inputs, radios, checkboxes, and selects should keep native affordances.
+- Express selected state through both the control and its container (for
+  example `accent-color` plus a border or background change), not the control
+  alone.
 - Focus-visible state is required for keyboard access.
 - Disabled state should be visually distinct and functionally disabled.
 

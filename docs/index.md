@@ -26,4 +26,3 @@
 - [Product context](../PRODUCT.md)
 - [Design context](../DESIGN.md)
 - [Script template notes](script-template.md)
-- [Frontend design guidelines](frontend-design-guidelines.md)
