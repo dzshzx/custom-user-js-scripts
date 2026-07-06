@@ -7,11 +7,10 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Trellis local workspace and agent config
+# Local agent workspace and config
 .agents/
 .claude/
 .codex/
-.trellis/
 CLAUDE.md
 .scratch/
 docs/agents/
