@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js');
+await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js');
 await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js');
 
 const { createQuotaPanelRenderer } = globalThis.CodexQuotaCompassPanelRendererLib;
@@ -12,6 +14,7 @@ const userscriptPath = path.resolve(
   '../src/userscripts/codex-quota-compass/codex-quota-compass.user.js',
 );
 const rendererStylesRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js';
+const statsStylesRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js';
 const userscriptContent = await readFile(userscriptPath, 'utf8');
 
 const labels = {
@@ -36,14 +39,13 @@ const labels = {
   resetCountdown: 'Reset',
   sectionArchiveOverview: 'Archive Overview',
   sectionDailyQuery: 'Daily',
-  sectionPeriodSummary: 'Period',
   syncBannerGmDetail: 'Using {backend}',
   syncBannerGmTitle: 'Sync enabled',
   tableNoData: 'No data',
   tablePreviewHint: 'Showing {visible} of {total}; debug {debugKey}',
   tabArchiveWorkspace: 'Sync',
   tabDetails: 'Details',
-  tabHistory: 'History',
+  tabStats: 'Stats',
   transferNote: 'Transfer note',
 };
 
@@ -56,11 +58,27 @@ function createRenderer() {
   return createQuotaPanelRenderer({ t, debugKey: '__debugKey' });
 }
 
-test('installable metadata requires the panel renderer styles library', () => {
+test('installable metadata requires statistics styles before renderer styles', () => {
   assert.equal(
     userscriptContent.includes(`// @require      ${rendererStylesRequireUrl}`),
     true,
   );
+  assert.equal(
+    userscriptContent.includes(`// @require      ${statsStylesRequireUrl}`),
+    true,
+  );
+  assert.equal(
+    userscriptContent.indexOf(statsStylesRequireUrl) < userscriptContent.indexOf(rendererStylesRequireUrl),
+    true,
+  );
+});
+
+test('installable metadata and Snapshot Archive version stay synchronized at 0.4.1', () => {
+  const metadataVersion = /^\/\/ @version\s+(\S+)$/m.exec(userscriptContent)?.[1];
+  const internalVersion = /const SCRIPT_VERSION = '([^']+)';/.exec(userscriptContent)?.[1];
+
+  assert.equal(metadataVersion, '0.4.1');
+  assert.equal(internalVersion, metadataVersion);
 });
 
 test('renderLoading and renderError return escaped panel states', () => {
@@ -283,7 +301,7 @@ test('renderResult falls back to first tab when active view is unavailable', () 
     primaryMetrics: [],
     tabs: [
       { id: 'details', labelKey: 'tabDetails' },
-      { id: 'history', labelKey: 'tabHistory' },
+      { id: 'stats', labelKey: 'tabStats' },
     ],
     views: {
       details: {
@@ -319,26 +337,50 @@ test('installStyles installs content styles once', () => {
   assert.equal(appended.length, 1);
   assert.equal(appended[0].id, 'root-style');
   assert.match(appended[0].textContent, /\.cqc-tabs/);
+  assert.match(appended[0].textContent, /#root \.cqc-stats-tabs/);
+  assert.match(appended[0].textContent, /#root \.cqc-stats-tab:focus-visible/);
   assert.match(appended[0].textContent, /@container \(max-width: 720px\)/);
   assert.match(appended[0].textContent, /\.cqc-data-view\[data-compact="true"\] \.cqc-data-table/);
 });
 
-test('history view renders the settled cost section', () => {
+test('stats view renders cost dimensions, a live rolling line, and drillable rows', () => {
   const renderer = createQuotaPanelRenderer({ t: (key) => key, debugKey: '__debugKey' });
-  const rendered = renderer.renderActiveView({
+  const model = {
+    rolling: { 累计折算USD: 8, 累计Credits: 200 },
     cost: {
       cycleStartDate: '2026-06-01',
-      cycle: { totalCredits: 300, totalUsd: 12 },
-      month: { totalCredits: 300, totalUsd: 12 },
       today: { date: '2026-06-05', credits: 50, usd: 2 },
-      dailyRows: [{ date: '2026-06-02', credits: 200, usd: 8 }],
+      day: { rows: [{ date: '2026-06-02', credits: 200, usd: 8 }], today: { date: '2026-06-05', credits: 50, usd: 2 } },
+      week: {
+        current: { from: '2026-05-30', to: '2026-06-05', credits: 50, usd: 2 },
+        blocks: [{ from: '2026-05-23', to: '2026-05-29', credits: 100, usd: 4 }],
+      },
+      month: {
+        current: { month: '2026-06', credits: 250, usd: 10 },
+        rows: [{ month: '2026-05', from: '2026-05-01', to: '2026-05-31', credits: 100, usd: 4 }],
+      },
+      all: { totalCredits: 300, totalUsd: 12, coverDays: 5, fromDate: '2026-06-02', toDate: '2026-06-02', rows: [{ date: '2026-06-02', credits: 200, usd: 8 }] },
+      allDays: [{ date: '2026-06-02', credits: 200, usd: 8 }],
     },
-    history: {},
-    views: {},
-  }, { activePanelView: 'history' });
+    views: { stats: { id: 'stats', kind: 'stats' } },
+  };
 
-  assert.match(rendered.html, /sectionCostLedger/);
-  assert.match(rendered.html, /costCycleNote/);
-  assert.match(rendered.html, /12\.00/);
-  assert.match(rendered.html, /2026-06-02/);
+  const day = renderer.renderActiveView(model, { activePanelView: 'stats' });
+  assert.match(day.html, /cqc-stats-tabs/);
+  assert.match(day.html, /statsRollingLive/);
+  assert.match(day.html, /2026-06-02/);
+
+  const week = renderer.renderActiveView(model, { activePanelView: 'stats', statsPeriod: 'week' });
+  assert.match(week.html, /data-action="stats-drill"/);
+  assert.match(week.html, /data-from="2026-05-23"/);
+  assert.match(week.html, /data-to="2026-05-29"/);
+
+  const drill = renderer.renderActiveView(model, {
+    activePanelView: 'stats',
+    statsPeriod: 'week',
+    statsDrill: { from: '2026-05-23', to: '2026-05-29', label: 'wk' },
+  });
+  assert.match(drill.html, /data-action="stats-drill-back"/);
+  // The live rolling line is summary-only and must not bleed into a drill view.
+  assert.doesNotMatch(drill.html, /statsRollingLive/);
 });

@@ -31,6 +31,9 @@
     aggregateDaily,
     aggregateCycle,
     aggregateMonth,
+    aggregateWeekly,
+    aggregateMonthlyList,
+    aggregateAllTime,
   } = ledgerLib;
 
   function isPlainObject(value) {
@@ -149,6 +152,9 @@
       daily: aggregateDaily(migrated.ledger, { nowMs, limit: options.dailyLimit }),
       cycle: aggregateCycle(migrated.ledger, cycleStartDate, { nowMs }),
       month: aggregateMonth(migrated.ledger, options.month, { nowMs }),
+      weekly: aggregateWeekly(migrated.ledger, { nowMs, count: options.weekCount }),
+      monthly: aggregateMonthlyList(migrated.ledger, { nowMs, count: options.monthCount }),
+      allTime: aggregateAllTime(migrated.ledger, { nowMs }),
     };
   }
 
@@ -405,6 +411,10 @@
       return dailyUsageForLatestSinceReset(query);
     }
 
+    // Compatibility aggregate retained for existing callers. The Statistics
+    // view reads Cost Ledger projections instead, but removing this public
+    // query shape would break integrations that still consume Snapshot Archive
+    // history directly.
     function queryHistory(query = {}) {
       const periods = queryPeriodSummaries(query);
       return {

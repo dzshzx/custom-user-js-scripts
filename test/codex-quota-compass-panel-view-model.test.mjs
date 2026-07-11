@@ -27,11 +27,6 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
 
   const model = createQuotaPanelViewModel({
     result,
-    historyUsage: {
-      day: { rows: [{ date: '2026-05-30', credits: 20, usd: 0.8 }], summary: { totalCredits: 20 } },
-      rolling: { summary: { totalCredits: 200, totalUsd: 8 } },
-      month: { summary: { totalCredits: 100, totalUsd: 4 } },
-    },
     archiveSummary: {
       snapshotCount: 1,
       earliestCapturedAt: '2026-05-30T10:00:00.000Z',
@@ -64,8 +59,6 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   assert.equal(model.rollingKey, '近30天');
   assert.equal(model.weekly.已用百分比, 40);
   assert.equal(model.mainSevenDayWindow.距离重置小时, 12);
-  assert.equal(model.history.dayRows.length, 1);
-  assert.equal(model.history.rollingSummary.totalCredits, 200);
   assert.equal(model.archive.snapshotCount, 1);
   assert.equal(model.archive.storageBackend.label, 'GM storage');
   assert.equal(model.archive.importReport.added, 1);
@@ -78,7 +71,8 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     'export-archive',
     'import-archive',
   ]);
-  assert.deepEqual(model.tabs.map((tab) => tab.id), ['details', 'history', 'archive']);
+  assert.deepEqual(model.tabs.map((tab) => tab.id), ['details', 'stats', 'archive']);
+  assert.equal(model.views.stats.kind, 'stats');
   assert.equal(model.tabs.some((tab) => tab.id === 'transfer'), false);
   assert.equal(model.views.details.sections[2].id, 'details-windows');
   assert.equal(
@@ -164,11 +158,6 @@ test('panel mobile regression contract gives every tab content and compact long 
         rolling: { summary: { 累计Credits: 200, 累计折算USD: 8 }, rows: [], clients: [] },
       },
     }),
-    historyUsage: {
-      day: { rows: [{ date: '2026-05-30', credits: 20, usd: 0.8 }], summary: { totalCredits: 20 } },
-      rolling: { summary: { totalCredits: 200, totalUsd: 8 } },
-      month: { summary: { totalCredits: 100, totalUsd: 4 } },
-    },
     archiveSummary: {
       snapshotCount: 1,
       earliestCapturedAt: '2026-05-30T10:00:00.000Z',
@@ -190,11 +179,17 @@ test('panel mobile regression contract gives every tab content and compact long 
   for (const tab of model.tabs) {
     const view = model.views[tab.id];
     assert.ok(view, `missing view for ${tab.id}`);
-    assert.ok(Array.isArray(view.sections) && view.sections.length > 0, `empty sections for ${tab.id}`);
+    // The Statistics view renders from the cost model (kind 'stats') and has no
+    // static `sections`; section-bearing views must still be non-empty.
+    if (view.kind === 'stats') {
+      assert.equal(view.kind, 'stats', 'stats view present');
+    } else {
+      assert.ok(Array.isArray(view.sections) && view.sections.length > 0, `empty sections for ${tab.id}`);
+    }
   }
 
   const dataViews = Object.values(model.views)
-    .flatMap((view) => view.sections)
+    .flatMap((view) => view.sections || [])
     .filter((section) => section.type === 'dataView');
 
   assert.ok(dataViews.length > 0);
@@ -227,15 +222,29 @@ test('createQuotaPanelViewModel surfaces ledger cost views', () => {
         days: [{ date: '2026-06-02', credits: 200, usd: 8 }],
         inProgress: { date: '2026-06-05', credits: 50, usd: 2 },
       },
-      cycle: { totalCredits: 300, totalUsd: 12 },
-      month: { totalCredits: 300, totalUsd: 12 },
+      weekly: {
+        current: { from: '2026-05-30', to: '2026-06-05', totalCredits: 50, totalUsd: 2 },
+        blocks: [{ from: '2026-05-23', to: '2026-05-29', totalCredits: 100, totalUsd: 4 }],
+      },
+      monthly: {
+        current: { month: '2026-06', from: '2026-06-01', to: '2026-06-30', totalCredits: 250, totalUsd: 10 },
+        months: [{ month: '2026-05', from: '2026-05-01', to: '2026-05-31', totalCredits: 100, totalUsd: 4 }],
+      },
+      allTime: { totalCredits: 300, totalUsd: 12, coverDays: 5, fromDate: '2026-06-02', toDate: '2026-06-02' },
     },
   });
   assert.equal(withCost.cost.cycleStartDate, '2026-06-01');
-  assert.equal(withCost.cost.cycle.totalUsd, 12);
-  assert.equal(withCost.cost.month.totalCredits, 300);
   assert.equal(withCost.cost.today.date, '2026-06-05');
-  assert.equal(withCost.cost.dailyRows.length, 1);
+  assert.equal(withCost.cost.day.rows.length, 1);
+  assert.equal(withCost.cost.allDays.length, 1);
+  assert.equal(withCost.cost.week.current.from, '2026-05-30');
+  assert.equal(withCost.cost.week.blocks.length, 1);
+  assert.equal(withCost.cost.week.blocks[0].usd, 4);
+  assert.equal(withCost.cost.month.rows[0].month, '2026-05');
+  assert.equal(withCost.cost.month.current.usd, 10);
+  assert.equal(withCost.cost.month.current.to, '2026-06-30');
+  assert.equal(withCost.cost.all.coverDays, 5);
+  assert.equal(withCost.cost.all.totalUsd, 12);
 
   const withoutCost = createQuotaPanelViewModel({ result });
   assert.equal(withoutCost.cost, null);

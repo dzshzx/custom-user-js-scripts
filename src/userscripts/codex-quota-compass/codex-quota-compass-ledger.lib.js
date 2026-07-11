@@ -177,6 +177,103 @@
     return new Date(Number.isFinite(nowMs) ? nowMs : Date.now()).toISOString().slice(0, 10);
   }
 
+  // Shift a YYYY-MM-DD key by whole UTC days.
+  function shiftDateKey(dateStr, deltaDays) {
+    if (!isDateKey(dateStr)) return dateStr;
+    const ms = utcDayStartMs(dateStr) + deltaDays * DAY_MS;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  // Shift a YYYY-MM month key by whole months.
+  function shiftMonthKey(monthStr, deltaMonths) {
+    const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(monthStr || ''));
+    if (!match) return monthStr;
+    const index = Number(match[1]) * 12 + (Number(match[2]) - 1) + deltaMonths;
+    const year = Math.floor(index / 12);
+    const month = (index % 12) + 1;
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+  }
+
+  function utcMonthRange(monthStr, nowMs) {
+    const fallbackMonth = currentUtcDate(nowMs).slice(0, 7);
+    const requestedMonth = String(monthStr || '');
+    const month = /^(\d{4})-(0[1-9]|1[0-2])$/.test(requestedMonth)
+      ? requestedMonth
+      : fallbackMonth;
+    const [year, monthNumber] = month.split('-').map(Number);
+    const to = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+    return { month, from: `${month}-01`, to };
+  }
+
+  // Raw range sum over ALL records (no settle filter). Used only for the
+  // in-progress estimate buckets (current rolling week / current month), which
+  // are explicitly labelled estimates and must include today's unsettled usage.
+  function sumRangeRaw(ledger, { from, to } = {}) {
+    const records = Object.values(normalizeLedger(ledger)).filter((record) => {
+      if (from && record.date < from) return false;
+      if (to && record.date > to) return false;
+      return true;
+    });
+    return sumRecords(records);
+  }
+
+  // Rolling 7-day non-overlapping blocks anchored to today, newest first.
+  // `count` is the total number of rows incl. the in-progress current block.
+  // Block 0 = [today-6 .. today] (contains today -> in-progress estimate);
+  // block i = [today-7i-6 .. today-7i] (fully past -> settled).
+  function aggregateWeekly(ledger, { nowMs, count = 8, buffer = SETTLE_BUFFER_MS } = {}) {
+    const today = currentUtcDate(nowMs);
+    let current = null;
+    const blocks = [];
+    for (let i = 0; i < count; i += 1) {
+      const to = shiftDateKey(today, -7 * i);
+      const from = shiftDateKey(today, -7 * i - 6);
+      if (i === 0) {
+        const raw = sumRangeRaw(ledger, { from, to });
+        current = { from, to, totalCredits: round2(raw.totalCredits), totalUsd: round2(raw.totalUsd), settled: false };
+      } else {
+        const agg = aggregateRange(ledger, { from, to, nowMs, buffer });
+        blocks.push({ from, to, totalCredits: round2(agg.totalCredits), totalUsd: round2(agg.totalUsd), settled: true });
+      }
+    }
+    return { current, blocks };
+  }
+
+  // Recent natural UTC months, newest first. `count` is total rows incl. the
+  // in-progress current month (raw estimate); prior months are settled.
+  function aggregateMonthlyList(ledger, { nowMs, count = 6, buffer = SETTLE_BUFFER_MS } = {}) {
+    const currentMonth = currentUtcDate(nowMs).slice(0, 7);
+    let current = null;
+    const months = [];
+    for (let i = 0; i < count; i += 1) {
+      const month = shiftMonthKey(currentMonth, -i);
+      const { from, to } = utcMonthRange(month, nowMs);
+      if (i === 0) {
+        const raw = sumRangeRaw(ledger, { from, to });
+        current = { month, from, to, totalCredits: round2(raw.totalCredits), totalUsd: round2(raw.totalUsd), settled: false };
+      } else {
+        const agg = aggregateMonth(ledger, month, { nowMs, buffer });
+        months.push({ month, from, to, totalCredits: round2(agg.totalCredits), totalUsd: round2(agg.totalUsd), settled: true });
+      }
+    }
+    return { current, months };
+  }
+
+  // All settled days as a single total, plus coverage metadata for the
+  // "全量" view header.
+  function aggregateAllTime(ledger, { nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
+    const result = aggregateRange(ledger, { nowMs, buffer });
+    const days = result.days;
+    return {
+      totalCredits: round2(result.totalCredits),
+      totalUsd: round2(result.totalUsd),
+      coverDays: days.length,
+      fromDate: days.length ? days[days.length - 1].date : null,
+      toDate: days.length ? days[0].date : null,
+      inProgress: result.inProgress,
+    };
+  }
+
   function splitSettled(records, nowMs, buffer = SETTLE_BUFFER_MS) {
     const settled = [];
     let inProgress = null;
@@ -217,10 +314,8 @@
   }
 
   function aggregateMonth(ledger, yyyymm, { nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
-    const month = typeof yyyymm === 'string' && /^\d{4}-\d{2}$/.test(yyyymm)
-      ? yyyymm
-      : currentUtcDate(nowMs).slice(0, 7);
-    return aggregateRange(ledger, { from: `${month}-01`, to: `${month}-31`, nowMs, buffer });
+    const range = utcMonthRange(yyyymm, nowMs);
+    return aggregateRange(ledger, { from: range.from, to: range.to, nowMs, buffer });
   }
 
   globalObject[LIB_NAME] = Object.freeze({
@@ -242,5 +337,11 @@
     aggregateCycle,
     aggregateMonth,
     aggregateRange,
+    shiftDateKey,
+    shiftMonthKey,
+    sumRangeRaw,
+    aggregateWeekly,
+    aggregateMonthlyList,
+    aggregateAllTime,
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

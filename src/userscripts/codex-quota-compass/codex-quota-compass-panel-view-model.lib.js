@@ -132,38 +132,6 @@
     };
   }
 
-  function createHistorySections(historyUsage) {
-    const dayRows = historyUsage?.day?.rows || [];
-    const daySummary = historyUsage?.day?.summary || {};
-    const rollingSummary = historyUsage?.rolling?.summary || {};
-    const monthSummary = historyUsage?.month?.summary || {};
-
-    return [
-      dataView('history-daily', 'sectionDailyQuery', dayRows.map((row) => ({
-        date: row.date,
-        credits: row.credits,
-        usd: row.usd,
-      })), [
-        dataColumn('date', { labelKey: 'columnDateBucket', priority: 'primary' }),
-        dataColumn('credits', { label: 'Credits', priority: 'primary' }),
-        dataColumn('usd', { labelKey: 'columnUsd', priority: 'primary' }),
-      ]),
-      dataView('history-period-summary', 'sectionPeriodSummary', [{
-        rollingCredits: rollingSummary.totalCredits,
-        rollingUsd: rollingSummary.totalUsd,
-        monthCredits: monthSummary.totalCredits,
-        monthUsd: monthSummary.totalUsd,
-        dayCredits: daySummary.totalCredits,
-      }], [
-        dataColumn('rollingCredits', { labelKey: 'columnRollingCredits', priority: 'primary' }),
-        dataColumn('rollingUsd', { labelKey: 'columnRollingUsd', priority: 'primary' }),
-        dataColumn('monthCredits', { labelKey: 'columnMonthCredits', priority: 'primary' }),
-        dataColumn('monthUsd', { labelKey: 'columnMonthUsd', priority: 'secondary' }),
-        dataColumn('dayCredits', { labelKey: 'columnDailyCredits', priority: 'secondary' }),
-      ]),
-    ];
-  }
-
   function createDetailsSections({ weekly, sinceReset, month, rolling, windows }) {
     return [
       dataView('details-weekly-estimate', 'sectionWeeklyEstimate', [weekly], [
@@ -200,21 +168,20 @@
     ];
   }
 
-  function createPanelViews({ weekly, sinceReset, month, rolling, windows, historyUsage, transfer }) {
+  function createPanelViews({ weekly, sinceReset, month, rolling, windows, transfer }) {
     const tabs = [
       { id: 'details', labelKey: 'tabDetails' },
-      { id: 'history', labelKey: 'tabHistory' },
+      { id: 'stats', labelKey: 'tabStats' },
       { id: 'archive', labelKey: 'tabArchiveWorkspace' },
     ];
 
     return {
       tabs,
       views: {
-        history: {
-          id: 'history',
-          labelKey: 'tabHistory',
-          kind: 'sections',
-          sections: createHistorySections(historyUsage),
+        stats: {
+          id: 'stats',
+          labelKey: 'tabStats',
+          kind: 'stats',
         },
         details: {
           id: 'details',
@@ -235,6 +202,57 @@
           ],
         },
       },
+    };
+  }
+
+  function mapDailyRow(row) {
+    return { date: row?.date, credits: row?.credits || 0, usd: row?.usd || 0 };
+  }
+
+  function mapBucket(bucket) {
+    if (!bucket) return null;
+    return {
+      from: bucket.from,
+      to: bucket.to,
+      month: bucket.month,
+      credits: bucket.totalCredits || 0,
+      usd: bucket.totalUsd || 0,
+    };
+  }
+
+  // Shape the ledger-derived cost views into the structure the Statistics tab
+  // (CodexQuotaCompassPanelStatsLib.buildStatsView) consumes: four dimensions
+  // plus a flat allDays list used for in-panel drill-down filtering.
+  function buildCostViewModel(ledgerCost) {
+    if (!ledgerCost) return null;
+    const allDays = (ledgerCost.daily?.days || []).map(mapDailyRow);
+    const today = ledgerCost.daily?.inProgress ? mapDailyRow(ledgerCost.daily.inProgress) : null;
+    const allTime = ledgerCost.allTime || {};
+
+    return {
+      cycleStartDate: ledgerCost.cycleStartDate || null,
+      today,
+      day: {
+        rows: allDays.slice(0, 30),
+        today,
+      },
+      week: {
+        current: mapBucket(ledgerCost.weekly?.current),
+        blocks: (ledgerCost.weekly?.blocks || []).map(mapBucket),
+      },
+      month: {
+        current: mapBucket(ledgerCost.monthly?.current),
+        rows: (ledgerCost.monthly?.months || []).map(mapBucket),
+      },
+      all: {
+        totalCredits: allTime.totalCredits || 0,
+        totalUsd: allTime.totalUsd || 0,
+        coverDays: allTime.coverDays || 0,
+        fromDate: allTime.fromDate || null,
+        toDate: allTime.toDate || null,
+        rows: allDays,
+      },
+      allDays,
     };
   }
 
@@ -299,7 +317,6 @@
 
   function createQuotaPanelViewModel({
     result,
-    historyUsage,
     ledgerCost,
     archiveSummary,
     importReport,
@@ -346,7 +363,6 @@
       month,
       rolling,
       windows: snapshotAccess.windows,
-      historyUsage,
       transfer,
     });
 
@@ -373,35 +389,7 @@
       sinceResetRows: snapshotAccess.sinceReset.dailyRows,
       sinceResetClients: snapshotAccess.sinceReset.clientSummaries,
       mainSevenDayWindow,
-      history: {
-        dayRows: historyUsage?.day?.rows || [],
-        daySummary: historyUsage?.day?.summary || {},
-        rollingSummary: historyUsage?.rolling?.summary || {},
-        monthSummary: historyUsage?.month?.summary || {},
-      },
-      cost: ledgerCost ? {
-        cycleStartDate: ledgerCost.cycleStartDate || null,
-        cycle: {
-          totalCredits: ledgerCost.cycle?.totalCredits || 0,
-          totalUsd: ledgerCost.cycle?.totalUsd || 0,
-        },
-        month: {
-          totalCredits: ledgerCost.month?.totalCredits || 0,
-          totalUsd: ledgerCost.month?.totalUsd || 0,
-        },
-        today: ledgerCost.daily?.inProgress
-          ? {
-            date: ledgerCost.daily.inProgress.date,
-            credits: ledgerCost.daily.inProgress.credits || 0,
-            usd: ledgerCost.daily.inProgress.usd || 0,
-          }
-          : null,
-        dailyRows: (ledgerCost.daily?.days || []).slice(0, 14).map((row) => ({
-          date: row.date,
-          credits: row.credits || 0,
-          usd: row.usd || 0,
-        })),
-      } : null,
+      cost: buildCostViewModel(ledgerCost),
       archive: {
         isLoaded: Boolean(archiveSummary),
         snapshotCount: archiveSummary?.snapshotCount || 0,

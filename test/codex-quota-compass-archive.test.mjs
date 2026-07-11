@@ -317,7 +317,7 @@ test('queryArchiveUsage returns day rows and period summary from stored snapshot
   assert.equal(rollingQuery.summary.totalCredits, 777.7);
 });
 
-test('queryHistory returns latest period summaries and snapshot timeline', async () => {
+test('snapshot archive query exposes period summaries, latest usage, and timeline', async () => {
   const storage = createMemoryStore();
   const ids = ['snapshot-1', 'snapshot-2'];
   const store = createSnapshotArchiveStore({
@@ -337,6 +337,8 @@ test('queryHistory returns latest period summaries and snapshot timeline', async
   await store.saveSnapshot(older, { capturedAt: '2026-05-29T10:00:00.000Z' });
   await store.saveSnapshot(newer, { capturedAt: '2026-05-30T10:00:00.000Z' });
 
+  // queryHistory predates the Statistics view and remains a compatibility
+  // contract for callers outside the userscript entry.
   const history = await store.queryHistory({
     startDate: '2026-05-30',
     endDate: '2026-05-31',
@@ -358,6 +360,7 @@ test('queryHistory returns latest period summaries and snapshot timeline', async
   assert.equal(directQuery.queryLatestUsage({ mode: 'month' }).summary.totalCredits, 300);
   assert.equal(directQuery.queryTimeline({ limit: 1 }).length, 1);
   assert.equal(directQuery.queryTimeline({ limit: 1 })[0].snapshotId, 'snapshot-2');
+  assert.equal(directQuery.queryHistory({ timelineLimit: 1 }).timeline.length, 1);
 });
 
 function snapshotWithDays(snapshotId, capturedAt, days) {

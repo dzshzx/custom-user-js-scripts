@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.4.0
+// @version      0.4.1
 // @description  Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 配额窗口、每日用量、客户端汇总和周额度估算。
 // @description:en     Show Codex quota windows, daily usage, client summaries, and weekly estimates on chatgpt.com.
@@ -18,7 +18,9 @@
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js
+// @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js
 // @require      https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js
@@ -47,15 +49,16 @@
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.3.1';
+  const SCRIPT_VERSION = '0.4.1';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
 
   let statusNode;
   let contentNode;
   let activePanelView = 'details';
+  let activeStatsPeriod = 'day';
+  let statsDrill = null;
   let latestError;
   let latestResult = null;
-  let latestHistoryUsage = null;
   let latestLedgerCost = null;
   let latestPanelViewModel = null;
   let latestArchiveSummary = null;
@@ -163,20 +166,12 @@
     return match ? match[1] : null;
   }
 
-  async function refreshHistoryUsageForResult(result) {
-    const sinceResetSummary = result?.主7天窗口_上次重置至今?.汇总 || {};
-    if (!archiveStore?.queryHistory) return null;
-    latestHistoryUsage = await archiveStore.queryHistory({
-      startDate: sinceResetSummary?.API_start_date,
-      endDate: sinceResetSummary?.API_end_date_排他,
-      periodDays: result?.配置?.ROLLING_DAYS,
+  async function refreshLedgerCostForResult(result) {
+    if (!archiveStore?.queryLedgerCost) return null;
+    latestLedgerCost = await archiveStore.queryLedgerCost({
+      cycleStartDate: cycleStartDateFromResult(result),
     });
-    if (archiveStore?.queryLedgerCost) {
-      latestLedgerCost = await archiveStore.queryLedgerCost({
-        cycleStartDate: cycleStartDateFromResult(result),
-      });
-    }
-    return latestHistoryUsage;
+    return latestLedgerCost;
   }
 
   function refreshCurrentPanel() {
@@ -225,7 +220,6 @@
     if (!contentNode) return;
     const viewModel = panelViewModelLib.createQuotaPanelViewModel({
       result,
-      historyUsage: latestHistoryUsage,
       ledgerCost: latestLedgerCost,
       archiveSummary: latestArchiveSummary,
       importReport: latestImportReport,
@@ -234,15 +228,39 @@
       remoteSyncStatus: latestRemoteSyncStatus,
     });
     latestPanelViewModel = viewModel;
-    const rendered = panelRenderer.renderResult(viewModel, { activePanelView });
+    const rendered = panelRenderer.renderResult(viewModel, panelRenderState());
     activePanelView = rendered.activePanelView;
     contentNode.innerHTML = rendered.html;
     schedulePanelResize();
   }
 
+  // Shared render state for the renderer: the active top-level tab plus the
+  // Statistics tab's sub-state (active period + current drill-down range).
+  function panelRenderState(overrides = {}) {
+    return {
+      activePanelView,
+      statsPeriod: activeStatsPeriod,
+      statsDrill,
+      ...overrides,
+    };
+  }
+
   function switchPanelView(nextView) {
     if (!contentNode || !latestPanelViewModel) return;
-    const rendered = panelRenderer.renderActiveView(latestPanelViewModel, { activePanelView: nextView });
+    // Leaving (or re-entering) a top-level tab drops any open drill-down so the
+    // Statistics tab always reopens at its summary.
+    statsDrill = null;
+    const rendered = panelRenderer.renderActiveView(latestPanelViewModel, panelRenderState({ activePanelView: nextView }));
+    activePanelView = panelDomLib.applyActiveView(contentNode, rendered);
+    schedulePanelResize();
+  }
+
+  // Re-render only the active view body after a Statistics sub-state change
+  // (period switch or drill), reusing the in-place swap so metrics and the open
+  // animation are never rebuilt.
+  function rerenderActiveView() {
+    if (!contentNode || !latestPanelViewModel) return;
+    const rendered = panelRenderer.renderActiveView(latestPanelViewModel, panelRenderState());
     activePanelView = panelDomLib.applyActiveView(contentNode, rendered);
     schedulePanelResize();
   }
@@ -271,7 +289,7 @@
 
     try {
       const result = await runAndReport({ silentAlert: true });
-      await refreshHistoryUsageForResult(result);
+      await refreshLedgerCostForResult(result);
       renderResult(result);
       setStatus(t('statusUpdated'), 'success');
       return result;
@@ -314,7 +332,7 @@
 
     latestArchiveSummary = synced.summary || await refreshArchiveSummary();
     if (latestResult && !latestError) {
-      await refreshHistoryUsageForResult(latestResult);
+      await refreshLedgerCostForResult(latestResult);
     }
     refreshCurrentPanel();
 
@@ -410,6 +428,33 @@
       if (nextView) {
         switchPanelView(nextView);
       }
+      return;
+    }
+
+    if (action === 'switch-stats-period' && latestPanelViewModel) {
+      const nextPeriod = event.target?.closest?.('[data-period]')?.dataset?.period;
+      if (nextPeriod) {
+        activeStatsPeriod = nextPeriod;
+        statsDrill = null;
+        rerenderActiveView();
+      }
+      return;
+    }
+
+    if (action === 'stats-drill' && latestPanelViewModel) {
+      const node = event.target?.closest?.('[data-from]');
+      const from = node?.dataset?.from;
+      const to = node?.dataset?.to;
+      if (from && to) {
+        statsDrill = { from, to, label: node?.dataset?.label || `${from} ~ ${to}` };
+        rerenderActiveView();
+      }
+      return;
+    }
+
+    if (action === 'stats-drill-back' && latestPanelViewModel) {
+      statsDrill = null;
+      rerenderActiveView();
       return;
     }
 

@@ -12,6 +12,9 @@ const {
   aggregateDaily,
   aggregateCycle,
   aggregateMonth,
+  aggregateWeekly,
+  aggregateMonthlyList,
+  aggregateAllTime,
 } = globalThis.CodexQuotaCompassLedgerLib;
 
 const USD = 0.04;
@@ -132,4 +135,80 @@ test('mergeLedgers: per-date max credits and OR settled', () => {
 
 test('settle buffer constant is 15 minutes', () => {
   assert.equal(SETTLE_BUFFER_MS, 15 * 60 * 1000);
+});
+
+// Shared fixture for the multi-granularity aggregates. now = 2026-06-20T12:00Z,
+// so today (06-20) is in progress and every earlier day below is settled.
+const STATS_LEDGER = {
+  '2026-06-20': { date: '2026-06-20', credits: 5 },   // today, unsettled
+  '2026-06-18': { date: '2026-06-18', credits: 10 },  // current rolling week, settled
+  '2026-06-10': { date: '2026-06-10', credits: 20 },  // prior week
+  '2026-06-03': { date: '2026-06-03', credits: 30 },  // week before that
+};
+const STATS_NOW = ms('2026-06-20T12:00:00Z');
+
+test('aggregateWeekly: rolling 7-day blocks, current block estimates incl today', () => {
+  const weekly = aggregateWeekly(STATS_LEDGER, { nowMs: STATS_NOW, count: 3 });
+
+  // Current block is the trailing 7 days ending today and is a raw estimate
+  // (includes today's unsettled 5 + the settled 10).
+  assert.equal(weekly.current.from, '2026-06-14');
+  assert.equal(weekly.current.to, '2026-06-20');
+  assert.equal(weekly.current.totalCredits, 15);
+  assert.equal(weekly.current.settled, false);
+
+  // Two fully-past settled blocks, newest first.
+  assert.equal(weekly.blocks.length, 2);
+  assert.deepEqual([weekly.blocks[0].from, weekly.blocks[0].to], ['2026-06-07', '2026-06-13']);
+  assert.equal(weekly.blocks[0].totalCredits, 20);
+  assert.deepEqual([weekly.blocks[1].from, weekly.blocks[1].to], ['2026-05-31', '2026-06-06']);
+  assert.equal(weekly.blocks[1].totalCredits, 30);
+});
+
+test('aggregateMonthlyList: current month estimate plus prior settled months', () => {
+  const monthly = aggregateMonthlyList(STATS_LEDGER, { nowMs: STATS_NOW, count: 3 });
+
+  // Current month sums every June day incl. today (estimate).
+  assert.equal(monthly.current.month, '2026-06');
+  assert.equal(monthly.current.totalCredits, 65);
+  assert.equal(monthly.current.settled, false);
+
+  assert.equal(monthly.months.length, 2);
+  assert.equal(monthly.months[0].month, '2026-05');
+  assert.equal(monthly.months[0].totalCredits, 0);
+  assert.equal(monthly.months[1].month, '2026-04');
+});
+
+test('aggregateMonthlyList: ranges end on the real UTC month boundary', () => {
+  const cases = [
+    ['2026-02-15T12:00:00Z', '2026-02-28'],
+    ['2028-02-15T12:00:00Z', '2028-02-29'],
+    ['2026-04-15T12:00:00Z', '2026-04-30'],
+    ['2026-07-15T12:00:00Z', '2026-07-31'],
+  ];
+
+  for (const [nowIso, expectedTo] of cases) {
+    const monthly = aggregateMonthlyList({}, { nowMs: ms(nowIso), count: 1 });
+    assert.equal(monthly.current.to, expectedTo, nowIso);
+  }
+
+  const priorMonths = aggregateMonthlyList({}, {
+    nowMs: ms('2026-05-15T12:00:00Z'),
+    count: 3,
+  });
+  assert.deepEqual(
+    priorMonths.months.map((month) => month.to),
+    ['2026-04-30', '2026-03-31'],
+  );
+});
+
+test('aggregateAllTime: settled-only total with coverage range, excludes today', () => {
+  const all = aggregateAllTime(STATS_LEDGER, { nowMs: STATS_NOW });
+
+  // Today (06-20) is unsettled, so excluded from the total: 10 + 20 + 30.
+  assert.equal(all.totalCredits, 60);
+  assert.equal(all.coverDays, 3);
+  assert.equal(all.fromDate, '2026-06-03');
+  assert.equal(all.toDate, '2026-06-18');
+  assert.equal(all.inProgress.date, '2026-06-20');
 });

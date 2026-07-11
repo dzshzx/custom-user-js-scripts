@@ -2,12 +2,21 @@
   'use strict';
 
   const LIB_NAME = 'CodexQuotaCompassPanelRendererStylesLib';
+  const statsStylesLib = globalObject.CodexQuotaCompassPanelStatsStylesLib;
+
+  if (!statsStylesLib?.createQuotaPanelStatsStyles) {
+    throw new Error(`${LIB_NAME}: CodexQuotaCompassPanelStatsStylesLib is not loaded.`);
+  }
+
+  const { createQuotaPanelStatsStyles } = statsStylesLib;
 
   // All colors resolve from the CSS variables defined on the shell root
   // (codex-quota-compass-panel-shell-styles.lib.js). Dark mode flips those
   // variables there, so this file never hardcodes a theme color.
-  function createQuotaPanelRendererStyles() {
+  function createQuotaPanelRendererStyles(rootId = 'codex-quota-compass-root') {
     return `
+        ${createQuotaPanelStatsStyles(rootId)}
+
         .cqc-tabs {
           display: flex;
           flex-wrap: wrap;
@@ -477,7 +486,7 @@
 
     const style = documentObject.createElement('style');
     style.id = `${rootId}-style`;
-    style.textContent = createQuotaPanelRendererStyles();
+    style.textContent = createQuotaPanelRendererStyles(rootId);
     documentObject.head.append(style);
   }
 
