@@ -93,3 +93,22 @@ test('contract projection produces Snapshot Archive fields without changing sche
   assert.equal(projection.periodDetails.sinceReset.dailyBuckets.length, 1);
   assert.equal(projection.periodDetails.sinceReset.weeklyEstimate.已用百分比, 40);
 });
+
+test('contract access exposes model summaries and reset credits when present', () => {
+  const result = createFixtureResult();
+  result.近30天.模型汇总 = [{ 模型: 'gpt-5.6-sol', 速度: 'standard', Credits: 50, 折算USD: 2 }];
+  result.重置券 = { 可用张数: 3, 当前适用张数: 0, 明细: [{ 标题: 'Full reset' }] };
+
+  const access = createQuotaSnapshotAccess(result);
+
+  assert.equal(access.rolling.modelSummaries[0].模型, 'gpt-5.6-sol');
+  assert.equal(access.resetCredits.可用张数, 3);
+  assert.equal(access.resetCredits.明细.length, 1);
+});
+
+test('contract access reports absent reset credits as null and empty model summaries', () => {
+  const access = createQuotaSnapshotAccess(createFixtureResult());
+
+  assert.equal(access.resetCredits, null);
+  assert.deepEqual(access.rolling.modelSummaries, []);
+});

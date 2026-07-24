@@ -132,7 +132,9 @@
     };
   }
 
-  function createDetailsSections({ weekly, sinceReset, month, rolling, windows }) {
+  function createDetailsSections({
+    weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits,
+  }) {
     return [
       dataView('details-weekly-estimate', 'sectionWeeklyEstimate', [weekly], [
         dataColumn('已用百分比', { priority: 'primary' }),
@@ -165,10 +167,23 @@
         dataColumn('下次重置_本地', { priority: 'secondary', truncate: true }),
         dataColumn('距离重置小时', { priority: 'primary' }),
       ]),
+      dataView('details-model-summary', 'sectionModelSummary', modelSummaries, [
+        dataColumn('模型', { priority: 'primary', wrap: true }),
+        dataColumn('速度', { priority: 'secondary' }),
+        dataColumn('占比百分比', { priority: 'primary' }),
+        dataColumn('Credits', { priority: 'secondary' }),
+      ]),
+      dataView('details-reset-credits', 'sectionResetCredits', resetCredits?.明细, [
+        dataColumn('标题', { priority: 'primary', wrap: true }),
+        dataColumn('状态', { priority: 'secondary' }),
+        dataColumn('过期时间_本地', { priority: 'primary', truncate: true }),
+      ], { emptyKey: 'resetCreditsEmpty' }),
     ];
   }
 
-  function createPanelViews({ weekly, sinceReset, month, rolling, windows, transfer }) {
+  function createPanelViews({
+    weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits, transfer,
+  }) {
     const tabs = [
       { id: 'details', labelKey: 'tabDetails' },
       { id: 'stats', labelKey: 'tabStats' },
@@ -187,7 +202,9 @@
           id: 'details',
           labelKey: 'tabDetails',
           kind: 'sections',
-          sections: createDetailsSections({ weekly, sinceReset, month, rolling, windows }),
+          sections: createDetailsSections({
+            weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits,
+          }),
         },
         archive: {
           id: 'archive',
@@ -256,7 +273,16 @@
     };
   }
 
-  function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow }) {
+  function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow, resetCredits }) {
+    const resetCreditMetrics = resetCredits
+      ? [{
+        id: 'resetCreditsAvailable',
+        type: 'value',
+        labelKey: 'metricResetCredits',
+        label: '重置券 可用/适用',
+        value: `${resetCredits.可用张数 ?? '-'} / ${resetCredits.当前适用张数 ?? '-'}`,
+      }]
+      : [];
     return [
       {
         id: 'remainingUsdIncludingReset',
@@ -312,6 +338,7 @@
         type: 'reset',
         hours: mainSevenDayWindow?.距离重置小时,
       },
+      ...resetCreditMetrics,
     ];
   }
 
@@ -363,6 +390,8 @@
       month,
       rolling,
       windows: snapshotAccess.windows,
+      modelSummaries: snapshotAccess.rolling.modelSummaries,
+      resetCredits: snapshotAccess.resetCredits,
       transfer,
     });
 
@@ -384,6 +413,7 @@
         sinceReset,
         month,
         mainSevenDayWindow,
+        resetCredits: snapshotAccess.resetCredits,
       }),
       rollingRows: snapshotAccess.rolling.dailyRows,
       sinceResetRows: snapshotAccess.sinceReset.dailyRows,

@@ -249,3 +249,57 @@ test('createQuotaPanelViewModel surfaces ledger cost views', () => {
   const withoutCost = createQuotaPanelViewModel({ result });
   assert.equal(withoutCost.cost, null);
 });
+
+test('createQuotaPanelViewModel renders model summary and reset credit views when present', () => {
+  const result = buildQuotaSnapshotResult({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    diagnostics: {},
+    windows: [{ 窗口Key: 'main.sevenDayWindow', 名称: '主限制 - 7天窗口', 距离重置小时: 12 }],
+    resetCredits: {
+      可用张数: 3,
+      当前适用张数: 0,
+      明细: [{ 标题: 'Full reset', 状态: 'available', 过期时间_本地: '2026/7/31 08:00' }],
+    },
+    periods: {
+      sinceReset: { summary: {}, weeklyEstimate: {}, rows: [], clients: [] },
+      monthToDate: { summary: {}, rows: [], clients: [] },
+      rolling: {
+        summary: {},
+        rows: [],
+        clients: [],
+        modelSummaries: [{ 模型: 'gpt-5.6-sol', 速度: 'standard', Credits: 50, 占比百分比: 100 }],
+      },
+    },
+  });
+
+  const model = createQuotaPanelViewModel({ result });
+  const sectionIds = model.views.details.sections.map((section) => section.id);
+  const modelSection = model.views.details.sections.find((section) => section.id === 'details-model-summary');
+  const resetSection = model.views.details.sections.find((section) => section.id === 'details-reset-credits');
+  const resetMetric = model.primaryMetrics.find((metric) => metric.id === 'resetCreditsAvailable');
+
+  assert.equal(sectionIds[2], 'details-windows');
+  assert.equal(modelSection.titleKey, 'sectionModelSummary');
+  assert.equal(modelSection.rows[0].模型, 'gpt-5.6-sol');
+  assert.equal(resetSection.titleKey, 'sectionResetCredits');
+  assert.equal(resetSection.rows[0].标题, 'Full reset');
+  assert.equal(resetMetric.type, 'value');
+  assert.equal(resetMetric.value, '3 / 0');
+});
+
+test('createQuotaPanelViewModel omits the reset credit metric for legacy results', () => {
+  const result = buildQuotaSnapshotResult({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    diagnostics: {},
+    windows: [],
+    periods: {
+      sinceReset: { summary: {}, weeklyEstimate: {}, rows: [], clients: [] },
+      monthToDate: { summary: {}, rows: [], clients: [] },
+      rolling: { summary: {}, rows: [], clients: [] },
+    },
+  });
+
+  const model = createQuotaPanelViewModel({ result });
+
+  assert.equal(model.primaryMetrics.some((metric) => metric.id === 'resetCreditsAvailable'), false);
+});

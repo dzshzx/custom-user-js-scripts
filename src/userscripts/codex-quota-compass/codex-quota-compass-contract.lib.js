@@ -31,6 +31,7 @@
       weeklyEstimate: objectOrEmpty(period['反推周额度']),
       dailyRows: arrayOrEmpty(period['每日明细']),
       clientSummaries: arrayOrEmpty(period['客户端汇总']),
+      modelSummaries: arrayOrEmpty(period['模型汇总']),
     };
   }
 
@@ -49,6 +50,7 @@
       diagnostics: objectOrEmpty(source['时区诊断']),
       windows,
       mainSevenDayWindow: windows.find(isMainSevenDayWindow) || null,
+      resetCredits: source['重置券'] ? objectOrEmpty(source['重置券']) : null,
       sinceReset,
       monthToDate,
       rolling,

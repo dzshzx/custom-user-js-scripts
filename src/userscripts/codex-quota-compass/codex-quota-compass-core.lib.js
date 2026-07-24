@@ -81,6 +81,7 @@
     diagnostics,
     windows,
     periods,
+    resetCredits = null,
   }) {
     const rollingLabel = `近${config.ROLLING_DAYS}天`;
     return {
@@ -91,6 +92,7 @@
       },
       时区诊断: diagnostics,
       限制窗口概览: windows,
+      ...(resetCredits ? { 重置券: resetCredits } : {}),
       主7天窗口_上次重置至今: {
         汇总: periods.sinceReset.summary,
         反推周额度: periods.sinceReset.weeklyEstimate,
@@ -106,6 +108,12 @@
         汇总: periods.rolling.summary,
         每日明细: periods.rolling.rows,
         客户端汇总: periods.rolling.clients,
+        ...(periods.rolling.modelSummaries
+          ? { 模型汇总: periods.rolling.modelSummaries }
+          : {}),
+        ...(periods.rolling.modelSummaryError
+          ? { 模型汇总错误: periods.rolling.modelSummaryError }
+          : {}),
       },
     };
   }
@@ -114,6 +122,8 @@
     config,
     fetchUsage,
     fetchDailyUsage,
+    fetchDailyTokenBreakdown = null,
+    fetchRateLimitResetCredits = null,
     now = () => Date.now(),
     formatLocalTime = (ms) => new Date(ms).toLocaleString(),
     getBrowserTimeZone = () => (
@@ -316,6 +326,85 @@
       };
     }
 
+    // breakdown 接口的 credits 与 daily analytics 的 credits 单位不同（实测相差两个数量级），
+    // 不能套 USD_PER_CREDIT 折算；模型维度只给原始 Credits 和占比。
+    function summarizeModels(json) {
+      const rowsByModel = new Map();
+
+      for (const day of json?.data ?? []) {
+        for (const entry of day.models ?? []) {
+          const model = entry.model ?? 'UNKNOWN';
+          const speed = entry.speed ?? '';
+          const key = `${model}::${speed}`;
+          const row = rowsByModel.get(key) ?? { 模型: model, 速度: speed, Credits: 0 };
+          row.Credits += toNumber(entry.credits);
+          rowsByModel.set(key, row);
+        }
+      }
+
+      const rows = [...rowsByModel.values()];
+      const totalCredits = rows.reduce((sum, row) => sum + row.Credits, 0);
+      return rows
+        .map((row) => ({
+          模型: row.模型,
+          速度: row.速度,
+          Credits: roundNumber(row.Credits, 6),
+          占比百分比: totalCredits > 0
+            ? roundNumber((row.Credits / totalCredits) * 100, 1)
+            : 0,
+        }))
+        .sort((left, right) => right.Credits - left.Credits);
+    }
+
+    // 模型汇总是增强数据：失败不拖垮主报告，但错误必须显式写进结果。
+    async function collectModelSummaries(startDate, endExclusiveDate) {
+      if (typeof fetchDailyTokenBreakdown !== 'function') {
+        return { modelSummaries: null, modelSummaryError: '' };
+      }
+      try {
+        const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
+        return { modelSummaries: summarizeModels(json), modelSummaryError: '' };
+      } catch (error) {
+        return { modelSummaries: [], modelSummaryError: String(error?.message || error) };
+      }
+    }
+
+    function parseResetCreditRows(json) {
+      return (json?.credits ?? [])
+        .slice()
+        .sort((left, right) => String(left?.expires_at || '').localeCompare(String(right?.expires_at || '')))
+        .map((credit) => ({
+          标题: credit?.title || credit?.reset_type || '-',
+          状态: credit?.status || '-',
+          过期时间_本地: credit?.expires_at
+            ? formatLocalTime(Date.parse(credit.expires_at))
+            : '-',
+        }));
+    }
+
+    // 重置券同为增强数据：计数来自 usage 响应，明细来自独立接口，明细失败时保留计数。
+    async function collectResetCredits(usage) {
+      const counts = usage?.rate_limit_reset_credits;
+      const hasDetailFetch = typeof fetchRateLimitResetCredits === 'function';
+      if (!counts && !hasDetailFetch) return null;
+
+      const section = {
+        可用张数: counts ? toNumber(counts.available_count) : null,
+        当前适用张数: counts ? toNumber(counts.applicable_available_count) : null,
+        明细: [],
+      };
+
+      if (hasDetailFetch) {
+        try {
+          section.明细 = parseResetCreditRows(await fetchRateLimitResetCredits());
+        } catch (error) {
+          section.明细错误 = String(error?.message || error);
+        }
+      }
+
+      return section;
+    }
+
     function summarizeRows(rangeName, rows, startDate, endExclusiveDate) {
       const credits = rows.reduce((sum, row) => sum + toNumber(row.Credits), 0);
       return {
@@ -440,9 +529,12 @@
         rollingStartDate,
         endExclusiveDate,
       );
+      const rollingModels = await collectModelSummaries(rollingStartDate, endExclusiveDate);
+      const resetCredits = await collectResetCredits(usage);
 
       return buildQuotaSnapshotResult({
         config,
+        resetCredits,
         diagnostics: {
           浏览器本地时区: getBrowserTimeZone(),
           浏览器UTC偏移: utcOffsetLabel(apiNowMs),
@@ -474,6 +566,8 @@
             summary: rollingSummary,
             rows: rolling.rows,
             clients: rolling.clients,
+            modelSummaries: rollingModels.modelSummaries,
+            modelSummaryError: rollingModels.modelSummaryError,
           },
         },
       });

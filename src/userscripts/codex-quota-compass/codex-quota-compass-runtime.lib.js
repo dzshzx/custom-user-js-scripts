@@ -12,6 +12,8 @@
       MANUAL_ACCESS_TOKEN: '',
       USAGE_PATH: '/backend-api/wham/usage',
       DAILY_USAGE_PATH: '/backend-api/wham/analytics/daily-workspace-usage-counts',
+      DAILY_TOKEN_BREAKDOWN_PATH: '/backend-api/wham/usage/daily-token-usage-breakdown',
+      RESET_CREDITS_PATH: '/backend-api/wham/rate-limit-reset-credits',
       ...overrides,
     };
   }
@@ -132,17 +134,24 @@
         return response.json();
       }
 
+      function dailyRangeQuery(startDate, endExclusiveDate) {
+        return new URLSearchParams({
+          start_date: startDate,
+          end_date: endExclusiveDate,
+          group_by: 'day',
+        });
+      }
+
       return coreLib.createQuotaCalculator({
         config,
         fetchUsage: () => apiGet(config.USAGE_PATH),
-        fetchDailyUsage: (startDate, endExclusiveDate) => {
-          const query = new URLSearchParams({
-            start_date: startDate,
-            end_date: endExclusiveDate,
-            group_by: 'day',
-          });
-          return apiGet(`${config.DAILY_USAGE_PATH}?${query}`);
-        },
+        fetchDailyUsage: (startDate, endExclusiveDate) => (
+          apiGet(`${config.DAILY_USAGE_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`)
+        ),
+        fetchDailyTokenBreakdown: (startDate, endExclusiveDate) => (
+          apiGet(`${config.DAILY_TOKEN_BREAKDOWN_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`)
+        ),
+        fetchRateLimitResetCredits: () => apiGet(config.RESET_CREDITS_PATH),
         now,
         formatLocalTime,
         getBrowserTimeZone,

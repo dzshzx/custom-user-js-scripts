@@ -190,3 +190,155 @@ test('createQuotaCalculator classifies additional rate limit windows by duration
   assert.equal(additionalRow.名称, 'GPT-5.3-Codex-Spark - 7天窗口');
   assert.equal(additionalRow.后端字段, 'primary_window');
 });
+
+function newShapeUsageFixture(extra = {}) {
+  return {
+    rate_limit: {
+      primary_window: {
+        used_percent: 40,
+        limit_window_seconds: 7 * 24 * 60 * 60,
+        reset_after_seconds: 24 * 60 * 60,
+        reset_at: Date.parse('2026-05-31T00:00:00.000Z') / 1000,
+      },
+      secondary_window: null,
+    },
+    ...extra,
+  };
+}
+
+function emptyDailyFixture(startDate) {
+  return { data: [{ date: startDate, totals: { credits: 10 }, clients: [] }] };
+}
+
+test('createQuotaCalculator aggregates rolling model summaries from daily token breakdown', async () => {
+  const breakdownCalls = [];
+  const calculator = createQuotaCalculator({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
+    getBrowserTimeZone: () => 'Asia/Shanghai',
+    fetchUsage: async () => newShapeUsageFixture(),
+    fetchDailyUsage: async (startDate) => emptyDailyFixture(startDate),
+    fetchDailyTokenBreakdown: async (startDate, endExclusiveDate) => {
+      breakdownCalls.push([startDate, endExclusiveDate]);
+      return {
+        data: [
+          {
+            date: '2026-05-29',
+            models: [
+              { model: 'gpt-5.6-sol', speed: 'standard', credits: 30 },
+              { model: 'gpt-5.3-codex', speed: 'fast', credits: 5 },
+            ],
+          },
+          {
+            date: '2026-05-30',
+            models: [
+              { model: 'gpt-5.6-sol', speed: 'standard', credits: 20 },
+            ],
+          },
+        ],
+        units: 'percent',
+        group_by: 'day',
+      };
+    },
+  });
+
+  const result = await calculator.run();
+
+  assert.deepEqual(breakdownCalls, [['2026-05-01', '2026-05-31']]);
+  assert.deepEqual(result.近30天.模型汇总, [
+    { 模型: 'gpt-5.6-sol', 速度: 'standard', Credits: 50, 占比百分比: 90.9 },
+    { 模型: 'gpt-5.3-codex', 速度: 'fast', Credits: 5, 占比百分比: 9.1 },
+  ]);
+});
+
+test('createQuotaCalculator records an explicit model summary error without failing the run', async () => {
+  const calculator = createQuotaCalculator({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
+    getBrowserTimeZone: () => 'Asia/Shanghai',
+    fetchUsage: async () => newShapeUsageFixture(),
+    fetchDailyUsage: async (startDate) => emptyDailyFixture(startDate),
+    fetchDailyTokenBreakdown: async () => {
+      throw new Error('HTTP 500 Internal Server Error');
+    },
+  });
+
+  const result = await calculator.run();
+
+  assert.deepEqual(result.近30天.模型汇总, []);
+  assert.equal(result.近30天.模型汇总错误, 'HTTP 500 Internal Server Error');
+});
+
+test('createQuotaCalculator surfaces rate limit reset credits with detail rows', async () => {
+  const calculator = createQuotaCalculator({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
+    getBrowserTimeZone: () => 'Asia/Shanghai',
+    fetchUsage: async () => newShapeUsageFixture({
+      rate_limit_reset_credits: { available_count: 3, applicable_available_count: 0 },
+    }),
+    fetchDailyUsage: async (startDate) => emptyDailyFixture(startDate),
+    fetchRateLimitResetCredits: async () => ({
+      credits: [
+        {
+          id: 'RateLimitResetCredit_b',
+          title: 'Full reset',
+          status: 'available',
+          expires_at: '2026-08-15T00:00:00.000Z',
+        },
+        {
+          id: 'RateLimitResetCredit_a',
+          title: 'Full reset',
+          status: 'available',
+          expires_at: '2026-07-31T00:00:00.000Z',
+        },
+      ],
+      available_count: 3,
+      total_earned_count: 0,
+    }),
+  });
+
+  const result = await calculator.run();
+
+  assert.equal(result.重置券.可用张数, 3);
+  assert.equal(result.重置券.当前适用张数, 0);
+  assert.deepEqual(result.重置券.明细, [
+    { 标题: 'Full reset', 状态: 'available', 过期时间_本地: 'local:2026-07-31T00:00:00.000Z' },
+    { 标题: 'Full reset', 状态: 'available', 过期时间_本地: 'local:2026-08-15T00:00:00.000Z' },
+  ]);
+});
+
+test('createQuotaCalculator keeps reset credit counts when the detail fetch fails', async () => {
+  const calculator = createQuotaCalculator({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
+    getBrowserTimeZone: () => 'Asia/Shanghai',
+    fetchUsage: async () => newShapeUsageFixture({
+      rate_limit_reset_credits: { available_count: 3, applicable_available_count: 0 },
+    }),
+    fetchDailyUsage: async (startDate) => emptyDailyFixture(startDate),
+    fetchRateLimitResetCredits: async () => {
+      throw new Error('HTTP 503 Service Unavailable');
+    },
+  });
+
+  const result = await calculator.run();
+
+  assert.equal(result.重置券.可用张数, 3);
+  assert.deepEqual(result.重置券.明细, []);
+  assert.equal(result.重置券.明细错误, 'HTTP 503 Service Unavailable');
+});
+
+test('createQuotaCalculator omits the reset credit section without counts or adapter', async () => {
+  const calculator = createQuotaCalculator({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
+    getBrowserTimeZone: () => 'Asia/Shanghai',
+    fetchUsage: async () => newShapeUsageFixture(),
+    fetchDailyUsage: async (startDate) => emptyDailyFixture(startDate),
+  });
+
+  const result = await calculator.run();
+
+  assert.equal(Object.hasOwn(result, '重置券'), false);
+});

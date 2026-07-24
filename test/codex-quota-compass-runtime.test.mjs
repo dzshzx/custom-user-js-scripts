@@ -77,7 +77,22 @@ test('createQuotaRuntime runs quota calculation through injected browser adapter
         return jsonResponse({ nested: { accessToken: token } });
       }
       if (path === '/backend-api/wham/usage') {
-        return jsonResponse(createUsageFixture());
+        return jsonResponse({
+          ...createUsageFixture(),
+          rate_limit_reset_credits: { available_count: 3, applicable_available_count: 0 },
+        });
+      }
+      if (path === '/backend-api/wham/rate-limit-reset-credits') {
+        return jsonResponse({
+          credits: [{ title: 'Full reset', status: 'available', expires_at: '2026-07-31T00:00:00.000Z' }],
+          available_count: 3,
+        });
+      }
+      if (path.startsWith('/backend-api/wham/usage/daily-token-usage-breakdown')) {
+        return jsonResponse({
+          data: [{ date: '2026-05-29', models: [{ model: 'gpt-5.6-sol', speed: 'standard', credits: 5 }] }],
+          group_by: 'day',
+        });
       }
 
       const parsed = new URL(path, 'https://chatgpt.com');
@@ -96,9 +111,16 @@ test('createQuotaRuntime runs quota calculation through injected browser adapter
     '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-24&end_date=2026-05-31&group_by=day',
     '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
     '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
+    '/backend-api/wham/usage/daily-token-usage-breakdown?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
+    '/backend-api/wham/rate-limit-reset-credits',
   ]);
   assert.equal(calls[1].options.headers.authorization, `Bearer ${token}`);
   assert.equal(calls[2].options.credentials, 'include');
+  assert.deepEqual(result.近30天.模型汇总, [
+    { 模型: 'gpt-5.6-sol', 速度: 'standard', Credits: 5, 占比百分比: 100 },
+  ]);
+  assert.equal(result.重置券.可用张数, 3);
+  assert.equal(result.重置券.明细[0].标题, 'Full reset');
 });
 
 test('createQuotaRuntime preserves 401 recovery guidance without leaking token values', async () => {
