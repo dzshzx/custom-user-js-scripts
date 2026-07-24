@@ -11,7 +11,10 @@
     "url": "https://github.com/dzshzx/custom-user-js-scripts.git"
   },
   "scripts": {
+    "build": "node scripts/build-userscripts.mjs",
+    "prelint": "npm run build",
     "lint": "node scripts/check-userscripts.mjs",
+    "pretest": "npm run build",
     "test": "node --test"
   },
   "keywords": [
@@ -19,5 +22,15 @@
     "tampermonkey",
     "violentmonkey",
     "browser-script"
-  ]
+  ],
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "happy-dom": "20.11.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }

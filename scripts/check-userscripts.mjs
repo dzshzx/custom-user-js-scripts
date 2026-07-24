@@ -1,110 +1,142 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+
+import {
+  REQUIRED_METADATA_FIELDS,
+  UNIQUE_METADATA_FIELDS,
+  extractMetadataBlockText,
+  firstMetadataValue,
+  installIdentity,
+  listUserScripts,
+  parseMetadataBlock,
+} from './lib/userscript-metadata.mjs';
 
 const root = process.cwd();
 const srcDir = path.join(root, 'src');
-const requiredMetadata = ['@name', '@namespace', '@version', '@description', '@match'];
-const uniqueMetadata = ['@downloadURL', '@updateURL'];
+const distDir = path.join(root, 'dist');
 
-async function listUserScripts(dir) {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files = await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        return listUserScripts(fullPath);
-      }
-      return entry.isFile() && entry.name.endsWith('.user.js') ? [fullPath] : [];
-    }),
-  );
-
-  return files.flat();
-}
-
-function parseMetadataBlock(content) {
-  const match = content.match(/\/\/ ==UserScript==\n([\s\S]*?)\/\/ ==\/UserScript==/);
-  if (!match) return null;
-
-  const metadata = new Map();
-  for (const line of match[1].split('\n')) {
-    const fieldMatch = line.match(/^\s*\/\/\s+(@\S+)(?:\s+(.*))?$/);
-    if (!fieldMatch) continue;
-
-    const field = fieldMatch[1];
-    const value = (fieldMatch[2] || '').trim();
-    const values = metadata.get(field) || [];
-    values.push(value);
-    metadata.set(field, values);
-  }
-
-  return metadata;
-}
-
-function firstMetadataValue(metadata, field) {
-  return metadata.get(field)?.[0] || '';
-}
-
-function installIdentity(metadata) {
-  const namespace = firstMetadataValue(metadata, '@namespace');
-  const name = firstMetadataValue(metadata, '@name');
-  return namespace && name ? `${namespace} :: ${name}` : '';
-}
-
-const files = await listUserScripts(srcDir);
 let hasError = false;
 const seenInstallKeys = new Map();
 
-if (files.length === 0) {
-  console.warn('No .user.js files found in src/.');
+function report(file, message) {
+  console.error(`${path.relative(root, file)}: ${message}`);
+  hasError = true;
 }
 
-for (const file of files) {
-  const content = await readFile(file, 'utf8');
-  const relativePath = path.relative(root, file);
-  const metadata = parseMetadataBlock(content);
-
-  if (!metadata) {
-    console.error(`${relativePath}: missing userscript metadata block`);
-    hasError = true;
-    continue;
+async function listOptional(dir) {
+  try {
+    return await listUserScripts(dir);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
   }
+}
 
-  for (const field of requiredMetadata) {
-    if (!metadata.has(field)) {
-      console.error(`${relativePath}: missing ${field}`);
-      hasError = true;
+async function loadScript(file) {
+  const content = await readFile(file, 'utf8');
+  return {
+    file,
+    content,
+    metadata: parseMetadataBlock(content),
+    metadataText: extractMetadataBlockText(content),
+  };
+}
+
+function scriptId(file) {
+  return path.basename(file, '.user.js');
+}
+
+// A bridge stub is a src userscript whose download URL points at its own dist
+// counterpart; it exists only to keep the legacy install path discoverable.
+function isBridge(script) {
+  if (!script.metadata) return false;
+  const downloadUrl = firstMetadataValue(script.metadata, '@downloadURL');
+  return downloadUrl.endsWith(`/dist/${scriptId(script.file)}.user.js`);
+}
+
+function checkRequiredFields(script) {
+  if (!script.metadata) {
+    report(script.file, 'missing userscript metadata block');
+    return false;
+  }
+  for (const field of REQUIRED_METADATA_FIELDS) {
+    if (!script.metadata.has(field)) {
+      report(script.file, `missing ${field}`);
     }
   }
+  return true;
+}
 
-  const identity = installIdentity(metadata);
+function registerUniqueness(script, label) {
+  const identity = installIdentity(script.metadata);
   if (identity) {
     const key = `identity:${identity}`;
     const previous = seenInstallKeys.get(key);
     if (previous) {
-      console.error(`${relativePath}: duplicate userscript install identity with ${previous}`);
-      hasError = true;
+      report(script.file, `duplicate userscript install identity with ${previous}`);
     } else {
-      seenInstallKeys.set(key, relativePath);
+      seenInstallKeys.set(key, label);
     }
   }
 
-  for (const field of uniqueMetadata) {
-    for (const value of metadata.get(field) || []) {
+  for (const field of UNIQUE_METADATA_FIELDS) {
+    for (const value of script.metadata.get(field) || []) {
       if (!value) continue;
       const key = `${field}:${value}`;
       const previous = seenInstallKeys.get(key);
       if (previous) {
-        console.error(`${relativePath}: duplicate ${field} value with ${previous}`);
-        hasError = true;
+        report(script.file, `duplicate ${field} value with ${previous}`);
       } else {
-        seenInstallKeys.set(key, relativePath);
+        seenInstallKeys.set(key, label);
       }
     }
   }
+}
+
+const srcScripts = await Promise.all((await listOptional(srcDir)).map(loadScript));
+const distScripts = await Promise.all((await listOptional(distDir)).map(loadScript));
+
+if (srcScripts.length === 0) {
+  console.warn('No .user.js files found in src/.');
+}
+
+const distById = new Map(distScripts.map((script) => [scriptId(script.file), script]));
+const pairedDistIds = new Set();
+
+for (const script of srcScripts) {
+  if (!checkRequiredFields(script)) continue;
+
+  if (isBridge(script)) {
+    const id = scriptId(script.file);
+    const dist = distById.get(id);
+    if (!dist) {
+      report(script.file, `bridge stub's dist counterpart dist/${id}.user.js is missing`);
+      continue;
+    }
+    pairedDistIds.add(id);
+    if (!dist.metadataText || script.metadataText !== dist.metadataText) {
+      report(script.file, `bridge metadata does not match dist/${id}.user.js`);
+      continue;
+    }
+    // The pair is one logical script: register its identity and URLs once.
+    registerUniqueness(script, `${path.relative(root, script.file)} + dist/${id}.user.js`);
+    continue;
+  }
+
+  registerUniqueness(script, path.relative(root, script.file));
+}
+
+for (const script of distScripts) {
+  const id = scriptId(script.file);
+  if (!pairedDistIds.has(id)) {
+    report(script.file, `missing bridge stub under src/ (expected a ${id}.user.js bridge with matching metadata)`);
+    continue;
+  }
+  checkRequiredFields(script);
 }
 
 if (hasError) {
   process.exitCode = 1;
 } else {
-  console.log(`Checked ${files.length} userscript file(s).`);
+  console.log(`Checked ${srcScripts.length + distScripts.length} userscript file(s).`);
 }
