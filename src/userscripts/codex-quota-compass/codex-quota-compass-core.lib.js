@@ -155,6 +155,28 @@
       return { key, label, backendField, sourceName };
     }
 
+    // 2026-07 起后端把 7 天主窗口挪进 primary_window（secondary_window 恒为 null），
+    // 窗口角色只能按 limit_window_seconds 时长判断，不能按字段位置。
+    const SEVEN_DAY_CLASS_MIN_SECONDS = 6 * 86400;
+
+    function isSevenDayClassWindow(windowRow) {
+      return toNumber(windowRow?.limit_window_seconds) >= SEVEN_DAY_CLASS_MIN_SECONDS;
+    }
+
+    function mainWindowEntries(usage) {
+      return ['primary_window', 'secondary_window']
+        .map((field) => ({ field, row: usage?.rate_limit?.[field] }))
+        .filter((entry) => entry.row);
+    }
+
+    function findMainSevenDayEntry(usage) {
+      return mainWindowEntries(usage)
+        .filter((entry) => isSevenDayClassWindow(entry.row))
+        .sort((left, right) => (
+          toNumber(right.row.limit_window_seconds) - toNumber(left.row.limit_window_seconds)
+        ))[0] ?? null;
+    }
+
     function additionalWindowKey(name, suffix) {
       return `additional.${String(name || 'unknown').trim() || 'unknown'}.${suffix}`;
     }
@@ -192,37 +214,27 @@
 
     function collectWindows(usage) {
       const windows = [];
-      if (usage?.rate_limit?.primary_window) {
+      const sevenDayEntry = findMainSevenDayEntry(usage);
+      for (const entry of mainWindowEntries(usage)) {
+        const isSevenDay = entry.field === sevenDayEntry?.field;
         windows.push(parseWindow(windowIdentity({
-          key: MAIN_PRIMARY_WINDOW_KEY,
-          label: '主限制 - 5小时窗口',
-          backendField: 'primary_window',
-        }), usage.rate_limit.primary_window));
-      }
-      if (usage?.rate_limit?.secondary_window) {
-        windows.push(parseWindow(windowIdentity({
-          key: MAIN_SEVEN_DAY_WINDOW_KEY,
-          label: '主限制 - 7天窗口',
-          backendField: 'secondary_window',
-        }), usage.rate_limit.secondary_window));
+          key: isSevenDay ? MAIN_SEVEN_DAY_WINDOW_KEY : MAIN_PRIMARY_WINDOW_KEY,
+          label: isSevenDay ? '主限制 - 7天窗口' : '主限制 - 5小时窗口',
+          backendField: entry.field,
+        }), entry.row));
       }
       for (const item of usage?.additional_rate_limits ?? []) {
         const name = item.limit_name || item.metered_feature || '额外限制';
-        if (item?.rate_limit?.primary_window) {
+        for (const field of ['primary_window', 'secondary_window']) {
+          const row = item?.rate_limit?.[field];
+          if (!row) continue;
+          const isSevenDay = isSevenDayClassWindow(row);
           windows.push(parseWindow(windowIdentity({
-            key: additionalWindowKey(name, 'primaryWindow'),
-            label: `${name} - 5小时窗口`,
-            backendField: 'primary_window',
+            key: additionalWindowKey(name, isSevenDay ? 'sevenDayWindow' : 'primaryWindow'),
+            label: `${name} - ${isSevenDay ? '7天窗口' : '5小时窗口'}`,
+            backendField: field,
             sourceName: name,
-          }), item.rate_limit.primary_window));
-        }
-        if (item?.rate_limit?.secondary_window) {
-          windows.push(parseWindow(windowIdentity({
-            key: additionalWindowKey(name, 'sevenDayWindow'),
-            label: `${name} - 7天窗口`,
-            backendField: 'secondary_window',
-            sourceName: name,
-          }), item.rate_limit.secondary_window));
+          }), row));
         }
       }
       return windows;
@@ -381,16 +393,17 @@
     async function run() {
       const usage = await fetchUsage();
       const windows = collectWindows(usage);
+      const sevenDayEntry = findMainSevenDayEntry(usage);
 
-      if (!usage?.rate_limit?.secondary_window) {
-        throw new Error('没有找到 usage.rate_limit.secondary_window，无法反推主限制 - 7天窗口。');
+      if (!sevenDayEntry) {
+        throw new Error('rate_limit 的 primary/secondary_window 均不含 7 天级别窗口，无法反推主限制 - 7天窗口。');
       }
 
       const mainSecondary = parseWindow(windowIdentity({
         key: MAIN_SEVEN_DAY_WINDOW_KEY,
         label: '主限制 - 7天窗口',
-        backendField: 'secondary_window',
-      }), usage.rate_limit.secondary_window);
+        backendField: sevenDayEntry.field,
+      }), sevenDayEntry.row);
       const apiNowMs = mainSecondary._serverNowMs || now();
       const apiTodayDate = ymdForApi(apiNowMs);
       const endExclusiveDate = ymdForApi(addDaysForApi(apiNowMs, 1));
