@@ -1,13 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js');
-
-const {
+import {
   DEFAULT_ARCHIVE_KEY,
   DEFAULT_ARCHIVE_FALLBACK_KEY,
   createSnapshotArchiveStoragePort,
-} = globalThis.CodexQuotaCompassStorageLib;
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js';
 
 function createLocalStorage(initial = {}) {
   const values = new Map(Object.entries(initial));

@@ -3,19 +3,23 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js');
+import { createQuotaPanelRenderer } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js';
 
-const { createQuotaPanelRenderer } = globalThis.CodexQuotaCompassPanelRendererLib;
-const userscriptPath = path.resolve(
+const entryPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/codex-quota-compass/codex-quota-compass.user.js',
+  '../src/userscripts/codex-quota-compass/codex-quota-compass.entry.js',
 );
-const rendererStylesRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js';
-const statsStylesRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js';
-const userscriptContent = await readFile(userscriptPath, 'utf8');
+const rendererLibPath = path.resolve(
+  import.meta.dirname,
+  '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js',
+);
+const rendererStylesLibPath = path.resolve(
+  import.meta.dirname,
+  '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js',
+);
+const entryContent = await readFile(entryPath, 'utf8');
+const rendererLibContent = await readFile(rendererLibPath, 'utf8');
+const rendererStylesLibContent = await readFile(rendererStylesLibPath, 'utf8');
 
 const labels = {
   actionRetry: 'Retry',
@@ -58,24 +62,22 @@ function createRenderer() {
   return createQuotaPanelRenderer({ t, debugKey: '__debugKey' });
 }
 
-test('installable metadata requires statistics styles before renderer styles', () => {
+test('renderer module imports statistics styles before renderer styles', () => {
+  // The module graph (not a flat @require order) now enforces this: the renderer
+  // lib imports its own styles, which in turn import the statistics styles.
   assert.equal(
-    userscriptContent.includes(`// @require      ${rendererStylesRequireUrl}`),
+    rendererLibContent.includes(`from './codex-quota-compass-panel-renderer-styles.lib.js'`),
     true,
   );
   assert.equal(
-    userscriptContent.includes(`// @require      ${statsStylesRequireUrl}`),
-    true,
-  );
-  assert.equal(
-    userscriptContent.indexOf(statsStylesRequireUrl) < userscriptContent.indexOf(rendererStylesRequireUrl),
+    rendererStylesLibContent.includes(`from './codex-quota-compass-panel-stats-styles.lib.js'`),
     true,
   );
 });
 
 test('installable metadata and Snapshot Archive version stay synchronized at 0.4.1', () => {
-  const metadataVersion = /^\/\/ @version\s+(\S+)$/m.exec(userscriptContent)?.[1];
-  const internalVersion = /const SCRIPT_VERSION = '([^']+)';/.exec(userscriptContent)?.[1];
+  const metadataVersion = /^\/\/ @version\s+(\S+)$/m.exec(entryContent)?.[1];
+  const internalVersion = /const SCRIPT_VERSION = '([^']+)';/.exec(entryContent)?.[1];
 
   assert.equal(metadataVersion, '0.4.1');
   assert.equal(internalVersion, metadataVersion);

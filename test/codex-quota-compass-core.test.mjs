@@ -1,14 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js');
+import * as CoreLib from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js';
+import { rollingPeriodKey } from '../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js';
 
-const {
-  buildQuotaSnapshotResult,
-  createQuotaCalculator,
-} = globalThis.CodexQuotaCompassCoreLib;
-const { rollingPeriodKey } = globalThis.CodexQuotaCompassContractLib;
+const { buildQuotaSnapshotResult, createQuotaCalculator } = CoreLib;
 
 test('rollingPeriodKey returns the first matching rolling period key', () => {
   const key = rollingPeriodKey({
@@ -21,10 +17,10 @@ test('rollingPeriodKey returns the first matching rolling period key', () => {
 });
 
 test('core exports quota calculation interfaces only', () => {
-  assert.equal(Object.hasOwn(globalThis.CodexQuotaCompassCoreLib, 'rollingPeriodKey'), false);
-  assert.equal(Object.hasOwn(globalThis.CodexQuotaCompassCoreLib, 'createSnapshotSyncPort'), false);
-  assert.equal(Object.hasOwn(globalThis.CodexQuotaCompassCoreLib, 'createSnapshotSyncStatus'), false);
-  assert.equal(Object.hasOwn(globalThis.CodexQuotaCompassCoreLib, 'createQuotaPanelViewModel'), false);
+  assert.equal(Object.hasOwn(CoreLib, 'rollingPeriodKey'), false);
+  assert.equal(Object.hasOwn(CoreLib, 'createSnapshotSyncPort'), false);
+  assert.equal(Object.hasOwn(CoreLib, 'createSnapshotSyncStatus'), false);
+  assert.equal(Object.hasOwn(CoreLib, 'createQuotaPanelViewModel'), false);
 });
 
 test('buildQuotaSnapshotResult builds stable Quota Snapshot contract shape', () => {

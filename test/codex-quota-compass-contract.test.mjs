@@ -1,14 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js');
-
-const {
+import {
   createQuotaSnapshotAccess,
   isMainSevenDayWindow,
   projectQuotaSnapshotForArchive,
   rollingPeriodKey,
-} = globalThis.CodexQuotaCompassContractLib;
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js';
 
 function createFixtureResult() {
   return {

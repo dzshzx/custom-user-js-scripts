@@ -1,12 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-view-model.lib.js');
-
-const { buildQuotaSnapshotResult } = globalThis.CodexQuotaCompassCoreLib;
-const { createQuotaPanelViewModel } = globalThis.CodexQuotaCompassPanelViewModelLib;
+import { buildQuotaSnapshotResult } from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js';
+import { createQuotaPanelViewModel } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-view-model.lib.js';
 
 test('createQuotaPanelViewModel maps result, history, and archive state', () => {
   const result = buildQuotaSnapshotResult({

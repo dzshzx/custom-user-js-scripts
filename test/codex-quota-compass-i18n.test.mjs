@@ -1,14 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.js');
-
-const {
+import {
   DEFAULT_LOCALE,
   messages,
   createQuotaCompassTranslator,
   resolveLocale,
-} = globalThis.CodexQuotaCompassI18nLib;
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.js';
 
 test('createQuotaCompassTranslator uses zh-CN as the default locale', () => {
   const translator = createQuotaCompassTranslator({

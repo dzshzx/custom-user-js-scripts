@@ -2,9 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js');
-
-const { applyActiveView, readSyncFormValues, isSyncFormEditing } = globalThis.CodexQuotaCompassPanelDomLib;
+import { applyActiveView, readSyncFormValues, isSyncFormEditing } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js';
 
 function contentWith(window, html) {
   const node = window.document.createElement('div');

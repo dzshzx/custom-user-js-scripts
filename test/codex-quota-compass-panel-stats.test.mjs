@@ -2,11 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js');
-
-const { buildStatsView } = globalThis.CodexQuotaCompassPanelStatsLib;
-const { createQuotaPanelStatsStyles } = globalThis.CodexQuotaCompassPanelStatsStylesLib;
+import { buildStatsView } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js';
+import { createQuotaPanelStatsStyles } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js';
 
 // Stub the renderer helpers so the view builder can be exercised without a DOM
 // or the real renderer. tableHtml echoes its rows as JSON so assertions can read

@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js');
-
-const { createShellStyles } = globalThis.CodexQuotaCompassPanelShellStylesLib;
+import { createShellStyles } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js';
 
 test('createShellStyles renders scoped shell CSS with injected layout constants', () => {
   const css = createShellStyles('quota-root', {

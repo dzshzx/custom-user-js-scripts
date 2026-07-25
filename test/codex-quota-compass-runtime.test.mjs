@@ -1,11 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js');
-
-const { createDefaultQuotaRuntimeConfig, createQuotaRuntime } = globalThis.CodexQuotaCompassRuntimeLib;
+import * as CoreLib from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js';
+import { createDefaultQuotaRuntimeConfig, createQuotaRuntime } from '../src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js';
 
 function jsonResponse(body, options = {}) {
   return {
@@ -67,7 +64,7 @@ test('createQuotaRuntime runs quota calculation through injected browser adapter
   const token = `header.${'x'.repeat(120)}.signature`;
   const runtime = createQuotaRuntime({
     config: createDefaultQuotaRuntimeConfig(),
-    coreLib: globalThis.CodexQuotaCompassCoreLib,
+    coreLib: CoreLib,
     location: { hostname: 'chatgpt.com' },
     formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
     getBrowserTimeZone: () => 'Asia/Shanghai',
@@ -126,7 +123,7 @@ test('createQuotaRuntime runs quota calculation through injected browser adapter
 test('createQuotaRuntime preserves 401 recovery guidance without leaking token values', async () => {
   const runtime = createQuotaRuntime({
     config: createDefaultQuotaRuntimeConfig({ MANUAL_ACCESS_TOKEN: 'Bearer local-secret-token' }),
-    coreLib: globalThis.CodexQuotaCompassCoreLib,
+    coreLib: CoreLib,
     location: { hostname: 'chatgpt.com' },
     fetchImpl: async (path) => {
       if (path === '/backend-api/wham/usage') {
@@ -157,7 +154,7 @@ test('createQuotaRuntime preserves 401 recovery guidance without leaking token v
 test('createQuotaRuntime rejects non-chatgpt hosts before fetching', async () => {
   const calls = [];
   const runtime = createQuotaRuntime({
-    coreLib: globalThis.CodexQuotaCompassCoreLib,
+    coreLib: CoreLib,
     location: { hostname: 'example.com' },
     fetchImpl: async () => {
       calls.push('fetch');

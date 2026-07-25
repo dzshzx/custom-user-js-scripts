@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.js');
-
-const {
+import {
   SETTLE_BUFFER_MS,
   isSettled,
   upsertLedgerRow,
@@ -15,7 +13,7 @@ const {
   aggregateWeekly,
   aggregateMonthlyList,
   aggregateAllTime,
-} = globalThis.CodexQuotaCompassLedgerLib;
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.js';
 
 const USD = 0.04;
 const ms = (iso) => Date.parse(iso);

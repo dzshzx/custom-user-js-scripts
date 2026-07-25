@@ -3,12 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js');
-await import('../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js');
-
-const {
+import {
   GIST_DESCRIPTION,
   GIST_FILENAME,
   GITHUB_API_BASE,
@@ -17,13 +12,14 @@ const {
   createRemoteSyncClient,
   normalizeSettings,
   planRemoteSyncSave,
-} = globalThis.CodexQuotaCompassRemoteSyncLib;
-const { createSnapshotArchiveStore, normalizeSnapshotArchive } = globalThis.CodexQuotaCompassArchiveLib;
-const userscriptPath = path.resolve(
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js';
+import { createSnapshotArchiveStore, normalizeSnapshotArchive } from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js';
+
+const distPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/codex-quota-compass/codex-quota-compass.user.js',
+  '../dist/codex-quota-compass.user.js',
 );
-const userscriptContent = await readFile(userscriptPath, 'utf8');
+const distContent = await readFile(distPath, 'utf8');
 
 function createSnapshot(snapshotId, capturedAt, totalCredits = 1) {
   return {
@@ -100,10 +96,10 @@ function createMemorySettingsStore(initialSettings = null) {
 }
 
 test('installable metadata grants only GitHub API manager requests for Gist sync', () => {
-  assert.equal(userscriptContent.includes('// @grant        GM_xmlhttpRequest'), true);
-  assert.equal(userscriptContent.includes('// @connect      api.github.com'), true);
-  assert.equal(userscriptContent.includes('// @connect      gist.githubusercontent.com'), true);
-  assert.equal(userscriptContent.includes('// @connect      *'), false);
+  assert.equal(distContent.includes('// @grant        GM_xmlhttpRequest'), true);
+  assert.equal(distContent.includes('// @connect      api.github.com'), true);
+  assert.equal(distContent.includes('// @connect      gist.githubusercontent.com'), true);
+  assert.equal(distContent.includes('// @connect      *'), false);
 });
 
 test('createJsonRequester prefers GM_xmlhttpRequest over page fetch to avoid host CSP blocks', async () => {
