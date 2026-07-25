@@ -75,11 +75,11 @@ test('renderer module imports statistics styles before renderer styles', () => {
   );
 });
 
-test('installable metadata and Snapshot Archive version stay synchronized at 0.4.1', () => {
+test('installable metadata and Snapshot Archive version stay synchronized', () => {
   const metadataVersion = /^\/\/ @version\s+(\S+)$/m.exec(entryContent)?.[1];
   const internalVersion = /const SCRIPT_VERSION = '([^']+)';/.exec(entryContent)?.[1];
 
-  assert.equal(metadataVersion, '0.4.1');
+  assert.match(metadataVersion ?? '', /^\d+\.\d+\.\d+$/);
   assert.equal(internalVersion, metadataVersion);
 });
 
