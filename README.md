@@ -6,8 +6,8 @@
 
 | 脚本 | 适用页面 | 用途 | 安装入口 |
 | --- | --- | --- | --- |
-| Web Page Assistant / 网页助手 | `*://*/*` | 管理网页自动刷新，并可按需解除复制、选择、右键菜单、拖拽和离开确认限制。 | [web-page-assistant.user.js](src/userscripts/web-page-assistant/web-page-assistant.user.js) |
-| Codex Quota Compass | `https://chatgpt.com/*` | 查看 Codex 用量、保存本地快照、远程同步、导出 / 导入用量归档。 | [codex-quota-compass.user.js](src/userscripts/codex-quota-compass/codex-quota-compass.user.js) |
+| Web Page Assistant / 网页助手 | `*://*/*` | 管理网页自动刷新，并可按需解除复制、选择、右键菜单、拖拽和离开确认限制。 | [dist/web-page-assistant.user.js](dist/web-page-assistant.user.js) |
+| Codex Quota Compass | `https://chatgpt.com/*` | 查看 Codex 用量、保存本地快照、远程同步、导出 / 导入用量归档。 | [dist/codex-quota-compass.user.js](dist/codex-quota-compass.user.js) |
 | Feishu Preview Image Export | `https://mi.feishu.cn/file/*` | 从飞书文件预览页导出当前最大可见图片。 | [feishu-preview-image-export.user.js](src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js) |
 
 安装方式：
@@ -34,7 +34,7 @@
 
 - 脚本运行范围是 `*://*/*`，安装时会看到较宽的授权提示；不需要时可以在脚本管理器里禁用。
 - “限制解除”只影响浏览器页面事件，不绕过登录、权限、付费墙或服务端限制。
-- 该脚本通过 `@require` 加载同目录的 settings、storage 和 refresh support modules，手动安装时应使用安装入口文件，不要只复制单个 support module。
+- 安装入口是 `dist/` 下打包好的单文件；`src/` 目录下的 `*.entry.js` 与 `*.lib.js` 是 ES 模块源码，不能直接安装。
 
 ## Codex Quota Compass
 
@@ -71,23 +71,24 @@ Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜�
 
 ```text
 .
+├── dist/                 # 打包产物：多模块脚本的单文件安装入口（构建生成并提交）
 ├── docs/                 # 脚本说明、运行手册和项目约定
-├── scripts/              # 本地辅助脚本
+├── scripts/              # 本地辅助脚本与构建脚本
 ├── snippets/             # 可复用代码片段
-├── src/userscripts/      # 可安装 userscript 和同脚本 support modules
+├── src/userscripts/      # userscript 源码（ESM entry + lib 模块，或单文件脚本）
 └── test/                 # Node 测试
 ```
 
 ## 开发与验证
 
 ```bash
+npm ci          # 安装 devDependencies（esbuild、happy-dom）
+npm run build   # 把 src 的 entry.js 打包为 dist/*.user.js（并生成桥接文件）
 npm run lint
 npm test
 ```
 
-`npm run lint` 检查 installable userscript metadata；`npm test` 运行 Node 测试。
-
-UI/UX（DOM 层）测试可选：仓库保持零依赖，不记录 DOM 测试库。本机启用时执行 `npm install --no-save --no-package-lock happy-dom`，相关测试会自动运行；未安装时这些测试自动跳过，`npm test` 仍然全绿。
+`npm run lint` 与 `npm test` 都会先自动执行构建，保证 dist 产物与源码一致；改动多模块脚本后需把重建出的 `dist/` 与桥接文件一并提交，否则 CI 的一致性门禁会失败。DOM 层测试依赖 devDependencies 里的 happy-dom；环境缺失时相关测试自动跳过。
 
 新建脚本可从 [src/userscripts/example/example.user.js](src/userscripts/example/example.user.js) 开始，并参考 [docs/script-template.md](docs/script-template.md)。有注入 UI 的脚本先看 [DESIGN.md](DESIGN.md)。
 

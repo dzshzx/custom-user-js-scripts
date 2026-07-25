@@ -2,32 +2,31 @@
 
 本页列出当前可直接安装到 Tampermonkey、Violentmonkey、Greasemonkey 等管理器的 userscript。
 
-installable userscript 已按脚本级目录放在 `src/userscripts/<script-id>/`。迁移时保留了 `@name`、`@namespace`、存储 key 和用户数据；带有 `@downloadURL` / `@updateURL` / `@require` 的脚本会同步指向新 raw 路径。
+脚本源码按脚本级目录放在 `src/userscripts/<script-id>/`。多模块脚本的安装入口是构建生成并提交的 `dist/<script-id>.user.js` 单文件；单文件脚本仍直接从 `src` 安装。历次迁移均保留 `@name`、`@namespace`、存储 key 和用户数据。
 
 ## Web Page Assistant
 
 安装入口：
 
-- [../../src/userscripts/web-page-assistant/web-page-assistant.user.js](../../src/userscripts/web-page-assistant/web-page-assistant.user.js)
+- [../../dist/web-page-assistant.user.js](../../dist/web-page-assistant.user.js)
 
 用途：
 
 - 在网页上提供可配置的页面辅助能力。
 - 包含设置、刷新、session、unlocker 能力和浮动控件。
 - 当前脚本运行范围较广，安装前应确认目标用户脚本管理器的授权提示。
-- 安装入口通过 `@require` 加载同目录的 settings、storage、refresh、presentation、session、widget layout 和 unlocker support modules。
+- 源码是 `web-page-assistant.entry.js` 加同目录 `*.lib.js` ES 模块，`npm run build` 打包为 dist 单文件。
 
 迁移说明：
 
-- 旧路径：`src/web-page-assistant.user.js`
-- 新路径：`src/userscripts/web-page-assistant/web-page-assistant.user.js`
-- `@downloadURL`、`@updateURL` 和 `@require` 已指向新路径。
+- 更早：`src/web-page-assistant.user.js` → `src/userscripts/web-page-assistant/web-page-assistant.user.js`。
+- 当前：多文件 `@require` 入口 → `dist/web-page-assistant.user.js` 单文件；旧 src 路径保留构建生成的桥接文件（按 [../script-template.md](../script-template.md) 的桥接约定），存量安装经一次版本更新自动切换到 dist。
 
 ## Codex Quota Compass
 
 安装入口：
 
-- [../../src/userscripts/codex-quota-compass/codex-quota-compass.user.js](../../src/userscripts/codex-quota-compass/codex-quota-compass.user.js)
+- [../../dist/codex-quota-compass.user.js](../../dist/codex-quota-compass.user.js)
 
 用途：
 
@@ -45,9 +44,8 @@ installable userscript 已按脚本级目录放在 `src/userscripts/<script-id>/
 
 迁移说明：
 
-- 旧路径：`src/codex-quota-compass.user.js`
-- 新路径：`src/userscripts/codex-quota-compass/codex-quota-compass.user.js`
-- `@downloadURL`、`@updateURL` 和 `@require` 已指向新路径。
+- 更早：`src/codex-quota-compass.user.js` → `src/userscripts/codex-quota-compass/codex-quota-compass.user.js`。
+- 当前：多文件 `@require` 入口 → `dist/codex-quota-compass.user.js` 单文件；旧 src 路径保留构建生成的桥接文件，存量安装经一次版本更新自动切换到 dist。
 
 ## Feishu Preview Image Export
 
