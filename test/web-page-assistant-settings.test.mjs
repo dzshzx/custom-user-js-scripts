@@ -3,18 +3,16 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-await import('../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js');
+import * as libraryContract from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js';
 
 const pageKey = 'https://example.com/path?a=1';
 const siteKey = 'example.com';
-const userscriptPath = path.resolve(
+const entryPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.user.js',
+  '../src/userscripts/web-page-assistant/web-page-assistant.entry.js',
 );
-const settingsRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js';
 
-const libraryContract = globalThis.WebPageAssistantSettingsLib;
-const userscriptContent = await readFile(userscriptPath, 'utf8');
+const entryContent = await readFile(entryPath, 'utf8');
 
 test('settings contract library exposes the stable interface', () => {
   assert.deepEqual(
@@ -42,12 +40,12 @@ test('settings contract library exposes the stable interface', () => {
   );
 });
 
-test('installable metadata requires the settings library', () => {
+test('entry module imports the settings library', () => {
   assert.equal(
-    userscriptContent.includes(`// @require      ${settingsRequireUrl}`),
+    entryContent.includes(`from './web-page-assistant-settings.lib.js'`),
     true,
   );
-  assert.equal(userscriptContent.includes('WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START'), false);
+  assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START'), false);
 });
 
 test('settings contract migrates legacy refresh pages and rejects invalid intervals', () => {

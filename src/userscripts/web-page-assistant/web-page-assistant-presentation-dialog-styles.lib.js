@@ -1,46 +1,43 @@
-(function attachWebPageAssistantPresentationDialogStylesLib(globalObject) {
-  'use strict';
+const LIB_NAME = 'WebPageAssistantPresentationDialogStylesLib';
 
-  const LIB_NAME = 'WebPageAssistantPresentationDialogStylesLib';
+function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
+  if (!documentObject || !rootId || !styleId) {
+    throw new Error(`${LIB_NAME}: documentObject, rootId, and styleId are required.`);
+  }
 
-  function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
-    if (!documentObject || !rootId || !styleId) {
-      throw new Error(`${LIB_NAME}: documentObject, rootId, and styleId are required.`);
+  if (documentObject.getElementById(styleId)) return;
+
+  const style = documentObject.createElement('style');
+  style.id = styleId;
+  style.textContent = `      #${rootId} .part-close-icon {
+      position: relative;
+      display: inline-block;
+      width: 14px;
+      height: 14px;
     }
 
-    if (documentObject.getElementById(styleId)) return;
+    #${rootId} .part-close-icon::before,
+    #${rootId} .part-close-icon::after {
+      content: "";
+      position: absolute;
+      top: 6px;
+      left: 1px;
+      width: 12px;
+      height: 2px;
+      border-radius: 999px;
+      background: currentColor;
+    }
 
-    const style = documentObject.createElement('style');
-    style.id = styleId;
-    style.textContent = `      #${rootId} .part-close-icon {
-        position: relative;
-        display: inline-block;
-        width: 14px;
-        height: 14px;
-      }
+    #${rootId} .part-close-icon::before {
+      transform: rotate(45deg);
+    }
 
-      #${rootId} .part-close-icon::before,
-      #${rootId} .part-close-icon::after {
-        content: "";
-        position: absolute;
-        top: 6px;
-        left: 1px;
-        width: 12px;
-        height: 2px;
-        border-radius: 999px;
-        background: currentColor;
-      }
+    #${rootId} .part-close-icon::after {
+      transform: rotate(-45deg);
+    }
 
-      #${rootId} .part-close-icon::before {
-        transform: rotate(45deg);
-      }
-
-      #${rootId} .part-close-icon::after {
-        transform: rotate(-45deg);
-      }
-
-      #${rootId} .part-backdrop {
-        position: fixed;
+    #${rootId} .part-backdrop {
+      position: fixed;
 	        inset: 0;
 	        display: grid;
 	        place-items: center;
@@ -143,20 +140,20 @@
 	        border: 1px solid var(--part-line);
 	      }
 
-      #${rootId} .part-key {
-        display: block;
-        margin-top: 4px;
-        overflow-wrap: anywhere;
+    #${rootId} .part-key {
+      display: block;
+      margin-top: 4px;
+      overflow-wrap: anywhere;
 	        color: var(--part-muted-text);
 	        font-size: 12px;
 	      }
 
-      #${rootId} .part-scope-grid {
-        align-items: stretch;
-        flex-wrap: wrap;
-      }
+    #${rootId} .part-scope-grid {
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
 
-      #${rootId} .part-scope-card {
+    #${rootId} .part-scope-card {
 	        flex: 1 1 210px;
 	        display: block;
 	        padding: 12px;
@@ -178,17 +175,17 @@
 	      #${rootId} .part-scope-card input {
 	        margin-right: 6px;
 	        accent-color: var(--part-accent);
-      }
+    }
 
-      #${rootId} .part-presets {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 8px;
-      }
+    #${rootId} .part-presets {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
 
-      #${rootId} .part-preset {
-        min-height: 36px;
-        padding: 8px;
+    #${rootId} .part-preset {
+      min-height: 36px;
+      padding: 8px;
 	        border: 1px solid var(--part-line);
 	        border-radius: 7px;
 	        background: var(--part-field);
@@ -211,28 +208,28 @@
 	        transform: translateY(1px);
 	      }
 
-      #${rootId} .part-custom-row {
-        align-items: stretch;
-        flex-wrap: wrap;
-      }
+    #${rootId} .part-custom-row {
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
 
-      #${rootId} .part-custom-row input,
-      #${rootId} .part-custom-row select {
-        min-height: 36px;
+    #${rootId} .part-custom-row input,
+    #${rootId} .part-custom-row select {
+      min-height: 36px;
 	        border: 1px solid var(--part-line-strong);
 	        border-radius: 7px;
 	        background: var(--part-field);
 	        color: var(--part-text);
 	      }
 
-      #${rootId} .part-custom-row input {
-        width: 140px;
-        padding: 7px 9px;
-      }
+    #${rootId} .part-custom-row input {
+      width: 140px;
+      padding: 7px 9px;
+    }
 
-      #${rootId} .part-custom-row select {
-        padding: 7px 28px 7px 9px;
-      }
+    #${rootId} .part-custom-row select {
+      padding: 7px 28px 7px 9px;
+    }
 
 	      #${rootId} .part-dialog-actions {
 	        flex-wrap: wrap;
@@ -281,7 +278,7 @@
 	        color: var(--part-danger);
 	      }
 
-      @media (max-width: 520px) {
+    @media (max-width: 520px) {
 	        #${rootId} .part-presets {
 	          grid-template-columns: repeat(2, minmax(0, 1fr));
 	        }
@@ -290,23 +287,22 @@
 	          grid-template-columns: 1fr;
 	        }
 
-        #${rootId} .part-custom-row input,
-        #${rootId} .part-custom-row select,
-        #${rootId} .part-custom-row button {
-          flex: 1 1 100%;
-          width: 100%;
-        }
-
-        #${rootId} .part-widget {
-          right: 12px;
-          bottom: 12px;
-        }
+      #${rootId} .part-custom-row input,
+      #${rootId} .part-custom-row select,
+      #${rootId} .part-custom-row button {
+        flex: 1 1 100%;
+        width: 100%;
       }
-    `;
-    documentObject.documentElement.append(style);
-  }
 
-  globalObject[LIB_NAME] = Object.freeze({
-    installAssistantDialogStyles,
-  });
-})(typeof globalThis !== 'undefined' ? globalThis : this);
+      #${rootId} .part-widget {
+        right: 12px;
+        bottom: 12px;
+      }
+    }
+  `;
+  documentObject.documentElement.append(style);
+}
+
+export {
+  installAssistantDialogStyles,
+};

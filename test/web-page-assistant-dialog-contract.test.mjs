@@ -3,18 +3,18 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-await import('../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js');
+import { createPageAssistantDialogContract } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js';
 
-const userscriptPath = path.resolve(
+const entryPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.user.js',
+  '../src/userscripts/web-page-assistant/web-page-assistant.entry.js',
 );
-const presentationRequireUrls = [
-  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.js',
-  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-presentation-dialog-styles.lib.js',
-  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js',
+const presentationLibFiles = [
+  'web-page-assistant-presentation-base-styles.lib.js',
+  'web-page-assistant-presentation-dialog-styles.lib.js',
+  'web-page-assistant-presentation.lib.js',
 ];
-const userscriptContent = await readFile(userscriptPath, 'utf8');
+const entryContent = await readFile(entryPath, 'utf8');
 
 function createSettingsContract() {
   return {
@@ -60,16 +60,16 @@ function createFakeDialog(checkedRoles) {
   };
 }
 
-createDialogContract.factory = globalThis.WebPageAssistantPresentationLib.createPageAssistantDialogContract;
+createDialogContract.factory = createPageAssistantDialogContract;
 
-test('installable metadata requires the presentation libraries', () => {
-  for (const requireUrl of presentationRequireUrls) {
+test('entry module imports the presentation libraries', () => {
+  for (const libFile of presentationLibFiles) {
     assert.equal(
-      userscriptContent.includes(`// @require      ${requireUrl}`),
+      entryContent.includes(`from './${libFile}'`),
       true,
     );
   }
-  assert.equal(userscriptContent.includes('WEB_PAGE_ASSISTANT_DIALOG_CONTRACT_START'), false);
+  assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_DIALOG_CONTRACT_START'), false);
 });
 
 test('dialog contract normalizes tabs and focus roles', () => {

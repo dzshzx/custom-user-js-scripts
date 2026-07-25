@@ -4,18 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 
-const userscriptDir = path.resolve(import.meta.dirname, '../src/userscripts/web-page-assistant');
-const supportFiles = [
-  'web-page-assistant-settings.lib.js',
-  'web-page-assistant-storage.lib.js',
-  'web-page-assistant-refresh.lib.js',
-  'web-page-assistant-presentation-base-styles.lib.js',
-  'web-page-assistant-presentation-dialog-styles.lib.js',
-  'web-page-assistant-presentation.lib.js',
-  'web-page-assistant-session.lib.js',
-  'web-page-assistant-widget-layout.lib.js',
-  'web-page-assistant-unlocker.lib.js',
-];
+const distPath = path.resolve(import.meta.dirname, '../dist/web-page-assistant.user.js');
 
 function createLocalStorage() {
   const values = new Map();
@@ -29,9 +18,9 @@ function createLocalStorage() {
   };
 }
 
-async function runScriptFile(context, fileName) {
-  const source = await readFile(path.join(userscriptDir, fileName), 'utf8');
-  vm.runInContext(source, context, { filename: fileName });
+async function runScriptFile(context, filePath) {
+  const source = await readFile(filePath, 'utf8');
+  vm.runInContext(source, context, { filename: path.basename(filePath) });
 }
 
 async function createEntrypointHarness(overrides = {}) {
@@ -91,10 +80,7 @@ async function createEntrypointHarness(overrides = {}) {
     ...overrides,
   });
 
-  for (const fileName of supportFiles) {
-    await runScriptFile(context, fileName);
-  }
-  await runScriptFile(context, 'web-page-assistant.user.js');
+  await runScriptFile(context, distPath);
 
   return { context, menuCalls, timerIds };
 }

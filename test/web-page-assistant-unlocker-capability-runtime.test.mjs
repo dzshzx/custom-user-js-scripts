@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.js');
-
-const { createUnlockerRuntime } = globalThis.WebPageAssistantUnlockerLib;
+import { createUnlockerRuntime } from '../src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.js';
 
 function createTarget() {
   const listeners = [];

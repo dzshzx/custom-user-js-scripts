@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/web-page-assistant/web-page-assistant-widget-layout.lib.js');
-
-const { createWidgetLayoutRuntime } = globalThis.WebPageAssistantWidgetLayoutLib;
+import { createWidgetLayoutRuntime } from '../src/userscripts/web-page-assistant/web-page-assistant-widget-layout.lib.js';
 
 function createClassList() {
   const values = new Set();

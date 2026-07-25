@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-await import('../src/userscripts/web-page-assistant/web-page-assistant-session.lib.js');
-
-const { createWebPageAssistantSession } = globalThis.WebPageAssistantSessionLib;
+import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.js';
 
 function createSettingsContract() {
   function ensureSettings(settings) {

@@ -3,14 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-await import('../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js');
+import { createWebPageAssistantStoragePort } from '../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js';
 
-const userscriptPath = path.resolve(
+const entryPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.user.js',
+  '../src/userscripts/web-page-assistant/web-page-assistant.entry.js',
 );
-const storageRequireUrl = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js';
-const userscriptContent = await readFile(userscriptPath, 'utf8');
+const entryContent = await readFile(entryPath, 'utf8');
 
 function createLocalStorage(initial = {}) {
   const store = new Map(Object.entries(initial));
@@ -65,14 +64,12 @@ function baseAdapters(overrides = {}) {
   };
 }
 
-const createWebPageAssistantStoragePort = globalThis.WebPageAssistantStorageLib.createWebPageAssistantStoragePort;
-
-test('installable metadata requires the storage library', () => {
+test('entry module imports the storage library', () => {
   assert.equal(
-    userscriptContent.includes(`// @require      ${storageRequireUrl}`),
+    entryContent.includes(`from './web-page-assistant-storage.lib.js'`),
     true,
   );
-  assert.equal(userscriptContent.includes('WEB_PAGE_ASSISTANT_STORAGE_PORT_START'), false);
+  assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_STORAGE_PORT_START'), false);
 });
 
 test('storage port reads and writes settings through legacy GM storage first', async () => {
