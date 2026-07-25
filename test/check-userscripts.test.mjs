@@ -49,8 +49,8 @@ function runLint(workspace) {
 
 function bridgePair(name) {
   const downloadURL = `https://raw.githubusercontent.com/example/repo/master/dist/${name}.user.js`;
-  const metadata = userscriptMetadata({ name, downloadURL, updateURL: downloadURL });
-  return { bridge: metadata, dist: `${metadata}\n// bundled body sentinel\n` };
+  const content = `${userscriptMetadata({ name, downloadURL, updateURL: downloadURL })}\n// bundled body sentinel\n`;
+  return { bridge: content, dist: content };
 }
 
 test('check-userscripts rejects duplicate userscript install identities', async () => {
@@ -97,7 +97,7 @@ test('check-userscripts accepts a bridge/dist pair sharing identity and URLs', a
   assert.match(result.stdout, /Checked/);
 });
 
-test('check-userscripts rejects a bridge whose metadata differs from its dist file', async () => {
+test('check-userscripts rejects a bridge whose content differs from its dist file', async () => {
   const { bridge, dist } = bridgePair('paired');
   const workspace = await createWorkspace(
     { 'paired.user.js': bridge.replace('0.1.0', '0.1.1') },
@@ -107,7 +107,7 @@ test('check-userscripts rejects a bridge whose metadata differs from its dist fi
   const result = runLint(workspace);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /bridge metadata does not match/);
+  assert.match(result.stderr, /bridge content does not match/);
 });
 
 test('check-userscripts rejects a dist file without a bridge stub', async () => {

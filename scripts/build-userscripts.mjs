@@ -81,28 +81,13 @@ async function assertNoOrphanLibs({ rootDir, scriptDir, entryPath, metafile }) {
   }
 }
 
-function bridgeStub({ scriptId, metadataText, metadata }) {
-  const name = firstMetadataValue(metadata, '@name') || scriptId;
-  const downloadUrl = firstMetadataValue(metadata, '@downloadURL');
-  return [
-    metadataText,
-    GENERATED_NOTE(scriptId),
-    '// Bridge stub: keeps the legacy install path alive for update discovery only.',
-    '(function () {',
-    "  'use strict';",
-    `  console.info('${name}: this legacy path is a bridge stub — install the real script from ${downloadUrl}');`,
-    '})();',
-    '',
-  ].join('\n');
-}
-
 export async function buildAll({ rootDir = process.cwd(), distDir = path.join(rootDir, 'dist') } = {}) {
   const targets = await discoverEntries(rootDir);
   const results = [];
 
   for (const { scriptId, entryPath, scriptDir } of targets) {
     const entrySource = await readFile(entryPath, 'utf8');
-    const { metadataText, metadata } = validateEntryMetadata({ scriptId, entryPath, entrySource });
+    const { metadataText } = validateEntryMetadata({ scriptId, entryPath, entrySource });
 
     const buildResult = await esbuild.build({
       entryPoints: [entryPath],
@@ -123,10 +108,13 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
     const bundledCode = buildResult.outputFiles[0].text;
     const distPath = path.join(distDir, `${scriptId}.user.js`);
     const bridgePath = path.join(scriptDir, `${scriptId}.user.js`);
+    const output = `${metadataText}\n${GENERATED_NOTE(scriptId)}\n${bundledCode}`;
 
     await mkdir(distDir, { recursive: true });
-    await writeFile(distPath, `${metadataText}\n${GENERATED_NOTE(scriptId)}\n${bundledCode}`);
-    await writeFile(bridgePath, bridgeStub({ scriptId, metadataText, metadata }));
+    await writeFile(distPath, output);
+    // The legacy install path serves the identical full script: script managers
+    // may install whatever @downloadURL they hold, so both URLs must be real.
+    await writeFile(bridgePath, output);
 
     results.push({ scriptId, distPath, bridgePath });
   }

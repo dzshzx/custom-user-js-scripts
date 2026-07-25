@@ -114,8 +114,8 @@ for (const script of srcScripts) {
       continue;
     }
     pairedDistIds.add(id);
-    if (!dist.metadataText || script.metadataText !== dist.metadataText) {
-      report(script.file, `bridge metadata does not match dist/${id}.user.js`);
+    if (script.content !== dist.content) {
+      report(script.file, `bridge content does not match dist/${id}.user.js (rebuild with npm run build)`);
       continue;
     }
     // The pair is one logical script: register its identity and URLs once.
