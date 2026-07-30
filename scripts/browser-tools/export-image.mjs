@@ -3,6 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
+import { resolvePlaywrightImport } from './playwright-loader.mjs'
+
 const DEFAULT_URL = 'https://mi.feishu.cn/file/UxkDbtSZqo9Ya4xCGNZcWOmWnlf'
 const DEFAULT_PROFILE_DIR = path.join(os.homedir(), '.local', 'share', 'codex-browser', 'feishu-login', 'playwright-profile')
 const DEFAULT_OUTPUT_DIR = path.join(os.homedir(), '.local', 'share', 'codex-browser', 'feishu-login', 'exports')
@@ -116,10 +118,6 @@ async function ensureParentDirectory(filePath) {
   await mkdir(path.dirname(filePath), { recursive: true })
 }
 
-async function loadPlaywright() {
-  return import('/home/ubuntu/.npm/_npx/420ff84f11983ee5/node_modules/playwright/index.mjs')
-}
-
 async function openPresentation(page) {
   await page.mouse.move(760, 2125)
   await page.waitForTimeout(1000)
@@ -190,7 +188,7 @@ async function main() {
     return
   }
 
-  const { chromium } = await loadPlaywright()
+  const { chromium } = await resolvePlaywrightImport()
   const context = await chromium.launchPersistentContext(options.profileDir, {
     headless: options.headless,
     args: DIRECT_PROXY_ARGS,

@@ -84,7 +84,7 @@ agent-browser --state ~/.local/share/codex-browser/example-login/storage-state.j
 
 ```bash
 node scripts/browser-tools/export-image.mjs \
-  --profile-dir /home/ubuntu/.local/share/codex-browser/feishu-login/replay-profile-20260525-143617
+  --profile-dir ~/.local/share/codex-browser/feishu-login/replay-profile-20260525-143617
 ```
 
 默认行为：
