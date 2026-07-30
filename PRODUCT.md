@@ -45,9 +45,12 @@ Persistent settings prefer userscript manager storage and fall back to page
 Runs on `https://chatgpt.com/*`.
 
 It shows Codex quota windows, daily usage, client summaries, weekly estimates,
-and local history. Each successful run creates a sanitized `Quota Snapshot`.
-Snapshots are stored in a local `Snapshot Archive`, which can be exported and
-imported as versioned JSON for backup or manual cross-device transfer.
+model summaries, available rate-limit reset credits, and local history. Each
+successful run creates a sanitized `Quota Snapshot`. Settled daily costs are
+stored in the `Cost Ledger` and drive the day, rolling-week, month, and
+all-time statistics views. Snapshots are stored in a local `Snapshot Archive`,
+which can be exported and imported as versioned JSON for backup or manual
+cross-device transfer, or synchronized through a user-owned GitHub Gist.
 
 The archive stores organized quota data, not cookies, tokens, authorization
 headers, or raw private API responses.
@@ -121,7 +124,7 @@ export, but the installable userscript remains browser-side.
   (patch level); do not bump without asking, and do not skip the question.
   Script managers key update discovery and cache refresh on `@version`.
 - The version lives in the entry metadata block; `npm run build` propagates it
-  to the dist bundle and the bridge stub, and fails if an internal
+  to the dist bundle and the byte-identical bridge file, and fails if an internal
   `SCRIPT_VERSION` constant disagrees with `@version`.
 - Do not use repository `package.json` version as a substitute for installable
   userscript versions.

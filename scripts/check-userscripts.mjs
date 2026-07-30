@@ -46,8 +46,8 @@ function scriptId(file) {
   return path.basename(file, '.user.js');
 }
 
-// A bridge stub is a src userscript whose download URL points at its own dist
-// counterpart; it exists only to keep the legacy install path discoverable.
+// A bridge file is a src userscript whose download URL points at its own dist
+// counterpart; it remains a complete installable at the legacy path.
 function isBridge(script) {
   if (!script.metadata) return false;
   const downloadUrl = firstMetadataValue(script.metadata, '@downloadURL');
@@ -110,7 +110,7 @@ for (const script of srcScripts) {
     const id = scriptId(script.file);
     const dist = distById.get(id);
     if (!dist) {
-      report(script.file, `bridge stub's dist counterpart dist/${id}.user.js is missing`);
+      report(script.file, `bridge file's dist counterpart dist/${id}.user.js is missing`);
       continue;
     }
     pairedDistIds.add(id);
@@ -129,7 +129,7 @@ for (const script of srcScripts) {
 for (const script of distScripts) {
   const id = scriptId(script.file);
   if (!pairedDistIds.has(id)) {
-    report(script.file, `missing bridge stub under src/ (expected a ${id}.user.js bridge with matching metadata)`);
+    report(script.file, `missing bridge file under src/ (expected a ${id}.user.js bridge with matching metadata)`);
     continue;
   }
   checkRequiredFields(script);

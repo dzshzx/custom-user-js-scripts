@@ -33,12 +33,16 @@
 - 在 `https://chatgpt.com/*` 页面运行，通过悬浮按钮或菜单命令计算当前 Codex 用量。
 - 每次成功运行后保存一条本地 `Quota Snapshot`。
 - 面板里显示 `Snapshot Archive` 概况和最近快照。
+- 展示近 30 天按模型汇总和当前可用的重置券明细。
+- 通过 `Cost Ledger` 展示日 / 周（滚动 7 天）/ 月 / 全量已结算消耗，并支持区间下钻。
 - 支持从面板导出整个归档。
 - 支持从 userscript 菜单导出 / 导入版本化 JSON 归档，用于手动同步。
+- 支持通过用户自己的 GitHub secret gist 自动合并和同步归档。
 
 说明：
 
 - 长期归档优先使用 userscript manager 存储，运行环境不支持时回退到页面 `localStorage`。
+- Gist 同步设置和 token 需要 GM storage；仅有 `localStorage` 回退时仍可保留本地归档，但不能启用 Gist 同步。
 - 导入是 `merge` 语义，不会覆盖本地已有归档。
 - 当前只支持完整 JSON 归档导出 / 导入，不支持 CSV 和按范围导出。
 

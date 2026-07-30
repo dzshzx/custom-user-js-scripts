@@ -40,7 +40,7 @@
 
 Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript 菜单命令读取当前 Codex 用量并保存历史。
 
-它会把每次成功运行的结果保存为一条 `Quota Snapshot`，并维护本地 `Snapshot Archive`。脚本管理器的 WebDAV 同步只能保证脚本代码和管理器设置同步，不作为 Codex 用量历史的可靠跨设备通道。
+它会把每次成功运行的结果保存为一条 `Quota Snapshot`，并维护本地 `Snapshot Archive`。面板还会展示按模型汇总、可用重置券，以及由 `Cost Ledger` 派生的日 / 周 / 月 / 全量已结算消耗视图。脚本管理器的 WebDAV 同步只能保证脚本代码和管理器设置同步，不作为 Codex 用量历史的可靠跨设备通道。
 
 跨设备自动同步走 GitHub Gist：用户配置自己的 GitHub token 后，脚本会在用户自己的 GitHub 账号里查找或创建一个 secret gist，并把 `Snapshot Archive` 保存为 JSON 文件。不同设备使用同一个 GitHub 账号和 token 后，会按 `Snapshot ID` 合并归档。你也可以从面板导出完整归档，或通过 userscript 菜单导出 / 导入 JSON，作为手动备份或迁移路径。
 
@@ -50,7 +50,7 @@ Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript �
 - 导入是 merge 语义，会跳过重复快照，不会覆盖整个本地归档。
 - GitHub token 保存在脚本管理器存储中，不写入仓库；建议使用 fine-grained token，并只授予 Gists read/write 权限。
 - Gist 使用 `public: false` 创建，是 unlisted secret gist，不应保存 Cookie、Token 或其他真正敏感信息。
-- 运行环境不支持 GM storage 时会回退到当前浏览器的 `localStorage`；跨设备同步仍需要配置 GitHub token。
+- 运行环境不支持 GM storage 时，本地归档会回退到当前浏览器的 `localStorage`；Gist 同步设置和 token 只保存在 GM storage 中，因此该环境下不能启用 Gist 同步。
 
 Gist 同步设置说明见 [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)。
 
@@ -80,6 +80,8 @@ Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜�
 ```
 
 ## 开发与验证
+
+需要 Node.js 22 或更高版本。
 
 ```bash
 npm ci          # 安装 devDependencies（esbuild、happy-dom）

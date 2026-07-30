@@ -110,7 +110,7 @@ test('check-userscripts rejects a bridge whose content differs from its dist fil
   assert.match(result.stderr, /bridge content does not match/);
 });
 
-test('check-userscripts rejects a dist file without a bridge stub', async () => {
+test('check-userscripts rejects a dist file without a bridge file', async () => {
   const { dist } = bridgePair('orphan-dist');
   const workspace = await createWorkspace(
     {},

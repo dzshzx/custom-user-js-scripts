@@ -16,7 +16,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # Committed dist bundles and bridge stubs must match the sources.
+      # Committed dist bundles and byte-identical bridge files must match the sources.
       - run: git diff --exit-code -- dist src
       - run: test -z "$(git status --porcelain dist)"
       - run: npm run lint
