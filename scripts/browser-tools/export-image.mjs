@@ -30,7 +30,7 @@ Options:
 Notes:
   - This script uses Playwright bundled Chromium only.
   - Browser traffic is forced to direct mode for this session.
-  - It prefers exporting the original visible image data; screenshot is fallback only.`)
+  - It exports original visible image data and exits if none can be extracted.`)
 }
 
 function parseInteger(value, flagName) {

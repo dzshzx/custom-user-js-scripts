@@ -17,7 +17,7 @@ Codex Quota Compass 的公开免费同步方案是 GitHub Gist。每个用户使
 
 如果使用 classic token，只选择 `gist` scope。
 
-依据 GitHub 官方文档：[Gist REST API](https://docs.github.com/en/rest/gists/gists) 创建、读取和修改 gist 需要 token；[fine-grained token 权限表](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens) 中对应的是 `Gists` 用户权限。
+依据 GitHub 官方文档：[Gist REST API](https://docs.github.com/en/rest/gists/gists) 允许匿名读取公开 gist；本脚本要代表当前用户查找、创建和更新其 secret gist，因此仍需要 token。[fine-grained token 权限表](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens) 中对应的是 `Gists` 用户权限。
 
 ## 脚本配置
 
