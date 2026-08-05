@@ -50,7 +50,7 @@ Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript �
 - 导入是 merge 语义，会跳过重复快照，不会覆盖整个本地归档。
 - GitHub token 保存在脚本管理器存储中，不写入仓库；建议使用 fine-grained token，并只授予 Gists read/write 权限。
 - Gist 使用 `public: false` 创建，是 unlisted secret gist，不应保存 Cookie、Token 或其他真正敏感信息。
-- 运行环境不支持 GM storage 时，本地归档会回退到当前浏览器的 `localStorage`；Gist 同步设置和 token 只保存在 GM storage 中，因此该环境下不能启用 Gist 同步。
+- 本地归档优先保存在 GM storage，同时在当前页面的 `localStorage` 保留一份非敏感镜像；读取时会合并两端，GM storage 不可用时则直接使用该镜像。Gist 同步设置和 token 只保存在 GM storage 中，不会写入页面存储；仅有 `localStorage` 时不能启用 Gist 同步。
 
 Gist 同步设置说明见 [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)。
 

@@ -94,6 +94,9 @@ export, but the installable userscript remains browser-side.
   migration.
 - Prefer userscript manager storage for long-lived userscript data, then fall
   back to page `localStorage` when manager storage is unavailable.
+- Codex Quota Compass mirrors its sanitized `Snapshot Archive` to page
+  `localStorage` and merges that mirror back on read. Gist settings and tokens
+  remain GM-storage-only and are never mirrored to page storage.
 - Export only versioned, sanitized documents. Codex Quota Compass exports
   `Snapshot Export` JSON, not raw private payloads.
 - Imports use validation, deduplication, and merge semantics. They should not

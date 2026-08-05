@@ -41,8 +41,8 @@
 
 说明：
 
-- 长期归档优先使用 userscript manager 存储，运行环境不支持时回退到页面 `localStorage`。
-- Gist 同步设置和 token 需要 GM storage；仅有 `localStorage` 回退时仍可保留本地归档，但不能启用 Gist 同步。
+- 长期归档优先使用 userscript manager 存储，同时镜像到页面 `localStorage`；读取时会合并两端，GM storage 不可用时则使用该镜像。
+- Gist 同步设置和 token 只保存在 GM storage，不会镜像到页面存储；仅有 `localStorage` 时仍可保留本地归档，但不能启用 Gist 同步。
 - 导入是 `merge` 语义，不会覆盖本地已有归档。
 - 当前只支持完整 JSON 归档导出 / 导入，不支持 CSV 和按范围导出。
 

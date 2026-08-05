@@ -21,7 +21,7 @@ Codex Quota Compass 的公开免费同步方案是 GitHub Gist。每个用户使
 
 ## 脚本配置
 
-Gist 同步要求当前 userscript manager 提供 GM storage。若 GM storage 不可用，本地 `Snapshot Archive` 仍会回退到页面 `localStorage`，但同步设置和 GitHub token 没有页面存储回退，因此不能启用 Gist 同步。
+Gist 同步要求当前 userscript manager 提供 GM storage。本地 `Snapshot Archive` 优先写入 GM storage，同时镜像到页面 `localStorage`；读取时合并两端，GM storage 不可用时直接使用该镜像。镜像只包含整理后的归档数据；同步设置和 GitHub token 始终只保存在 GM storage，不会写入页面存储，因此仅有 `localStorage` 时不能启用 Gist 同步。
 
 安装 `Codex Quota Compass` 后，在 Tampermonkey 菜单或面板“同步”页点击“配置 Gist 同步”：
 
