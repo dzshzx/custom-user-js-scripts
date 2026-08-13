@@ -69,3 +69,23 @@
 - 旧路径：`src/feishu-preview-image-export.user.js`
 - 新路径：`src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`
 - 当前脚本没有 `@downloadURL` / `@updateURL`；如已手动安装，直接用新路径重新安装即可。
+
+## JavDB Recommend Archive
+
+安装入口：
+
+- [../../src/userscripts/javdb-recommend/javdb-recommend.user.js](../../src/userscripts/javdb-recommend/javdb-recommend.user.js)
+
+用途：
+
+- 运行在 `https://javdb.com/*`（及 `javdb575.com`、`javdb.today` 等镜像域名）。
+- 页面右下角「🎬」悬浮按钮展开面板，浏览「佳片推荐」全部历史期数（每周一/四更新）。
+- 期数导航：下拉选择、上一期 / 下一期、按期号跳转，记住上次浏览位置。
+- 影片卡片（封面、番号、评分），点击跳转官网搜索。
+- 当前期即时过滤 + 全期关键词搜索（逐期扫描、可随时停止）。
+- 数据走官网自身的 `/api/v1/movies/recommend_periods` 与 `/api/v1/movies/recommend` 接口（同域请求）。
+
+说明：
+
+- `@grant none`，不使用脚本管理器特权 API；上次浏览期数保存在页面 `localStorage`。
+- 无需登录即可使用；脚本内置与官网一致的 `jdsignature` 签名算法。

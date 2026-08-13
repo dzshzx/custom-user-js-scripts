@@ -66,6 +66,19 @@ visible but the original image entry is awkward to access.
 Local browser helpers support QR login-state capture and scripted Feishu image
 export, but the installable userscript remains browser-side.
 
+### JavDB Recommend Archive
+
+Runs on `https://javdb.com/*` and mirror domains (`javdb575.com`,
+`javdb.today`, and similar).
+
+A floating button opens a panel for browsing every historical issue of the
+JavDB "Recommend" section: issue navigation (select, previous/next, jump by
+issue number, last-viewed issue remembered), movie cards linking to site
+search, per-issue filtering, and a stoppable full-archive keyword search. Data
+comes from the site's own same-origin recommend APIs with a built-in
+`jdsignature` header; the script needs no login, declares `@grant none`, and
+persists only the last-viewed issue number in page `localStorage`.
+
 ## Core Jobs
 
 - Let users complete small browser-page tasks without leaving the current page.
