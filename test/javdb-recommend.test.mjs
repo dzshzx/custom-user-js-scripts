@@ -15,11 +15,23 @@ const srcPath = path.resolve(
 const RAW_URL =
   'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/javdb-recommend/javdb-recommend.user.js';
 
-test('metadata pins auto-update URLs to the src raw path and carries version 0.0.2', async () => {
+test('metadata pins auto-update URLs to the src raw path and carries version 0.0.3', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
-  assert.deepEqual(metadata.get('@version'), ['0.0.2']);
+  assert.deepEqual(metadata.get('@version'), ['0.0.3']);
   assert.deepEqual(metadata.get('@downloadURL'), [RAW_URL]);
   assert.deepEqual(metadata.get('@updateURL'), [RAW_URL]);
+});
+
+// md5 是签名链的根：S 表错位曾导致摘要全错、decrypt 产出非法 base64，
+// 浏览器严格 atob 直接抛错让整个脚本不运行。用已知向量钉死它。
+test('md5 matches known vectors', async () => {
+  const source = await readFile(srcPath, 'utf8');
+  const md5Source = source.match(/function md5\(s\) \{[\s\S]*?\n  \}/);
+  assert.ok(md5Source, 'md5 function source should be extractable');
+  const md5 = new Function(`${md5Source[0]}; return md5;`)();
+  assert.equal(md5(''), 'd41d8cd98f00b204e9800998ecf8427e');
+  assert.equal(md5('abc'), '900150983cd24fb0d6963f7d28e17f72');
+  assert.equal(md5('30820'), 'da97c8240e2ad99a2d331eed95c411f5');
 });
 
 const PERIODS = {
@@ -69,8 +81,9 @@ async function runScript(window, fetchImpl) {
     console,
     URLSearchParams,
     TextDecoder,
-    // 浏览器 atob 语义 = 字节串；Node 全局 atob 传入 vm 上下文会抛 InvalidCharacterError，用 Buffer 包装
-    atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+    // Node 全局 atob 与浏览器同为严格语义（非法 base64 抛 InvalidCharacterError），直接传入；
+    // 不要用 Buffer 包装——宽容解码会吞掉 decrypt 产出的非法字符，掩盖签名链错误
+    atob,
     Uint8Array,
     setTimeout,
     clearTimeout,
