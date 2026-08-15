@@ -133,6 +133,12 @@ or an app trying to take over the host site.
 - File names should be sanitized from the Feishu document title and remain
   understandable to the user.
 
+## JavDB Recommend Archive UI
+
+- The surface is a quiet navbar entry on JavDB pages plus a standalone archive page rendered at `/recommend-archive`; no floating panel.
+- The standalone page is fully owned by the script: product layout, one accent color, styles scoped under `.jdb-ra`.
+- Movie cards are plain anchors linking directly to the site's `/v/<id>` detail pages.
+
 ## Components
 
 - Use real `button type="button"` controls for clickable actions.

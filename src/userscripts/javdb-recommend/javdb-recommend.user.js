@@ -2,9 +2,9 @@
 // @name         JavDB Recommend Archive
 // @name:zh-CN   JavDB 佳片推荐 · 历史期数
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      1.0.0
-// @description  Browse every historical issue of the JavDB "Recommend" section (updated Mon/Thu), with flip, search and full-archive keyword search.
-// @description:zh-CN  在 JavDB 网页上浏览「佳片推荐」全部历史期数（每周一/四更新），支持翻期、搜索、全期关键词搜索。
+// @version      0.0.2
+// @description  Adds a "Recommend" entry to the JavDB navbar that opens a standalone archive page for every historical issue (updated Mon/Thu), with flip, search and full-archive keyword search.
+// @description:zh-CN  在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索、全期关键词搜索。
 // @author       dzshzx
 // @match        https://javdb.com/*
 // @match        https://www.javdb.com/*
@@ -13,6 +13,8 @@
 // @grant        none
 // @run-at       document-idle
 // @noframes
+// @downloadURL  https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/javdb-recommend/javdb-recommend.user.js
+// @updateURL    https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/javdb-recommend/javdb-recommend.user.js
 // ==/UserScript==
 
 (function () {
@@ -26,7 +28,7 @@
   function md5(s) {
     function rol(x, c) { return ((x << c) | (x >>> (32 - c))) >>> 0; }
     var K = [0xd76aa478,0xe8c7b756,0x242070db,0xc1bdceee,0xf57c0faf,0x4787c62a,0xa8304613,0xfd469501,0x698098d8,0x8b44f7af,0xffff5bb1,0x895cd7be,0x6b901122,0xfd987193,0xa679438e,0x49b40821,0xf61e2562,0xc040b340,0x265e5a51,0xe9b6c7aa,0xd62f105d,0x02441453,0xd8a1e681,0xe7d3fbc8,0x21e1cde6,0xc33707d6,0xf4d50d87,0x455a14ed,0xa9e3e905,0xfcefa3f8,0x676f02d9,0x8d2a4c8a,0xfffa3942,0x8771f681,0x6d9d6122,0xfde5380c,0xa4beea44,0x4bdecfa9,0xf6bb4b60,0xbebfbc70,0x289b7ec6,0xeaa127fa,0xd4ef3085,0x04881d05,0xd9d4d039,0xe6db99e5,0x1fa27cf8,0xc4ac5665,0xf4292244,0x432aff97,0xab9423a7,0xfc93a039,0x655b59c3,0x8f0ccc92,0xffeff47d,0x85845dd1,0x6fa87e4f,0xfe2ce6e0,0xa3014314,0x4e0811a1,0xf7537e82,0xbd3af235,0x2ad7d2bb,0xeb86d391];
-    var S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+    var S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
     var bytes = [], i;
     for (i = 0; i < s.length; i++) bytes.push(s.charCodeAt(i) & 0xff);
     var lenBits = (s.length * 8) >>> 0;
@@ -95,6 +97,21 @@
     });
   }
 
+  /* ================= 官网资源约定 ================= */
+  var ROUTE = '/recommend-archive';
+  // 接口返回的封面是 App 图床 tp.spfcas.com（网页端常被拦截导致封面不显示）；
+  // 官网页面自身使用 c0.jdbstatic.com，且 /covers/<前缀>/<id>.jpg 路径完全一致，直接换宿主即可。
+  var SITE_IMG_HOST = 'https://c0.jdbstatic.com';
+
+  function coverUrl(url) {
+    var m = /\/covers\/.*$/.exec(url || '');
+    return m ? SITE_IMG_HOST + m[0] : (url || '');
+  }
+
+  function movieUrl(movie) {
+    return BASE + '/v/' + encodeURIComponent(movie.id);
+  }
+
   /* ================= 状态 ================= */
   var periods = [];
   var detailCache = {};   // period -> movies[]
@@ -102,267 +119,264 @@
   var searching = false;
   var LS_KEY = 'javdb_recommend_last_period';
 
-  /* ================= UI ================= */
-  function boot() {
-  var CSS = [
-    '#jdb-recommend-btn{position:fixed;right:18px;bottom:18px;z-index:2147483000;width:52px;height:52px;padding:0;border-radius:50%;background:oklch(26.5% 0.016 269.1);border:1px solid oklch(37.6% 0.031 267.4);color:oklch(82% 0.171 78.5);font-size:24px;cursor:pointer;box-shadow:0 4px 16px oklch(0% 0 0 / .4);transition:transform .15s}',
-    '#jdb-recommend-btn:hover{transform:scale(1.08)}',
-    '#jdb-recommend-panel{position:fixed;right:18px;bottom:84px;z-index:2147483000;width:430px;max-width:calc(100vw - 24px);max-height:78vh;background:oklch(22.3% 0.012 270.8);border:1px solid oklch(34.8% 0.026 264.1);border-radius:14px;box-shadow:0 12px 40px oklch(0% 0 0 / .55);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}',
-    '#jdb-recommend-panel .hd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid oklch(30.5% 0.021 265.9);color:oklch(82% 0.171 78.5);font-weight:600;font-size:14px}',
-    '#jdb-recommend-panel .hd .grow{flex:1}',
-    '#jdb-recommend-panel .close{cursor:pointer;background:none;border:none;color:oklch(65.7% 0.028 268.7);font-size:16px;padding:2px 8px}',
-    '#jdb-recommend-panel .close:hover{color:oklch(95% 0.01 270)}',
-    '#jdb-recommend-panel .bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px;border-bottom:1px solid oklch(30.5% 0.021 265.9);align-items:center}',
-    '#jdb-recommend-panel select,#jdb-recommend-panel input,#jdb-recommend-panel button{background:oklch(27.6% 0.016 264.3);color:oklch(93.7% 0.008 271.3);border:1px solid oklch(34.8% 0.026 264.1);border-radius:7px;padding:6px 8px;font-size:13px;outline:none}',
-    '#jdb-recommend-panel select:focus-visible,#jdb-recommend-panel input:focus-visible,#jdb-recommend-panel button:focus-visible{outline:2px solid oklch(82% 0.171 78.5);outline-offset:1px}',
-    '#jdb-recommend-panel select{flex:1;min-width:130px}',
-    '#jdb-recommend-panel .jump{width:72px}',
-    '#jdb-recommend-panel .search{flex:1;min-width:110px}',
-    '#jdb-recommend-panel button{cursor:pointer}',
-    '#jdb-recommend-panel button:hover{border-color:oklch(82% 0.171 78.5);color:oklch(82% 0.171 78.5)}',
-    '#jdb-recommend-panel .status{padding:6px 14px;color:oklch(65.7% 0.028 268.7);font-size:12px;min-height:18px}',
-    '#jdb-recommend-panel .grid{overflow-y:auto;padding:10px 14px 16px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}',
-    '#jdb-recommend-panel .card{background:oklch(26% 0.018 266.3);border:1px solid oklch(30.5% 0.021 265.9);border-radius:9px;overflow:hidden;cursor:pointer}',
-    '#jdb-recommend-panel .card:hover{border-color:oklch(82% 0.171 78.5)}',
-    '#jdb-recommend-panel .cv{position:relative;aspect-ratio:5/7;background:oklch(20.5% 0.012 270.8);overflow:hidden}',
-    '#jdb-recommend-panel .cv img{width:100%;height:100%;object-fit:cover;display:block}',
-    '#jdb-recommend-panel .cv .num{position:absolute;left:4px;top:4px;background:oklch(0% 0 0 / .75);color:oklch(95% 0.01 270);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}',
-    '#jdb-recommend-panel .cv .score{position:absolute;right:4px;top:4px;background:oklch(0% 0 0 / .75);color:oklch(82% 0.171 78.5);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}',
-    '#jdb-recommend-panel .info{padding:5px 7px 7px}',
-    '#jdb-recommend-panel .tt{font-size:12px;line-height:1.35;color:oklch(93.7% 0.008 271.3);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:32px}',
-    '#jdb-recommend-panel .grp-title{grid-column:1/-1;color:oklch(82% 0.171 78.5);font-size:13px;font-weight:600;margin-top:4px}',
-    '#jdb-recommend-panel .empty{grid-column:1/-1;color:oklch(65.7% 0.028 268.7);text-align:center;padding:24px 0;font-size:13px}'
-  ].join('\n');
-
-  var styleEl = document.createElement('style');
-  styleEl.textContent = CSS;
-  document.documentElement.appendChild(styleEl);
-
-  var btn = document.createElement('button');
-  btn.type = 'button';
-  btn.id = 'jdb-recommend-btn';
-  btn.title = '佳片推荐 · 全部历史期数';
-  btn.setAttribute('aria-label', '佳片推荐 · 全部历史期数');
-  btn.textContent = '🎬';
-  document.body.appendChild(btn);
-
-  var panel = document.createElement('div');
-  panel.id = 'jdb-recommend-panel';
-  panel.style.display = 'none';
-  panel.innerHTML =
-    '<div class="hd"><span>🎬 佳片推荐 · 历史期数</span><span class="grow"></span>' +
-    '<button type="button" class="close" title="关闭" aria-label="关闭">✕</button></div>' +
-    '<div class="bar">' +
-    '<select id="jdb-rp-select"></select>' +
-    '<button type="button" id="jdb-rp-prev" aria-label="上一期">◀</button><button type="button" id="jdb-rp-next" aria-label="下一期">▶</button>' +
-    '<input class="jump" id="jdb-rp-jump" type="number" min="1" placeholder="期号">' +
-    '<input class="search" id="jdb-rp-search" placeholder="🔍 搜索当前期">' +
-    '<button type="button" id="jdb-rp-gsearch" title="在所有期数中搜索">全期搜索</button>' +
-    '</div>' +
-    '<div class="status" id="jdb-rp-status">加载期数列表中…</div>' +
-    '<div class="grid" id="jdb-rp-grid"></div>';
-  document.body.appendChild(panel);
-
-  var $ = function (id) { return document.getElementById(id); };
-  var statusEl = $('jdb-rp-status'), grid = $('jdb-rp-grid'), select = $('jdb-rp-select');
-
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
+  /* ================= 独立归档页（ROUTE） ================= */
+  // javdb.com 对未知路径返回不含重定向的 404 HTML 页，脚本直接把它渲染成归档页。
+  function isArchiveRoute() {
+    return location.pathname.replace(/\/+$/, '') === ROUTE;
   }
 
-  function setStatus(t) { statusEl.textContent = t; }
+  function bootArchivePage() {
+    document.title = '佳片推荐 · 历史期数 - JavDB';
 
-  btn.addEventListener('click', function () {
-    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
-  });
-  panel.querySelector('.close').addEventListener('click', function () {
-    panel.style.display = 'none';
-  });
+    var CSS = [
+      'body{margin:0;background:oklch(20.5% 0.012 270.8)}',
+      '.jdb-ra{max-width:1080px;margin:0 auto;padding:20px 16px 48px;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:oklch(93.7% 0.008 271.3)}',
+      '.jdb-ra .hd{display:flex;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid oklch(30.5% 0.021 265.9)}',
+      '.jdb-ra h1{margin:0;font-size:18px;color:oklch(82% 0.171 78.5)}',
+      '.jdb-ra .hd .sub{font-size:12px;color:oklch(65.7% 0.028 268.7)}',
+      '.jdb-ra .home{margin-left:auto;font-size:13px;color:oklch(65.7% 0.028 268.7);text-decoration:none}',
+      '.jdb-ra .home:hover{color:oklch(82% 0.171 78.5)}',
+      '.jdb-ra .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0}',
+      '.jdb-ra select,.jdb-ra input,.jdb-ra button{background:oklch(27.6% 0.016 264.3);color:oklch(93.7% 0.008 271.3);border:1px solid oklch(34.8% 0.026 264.1);border-radius:7px;padding:7px 10px;font-size:13px;outline:none}',
+      '.jdb-ra select:focus-visible,.jdb-ra input:focus-visible,.jdb-ra button:focus-visible{outline:2px solid oklch(82% 0.171 78.5);outline-offset:1px}',
+      '.jdb-ra select{flex:1;min-width:180px;max-width:340px}',
+      '.jdb-ra .jump{width:80px}',
+      '.jdb-ra .search{flex:1;min-width:140px;max-width:260px}',
+      '.jdb-ra button{cursor:pointer}',
+      '.jdb-ra button:hover{border-color:oklch(82% 0.171 78.5);color:oklch(82% 0.171 78.5)}',
+      '.jdb-ra .status{padding:2px 0 10px;min-height:18px;font-size:12px;color:oklch(65.7% 0.028 268.7)}',
+      '.jdb-ra .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}',
+      '.jdb-ra .card{display:block;background:oklch(26% 0.018 266.3);border:1px solid oklch(30.5% 0.021 265.9);border-radius:9px;overflow:hidden;text-decoration:none;transition:border-color .15s}',
+      '.jdb-ra .card:hover{border-color:oklch(82% 0.171 78.5)}',
+      '.jdb-ra .cv{position:relative;aspect-ratio:5/7;background:oklch(23% 0.014 270);overflow:hidden}',
+      '.jdb-ra .cv img{width:100%;height:100%;object-fit:cover;display:block}',
+      '.jdb-ra .cv .num{position:absolute;left:4px;top:4px;background:oklch(0% 0 0 / .75);color:oklch(95% 0.01 270);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}',
+      '.jdb-ra .cv .score{position:absolute;right:4px;top:4px;background:oklch(0% 0 0 / .75);color:oklch(82% 0.171 78.5);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}',
+      '.jdb-ra .info{padding:5px 7px 7px}',
+      '.jdb-ra .tt{font-size:12px;line-height:1.35;color:oklch(93.7% 0.008 271.3);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:32px}',
+      '.jdb-ra .grp-title{grid-column:1/-1;color:oklch(82% 0.171 78.5);font-size:13px;font-weight:600;margin-top:4px}',
+      '.jdb-ra .empty{grid-column:1/-1;color:oklch(65.7% 0.028 268.7);text-align:center;padding:24px 0;font-size:13px}',
+      '@media (max-width:560px){.jdb-ra .grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}}',
+      '@media (prefers-reduced-motion:reduce){.jdb-ra .card{transition:none}}'
+    ].join('\n');
 
-  /* ---------- 期数列表 ---------- */
-  function loadPeriods() {
-    setStatus('加载期数列表中…');
-    var list = [];
-    (function next(page) {
-      api('/api/v1/movies/recommend_periods', { page: page, limit: 48 }).then(function (d) {
-        var batch = d.periods || [];
-        list = list.concat(batch);
-        setStatus('加载期数列表… 已获取 ' + list.length + ' 期');
-        if (batch.length === 48) { next(page + 1); }
-        else { finish(list); }
-      }).catch(function (e) {
-        setStatus('期数列表加载失败：' + e.message + '（3 秒后重试）');
-        setTimeout(function () { next(page); }, 3000);
+    var styleEl = document.createElement('style');
+    styleEl.textContent = CSS;
+    document.head.appendChild(styleEl);
+
+    document.body.innerHTML =
+      '<main class="jdb-ra">' +
+      '<header class="hd"><h1>🎬 佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新</span>' +
+      '<a class="home" href="/">← 返回首页</a></header>' +
+      '<div class="bar">' +
+      '<select id="jdb-ra-select" aria-label="选择期数"></select>' +
+      '<button type="button" id="jdb-ra-prev">◀ 上一期</button><button type="button" id="jdb-ra-next">下一期 ▶</button>' +
+      '<input class="jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转">' +
+      '<input class="search" id="jdb-ra-search" type="search" placeholder="🔍 搜索当前期" aria-label="搜索当前期">' +
+      '<button type="button" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button>' +
+      '</div>' +
+      '<div class="status" id="jdb-ra-status" role="status">加载期数列表中…</div>' +
+      '<div class="grid" id="jdb-ra-grid"></div>' +
+      '</main>';
+
+    var $ = function (id) { return document.getElementById(id); };
+    var statusEl = $('jdb-ra-status'), grid = $('jdb-ra-grid'), select = $('jdb-ra-select');
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
       });
-    })(1);
-  }
-
-  function finish(list) {
-    periods = list;
-    renderSelect();
-    setStatus('共 ' + periods.length + ' 期 · 每周一/四更新');
-    if (periods.length) {
-      var saved = parseInt(localStorage.getItem(LS_KEY), 10);
-      var first = periods.find(function (p) { return p.period === saved; }) ? saved : periods[0].period;
-      loadDetail(first);
     }
-  }
 
-  function renderSelect() {
-    select.innerHTML = '';
-    periods.forEach(function (p) {
-      var o = document.createElement('option');
-      o.value = String(p.period);
-      o.textContent = '第 ' + p.period + ' 期 · ' + p.created_at.slice(0, 10) + ' · ' + p.movies_count + ' 部';
-      select.appendChild(o);
-    });
-  }
+    function setStatus(t) { statusEl.textContent = t; }
 
-  /* ---------- 单期详情 ---------- */
-  function loadDetail(period) {
-    currentPeriod = period;
-    try { localStorage.setItem(LS_KEY, String(period)); } catch (e) {}
-    select.value = String(period);
-    if (detailCache[period]) {
-      renderMovies(detailCache[period]);
-      setStatus('第 ' + period + ' 期 · 共 ' + detailCache[period].length + ' 部');
-      return;
+    /* ---------- 期数列表 ---------- */
+    function loadPeriods() {
+      setStatus('加载期数列表中…');
+      var list = [];
+      (function next(page) {
+        api('/api/v1/movies/recommend_periods', { page: page, limit: 48 }).then(function (d) {
+          var batch = d.periods || [];
+          list = list.concat(batch);
+          setStatus('加载期数列表… 已获取 ' + list.length + ' 期');
+          if (batch.length === 48) { next(page + 1); }
+          else { finish(list); }
+        }).catch(function (e) {
+          setStatus('期数列表加载失败：' + e.message + '（3 秒后重试）');
+          setTimeout(function () { next(page); }, 3000);
+        });
+      })(1);
     }
-    setStatus('加载第 ' + period + ' 期…');
-    api('/api/v1/movies/recommend', { period: period }).then(function (d) {
-      detailCache[period] = d.movies || [];
-      renderMovies(detailCache[period]);
-      setStatus('第 ' + period + ' 期 · 共 ' + detailCache[period].length + ' 部');
-    }).catch(function (e) {
-      setStatus('加载失败：' + e.message);
-    });
-  }
 
-  function cardHtml(m) {
-    return '<div class="card" data-number="' + esc(m.number) + '">' +
-      '<div class="cv"><img loading="lazy" src="' + esc(m.cover_url || '') + '" ' +
-      'onerror="this.style.visibility=\'hidden\'">' +
-      '<span class="num">' + esc(m.number) + '</span>' +
-      (m.score ? '<span class="score">★ ' + esc(m.score) + '</span>' : '') +
-      '</div><div class="info"><div class="tt">' + esc(m.title || m.origin_title || '') + '</div></div></div>';
-  }
-
-  function renderMovies(movies, headerText) {
-    grid.innerHTML = '';
-    if (headerText) {
-      var h = document.createElement('div');
-      h.className = 'grp-title';
-      h.textContent = headerText;
-      grid.appendChild(h);
+    function finish(list) {
+      periods = list;
+      renderSelect();
+      setStatus('共 ' + periods.length + ' 期 · 每周一/四更新');
+      if (periods.length) {
+        var saved = parseInt(localStorage.getItem(LS_KEY), 10);
+        var first = periods.find(function (p) { return p.period === saved; }) ? saved : periods[0].period;
+        loadDetail(first);
+      }
     }
-    if (!movies.length) {
-      var e = document.createElement('div');
-      e.className = 'empty';
-      e.textContent = '没有找到影片';
-      grid.appendChild(e);
-      return;
+
+    function renderSelect() {
+      select.innerHTML = '';
+      periods.forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = String(p.period);
+        o.textContent = '第 ' + p.period + ' 期 · ' + p.created_at.slice(0, 10) + ' · ' + p.movies_count + ' 部';
+        select.appendChild(o);
+      });
     }
-    movies.forEach(function (m) {
-      var div = document.createElement('div');
-      div.innerHTML = cardHtml(m);
-      grid.appendChild(div.firstChild);
-    });
-  }
 
-  // 点卡片 → 打开官网影片详情页（同域）
-  grid.addEventListener('click', function (ev) {
-    var card = ev.target.closest('.card');
-    if (card && card.dataset.number) {
-      window.open(location.origin + '/search?q=' + encodeURIComponent(card.dataset.number) + '&f=all', '_blank');
-    }
-  });
-
-  /* ---------- 翻期 ---------- */
-  // periods 为降序（最新在前）：dir=1 → 更早一期；dir=-1 → 更新一期
-  function step(dir) {
-    if (!periods.length) return;
-    var idx = periods.findIndex(function (p) { return p.period === currentPeriod; });
-    if (idx < 0) return;
-    var t = idx + dir;
-    if (t < 0 || t >= periods.length) { setStatus(dir > 0 ? '已是最早一期' : '已是最新一期'); return; }
-    if (periods[t].period !== currentPeriod) loadDetail(periods[t].period);
-  }
-  $('jdb-rp-prev').addEventListener('click', function () { step(1); });
-  $('jdb-rp-next').addEventListener('click', function () { step(-1); });
-  select.addEventListener('change', function () { loadDetail(parseInt(select.value, 10)); });
-  $('jdb-rp-jump').addEventListener('keydown', function (e) {
-    if (e.key !== 'Enter') return;
-    var v = parseInt(e.target.value, 10);
-    if (v > 0 && periods.some(function (p) { return p.period === v; })) { loadDetail(v); e.target.value = ''; }
-    else setStatus('没有第 ' + v + ' 期');
-  });
-
-  /* ---------- 搜索 ---------- */
-  function matches(m, q) {
-    return (m.number + ' ' + (m.title || '') + ' ' + (m.origin_title || '')).toLowerCase().indexOf(q) !== -1;
-  }
-  var debounceTimer = null;
-  $('jdb-rp-search').addEventListener('input', function () {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(function () {
-      var q = $('jdb-rp-search').value.trim().toLowerCase();
-      if (currentPeriod == null || !detailCache[currentPeriod]) return;
-      var movies = detailCache[currentPeriod];
-      renderMovies(q ? movies.filter(function (m) { return matches(m, q); }) : movies);
-    }, 300);
-  });
-
-  $('jdb-rp-gsearch').addEventListener('click', function () {
-    var q = $('jdb-rp-search').value.trim().toLowerCase();
-    if (!q) { setStatus('请先输入关键词'); return; }
-    if (searching) { searching = false; setStatus('已停止搜索'); return; }
-    searching = true;
-    var btnEl = $('jdb-rp-gsearch');
-    btnEl.textContent = '停止';
-    var results = [];
-    var done = 0;
-    (function scan(i) {
-      if (!searching || i >= periods.length) {
-        searching = false;
-        btnEl.textContent = '全期搜索';
-        if (results.length) setStatus('搜索完成 · 命中 ' + results.reduce(function (a, r) { return a + r.movies.length; }, 0) + ' 部（' + results.length + ' 期）');
+    /* ---------- 单期详情 ---------- */
+    function loadDetail(period) {
+      currentPeriod = period;
+      try { localStorage.setItem(LS_KEY, String(period)); } catch (e) {}
+      select.value = String(period);
+      if (detailCache[period]) {
+        renderMovies(detailCache[period]);
+        setStatus('第 ' + period + ' 期 · 共 ' + detailCache[period].length + ' 部');
         return;
       }
-      var p = periods[i];
-      var cont = function (movies) {
-        done++;
-        var hit = movies.filter(function (m) { return matches(m, q); });
-        if (hit.length) { results.push({ period: p.period, movies: hit }); renderResults(results); }
-        setStatus('搜索进度 ' + done + '/' + periods.length + ' · 命中 ' + results.reduce(function (a, r) { return a + r.movies.length; }, 0) + ' 部');
-        setTimeout(function () { scan(i + 1); }, 60);
-      };
-      if (detailCache[p.period]) cont(detailCache[p.period]);
-      else api('/api/v1/movies/recommend', { period: p.period })
-        .then(function (d) { detailCache[p.period] = d.movies || []; cont(detailCache[p.period]); })
-        .catch(function (e) { cont([]); });
-    })(0);
-  });
+      setStatus('加载第 ' + period + ' 期…');
+      api('/api/v1/movies/recommend', { period: period }).then(function (d) {
+        detailCache[period] = d.movies || [];
+        renderMovies(detailCache[period]);
+        setStatus('第 ' + period + ' 期 · 共 ' + detailCache[period].length + ' 部');
+      }).catch(function (e) {
+        setStatus('加载失败：' + e.message);
+      });
+    }
 
-  function renderResults(results) {
-    grid.innerHTML = '';
-    results.forEach(function (g) {
-      var h = document.createElement('div');
-      h.className = 'grp-title';
-      h.textContent = '第 ' + g.period + ' 期';
-      grid.appendChild(h);
-      g.movies.forEach(function (m) {
+    // 卡片即直链：点击直达官网影片详情页 /v/<id>
+    function cardHtml(m) {
+      return '<a class="card" href="' + esc(movieUrl(m)) + '" target="_blank" rel="noopener">' +
+        '<div class="cv"><img loading="lazy" src="' + esc(coverUrl(m.cover_url)) + '" ' +
+        'onerror="this.style.visibility=\'hidden\'">' +
+        '<span class="num">' + esc(m.number) + '</span>' +
+        (m.score ? '<span class="score">★ ' + esc(m.score) + '</span>' : '') +
+        '</div><div class="info"><div class="tt">' + esc(m.title || m.origin_title || '') + '</div></div></a>';
+    }
+
+    function renderMovies(movies, headerText) {
+      grid.innerHTML = '';
+      if (headerText) {
+        var h = document.createElement('div');
+        h.className = 'grp-title';
+        h.textContent = headerText;
+        grid.appendChild(h);
+      }
+      if (!movies.length) {
+        var e = document.createElement('div');
+        e.className = 'empty';
+        e.textContent = '没有找到影片';
+        grid.appendChild(e);
+        return;
+      }
+      movies.forEach(function (m) {
         var div = document.createElement('div');
         div.innerHTML = cardHtml(m);
         grid.appendChild(div.firstChild);
       });
+    }
+
+    /* ---------- 翻期 ---------- */
+    // periods 为降序（最新在前）：dir=1 → 更早一期；dir=-1 → 更新一期
+    function step(dir) {
+      if (!periods.length) return;
+      var idx = periods.findIndex(function (p) { return p.period === currentPeriod; });
+      if (idx < 0) return;
+      var t = idx + dir;
+      if (t < 0 || t >= periods.length) { setStatus(dir > 0 ? '已是最早一期' : '已是最新一期'); return; }
+      if (periods[t].period !== currentPeriod) loadDetail(periods[t].period);
+    }
+    $('jdb-ra-prev').addEventListener('click', function () { step(1); });
+    $('jdb-ra-next').addEventListener('click', function () { step(-1); });
+    select.addEventListener('change', function () { loadDetail(parseInt(select.value, 10)); });
+    $('jdb-ra-jump').addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      var v = parseInt(e.target.value, 10);
+      if (v > 0 && periods.some(function (p) { return p.period === v; })) { loadDetail(v); e.target.value = ''; }
+      else setStatus('没有第 ' + v + ' 期');
     });
+
+    /* ---------- 搜索 ---------- */
+    function matches(m, q) {
+      return (m.number + ' ' + (m.title || '') + ' ' + (m.origin_title || '')).toLowerCase().indexOf(q) !== -1;
+    }
+    var debounceTimer = null;
+    $('jdb-ra-search').addEventListener('input', function () {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function () {
+        var q = $('jdb-ra-search').value.trim().toLowerCase();
+        if (currentPeriod == null || !detailCache[currentPeriod]) return;
+        var movies = detailCache[currentPeriod];
+        renderMovies(q ? movies.filter(function (m) { return matches(m, q); }) : movies);
+      }, 300);
+    });
+
+    $('jdb-ra-gsearch').addEventListener('click', function () {
+      var q = $('jdb-ra-search').value.trim().toLowerCase();
+      if (!q) { setStatus('请先输入关键词'); return; }
+      if (searching) { searching = false; setStatus('已停止搜索'); return; }
+      searching = true;
+      var btnEl = $('jdb-ra-gsearch');
+      btnEl.textContent = '停止';
+      var results = [];
+      var done = 0;
+      (function scan(i) {
+        if (!searching || i >= periods.length) {
+          searching = false;
+          btnEl.textContent = '全期搜索';
+          if (results.length) setStatus('搜索完成 · 命中 ' + results.reduce(function (a, r) { return a + r.movies.length; }, 0) + ' 部（' + results.length + ' 期）');
+          return;
+        }
+        var p = periods[i];
+        var cont = function (movies) {
+          done++;
+          var hit = movies.filter(function (m) { return matches(m, q); });
+          if (hit.length) { results.push({ period: p.period, movies: hit }); renderResults(results); }
+          setStatus('搜索进度 ' + done + '/' + periods.length + ' · 命中 ' + results.reduce(function (a, r) { return a + r.movies.length; }, 0) + ' 部');
+          setTimeout(function () { scan(i + 1); }, 60);
+        };
+        if (detailCache[p.period]) cont(detailCache[p.period]);
+        else api('/api/v1/movies/recommend', { period: p.period })
+          .then(function (d) { detailCache[p.period] = d.movies || []; cont(detailCache[p.period]); })
+          .catch(function () { cont([]); });
+      })(0);
+    });
+
+    function renderResults(results) {
+      grid.innerHTML = '';
+      results.forEach(function (g) {
+        var h = document.createElement('div');
+        h.className = 'grp-title';
+        h.textContent = '第 ' + g.period + ' 期';
+        grid.appendChild(h);
+        g.movies.forEach(function (m) {
+          var div = document.createElement('div');
+          div.innerHTML = cardHtml(m);
+          grid.appendChild(div.firstChild);
+        });
+      });
+    }
+
+    loadPeriods();
   }
 
-  loadPeriods();
+  /* ================= 导航入口（普通页面） ================= */
+  function injectNavEntry() {
+    var start = document.querySelector('nav.main-nav .navbar-start');
+    if (!start || start.querySelector('a[href="' + ROUTE + '"]')) return;
+    var a = document.createElement('a');
+    a.className = 'navbar-item';
+    a.href = ROUTE;
+    a.title = '浏览佳片推荐全部历史期数';
+    a.textContent = '佳片推荐';
+    start.appendChild(a);
   }
 
-  if (document.body) boot();
-  else document.addEventListener('DOMContentLoaded', boot);
+  if (isArchiveRoute()) bootArchivePage();
+  else injectNavEntry();
 })();

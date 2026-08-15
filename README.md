@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | Web Page Assistant / 网页助手 | `*://*/*` | 管理网页自动刷新，并可按需解除复制、选择、右键菜单、拖拽和离开确认限制。 | [dist/web-page-assistant.user.js](dist/web-page-assistant.user.js) |
 | Codex Quota Compass | `https://chatgpt.com/*` | 查看 Codex 用量、保存本地快照、远程同步、导出 / 导入用量归档。 | [dist/codex-quota-compass.user.js](dist/codex-quota-compass.user.js) |
-| JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数 | `https://javdb.com/*` 等 | 在 JavDB 网页上浏览「佳片推荐」全部历史期数（每周一/四更新），支持翻期、搜索与全期关键词搜索。 | [javdb-recommend.user.js](src/userscripts/javdb-recommend/javdb-recommend.user.js) |
+| JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数 | `https://javdb.com/*` 等 | 在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索与全期关键词搜索。 | [javdb-recommend.user.js](src/userscripts/javdb-recommend/javdb-recommend.user.js) |
 | Feishu Preview Image Export | `https://mi.feishu.cn/file/*` | 从飞书文件预览页导出当前最大可见图片。 | [feishu-preview-image-export.user.js](src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js) |
 
 安装方式：
@@ -70,14 +70,14 @@ Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜�
 
 ## JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数
 
-JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、javdb.today 等镜像域名），在页面右下角显示「🎬」悬浮按钮，点开后可以浏览「佳片推荐」栏目的全部历史期数：
+JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、javdb.today 等镜像域名），在顶部导航栏加入「佳片推荐」入口，点击打开独立页面 `/recommend-archive` 浏览「佳片推荐」栏目的全部历史期数：
 
 - 期数导航：下拉框选择任意期、上一期 / 下一期、按期号跳转，并记住上次浏览位置。
-- 影片列表：封面、番号、评分卡片，点击卡片跳转官网搜索。
+- 影片列表：封面、番号、评分卡片，点击卡片直达官网影片详情页。
 - 搜索：当前期即时过滤，以及全期关键词搜索（逐期扫描、可随时停止）。
-- 数据来自官网自身的 `/api/v1/movies/recommend_periods` 与 `/api/v1/movies/recommend` 接口（同域请求，无需额外授权）。
+- 数据来自官网自身的 `/api/v1/movies/recommend_periods` 与 `/api/v1/movies/recommend` 接口（同域请求，无需额外授权）；封面统一改写为官网页面使用的 `c0.jdbstatic.com` 图床（接口默认返回 App 图床，网页端常被拦截）。
 
-脚本无需登录即可使用；`@grant none`，不使用任何脚本管理器特权 API，仅以页面 `localStorage` 记住上次浏览的期数。
+脚本无需登录即可使用；`@grant none`，不使用任何脚本管理器特权 API，仅以页面 `localStorage` 记住上次浏览的期数。已配置 `@downloadURL` / `@updateURL`，推送新版本后脚本管理器会自动检查更新。
 
 ## 仓库结构
 
