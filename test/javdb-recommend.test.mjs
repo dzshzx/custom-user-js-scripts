@@ -15,9 +15,9 @@ const srcPath = path.resolve(
 const RAW_URL =
   'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/javdb-recommend/javdb-recommend.user.js';
 
-test('metadata pins auto-update URLs to the src raw path and carries version 0.0.4', async () => {
+test('metadata pins auto-update URLs to the src raw path and carries version 0.0.5', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
-  assert.deepEqual(metadata.get('@version'), ['0.0.4']);
+  assert.deepEqual(metadata.get('@version'), ['0.0.5']);
   assert.deepEqual(metadata.get('@downloadURL'), [RAW_URL]);
   assert.deepEqual(metadata.get('@updateURL'), [RAW_URL]);
 });
