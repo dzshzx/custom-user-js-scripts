@@ -3,13 +3,23 @@
 ## Register
 
 The repository uses a product UI register. Interfaces are browser-side tools
-injected into existing pages. Design should be quiet, reliable, task-oriented,
-and familiar.
+that live on top of existing sites. Design should be quiet, reliable,
+task-oriented, and familiar.
 
-The user opens a floating control or menu command while already working in a
-host page, checks state or performs one action, then returns to the original
-page. The interface should not feel like a landing page, a marketing card grid,
-or an app trying to take over the host site.
+There are two surface categories:
+
+- **Companion UI**: floating controls, panels, and menu commands that live
+  inside a host page. The user opens one while already working in the host
+  page, checks state or performs one action, then returns to the original
+  page. It should not feel like a landing page, a marketing card grid, or an
+  app trying to take over the host site.
+- **Script-owned pages**: standalone pages fully rendered by the script (for
+  example the JavDB archive page at `/recommend-archive`). There is no host
+  layout to protect, so familiarity means mirroring the host site's own look
+  rather than inventing a separate product theme.
+
+Most rules in this document target companion UI; the per-script sections call
+out where script-owned pages differ.
 
 ## Design Principles
 
@@ -18,8 +28,10 @@ or an app trying to take over the host site.
   checkboxes, tabs, tables, and status messages.
 - Keep the visual system restrained. State, selection, and primary actions earn
   accent color; inactive decoration does not.
-- Injected UI should stay visually distinct from the host page while keeping
-  its CSS scoped to the script root.
+- Companion UI should stay visually distinct from the host page while keeping
+  its CSS scoped to the script root. Script-owned pages may instead adopt the
+  host site's native styling; script-owned structural CSS is still scoped
+  under the script root.
 - Avoid layout surprises. Hover, focus, data refresh, and state changes should
   not cause large jumps.
 
@@ -135,9 +147,11 @@ or an app trying to take over the host site.
 
 ## JavDB Recommend Archive UI
 
-- The surface is a quiet navbar entry on JavDB pages plus a standalone archive page rendered at `/recommend-archive`; no floating panel.
-- The standalone page is fully owned by the script: product layout, one accent color, styles scoped under `.jdb-ra`.
-- Movie cards are plain anchors linking directly to the site's `/v/<id>` detail pages.
+- The surface is a quiet navbar entry on JavDB pages plus a script-owned archive page rendered at `/recommend-archive`; no floating panel.
+- The archive page mirrors the site's native look: stylesheet links and navbar markup are copied from the live homepage at runtime (asset URLs are deploy-fingerprinted and must not be hard-coded). If that copy fails, the page falls back to its own light, readable structural styles.
+- Script-owned styles stay scoped under `.jdb-ra` and own only what the site CSS does not cover: toolbar, period section headers, grid column count, and uncropped covers.
+- Browsing is one scrollable stream of period sections (newest first) that auto-loads older periods via a sentinel; period navigation (select / prev / next / issue-number jump) scrolls to the target section, loading forward when it is not loaded yet.
+- Movie cards reuse the site's native `movie-list` markup and link directly to the site's `/v/<id>` detail pages. Covers are landscape and must render uncropped (`contain`).
 
 ## Components
 

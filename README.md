@@ -70,11 +70,11 @@ Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜�
 
 ## JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数
 
-JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、javdb.today 等镜像域名），在顶部导航栏加入「佳片推荐」入口，点击打开独立页面 `/recommend-archive` 浏览「佳片推荐」栏目的全部历史期数：
+JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、javdb.today 等镜像域名），在顶部导航栏加入「佳片推荐」入口，点击打开独立页面 `/recommend-archive` 浏览「佳片推荐」栏目的全部历史期数。归档页复用官网首页的样式表与导航（运行时复制，视觉与官网一致）：
 
-- 期数导航：下拉框选择任意期、上一期 / 下一期、按期号跳转，并记住上次浏览位置。
-- 影片列表：封面、番号、评分卡片，点击卡片直达官网影片详情页。
-- 搜索：当前期即时过滤，以及全期关键词搜索（逐期扫描、可随时停止）。
+- 瀑布流浏览：从上次浏览的期数开始按期流式渲染，滚动到底自动加载更早的期数；下拉框选期、上一期 / 下一期、按期号跳转会滚动到对应期（未加载时自动顺流补齐），并记住浏览位置。
+- 影片列表：横版封面完整显示（不裁切）、番号、评分卡片，点击卡片直达官网影片详情页。
+- 搜索：已加载内容即时过滤，以及全期关键词搜索（逐期扫描、可随时停止）。
 - 数据来自官网自身的 `/api/v1/movies/recommend_periods` 与 `/api/v1/movies/recommend` 接口（同域请求，无需额外授权）；封面统一改写为官网页面使用的 `c0.jdbstatic.com` 图床（接口默认返回 App 图床，网页端常被拦截）。
 
 脚本无需登录即可使用；`@grant none`，不使用任何脚本管理器特权 API，仅以页面 `localStorage` 记住上次浏览的期数。已配置 `@downloadURL` / `@updateURL`，推送新版本后脚本管理器会自动检查更新。

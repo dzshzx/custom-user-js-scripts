@@ -2,7 +2,7 @@
 // @name         JavDB Recommend Archive
 // @name:zh-CN   JavDB 佳片推荐 · 历史期数
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.0.3
+// @version      0.0.4
 // @description  Adds a "Recommend" entry to the JavDB navbar that opens a standalone archive page for every historical issue (updated Mon/Thu), with flip, search and full-archive keyword search.
 // @description:zh-CN  在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索、全期关键词搜索。
 // @author       dzshzx
@@ -115,7 +115,6 @@
   /* ================= 状态 ================= */
   var periods = [];
   var detailCache = {};   // period -> movies[]
-  var currentPeriod = null;
   var searching = false;
   var LS_KEY = 'javdb_recommend_last_period';
 
@@ -127,37 +126,53 @@
 
   function bootArchivePage() {
     document.title = '佳片推荐 · 历史期数 - JavDB';
+    // 官网裸 404 页自带 rails-default-error-page 居中浅底样式，清掉后由本脚本完全接管
+    document.body.className = '';
 
+    /* ---------- 样式（全部限定在 .jdb-ra 下） ----------
+       始终生效：页面结构、工具栏、期区块、栅格列数、封面不裁切；
+       html.jdb-ra-native（官网样式表已加载）：只需补吸顶偏移等少量适配，外观交给官网 CSS；
+       html:not(.jdb-ra-native)（官网样式缺失）：控件与卡片的浅色可读兜底。 */
     var CSS = [
-      'body{margin:0;background:oklch(20.5% 0.012 270.8)}',
-      '.jdb-ra{max-width:1080px;margin:0 auto;padding:20px 16px 48px;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:oklch(93.7% 0.008 271.3)}',
-      '.jdb-ra .hd{display:flex;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid oklch(30.5% 0.021 265.9)}',
-      '.jdb-ra h1{margin:0;font-size:18px;color:oklch(82% 0.171 78.5)}',
-      '.jdb-ra .hd .sub{font-size:12px;color:oklch(65.7% 0.028 268.7)}',
-      '.jdb-ra .home{margin-left:auto;font-size:13px;color:oklch(65.7% 0.028 268.7);text-decoration:none}',
-      '.jdb-ra .home:hover{color:oklch(82% 0.171 78.5)}',
-      '.jdb-ra .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0}',
-      '.jdb-ra select,.jdb-ra input,.jdb-ra button{background:oklch(27.6% 0.016 264.3);color:oklch(93.7% 0.008 271.3);border:1px solid oklch(34.8% 0.026 264.1);border-radius:7px;padding:7px 10px;font-size:13px;outline:none}',
-      '.jdb-ra select:focus-visible,.jdb-ra input:focus-visible,.jdb-ra button:focus-visible{outline:2px solid oklch(82% 0.171 78.5);outline-offset:1px}',
-      '.jdb-ra select{flex:1;min-width:180px;max-width:340px}',
-      '.jdb-ra .jump{width:80px}',
-      '.jdb-ra .search{flex:1;min-width:140px;max-width:260px}',
-      '.jdb-ra button{cursor:pointer}',
-      '.jdb-ra button:hover{border-color:oklch(82% 0.171 78.5);color:oklch(82% 0.171 78.5)}',
-      '.jdb-ra .status{padding:2px 0 10px;min-height:18px;font-size:12px;color:oklch(65.7% 0.028 268.7)}',
-      '.jdb-ra .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}',
-      '.jdb-ra .card{display:block;background:oklch(26% 0.018 266.3);border:1px solid oklch(30.5% 0.021 265.9);border-radius:9px;overflow:hidden;text-decoration:none;transition:border-color .15s}',
-      '.jdb-ra .card:hover{border-color:oklch(82% 0.171 78.5)}',
-      '.jdb-ra .cv{position:relative;aspect-ratio:5/7;background:oklch(23% 0.014 270);overflow:hidden}',
-      '.jdb-ra .cv img{width:100%;height:100%;object-fit:cover;display:block}',
-      '.jdb-ra .cv .num{position:absolute;left:4px;top:4px;background:oklch(0% 0 0 / .75);color:oklch(95% 0.01 270);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}',
-      '.jdb-ra .cv .score{position:absolute;right:4px;top:4px;background:oklch(0% 0 0 / .75);color:oklch(82% 0.171 78.5);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}',
-      '.jdb-ra .info{padding:5px 7px 7px}',
-      '.jdb-ra .tt{font-size:12px;line-height:1.35;color:oklch(93.7% 0.008 271.3);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:32px}',
-      '.jdb-ra .grp-title{grid-column:1/-1;color:oklch(82% 0.171 78.5);font-size:13px;font-weight:600;margin-top:4px}',
-      '.jdb-ra .empty{grid-column:1/-1;color:oklch(65.7% 0.028 268.7);text-align:center;padding:24px 0;font-size:13px}',
-      '@media (max-width:560px){.jdb-ra .grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}}',
-      '@media (prefers-reduced-motion:reduce){.jdb-ra .card{transition:none}}'
+      'html:not(.jdb-ra-native) body{background:#f5f5f5}',
+      '.jdb-ra{max-width:1700px;margin:0 auto;padding:4px 16px 40px;font-family:BlinkMacSystemFont,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;color:#4a4a4a}',
+      '.jdb-ra .jdb-ra-hd{display:flex;align-items:baseline;gap:10px;padding:6px 0 2px}',
+      '.jdb-ra .jdb-ra-hd h1{font-size:17px;margin:0;color:#363636}',
+      '.jdb-ra .jdb-ra-hd .sub{font-size:12px;color:#7a7a7a}',
+      '.jdb-ra .jdb-ra-hd .home{margin-left:auto;font-size:13px;color:#3273dc;text-decoration:none}',
+      '.jdb-ra .jdb-ra-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;position:sticky;top:0;z-index:20;background:#f5f5f5}',
+      'html.jdb-ra-native .jdb-ra .jdb-ra-bar{top:52px}',
+      '.jdb-ra .jdb-ra-bar .select{flex:1 1 200px;max-width:340px}',
+      '.jdb-ra .jdb-ra-bar .select select{width:100%}',
+      '.jdb-ra .jdb-ra-bar .jdb-ra-jump{flex:0 0 90px;width:90px}',
+      '.jdb-ra .jdb-ra-bar .jdb-ra-search{flex:1 1 160px;max-width:280px}',
+      '.jdb-ra .jdb-ra-status{min-height:20px;padding:2px 0 6px;font-size:13px;color:#7a7a7a}',
+      '.jdb-ra .jdb-ra-sec{scroll-margin-top:118px}',
+      '.jdb-ra .jdb-ra-ph{font-size:15px;font-weight:600;color:#363636;margin:20px 0 8px;display:flex;align-items:baseline;gap:10px}',
+      '.jdb-ra .jdb-ra-ph .sub{font-size:12px;color:#7a7a7a;font-weight:400}',
+      // 栅格列数随宽度升档（覆盖官网 .movie-list 的固定 4 列），宽屏充分利用
+      '.jdb-ra .movie-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:.4rem;row-gap:1rem;padding-bottom:.5rem}',
+      '@media (min-width:769px){.jdb-ra .movie-list{grid-template-columns:repeat(4,minmax(0,1fr))}}',
+      '@media (min-width:1216px){.jdb-ra .movie-list{grid-template-columns:repeat(5,minmax(0,1fr))}}',
+      '@media (min-width:1500px){.jdb-ra .movie-list{grid-template-columns:repeat(6,minmax(0,1fr))}}',
+      // 封面横版完整显示（contain 不裁切），两侧留白融进卡片底色
+      '.jdb-ra .movie-list .item .cover{background:#fff}',
+      '.jdb-ra .jdb-ra-empty{color:#7a7a7a;font-size:13px;padding:12px 0}',
+      '.jdb-ra .jdb-ra-sentinel{display:block;margin:14px auto;padding:7px 18px;font-size:13px;color:#4a4a4a;background:#fff;border:1px solid #dbdbdb;border-radius:4px;cursor:pointer}',
+      '.jdb-ra .jdb-ra-sentinel[disabled]{cursor:default;color:#7a7a7a}',
+      // 深色主题跟随官网（data-theme 由官网首页复制而来）
+      'html[data-theme=dark] .jdb-ra{color:#eee}',
+      'html[data-theme=dark] .jdb-ra .jdb-ra-hd h1,html[data-theme=dark] .jdb-ra .jdb-ra-ph{color:#eee}',
+      'html[data-theme=dark] .jdb-ra .jdb-ra-bar{background:#17181c}',
+      'html[data-theme=dark] .jdb-ra .movie-list .item .cover{background:#222}',
+      // 官网样式缺失时的兜底
+      'html:not(.jdb-ra-native) .jdb-ra select,html:not(.jdb-ra-native) .jdb-ra input,html:not(.jdb-ra-native) .jdb-ra button{background:#fff;color:#4a4a4a;border:1px solid #dbdbdb;border-radius:4px;padding:6px 10px;font-size:13px;outline:none}',
+      'html:not(.jdb-ra-native) .jdb-ra button{cursor:pointer}',
+      'html:not(.jdb-ra-native) .jdb-ra .box{display:block;background:#fff;border-radius:6px;box-shadow:0 .5em 1em -.125em rgba(10,10,10,.1),0 0 0 1px rgba(10,10,10,.02);padding-bottom:.6rem;color:#4a4a4a;text-decoration:none}',
+      'html:not(.jdb-ra-native) .jdb-ra .cover{position:relative;padding-top:67%;background:#fff;overflow:hidden;border-radius:6px 6px 0 0}',
+      'html:not(.jdb-ra-native) .jdb-ra .cover img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain}',
+      'html:not(.jdb-ra-native) .jdb-ra .video-title{color:#3273dc;font-size:13px;padding:6px 8px 0}',
+      'html:not(.jdb-ra-native) .jdb-ra .meta{color:#7a7a7a;font-size:12px;padding:2px 8px 0}'
     ].join('\n');
 
     var styleEl = document.createElement('style');
@@ -166,21 +181,26 @@
 
     document.body.innerHTML =
       '<main class="jdb-ra">' +
-      '<header class="hd"><h1>🎬 佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新</span>' +
+      '<header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span>' +
       '<a class="home" href="/">← 返回首页</a></header>' +
-      '<div class="bar">' +
-      '<select id="jdb-ra-select" aria-label="选择期数"></select>' +
-      '<button type="button" id="jdb-ra-prev">◀ 上一期</button><button type="button" id="jdb-ra-next">下一期 ▶</button>' +
-      '<input class="jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转">' +
-      '<input class="search" id="jdb-ra-search" type="search" placeholder="🔍 搜索当前期" aria-label="搜索当前期">' +
-      '<button type="button" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button>' +
+      '<div class="jdb-ra-bar">' +
+      '<div class="select is-small"><select id="jdb-ra-select" aria-label="选择期数"></select></div>' +
+      '<button type="button" class="button is-small" id="jdb-ra-prev">◀ 上一期</button>' +
+      '<button type="button" class="button is-small" id="jdb-ra-next">下一期 ▶</button>' +
+      '<input class="input is-small jdb-ra-jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转">' +
+      '<input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="🔍 搜索已加载内容" aria-label="搜索已加载内容">' +
+      '<button type="button" class="button is-small" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button>' +
       '</div>' +
-      '<div class="status" id="jdb-ra-status" role="status">加载期数列表中…</div>' +
-      '<div class="grid" id="jdb-ra-grid"></div>' +
+      '<div class="jdb-ra-status" id="jdb-ra-status" role="status">加载期数列表中…</div>' +
+      '<div class="jdb-ra-results" id="jdb-ra-results" hidden></div>' +
+      '<div class="jdb-ra-stream" id="jdb-ra-stream"></div>' +
+      '<button type="button" class="jdb-ra-sentinel" id="jdb-ra-sentinel" disabled>加载期数列表中…</button>' +
       '</main>';
 
     var $ = function (id) { return document.getElementById(id); };
-    var statusEl = $('jdb-ra-status'), grid = $('jdb-ra-grid'), select = $('jdb-ra-select');
+    var statusEl = $('jdb-ra-status'), streamEl = $('jdb-ra-stream'),
+        resultsEl = $('jdb-ra-results'), sentinel = $('jdb-ra-sentinel'),
+        select = $('jdb-ra-select');
 
     function esc(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -189,6 +209,57 @@
     }
 
     function setStatus(t) { statusEl.textContent = t; }
+    function readyText() { return '共 ' + periods.length + ' 期 · 每周一/四更新 · 滚动加载更多'; }
+
+    /* ---------- 官网原生外观 ----------
+       样式表与导航直接复制自官网首页（同源）。样式表 URL 带部署指纹
+       （/packs/css/app-<hash>.css），硬编码会随官网发版失效，只能运行时复制。
+       失败时页面用上面的兜底样式，功能不受影响。 */
+    function loadSiteChrome() {
+      fetch(BASE + '/').then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        if (doc.documentElement.dataset.theme) {
+          document.documentElement.dataset.theme = doc.documentElement.dataset.theme;
+        }
+        doc.querySelectorAll('link[rel~="stylesheet"]').forEach(function (l) {
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = l.getAttribute('href');
+          if (l.getAttribute('media')) link.media = l.getAttribute('media');
+          document.head.appendChild(link);
+        });
+        var nav = doc.querySelector('nav.main-nav');
+        if (nav) {
+          document.body.insertAdjacentHTML('afterbegin', nav.outerHTML);
+          document.documentElement.classList.add('has-navbar-fixed-top');
+          // 官网 JS 不在本页运行，汉堡菜单的展开收起由脚本接管
+          document.body.querySelectorAll('nav.main-nav [data-target]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+              e.preventDefault();
+              var t = document.getElementById(btn.getAttribute('data-target'));
+              btn.classList.toggle('is-active');
+              if (t) t.classList.toggle('is-active');
+            });
+          });
+          // 补归档页自身入口，与官网其他页面保持一致
+          var start = document.body.querySelector('nav.main-nav .navbar-start');
+          if (start && !start.querySelector('a[href="' + ROUTE + '"]')) {
+            var a = document.createElement('a');
+            a.className = 'navbar-item';
+            a.href = ROUTE;
+            a.title = '浏览佳片推荐全部历史期数';
+            a.textContent = '佳片推荐';
+            start.appendChild(a);
+          }
+        }
+        document.documentElement.classList.add('jdb-ra-native');
+      }).catch(function (e) {
+        console.warn('[javdb-recommend] 官网样式加载失败，使用内置兜底样式:', e.message);
+      });
+    }
 
     /* ---------- 期数列表 ---------- */
     function loadPeriods() {
@@ -211,12 +282,8 @@
     function finish(list) {
       periods = list;
       renderSelect();
-      setStatus('共 ' + periods.length + ' 期 · 每周一/四更新');
-      if (periods.length) {
-        var saved = parseInt(localStorage.getItem(LS_KEY), 10);
-        var first = periods.find(function (p) { return p.period === saved; }) ? saved : periods[0].period;
-        loadDetail(first);
-      }
+      setStatus(readyText());
+      if (periods.length) startStream();
     }
 
     function renderSelect() {
@@ -229,107 +296,198 @@
       });
     }
 
-    /* ---------- 单期详情 ---------- */
-    function loadDetail(period) {
-      currentPeriod = period;
+    /* ---------- 流式浏览（滚动加载更多期数） ---------- */
+    var streamNext = 0;      // periods 中下一块待加载的下标
+    var streamBusy = false;
+    var sentinelVisible = false;
+    var loadedSections = {}; // period -> section 元素
+    var currentIdx = 0;
+
+    function setSentinel(t, disabled) {
+      sentinel.textContent = t;
+      sentinel.disabled = !!disabled;
+    }
+
+    function sectionShell(p) {
+      var sec = document.createElement('section');
+      sec.className = 'jdb-ra-sec';
+      sec.dataset.period = String(p.period);
+      sec.innerHTML =
+        '<h2 class="jdb-ra-ph">第 ' + p.period + ' 期 <span class="sub">' +
+        esc(p.created_at.slice(0, 10)) + ' · ' + p.movies_count + ' 部</span></h2>' +
+        '<div class="movie-list"></div>';
+      return sec;
+    }
+
+    // 卡片用官网原生 movie-list 标记，点击直达官网影片详情页 /v/<id>；
+    // cover 加 contain：横版封面完整显示不裁切
+    function cardHtml(m) {
+      var title = m.title || m.origin_title || '';
+      return '<div class="item" data-q="' + esc((m.number + ' ' + (m.title || '') + ' ' + (m.origin_title || '')).toLowerCase()) + '">' +
+        '<a class="box" href="' + esc(movieUrl(m)) + '" target="_blank" rel="noopener" title="' + esc(title) + '">' +
+        '<div class="cover contain"><img loading="lazy" src="' + esc(coverUrl(m.cover_url)) + '" alt="' + esc(m.number) + '" ' +
+        'onerror="this.style.visibility=\'hidden\'"></div>' +
+        '<div class="video-title"><strong>' + esc(m.number) + '</strong> ' + esc(title) + '</div>' +
+        (m.score ? '<div class="meta">★ ' + esc(m.score) + '</div>' : '') +
+        '</a></div>';
+    }
+
+    function currentQuery() { return $('jdb-ra-search').value.trim().toLowerCase(); }
+
+    // 已加载内容的即时过滤：隐藏不匹配的卡片与空区块
+    function applyFilter(q) {
+      var hits = 0;
+      streamEl.querySelectorAll('.jdb-ra-sec').forEach(function (sec) {
+        var visible = 0;
+        sec.querySelectorAll('.item').forEach(function (item) {
+          var show = !q || item.dataset.q.indexOf(q) !== -1;
+          item.style.display = show ? '' : 'none';
+          if (show) visible += 1;
+        });
+        sec.style.display = visible ? '' : 'none';
+        hits += visible;
+      });
+      return hits;
+    }
+
+    function appendNext() {
+      if (streamBusy || !periods.length) return Promise.resolve(false);
+      if (streamNext >= periods.length) {
+        setSentinel('已加载全部 ' + periods.length + ' 期', true);
+        return Promise.resolve(false);
+      }
+      streamBusy = true;
+      var p = periods[streamNext];
+      var sec = sectionShell(p);
+      loadedSections[p.period] = sec;
+      streamEl.appendChild(sec);
+      setSentinel('加载第 ' + p.period + ' 期…', true);
+      return api('/api/v1/movies/recommend', { period: p.period }).then(function (d) {
+        var movies = d.movies || [];
+        detailCache[p.period] = movies;
+        sec.querySelector('.movie-list').innerHTML =
+          movies.map(cardHtml).join('') || '<div class="jdb-ra-empty">本期没有影片</div>';
+        streamNext += 1;
+        streamBusy = false;
+        setSentinel('加载更多期数', false);
+        var q = currentQuery();
+        if (q) applyFilter(q); // 搜索激活时新加载的卡片也要参与过滤
+        if (sentinelVisible) appendNext();
+        return true;
+      }).catch(function (e) {
+        streamBusy = false;
+        setSentinel('第 ' + p.period + ' 期加载失败：' + e.message + '（3 秒后重试）', true);
+        return new Promise(function (resolve) {
+          setTimeout(function () { resolve(appendNext()); }, 3000);
+        });
+      });
+    }
+
+    function startStream() {
+      var saved = parseInt(localStorage.getItem(LS_KEY), 10);
+      var idx = periods.findIndex(function (p) { return p.period === saved; });
+      streamNext = idx >= 0 ? idx : 0;
+      currentIdx = streamNext;
+      sentinel.addEventListener('click', function () { appendNext(); });
+      if (typeof IntersectionObserver !== 'undefined') {
+        var io = new IntersectionObserver(function (entries) {
+          sentinelVisible = entries[0].isIntersecting;
+          if (sentinelVisible) appendNext();
+        }, { rootMargin: '600px' });
+        io.observe(sentinel);
+      }
+      appendNext();
+    }
+
+    /* ---------- 期数导航：已加载的滚动到位，未加载的沿流补齐 ---------- */
+    function gotoPeriod(period) {
+      var idx = periods.findIndex(function (p) { return p.period === period; });
+      if (idx < 0) { setStatus('没有第 ' + period + ' 期'); return; }
+      currentIdx = idx;
       try { localStorage.setItem(LS_KEY, String(period)); } catch (e) {}
       select.value = String(period);
-      if (detailCache[period]) {
-        renderMovies(detailCache[period]);
-        setStatus('第 ' + period + ' 期 · 共 ' + detailCache[period].length + ' 部');
-        return;
-      }
-      setStatus('加载第 ' + period + ' 期…');
-      api('/api/v1/movies/recommend', { period: period }).then(function (d) {
-        detailCache[period] = d.movies || [];
-        renderMovies(detailCache[period]);
-        setStatus('第 ' + period + ' 期 · 共 ' + detailCache[period].length + ' 部');
-      }).catch(function (e) {
-        setStatus('加载失败：' + e.message);
-      });
+      if (loadedSections[period]) { scrollToPeriod(period); return; }
+      setStatus('跳转到第 ' + period + ' 期，依次加载中…');
+      (function load() {
+        if (loadedSections[period]) { setStatus(readyText()); scrollToPeriod(period); return; }
+        if (streamNext >= periods.length) { setStatus('没有第 ' + period + ' 期'); return; }
+        if (streamBusy) { setTimeout(load, 200); return; }
+        appendNext().then(load);
+      })();
     }
 
-    // 卡片即直链：点击直达官网影片详情页 /v/<id>
-    function cardHtml(m) {
-      return '<a class="card" href="' + esc(movieUrl(m)) + '" target="_blank" rel="noopener">' +
-        '<div class="cv"><img loading="lazy" src="' + esc(coverUrl(m.cover_url)) + '" ' +
-        'onerror="this.style.visibility=\'hidden\'">' +
-        '<span class="num">' + esc(m.number) + '</span>' +
-        (m.score ? '<span class="score">★ ' + esc(m.score) + '</span>' : '') +
-        '</div><div class="info"><div class="tt">' + esc(m.title || m.origin_title || '') + '</div></div></a>';
+    function scrollToPeriod(period) {
+      var sec = loadedSections[period];
+      if (sec) sec.scrollIntoView();
     }
 
-    function renderMovies(movies, headerText) {
-      grid.innerHTML = '';
-      if (headerText) {
-        var h = document.createElement('div');
-        h.className = 'grp-title';
-        h.textContent = headerText;
-        grid.appendChild(h);
-      }
-      if (!movies.length) {
-        var e = document.createElement('div');
-        e.className = 'empty';
-        e.textContent = '没有找到影片';
-        grid.appendChild(e);
-        return;
-      }
-      movies.forEach(function (m) {
-        var div = document.createElement('div');
-        div.innerHTML = cardHtml(m);
-        grid.appendChild(div.firstChild);
-      });
-    }
-
-    /* ---------- 翻期 ---------- */
     // periods 为降序（最新在前）：dir=1 → 更早一期；dir=-1 → 更新一期
-    function step(dir) {
+    function stepPeriod(dir) {
       if (!periods.length) return;
-      var idx = periods.findIndex(function (p) { return p.period === currentPeriod; });
-      if (idx < 0) return;
-      var t = idx + dir;
+      var t = currentIdx + dir;
       if (t < 0 || t >= periods.length) { setStatus(dir > 0 ? '已是最早一期' : '已是最新一期'); return; }
-      if (periods[t].period !== currentPeriod) loadDetail(periods[t].period);
+      gotoPeriod(periods[t].period);
     }
-    $('jdb-ra-prev').addEventListener('click', function () { step(1); });
-    $('jdb-ra-next').addEventListener('click', function () { step(-1); });
-    select.addEventListener('change', function () { loadDetail(parseInt(select.value, 10)); });
+    $('jdb-ra-prev').addEventListener('click', function () { stepPeriod(1); });
+    $('jdb-ra-next').addEventListener('click', function () { stepPeriod(-1); });
+    select.addEventListener('change', function () { gotoPeriod(parseInt(select.value, 10)); });
     $('jdb-ra-jump').addEventListener('keydown', function (e) {
       if (e.key !== 'Enter') return;
       var v = parseInt(e.target.value, 10);
-      if (v > 0 && periods.some(function (p) { return p.period === v; })) { loadDetail(v); e.target.value = ''; }
-      else setStatus('没有第 ' + v + ' 期');
+      if (v > 0) { gotoPeriod(v); e.target.value = ''; }
     });
 
     /* ---------- 搜索 ---------- */
     function matches(m, q) {
       return (m.number + ' ' + (m.title || '') + ' ' + (m.origin_title || '')).toLowerCase().indexOf(q) !== -1;
     }
+
+    function enterResultsMode() {
+      resultsEl.hidden = false;
+      streamEl.style.display = 'none';
+      sentinel.style.display = 'none';
+    }
+
+    function exitResultsMode() {
+      resultsEl.hidden = true;
+      resultsEl.innerHTML = '';
+      streamEl.style.display = '';
+      sentinel.style.display = '';
+    }
+
     var debounceTimer = null;
     $('jdb-ra-search').addEventListener('input', function () {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(function () {
-        var q = $('jdb-ra-search').value.trim().toLowerCase();
-        if (currentPeriod == null || !detailCache[currentPeriod]) return;
-        var movies = detailCache[currentPeriod];
-        renderMovies(q ? movies.filter(function (m) { return matches(m, q); }) : movies);
+        if (searching) return; // 全期搜索进行中不打断
+        exitResultsMode();
+        var q = currentQuery();
+        var hits = applyFilter(q);
+        setStatus(q ? '已加载内容中命中 ' + hits + ' 部' : (periods.length ? readyText() : '加载期数列表中…'));
       }, 300);
     });
 
     $('jdb-ra-gsearch').addEventListener('click', function () {
-      var q = $('jdb-ra-search').value.trim().toLowerCase();
+      var q = currentQuery();
       if (!q) { setStatus('请先输入关键词'); return; }
       if (searching) { searching = false; setStatus('已停止搜索'); return; }
       searching = true;
       var btnEl = $('jdb-ra-gsearch');
       btnEl.textContent = '停止';
+      enterResultsMode();
+      resultsEl.innerHTML = '';
       var results = [];
       var done = 0;
+      var hitCount = function () {
+        return results.reduce(function (a, r) { return a + r.movies.length; }, 0);
+      };
       (function scan(i) {
         if (!searching || i >= periods.length) {
           searching = false;
           btnEl.textContent = '全期搜索';
-          if (results.length) setStatus('搜索完成 · 命中 ' + results.reduce(function (a, r) { return a + r.movies.length; }, 0) + ' 部（' + results.length + ' 期）');
+          var label = i >= periods.length ? '搜索完成' : '已停止';
+          setStatus(label + ' · 命中 ' + hitCount() + ' 部（' + results.length + ' 期）');
+          if (!results.length) resultsEl.innerHTML = '<div class="jdb-ra-empty">没有找到影片</div>';
           return;
         }
         var p = periods[i];
@@ -337,7 +495,7 @@
           done++;
           var hit = movies.filter(function (m) { return matches(m, q); });
           if (hit.length) { results.push({ period: p.period, movies: hit }); renderResults(results); }
-          setStatus('搜索进度 ' + done + '/' + periods.length + ' · 命中 ' + results.reduce(function (a, r) { return a + r.movies.length; }, 0) + ' 部');
+          setStatus('搜索进度 ' + done + '/' + periods.length + ' · 命中 ' + hitCount() + ' 部');
           setTimeout(function () { scan(i + 1); }, 60);
         };
         if (detailCache[p.period]) cont(detailCache[p.period]);
@@ -348,20 +506,17 @@
     });
 
     function renderResults(results) {
-      grid.innerHTML = '';
+      resultsEl.innerHTML = '';
       results.forEach(function (g) {
-        var h = document.createElement('div');
-        h.className = 'grp-title';
-        h.textContent = '第 ' + g.period + ' 期';
-        grid.appendChild(h);
-        g.movies.forEach(function (m) {
-          var div = document.createElement('div');
-          div.innerHTML = cardHtml(m);
-          grid.appendChild(div.firstChild);
-        });
+        var sec = document.createElement('section');
+        sec.className = 'jdb-ra-sec';
+        sec.innerHTML = '<h2 class="jdb-ra-ph">第 ' + g.period + ' 期</h2>' +
+          '<div class="movie-list">' + g.movies.map(cardHtml).join('') + '</div>';
+        resultsEl.appendChild(sec);
       });
     }
 
+    loadSiteChrome();
     loadPeriods();
   }
 
