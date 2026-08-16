@@ -84,17 +84,47 @@
   /* ================= API（同域，免跨域） ================= */
   var BASE = location.origin;
 
-  function api(path, params) {
+  var REQUEST_TIMEOUT = 12000, REQUEST_ATTEMPTS = 3;
+
+  function api(path, params, options) {
+    options = options || {};
     var q = new URLSearchParams(params).toString();
-    return fetch(BASE + path + '?' + q, {
-      headers: { 'jdsignature': signature(), 'connection': 'keep-alive' }
-    }).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    }).then(function (j) {
-      if (j.success !== 1) throw new Error(j.message || '接口返回错误');
-      return j.data;
-    });
+    var attempt = 0;
+    function run() {
+      attempt += 1;
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var abortedByOwner = function () { if (controller) controller.abort(); };
+      if (options.signal) {
+        if (options.signal.aborted) abortedByOwner();
+        else options.signal.addEventListener('abort', abortedByOwner, { once: true });
+      }
+      var timer = controller ? setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT) : null;
+      return fetch(BASE + path + '?' + q, {
+        headers: { 'jdsignature': signature(), 'connection': 'keep-alive' },
+        signal: controller ? controller.signal : options.signal
+      }).then(function (r) {
+        if (!r.ok) {
+          var error = new Error('HTTP ' + r.status);
+          error.retryable = r.status === 408 || r.status === 429 || r.status >= 500;
+          throw error;
+        }
+        return r.json();
+      }).then(function (j) {
+        if (j.success !== 1) throw new Error(j.message || '接口返回错误');
+        return j.data;
+      }).catch(function (e) {
+        var ownerAborted = options.signal && options.signal.aborted;
+        var retryable = !ownerAborted && (e.retryable || e.name === 'TypeError' || e.name === 'AbortError');
+        if (!retryable || attempt >= REQUEST_ATTEMPTS) throw e;
+        return new Promise(function (resolve) {
+          setTimeout(resolve, 500 * Math.pow(2, attempt - 1));
+        }).then(run);
+      }).finally(function () {
+        if (timer) clearTimeout(timer);
+        if (options.signal) options.signal.removeEventListener('abort', abortedByOwner);
+      });
+    }
+    return run();
   }
 
   /* ================= 官网资源约定 ================= */
@@ -113,18 +143,14 @@
   }
 
   /* ================= 状态 ================= */
-  var periods = [];
-  var detailCache = {};   // period -> movies[]
-  var detailRequests = {}; // period -> Promise<movies[]>
-  var searching = false;
+  var periods = [], detailCache = {}, detailRequests = {}, searching = false;
   var LS_KEY = 'javdb_recommend_last_period';
-  var CACHE_VERSION = 1;
-  var PERIODS_CACHE_KEY = 'javdb_recommend_periods_cache_v1';
-  var DETAILS_CACHE_KEY = 'javdb_recommend_details_cache_v1';
-  var PERIODS_CACHE_TTL = 6 * 60 * 60 * 1000;
-  var LATEST_DETAIL_CACHE_TTL = 2 * 60 * 60 * 1000;
-  var HISTORICAL_DETAIL_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
-  var DETAIL_CACHE_LIMIT = 48;
+  var CACHE_VERSION = 1, PERIODS_CACHE_KEY = 'javdb_recommend_periods_cache_v1';
+  var DETAILS_CACHE_KEY = 'javdb_recommend_details_cache_v1', PERIODS_CACHE_TTL = 6 * 60 * 60 * 1000;
+  var LATEST_DETAIL_CACHE_TTL = 2 * 60 * 60 * 1000, HISTORICAL_DETAIL_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+  var DETAIL_CACHE_LIMIT = 48, DETAIL_MEMORY_LIMIT = 24, DETAIL_TOUCH_INTERVAL = 60 * 60 * 1000;
+  var PERIODS_FULL_REFRESH_TTL = 30 * 24 * 60 * 60 * 1000;
+  var SEARCH_INDEX_PREFIX = 'javdb_recommend_search_index_v1_', detailCacheAccess = {};
 
   function readCache(key) {
     try {
@@ -153,14 +179,17 @@
     if (!cache || !Array.isArray(cache.periods) || !cache.periods.length || !Number.isFinite(cache.fetchedAt)) return null;
     return {
       periods: cache.periods,
+      fetchedAt: cache.fetchedAt,
+      fullFetchedAt: cache.fullFetchedAt || cache.fetchedAt,
       fresh: Date.now() - cache.fetchedAt < PERIODS_CACHE_TTL
     };
   }
 
-  function writePeriodsCache(list) {
+  function writePeriodsCache(list, fullFetchedAt) {
     writeCache(PERIODS_CACHE_KEY, {
       version: CACHE_VERSION,
       fetchedAt: Date.now(),
+      fullFetchedAt: fullFetchedAt || Date.now(),
       periods: list
     });
   }
@@ -175,12 +204,57 @@
     var cache = readCache(DETAILS_CACHE_KEY);
     var entry = cache && cache.entries && cache.entries[String(period)];
     if (!entry || !Array.isArray(entry.movies) || !Number.isFinite(entry.fetchedAt)) return null;
-    entry.accessedAt = Date.now();
-    writeCache(DETAILS_CACHE_KEY, cache);
+    var now = Date.now();
+    if (now - (entry.accessedAt || 0) >= DETAIL_TOUCH_INTERVAL) {
+      entry.accessedAt = now;
+      writeCache(DETAILS_CACHE_KEY, cache);
+    }
     return {
       movies: entry.movies,
-      fresh: Date.now() - entry.fetchedAt < detailCacheTtl(period)
+      fresh: now - entry.fetchedAt < detailCacheTtl(period)
     };
+  }
+
+  function rememberDetail(period, movies) {
+    detailCache[period] = movies;
+    detailCacheAccess[period] = Date.now();
+    var keys = Object.keys(detailCache).sort(function (a, b) {
+      return (detailCacheAccess[b] || 0) - (detailCacheAccess[a] || 0);
+    });
+    keys.slice(DETAIL_MEMORY_LIMIT).forEach(function (key) {
+      delete detailCache[key];
+      delete detailCacheAccess[key];
+    });
+  }
+
+  function searchIndexKey(period) { return SEARCH_INDEX_PREFIX + period; }
+
+  function projectMovie(movie) {
+    return { id: movie.id, number: movie.number || '', title: movie.title || '', origin_title: movie.origin_title || '', cover_url: movie.cover_url || '', score: movie.score || '', release_date: movie.release_date || '' };
+  }
+
+  function readSearchIndex(period) {
+    var entry = readCache(searchIndexKey(period));
+    if (!entry || !Array.isArray(entry.movies) || !Number.isFinite(entry.fetchedAt)) return null;
+    if (periods.length && periods[0].period !== period) return entry.movies;
+    return Date.now() - entry.fetchedAt < LATEST_DETAIL_CACHE_TTL ? entry.movies : null;
+  }
+
+  function writeSearchIndex(period, movies) {
+    writeCache(searchIndexKey(period), {
+      version: CACHE_VERSION,
+      fetchedAt: Date.now(),
+      movies: movies.map(projectMovie)
+    });
+  }
+
+  function clearArchiveCaches() {
+    localStorage.removeItem(PERIODS_CACHE_KEY);
+    localStorage.removeItem(DETAILS_CACHE_KEY);
+    for (var i = localStorage.length - 1; i >= 0; i--) {
+      var key = localStorage.key(i);
+      if (key && key.indexOf(SEARCH_INDEX_PREFIX) === 0) localStorage.removeItem(key);
+    }
   }
 
   function writeCachedDetail(period, movies) {
@@ -229,6 +303,7 @@
       '.jdb-ra .jdb-ra-bar .jdb-ra-search{flex:1 1 160px;max-width:280px}',
       '.jdb-ra .jdb-ra-status{min-height:20px;padding:2px 0 6px;font-size:13px;color:#7a7a7a}',
       '.jdb-ra .jdb-ra-sec{scroll-margin-top:118px}',
+      '@supports(content-visibility:auto){.jdb-ra .jdb-ra-sec{content-visibility:auto;contain-intrinsic-size:auto 820px}}',
       '.jdb-ra .jdb-ra-ph{font-size:15px;font-weight:600;color:#363636;margin:20px 0 8px;display:flex;align-items:baseline;gap:10px}',
       '.jdb-ra .jdb-ra-ph .sub{font-size:12px;color:#7a7a7a;font-weight:400}',
       // 栅格列数随宽度升档（覆盖官网 .movie-list 的固定 4 列），宽屏充分利用
@@ -275,6 +350,8 @@
       '<input class="input is-small jdb-ra-jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转">' +
       '<input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="🔍 搜索已加载内容" aria-label="搜索已加载内容">' +
       '<button type="button" class="button is-small" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button>' +
+      '<button type="button" class="button is-small" id="jdb-ra-refresh" title="重新检查期数目录">刷新期数</button>' +
+      '<button type="button" class="button is-small" id="jdb-ra-clear" title="清除本脚本的本地缓存">清缓存</button>' +
       '</div>' +
       '<div class="jdb-ra-status" id="jdb-ra-status" role="status">加载期数列表中…</div>' +
       '<div class="jdb-ra-results" id="jdb-ra-results" hidden></div>' +
@@ -437,40 +514,64 @@
     }
 
     /* ---------- 期数列表 ---------- */
+    function uniquePeriods(list) {
+      var seen = {};
+      return list.filter(function (item) {
+        if (seen[item.period]) return false;
+        seen[item.period] = true;
+        return true;
+      });
+    }
+
+    function mergeCatalogPrefix(remote, local) {
+      var localIndex = {};
+      local.forEach(function (item, index) { localIndex[item.period] = index; });
+      for (var i = remote.length - 1; i >= 0; i--) {
+        if (localIndex[remote[i].period] === undefined) continue;
+        return uniquePeriods(remote.concat(local.slice(localIndex[remote[i].period] + 1)));
+      }
+      return null;
+    }
+
     function loadPeriods() {
       var cached = readPeriodsCache();
       if (cached && cached.fresh) {
-        finish(cached.periods);
+        finish(cached.periods, '期数目录：本地缓存');
         return;
       }
       setStatus('加载期数列表中…');
       var list = [];
+      var allowIncremental = cached && Date.now() - cached.fullFetchedAt < PERIODS_FULL_REFRESH_TTL;
       (function next(page) {
         api('/api/v1/movies/recommend_periods', { page: page, limit: 48 }).then(function (d) {
           var batch = d.periods || [];
           list = list.concat(batch);
           setStatus('加载期数列表… 已获取 ' + list.length + ' 期');
-          if (batch.length === 48) { next(page + 1); }
-          else {
-            writePeriodsCache(list);
-            finish(list);
+          var merged = allowIncremental ? mergeCatalogPrefix(list, cached.periods) : null;
+          if (merged) {
+            writePeriodsCache(merged, cached.fullFetchedAt);
+            finish(merged, '期数目录：已增量更新');
+          } else if (batch.length === 48) {
+            next(page + 1);
+          } else {
+            list = uniquePeriods(list);
+            writePeriodsCache(list, Date.now());
+            finish(list, '期数目录：已完整更新');
           }
         }).catch(function (e) {
           if (cached) {
-            setStatus('期数列表更新失败，已使用本地缓存');
-            finish(cached.periods);
+            finish(cached.periods, '期数目录更新失败，使用本地缓存');
             return;
           }
-          setStatus('期数列表加载失败：' + e.message + '（3 秒后重试）');
-          setTimeout(function () { next(page); }, 3000);
+          setStatus('期数列表加载失败：' + e.message + '（可点击“刷新期数”重试）');
         });
       })(1);
     }
 
-    function finish(list) {
+    function finish(list, sourceLabel) {
       periods = list;
       renderSelect();
-      setStatus(readyText());
+      setStatus(sourceLabel ? readyText() + ' · ' + sourceLabel : readyText());
       if (periods.length) startStream();
     }
 
@@ -490,6 +591,7 @@
     var sentinelVisible = false;
     var streamGeneration = 0;
     var navigationGeneration = 0;
+    var streamLease = null;
     var loadedSections = {}; // period -> section 元素
     var currentIdx = 0;
 
@@ -574,7 +676,9 @@
       loadedSections[p.period] = sec;
       streamEl.appendChild(sec);
       setSentinel('加载第 ' + p.period + ' 期…', true);
-      return getPeriodMovies(p.period).then(function (movies) {
+      var lease = acquirePeriodMovies(p.period, 'navigation', 'stream:' + generation);
+      streamLease = lease;
+      return lease.promise.then(function (movies) {
         if (generation !== streamGeneration) return false;
         sec.querySelector('.movie-list').innerHTML =
           movies.map(cardHtml).join('') || '<div class="jdb-ra-empty">本期没有影片</div>';
@@ -589,13 +693,13 @@
       }).catch(function (e) {
         if (generation !== streamGeneration) return false;
         streamBusy = false;
-        setSentinel('第 ' + p.period + ' 期加载失败：' + e.message + '（3 秒后重试）', true);
-        return new Promise(function (resolve) {
-          setTimeout(function () {
-            if (generation !== streamGeneration) { resolve(false); return; }
-            resolve(appendNext(generation));
-          }, 3000);
-        });
+        delete loadedSections[p.period];
+        sec.remove();
+        setSentinel('第 ' + p.period + ' 期加载失败：' + e.message + '（点击重试）', false);
+        return false;
+      }).finally(function () {
+        lease.release();
+        if (streamLease === lease) streamLease = null;
       });
     }
 
@@ -616,6 +720,7 @@
     }
 
     function reanchorStream(index) {
+      if (streamLease) streamLease.release();
       var generation = streamGeneration + 1;
       streamGeneration = generation;
       streamEl.innerHTML = '';
@@ -625,32 +730,71 @@
       return appendNext(generation);
     }
 
-    function getPeriodMovies(period) {
-      if (detailCache[period]) return Promise.resolve(detailCache[period]);
-      if (detailRequests[period]) return detailRequests[period];
+    function resolvedLease(movies) { return { promise: Promise.resolve(movies), release: function () {} }; }
+
+    function acquireDetailRequest(period, owner) {
+      var entry = detailRequests[period];
+      if (!entry) {
+        var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        entry = { controller: controller, consumers: new Set(), promise: null };
+        entry.promise = api('/api/v1/movies/recommend', { period: period }, {
+          signal: controller ? controller.signal : null
+        }).then(function (d) { return d.movies || []; }).finally(function () {
+          if (detailRequests[period] === entry) delete detailRequests[period];
+        });
+        detailRequests[period] = entry;
+      }
+      entry.consumers.add(owner);
+      var released = false;
+      return {
+        promise: entry.promise,
+        release: function () {
+          if (released) return;
+          released = true;
+          entry.consumers.delete(owner);
+          if (!entry.consumers.size && detailRequests[period] === entry) {
+            delete detailRequests[period];
+            if (entry.controller) entry.controller.abort();
+          }
+        }
+      };
+    }
+
+    function acquirePeriodMovies(period, purpose, owner) {
+      if (detailCache[period]) {
+        detailCacheAccess[period] = Date.now();
+        return resolvedLease(detailCache[period]);
+      }
+      if (purpose === 'search') {
+        var indexed = readSearchIndex(period);
+        if (indexed) return resolvedLease(indexed);
+      }
       var cached = readCachedDetail(period);
       if (cached && cached.fresh) {
-        detailCache[period] = cached.movies;
-        return Promise.resolve(cached.movies);
+        if (purpose === 'navigation') rememberDetail(period, cached.movies);
+        writeSearchIndex(period, cached.movies);
+        return resolvedLease(cached.movies);
       }
-      var request = api('/api/v1/movies/recommend', { period: period }).then(function (d) {
-        var movies = d.movies || [];
-        detailCache[period] = movies;
-        writeCachedDetail(period, movies);
+      var networkLease = acquireDetailRequest(period, owner);
+      var promise = networkLease.promise.then(function (movies) {
+        writeSearchIndex(period, movies);
+        if (purpose === 'navigation') {
+          rememberDetail(period, movies);
+          writeCachedDetail(period, movies);
+        }
         return movies;
       }).catch(function (e) {
         if (!cached) throw e;
-        detailCache[period] = cached.movies;
+        if (purpose === 'navigation') rememberDetail(period, cached.movies);
         return cached.movies;
       });
-      detailRequests[period] = request.then(function (movies) {
-        delete detailRequests[period];
-        return movies;
-      }, function (e) {
-        delete detailRequests[period];
-        throw e;
-      });
-      return detailRequests[period];
+      return { promise: promise, release: networkLease.release };
+    }
+
+    var leaseSequence = 0;
+    function getPeriodMovies(period) {
+      var lease = acquirePeriodMovies(period, 'navigation', 'read:' + (++leaseSequence));
+      return lease.promise.finally(lease.release);
     }
 
     /* ---------- 期数导航：已加载的滚动到位，相邻追加，远距直接重定位 ---------- */
@@ -727,51 +871,113 @@
       }, 300);
     });
 
+    var searchGeneration = 0;
+    var activeSearchLeases = {};
+
+    function stopSearch(label) {
+      searching = false;
+      searchGeneration += 1;
+      Object.keys(activeSearchLeases).forEach(function (key) { activeSearchLeases[key].release(); });
+      activeSearchLeases = {};
+      $('jdb-ra-gsearch').textContent = '全期搜索';
+      if (label) setStatus(label);
+    }
+
+    function appendSearchGroup(period, periodIndex, movies) {
+      if (!movies.length) return;
+      var sec = document.createElement('section');
+      sec.className = 'jdb-ra-sec';
+      sec.dataset.periodIndex = String(periodIndex);
+      sec.innerHTML = '<h2 class="jdb-ra-ph">第 ' + period + ' 期</h2>' +
+        '<div class="movie-list">' + movies.map(cardHtml).join('') + '</div>';
+      var before = Array.prototype.find.call(resultsEl.querySelectorAll('.jdb-ra-sec'), function (item) {
+        return parseInt(item.dataset.periodIndex, 10) > periodIndex;
+      });
+      resultsEl.insertBefore(sec, before || null);
+      scheduleArchiveGridSync();
+    }
+
     $('jdb-ra-gsearch').addEventListener('click', function () {
       var q = currentQuery();
       if (!q) { setStatus('请先输入关键词'); return; }
-      if (searching) { searching = false; setStatus('已停止搜索'); return; }
+      if (searching) { stopSearch('已停止搜索'); return; }
       searching = true;
+      var generation = ++searchGeneration;
       var btnEl = $('jdb-ra-gsearch');
       btnEl.textContent = '停止';
       enterResultsMode();
       resultsEl.innerHTML = '';
-      var results = [];
       var done = 0;
-      var hitCount = function () {
-        return results.reduce(function (a, r) { return a + r.movies.length; }, 0);
-      };
-      (function scan(i) {
-        if (!searching || i >= periods.length) {
-          searching = false;
-          btnEl.textContent = '全期搜索';
-          var label = i >= periods.length ? '搜索完成' : '已停止';
-          setStatus(label + ' · 命中 ' + hitCount() + ' 部（' + results.length + ' 期）');
-          if (!results.length) resultsEl.innerHTML = '<div class="jdb-ra-empty">没有找到影片</div>';
-          return;
+      var hits = 0;
+      var hitPeriods = 0;
+      var missing = [];
+      var disk = readCache(DETAILS_CACHE_KEY);
+      var diskEntries = disk && disk.entries ? disk.entries : {};
+      periods.forEach(function (p, periodIndex) {
+        var movies = detailCache[p.period] || readSearchIndex(p.period);
+        var diskEntry = diskEntries[String(p.period)];
+        if (!movies && diskEntry && Array.isArray(diskEntry.movies) &&
+            Date.now() - diskEntry.fetchedAt < detailCacheTtl(p.period)) {
+          movies = diskEntry.movies;
+          writeSearchIndex(p.period, movies);
         }
-        var p = periods[i];
-        var cont = function (movies) {
-          done++;
-          var hit = movies.filter(function (m) { return matches(m, q); });
-          if (hit.length) { results.push({ period: p.period, movies: hit }); renderResults(results); }
-          setStatus('搜索进度 ' + done + '/' + periods.length + ' · 命中 ' + hitCount() + ' 部');
-          setTimeout(function () { scan(i + 1); }, 60);
-        };
-        getPeriodMovies(p.period).then(cont).catch(function () { cont([]); });
-      })(0);
+        if (!movies) { missing.push({ period: p, index: periodIndex }); return; }
+        done += 1;
+        var localHits = movies.filter(function (movie) { return matches(movie, q); });
+        if (localHits.length) {
+          hits += localHits.length;
+          hitPeriods += 1;
+          appendSearchGroup(p.period, periodIndex, localHits);
+        }
+      });
+      setStatus('本地索引已搜索 ' + done + '/' + periods.length + ' 期 · 命中 ' + hits + ' 部');
+
+      var cursor = 0;
+      function worker() {
+        if (!searching || generation !== searchGeneration || cursor >= missing.length) return Promise.resolve();
+        var missingItem = missing[cursor++];
+        var p = missingItem.period;
+        var owner = 'search:' + generation + ':' + p.period;
+        var lease = acquirePeriodMovies(p.period, 'search', owner);
+        activeSearchLeases[owner] = lease;
+        return lease.promise.then(function (movies) {
+          if (!searching || generation !== searchGeneration) return;
+          var found = movies.filter(function (movie) { return matches(movie, q); });
+          if (found.length) {
+            hits += found.length;
+            hitPeriods += 1;
+            appendSearchGroup(p.period, missingItem.index, found);
+          }
+        }).catch(function () {}).finally(function () {
+          lease.release();
+          delete activeSearchLeases[owner];
+          if (generation === searchGeneration) {
+            done += 1;
+            setStatus('索引补全 ' + done + '/' + periods.length + ' 期 · 命中 ' + hits + ' 部');
+          }
+        }).then(function () {
+          if (!searching || generation !== searchGeneration) return;
+          return new Promise(function (resolve) { setTimeout(resolve, 100); }).then(worker);
+        });
+      }
+      Promise.all([worker(), worker()]).then(function () {
+        if (!searching || generation !== searchGeneration) return;
+        searching = false;
+        btnEl.textContent = '全期搜索';
+        setStatus('搜索完成 · 命中 ' + hits + ' 部（' + hitPeriods + ' 期）');
+        if (!hits) resultsEl.innerHTML = '<div class="jdb-ra-empty">没有找到影片</div>';
+      });
     });
 
-    function renderResults(results) {
-      resultsEl.innerHTML = '';
-      results.forEach(function (g) {
-        var sec = document.createElement('section');
-        sec.className = 'jdb-ra-sec';
-        sec.innerHTML = '<h2 class="jdb-ra-ph">第 ' + g.period + ' 期</h2>' +
-          '<div class="movie-list">' + g.movies.map(cardHtml).join('') + '</div>';
-        resultsEl.appendChild(sec);
-      });
-    }
+    $('jdb-ra-refresh').addEventListener('click', function () {
+      localStorage.removeItem(PERIODS_CACHE_KEY);
+      location.reload();
+    });
+    $('jdb-ra-clear').addEventListener('click', function () {
+      stopSearch();
+      clearArchiveCaches();
+      location.reload();
+    });
 
     loadSiteChrome();
     loadPeriods();

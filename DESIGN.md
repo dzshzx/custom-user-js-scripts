@@ -152,6 +152,9 @@ out where script-owned pages differ.
 - Script-owned styles stay scoped under `.jdb-ra` and own only what the site CSS does not cover: toolbar, period section headers, grid column count, and uncropped covers.
 - When another userscript decorates the first native-style movie grid, the archive treats that grid's effective column count and gaps as the compatibility boundary and applies them to every later period grid. The archive must remain aligned regardless of userscript execution order.
 - Browsing is one scrollable stream of period sections (newest first) that auto-loads older periods via a sentinel. Navigation appends the adjacent next section when it matches the stream cursor; distant or reverse navigation re-anchors the stream at the target period so intermediate periods are neither fetched nor rendered.
+- Catalog refresh is prefix-incremental: scan newest pages until the first cached overlap, prefer remote metadata for the scanned prefix, and retain the cached immutable tail. A periodic full refresh bounds drift.
+- Navigation payloads and the full-search index are separate caches. Search index admission must not evict browsing payloads; detail transport remains single-flight per period and uses consumer leases so cancellation only aborts a request after its last consumer releases it.
+- Full-archive search renders each matching period exactly once as it arrives. Off-screen period sections may use browser-native rendering containment, but the DOM order and first externally decorated movie grid remain stable for multi-userscript compatibility.
 - Movie cards reuse the site's native `movie-list` markup and link directly to the site's `/v/<id>` detail pages. Covers are landscape and must render uncropped (`contain`); release dates share the restrained metadata row with scores instead of adding another card section.
 
 ## Components
