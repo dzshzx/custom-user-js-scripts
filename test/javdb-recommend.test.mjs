@@ -75,13 +75,13 @@ const CHROME_HTML =
   '<html><head><link rel="stylesheet" media="all" href="/packs/css/app-testhash.css" /></head>' +
   '<body><nav class="navbar is-fixed-top main-nav"><div class="navbar-start"></div></nav></body></html>';
 
-async function runScript(window, fetchImpl, extraGlobals) {
+async function runScript(window, fetchImpl, extraGlobals = {}, storage = createMemoryStorage()) {
   const source = await readFile(srcPath, 'utf8');
   const context = vm.createContext({
     window,
     document: window.document,
     location: window.location,
-    localStorage: createMemoryStorage(),
+    localStorage: storage,
     fetch: fetchImpl,
     console,
     URLSearchParams,
@@ -167,6 +167,104 @@ test('standalone archive page adopts site chrome and streams native-style cards'
     .filter((item) => item.style.display !== 'none');
   assert.equal(visible.length, 2);
   assert.match(doc.getElementById('jdb-ra-status').textContent, /命中 2 部/);
+  window.close();
+});
+
+test('later period grids follow the column setting applied to the first grid by another userscript', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  let ioCallback = null;
+  class FakeIO {
+    constructor(cb) { ioCallback = cb; }
+    observe() {}
+    disconnect() {}
+  }
+  await runScript(window, async (url) => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+    return { ok: true, json: async () => payload };
+  }, { IntersectionObserver: FakeIO });
+
+  const firstGrid = window.document.querySelector('.jdb-ra-sec .movie-list');
+  firstGrid.classList.add('jav-card-grid', 'javdb-card-grid');
+  firstGrid.style.setProperty('--jav-card-columns', '5');
+  firstGrid.style.setProperty('grid-template-columns', 'repeat(5, minmax(0, 1fr))', 'important');
+  firstGrid.style.setProperty('column-gap', '14px', 'important');
+  firstGrid.style.setProperty('row-gap', '14px', 'important');
+
+  ioCallback([{ isIntersecting: true }]);
+  for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const grids = [...window.document.querySelectorAll('.jdb-ra-sec .movie-list')];
+  assert.equal(grids.length, 2);
+  for (const grid of grids) {
+    assert.equal(grid.style.getPropertyValue('grid-template-columns'), 'repeat(5, minmax(0, 1fr))');
+    assert.equal(grid.style.getPropertyPriority('grid-template-columns'), 'important');
+    assert.equal(grid.style.getPropertyValue('column-gap'), '14px');
+    assert.equal(grid.style.getPropertyValue('row-gap'), '14px');
+  }
+
+  firstGrid.style.setProperty('--jav-card-columns', '4');
+  firstGrid.style.setProperty('grid-template-columns', 'repeat(4, minmax(0, 1fr))', 'important');
+  for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  for (const grid of grids) {
+    assert.equal(grid.style.getPropertyValue('grid-template-columns'), 'repeat(4, minmax(0, 1fr))');
+  }
+  window.close();
+});
+
+test('a fresh local cache avoids refetching the period catalog and loaded period details on reopen', { skip: domSkip }, async () => {
+  const storage = createMemoryStorage();
+  const firstCalls = [];
+  const firstWindow = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  await runScript(firstWindow, async (url) => {
+    firstCalls.push(url);
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+    return { ok: true, json: async () => payload };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } }, storage);
+
+  assert.equal(firstCalls.filter((url) => url.includes('recommend_periods')).length, 1);
+  assert.equal(firstCalls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 1);
+
+  const secondCalls = [];
+  const secondWindow = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  await runScript(secondWindow, async (url) => {
+    secondCalls.push(url);
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+    return { ok: true, json: async () => payload };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } }, storage);
+
+  assert.equal(secondWindow.document.querySelectorAll('.jdb-ra-sec .item').length, 2);
+  assert.equal(secondCalls.filter((url) => url.includes('/api/v1/movies/')).length, 0);
+  assert.equal(secondCalls.filter((url) => url === 'https://javdb.com/').length, 1);
+  firstWindow.close();
+  secondWindow.close();
+});
+
+test('stream rendering and full-archive search share one in-flight detail request per period', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  let resolveDetail;
+  const detailResponse = new Promise((resolve) => { resolveDetail = resolve; });
+  const calls = [];
+  await runScript(window, async (url) => {
+    calls.push(url);
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    if (url.includes('recommend_periods')) return { ok: true, json: async () => PERIODS };
+    await detailResponse;
+    return { ok: true, json: async () => DETAIL };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+
+  const search = window.document.getElementById('jdb-ra-search');
+  search.value = 'HND';
+  window.document.getElementById('jdb-ra-gsearch').click();
+  for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 1);
+
+  resolveDetail();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 2);
+  window.close();
 });
 
 test('normal pages get a navbar entry pointing at the archive route, without touching the API', { skip: domSkip }, async () => {
@@ -187,4 +285,5 @@ test('normal pages get a navbar entry pointing at the archive route, without tou
   assert.equal(entry.textContent, '佳片推荐');
   assert.equal(fetchCalled, false);
   assert.equal(doc.querySelector('.jdb-ra'), null);
+  window.close();
 });
