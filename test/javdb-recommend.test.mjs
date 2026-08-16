@@ -57,6 +57,7 @@ const DETAIL = {
         origin_title: '标题甲',
         cover_url: 'https://tp.spfcas.com/rhe951l4q/covers/08/0827.jpg',
         score: '4.22',
+        release_date: '2026-08-01',
       },
       {
         id: 'vDXan',
@@ -64,7 +65,8 @@ const DETAIL = {
         title: '标题乙',
         origin_title: '标题乙',
         cover_url: 'https://static.example.com/img/x.jpg',
-        score: '4.03',
+        score: '',
+        release_date: '2026-07-15',
       },
     ],
   },
@@ -146,6 +148,8 @@ test('standalone archive page adopts site chrome and streams native-style cards'
   assert.equal(link.getAttribute('href'), 'https://javdb.com/v/0827');
   assert.equal(link.getAttribute('target'), '_blank');
   assert.equal(link.getAttribute('rel'), 'noopener');
+  assert.equal(cards[0].querySelector('.meta').textContent, '★ 4.22 · 发售 2026-08-01');
+  assert.equal(cards[1].querySelector('.meta').textContent, '发售 2026-07-15');
 
   assert.ok(doc.querySelector('.jdb-ra-ph').textContent.includes('第 2 期'));
   assert.equal(doc.querySelectorAll('#jdb-ra-select option').length, 2);
@@ -167,6 +171,30 @@ test('standalone archive page adopts site chrome and streams native-style cards'
     .filter((item) => item.style.display !== 'none');
   assert.equal(visible.length, 2);
   assert.match(doc.getElementById('jdb-ra-status').textContent, /命中 2 部/);
+  window.close();
+});
+
+test('release-date metadata omits invalid dates without hiding independent score metadata', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  const invalidDetail = {
+    success: 1,
+    data: {
+      period: 2,
+      movies: [
+        { ...DETAIL.data.movies[0], release_date: '2025-02-29' },
+        { ...DETAIL.data.movies[1], release_date: '2026-99-99' },
+      ],
+    },
+  };
+  await runScript(window, async (url) => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    const payload = url.includes('recommend_periods') ? PERIODS : invalidDetail;
+    return { ok: true, json: async () => payload };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+
+  const cards = window.document.querySelectorAll('.jdb-ra-sec .item');
+  assert.equal(cards[0].querySelector('.meta').textContent, '★ 4.22');
+  assert.equal(cards[1].querySelector('.meta'), null);
   window.close();
 });
 
@@ -236,6 +264,7 @@ test('a fresh local cache avoids refetching the period catalog and loaded period
   }, { IntersectionObserver: class { observe() {} disconnect() {} } }, storage);
 
   assert.equal(secondWindow.document.querySelectorAll('.jdb-ra-sec .item').length, 2);
+  assert.equal(secondWindow.document.querySelector('.jdb-ra-sec .item .meta').textContent, '★ 4.22 · 发售 2026-08-01');
   assert.equal(secondCalls.filter((url) => url.includes('/api/v1/movies/')).length, 0);
   assert.equal(secondCalls.filter((url) => url === 'https://javdb.com/').length, 1);
   firstWindow.close();

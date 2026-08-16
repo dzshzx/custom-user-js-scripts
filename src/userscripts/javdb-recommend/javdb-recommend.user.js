@@ -500,6 +500,26 @@
 
     // 卡片用官网原生 movie-list 标记，点击直达官网影片详情页 /v/<id>；
     // cover 加 contain：横版封面完整显示不裁切
+    function normalizedReleaseDate(value) {
+      var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+      if (!match) return '';
+      var year = parseInt(match[1], 10);
+      var month = parseInt(match[2], 10);
+      var day = parseInt(match[3], 10);
+      var date = new Date(Date.UTC(year, month - 1, day));
+      return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+        ? match[0]
+        : '';
+    }
+
+    function cardMetaHtml(movie) {
+      var parts = [];
+      if (movie.score) parts.push('★ ' + esc(movie.score));
+      var releaseDate = normalizedReleaseDate(movie.release_date);
+      if (releaseDate) parts.push('发售 ' + releaseDate);
+      return parts.length ? '<div class="meta">' + parts.join(' · ') + '</div>' : '';
+    }
+
     function cardHtml(m) {
       var title = m.title || m.origin_title || '';
       return '<div class="item" data-q="' + esc((m.number + ' ' + (m.title || '') + ' ' + (m.origin_title || '')).toLowerCase()) + '">' +
@@ -507,7 +527,7 @@
         '<div class="cover contain"><img loading="lazy" src="' + esc(coverUrl(m.cover_url)) + '" alt="' + esc(m.number) + '" ' +
         'onerror="this.style.visibility=\'hidden\'"></div>' +
         '<div class="video-title"><strong>' + esc(m.number) + '</strong> ' + esc(title) + '</div>' +
-        (m.score ? '<div class="meta">★ ' + esc(m.score) + '</div>' : '') +
+        cardMetaHtml(m) +
         '</a></div>';
     }
 
