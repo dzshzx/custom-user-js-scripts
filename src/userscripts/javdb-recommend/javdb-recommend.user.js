@@ -293,6 +293,7 @@
     var gridSyncScheduled = false;
     var gridResizeObserver = null;
     var observedGridSource = null;
+    var lastCompatibleGridLayout = null;
 
     function setImportantStyle(el, name, value) {
       if (el.style.getPropertyValue(name) === value && el.style.getPropertyPriority(name) === 'important') return;
@@ -335,20 +336,28 @@
       gridSyncScheduled = false;
       var source = streamEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
       if (!source) source = resultsEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
-      if (!source) return;
-      var computed = window.getComputedStyle(source);
-      var columns = countGridTracks(computed.gridTemplateColumns);
-      if (!columns) columns = parseInt(computed.getPropertyValue('--jav-card-columns'), 10);
-      if (!Number.isFinite(columns) || columns < 1) return;
-      observeGridSource(source);
-      var template = 'repeat(' + columns + ', minmax(0, 1fr))';
-      var columnGap = computed.columnGap || '.4rem';
-      var rowGap = computed.rowGap || '1rem';
+      if (source) {
+        var computed = window.getComputedStyle(source);
+        var columns = countGridTracks(computed.gridTemplateColumns);
+        if (!columns) columns = parseInt(computed.getPropertyValue('--jav-card-columns'), 10);
+        if (Number.isFinite(columns) && columns > 0) {
+          observeGridSource(source);
+          lastCompatibleGridLayout = {
+            template: 'repeat(' + columns + ', minmax(0, 1fr))',
+            columnGap: computed.columnGap || '.4rem',
+            rowGap: computed.rowGap || '1rem'
+          };
+        }
+      } else if (observedGridSource && !observedGridSource.isConnected) {
+        if (gridResizeObserver) gridResizeObserver.disconnect();
+        observedGridSource = null;
+      }
+      if (!lastCompatibleGridLayout) return;
       document.querySelectorAll('.jdb-ra .movie-list').forEach(function (list) {
         if (list === source) return;
-        setImportantStyle(list, 'grid-template-columns', template);
-        setImportantStyle(list, 'column-gap', columnGap);
-        setImportantStyle(list, 'row-gap', rowGap);
+        setImportantStyle(list, 'grid-template-columns', lastCompatibleGridLayout.template);
+        setImportantStyle(list, 'column-gap', lastCompatibleGridLayout.columnGap);
+        setImportantStyle(list, 'row-gap', lastCompatibleGridLayout.rowGap);
       });
     }
 
@@ -479,6 +488,8 @@
     var streamNext = 0;      // periods 中下一块待加载的下标
     var streamBusy = false;
     var sentinelVisible = false;
+    var streamGeneration = 0;
+    var navigationGeneration = 0;
     var loadedSections = {}; // period -> section 元素
     var currentIdx = 0;
 
@@ -549,7 +560,9 @@
       return hits;
     }
 
-    function appendNext() {
+    function appendNext(generation) {
+      if (generation === undefined) generation = streamGeneration;
+      if (generation !== streamGeneration) return Promise.resolve(false);
       if (streamBusy || !periods.length) return Promise.resolve(false);
       if (streamNext >= periods.length) {
         setSentinel('已加载全部 ' + periods.length + ' 期', true);
@@ -562,21 +575,26 @@
       streamEl.appendChild(sec);
       setSentinel('加载第 ' + p.period + ' 期…', true);
       return getPeriodMovies(p.period).then(function (movies) {
+        if (generation !== streamGeneration) return false;
         sec.querySelector('.movie-list').innerHTML =
           movies.map(cardHtml).join('') || '<div class="jdb-ra-empty">本期没有影片</div>';
-        streamNext += 1;
+        streamNext = streamNext + 1;
         streamBusy = false;
         setSentinel('加载更多期数', false);
         var q = currentQuery();
         if (q) applyFilter(q); // 搜索激活时新加载的卡片也要参与过滤
         scheduleArchiveGridSync();
-        if (sentinelVisible) appendNext();
+        if (sentinelVisible) appendNext(generation);
         return true;
       }).catch(function (e) {
+        if (generation !== streamGeneration) return false;
         streamBusy = false;
         setSentinel('第 ' + p.period + ' 期加载失败：' + e.message + '（3 秒后重试）', true);
         return new Promise(function (resolve) {
-          setTimeout(function () { resolve(appendNext()); }, 3000);
+          setTimeout(function () {
+            if (generation !== streamGeneration) { resolve(false); return; }
+            resolve(appendNext(generation));
+          }, 3000);
         });
       });
     }
@@ -595,6 +613,16 @@
         io.observe(sentinel);
       }
       appendNext();
+    }
+
+    function reanchorStream(index) {
+      var generation = streamGeneration + 1;
+      streamGeneration = generation;
+      streamEl.innerHTML = '';
+      loadedSections = {};
+      streamNext = index;
+      streamBusy = false;
+      return appendNext(generation);
     }
 
     function getPeriodMovies(period) {
@@ -625,21 +653,27 @@
       return detailRequests[period];
     }
 
-    /* ---------- 期数导航：已加载的滚动到位，未加载的沿流补齐 ---------- */
+    /* ---------- 期数导航：已加载的滚动到位，相邻追加，远距直接重定位 ---------- */
     function gotoPeriod(period) {
+      var navigation = navigationGeneration + 1;
+      navigationGeneration = navigation;
       var idx = periods.findIndex(function (p) { return p.period === period; });
       if (idx < 0) { setStatus('没有第 ' + period + ' 期'); return; }
       currentIdx = idx;
       try { localStorage.setItem(LS_KEY, String(period)); } catch (e) {}
       select.value = String(period);
       if (loadedSections[period]) { scrollToPeriod(period); return; }
-      setStatus('跳转到第 ' + period + ' 期，依次加载中…');
-      (function load() {
-        if (loadedSections[period]) { setStatus(readyText()); scrollToPeriod(period); return; }
-        if (streamNext >= periods.length) { setStatus('没有第 ' + period + ' 期'); return; }
-        if (streamBusy) { setTimeout(load, 200); return; }
-        appendNext().then(load);
-      })();
+      setStatus('跳转到第 ' + period + ' 期，加载中…');
+      var load = idx === streamNext && !streamBusy
+        ? appendNext(streamGeneration)
+        : reanchorStream(idx);
+      load.then(function () {
+        if (navigation !== navigationGeneration) return;
+        if (loadedSections[period]) {
+          setStatus(readyText());
+          scrollToPeriod(period);
+        }
+      });
     }
 
     function scrollToPeriod(period) {
