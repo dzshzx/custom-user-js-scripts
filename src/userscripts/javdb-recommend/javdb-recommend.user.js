@@ -2,7 +2,7 @@
 // @name         JavDB Recommend Archive
 // @name:zh-CN   JavDB 佳片推荐 · 历史期数
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.0.5
+// @version      0.0.6
 // @description  Adds a "Recommend" entry to the JavDB navbar that opens a standalone archive page for every historical issue (updated Mon/Thu), with flip, search and full-archive keyword search.
 // @description:zh-CN  在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索、全期关键词搜索。
 // @author       dzshzx
