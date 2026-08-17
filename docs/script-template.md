@@ -5,7 +5,7 @@
 - `@name`: 脚本名称。
 - `@name:zh-CN` / `@name:en`: 脚本有中文用户界面或跨语言使用场景时，补充本地化名称。
 - `@namespace`: 通常使用仓库地址或个人域名。
-- `@version`: 推送脚本改动前询问用户是否递增（patch 级）；不问不改，也不跳过询问直接推送。多模块脚本的版本写在 entry metadata，构建自动传播到 dist 与桥接文件。
+- `@version`: 推送脚本改动前询问用户是否递增（patch 级）；不问不改，也不跳过询问直接推送。要发版时在候选分支先递增并重建，等待 PR CI 全绿后把该同一提交合入 `master`；合入即通过 raw update URL 发布，版本不再改写，修复使用下一个 patch。多模块脚本的版本写在 entry metadata，构建自动传播到 dist 与桥接文件。
 - `@description`: 简短说明脚本功能。
 - `@description:zh-CN` / `@description:en`: 脚本有本地化名称时，同步补充本地化简介。
 - `@match`: 脚本生效的网址规则。

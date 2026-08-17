@@ -139,6 +139,15 @@ persists only the last-viewed issue number in page `localStorage`.
 - Before pushing userscript changes, ask the user whether to bump `@version`
   (patch level); do not bump without asking, and do not skip the question.
   Script managers key update discovery and cache refresh on `@version`.
+- A releasing version bump belongs on the candidate branch before its pull
+  request CI runs. Merge that exact green commit to `master`; because raw
+  `@downloadURL` / `@updateURL` endpoints read `master`, that merge is the
+  external publication boundary. Do not merge first and wait for push CI to
+  decide whether the release was valid.
+- A userscript change may keep its version only when the user explicitly chose
+  not to release it yet; installed copies then remain on the prior version.
+  Once a bumped version reaches `master`, treat it as immutable and publish any
+  correction under the next patch version.
 - The version lives in the entry metadata block; `npm run build` propagates it
   to the dist bundle and the byte-identical bridge file, and fails if an internal
   `SCRIPT_VERSION` constant disagrees with `@version`.
