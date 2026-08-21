@@ -1,9 +1,3 @@
-## Verification
-
-- [ ] `npm run lint` passes.
-- [ ] `npm test` passes.
-- [ ] Generated `dist/` bundles and byte-identical `src` bridge files are committed.
-
 ## Userscript release boundary
 
 - [ ] No installable userscript changed; or the `@version` decision was explicitly confirmed.
