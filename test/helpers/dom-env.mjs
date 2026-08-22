@@ -1,13 +1,11 @@
 // DOM environment helper for UI/UX tests.
 //
-// happy-dom is intentionally NOT a recorded dependency of this repository — it
-// is installed locally on demand so the repo stays dependency-free:
+// happy-dom is an exact-pinned devDependency (package.json, installed by
+// `npm ci`, so CI always has it). Runtime userscripts still carry zero
+// dependencies — this only affects tests.
 //
-//   npm install --no-save --no-package-lock happy-dom
-//
-// Tests that need a DOM import this helper and pass `{ skip: domSkip }`. When
-// happy-dom is not installed (clean clone, CI), those tests skip cleanly and
-// `npm test` still runs the dependency-free suite.
+// Tests that need a DOM import this helper and pass `{ skip: domSkip }`; if a
+// checkout skipped `npm ci`, those tests skip cleanly instead of failing.
 
 let happyDomModule = null;
 try {

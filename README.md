@@ -22,7 +22,7 @@
 
 ## Web Page Assistant / 网页助手
 
-网页助手是一个通用网页辅助脚本，安装后会在页面右下角显示一个浮动控件。它的配置支持“当前页面”和“整个站点”两个范围。
+网页助手是一个通用网页辅助脚本；为当前页面或整个站点配置刷新规则后，页面右下角会显示一个浮动控件（没有匹配规则时不显示，设置经脚本管理器菜单打开）。它的配置支持“当前页面”和“整个站点”两个范围。
 
 主要能力：
 
@@ -89,7 +89,6 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 ├── dist/                 # 打包产物：多模块脚本的单文件安装入口（构建生成并提交）
 ├── docs/                 # 脚本说明、运行手册和项目约定
 ├── scripts/              # 本地辅助脚本与构建脚本
-├── snippets/             # 可复用代码片段
 ├── src/userscripts/      # userscript 源码（ESM entry + lib 模块，或单文件脚本）
 └── test/                 # Node 测试
 ```
@@ -120,6 +119,8 @@ npm test
 - [PRODUCT.md](PRODUCT.md)：产品上下文、用户、边界、数据原则和版本策略。
 - [DESIGN.md](DESIGN.md)：注入式 userscript UI 的设计上下文和组件规则。
 - [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
+- [docs/adr/index.md](docs/adr/index.md)：架构决策记录（打包与桥接、PR 发布门、存储策略、Gist 同步、入口文件不入库）。
+- [CONTEXT.md](CONTEXT.md)：四个脚本与构建/发布机制的领域术语表。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
 - [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)：Codex Quota Compass GitHub Gist 同步说明。
 - [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：二维码登录态捕获、飞书工具和飞书主图 userscript 说明。

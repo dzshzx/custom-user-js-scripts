@@ -47,6 +47,11 @@ function runLint(workspace) {
   return spawnSync(process.execPath, [lintScript], { cwd: workspace, encoding: 'utf8' });
 }
 
+function selfHosted(name, extra = {}) {
+  const url = `https://raw.githubusercontent.com/example/repo/master/src/${name}.user.js`;
+  return userscriptMetadata({ name, downloadURL: url, updateURL: url, ...extra });
+}
+
 function bridgePair(name) {
   const downloadURL = `https://raw.githubusercontent.com/example/repo/master/dist/${name}.user.js`;
   const content = `${userscriptMetadata({ name, downloadURL, updateURL: downloadURL })}\n// bundled body sentinel\n`;
@@ -131,4 +136,31 @@ test('check-userscripts rejects a bridge whose dist counterpart is missing', asy
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /dist counterpart .* is missing/);
+});
+
+test('check-userscripts rejects a single-file script without self-pointing install URLs', async () => {
+  const workspace = await createWorkspace({
+    'plain.user.js': userscriptMetadata({ name: 'Plain Script' }),
+  });
+  const result = runLint(workspace);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr + result.stdout, /missing @downloadURL\/@updateURL/);
+});
+
+test('check-userscripts rejects a single-file script whose install URLs do not point at its own path', async () => {
+  const wrong = 'https://raw.githubusercontent.com/example/repo/master/src/other.user.js';
+  const workspace = await createWorkspace({
+    'plain.user.js': userscriptMetadata({ name: 'Plain Script', downloadURL: wrong, updateURL: wrong }),
+  });
+  const result = runLint(workspace);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr + result.stdout, /must end with \/src\/plain\.user\.js/);
+});
+
+test('check-userscripts accepts a single-file script with self-pointing install URLs', async () => {
+  const workspace = await createWorkspace({
+    'plain.user.js': selfHosted('plain'),
+  });
+  const result = runLint(workspace);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
 });
