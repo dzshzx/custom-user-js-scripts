@@ -5,10 +5,11 @@
 - `@name`: 脚本名称。
 - `@name:zh-CN` / `@name:en`: 脚本有中文用户界面或跨语言使用场景时，补充本地化名称。
 - `@namespace`: 通常使用仓库地址或个人域名。
-- `@version`: `@version` 的递增与询问规则以 `AGENTS.md` 为准。要发版时在候选分支先递增并重建，等待 PR CI 全绿后把该同一提交合入 `master`；合入即通过 raw update URL 发布，版本不再改写，修复使用下一个 patch。多模块脚本的版本写在 entry metadata，构建自动传播到 dist 与桥接文件。
+- `@version`: 递增与询问规则以 `PRODUCT.md`「Version Policy」为准（ADR-0002）。要发版时在候选分支先递增并重建，等待 PR CI 全绿后把该同一提交合入 `master`；合入即通过 raw update URL 发布，版本不再改写，修复使用下一个 patch。多模块脚本的版本写在 entry metadata，构建自动传播到 dist 与桥接文件。
 - `@description`: 简短说明脚本功能。
 - `@description:zh-CN` / `@description:en`: 脚本有本地化名称时，同步补充本地化简介。
 - `@match`: 脚本生效的网址规则。
+- `@downloadURL` / `@updateURL`: 单文件脚本两者都指向自身在 `master` 上的 raw 路径（`npm run lint` 强制，否则已安装副本永远收不到更新）；多模块脚本由 entry 指向 `dist/<script-id>.user.js`。
 - `@grant`: 需要的浏览器用户脚本 API 权限；没有特殊权限时使用 `none`。
 
 改名或迁移已安装脚本文件时：

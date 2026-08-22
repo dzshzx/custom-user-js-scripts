@@ -27,6 +27,10 @@ unless a task explicitly introduces one.
 
 ## Current Product Surfaces
 
+This section states each script's product boundary only. Per-script
+behaviour, menu commands, cache/TTL details, and storage-key inventories are
+owned by `docs/scripts/installable-userscripts.md`; vocabulary by `CONTEXT.md`.
+
 ### Web Page Assistant
 
 Runs on `*://*/*`.
@@ -44,8 +48,8 @@ Persistent settings prefer userscript manager storage and fall back to page
 
 Runs on `https://chatgpt.com/*`.
 
-It shows Codex quota windows, daily usage, client summaries, weekly estimates,
-model summaries, available rate-limit reset credits, and local history. Each
+It shows Codex limit windows, daily usage, weekly estimates, model summaries,
+available rate-limit reset credits, and local history. Each
 successful run creates a sanitized `Quota Snapshot`. Settled daily costs are
 stored in the `Cost Ledger` and drive the day, rolling-week, month, and
 all-time statistics views. Snapshots are stored in a local `Snapshot Archive`,
@@ -68,16 +72,21 @@ export, but the installable userscript remains browser-side.
 
 ### JavDB Recommend Archive
 
-Runs on `https://javdb.com/*` and mirror domains (`javdb575.com`,
-`javdb.today`, and similar).
+Runs on `https://javdb.com/*` and the three mirror hosts listed in its
+`@match` block (`www.javdb.com`, `javdb575.com`, `javdb.today`); other mirrors
+are not matched.
 
-A floating button opens a panel for browsing every historical issue of the
-JavDB "Recommend" section: issue navigation (select, previous/next, jump by
-issue number, last-viewed issue remembered), movie cards linking to site
-search, per-issue filtering, and a stoppable full-archive keyword search. Data
-comes from the site's own same-origin recommend APIs with a built-in
-`jdsignature` header; the script needs no login, declares `@grant none`, and
-persists only the last-viewed issue number in page `localStorage`.
+It adds a quiet navbar entry on normal pages and renders a script-owned archive
+page at `/recommend-archive` for browsing every historical period of the site's
+"Recommend" section: one scrollable period stream (newest first, auto-loading
+older periods), adjacent or distant period navigation, movie cards that link
+directly to the site's `/v/<id>` detail pages, instant filtering of loaded
+content, and a stoppable full-archive keyword search. Data comes from the
+site's own same-origin recommend APIs with a built-in `jdsignature` header; the
+script needs no login and declares `@grant none`. It persists in page
+`localStorage` only: the last-viewed period, a versioned period catalog cache,
+per-period navigation payload caches, and compact search indexes (TTLs and
+sizes are listed in `docs/scripts/installable-userscripts.md`).
 
 ## Core Jobs
 

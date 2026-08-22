@@ -54,6 +54,26 @@ function isBridge(script) {
   return downloadUrl.endsWith(`/dist/${scriptId(script.file)}.user.js`);
 }
 
+// A single-file script installs from its own src path, so both install URLs
+// must point at that exact raw path: without them a script manager never sees
+// a newer @version (installed copies stayed frozen on feishu/example before
+// 2026-08-23).
+function checkInstallUrls(script) {
+  const rel = path.relative(root, script.file).split(path.sep).join('/');
+  const downloadUrl = firstMetadataValue(script.metadata, '@downloadURL');
+  const updateUrl = firstMetadataValue(script.metadata, '@updateURL');
+  if (!downloadUrl || !updateUrl) {
+    report(script.file, `missing @downloadURL/@updateURL (single-file scripts must point both at their own raw path, ending with /${rel})`);
+    return;
+  }
+  if (downloadUrl !== updateUrl) {
+    report(script.file, '@downloadURL and @updateURL differ');
+  }
+  if (!downloadUrl.endsWith(`/${rel}`)) {
+    report(script.file, `@downloadURL must end with /${rel} (the script's own path)`);
+  }
+}
+
 function checkRequiredFields(script) {
   if (!script.metadata) {
     report(script.file, 'missing userscript metadata block');
@@ -123,6 +143,7 @@ for (const script of srcScripts) {
     continue;
   }
 
+  checkInstallUrls(script);
   registerUniqueness(script, path.relative(root, script.file));
 }
 

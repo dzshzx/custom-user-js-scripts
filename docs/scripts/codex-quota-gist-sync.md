@@ -29,7 +29,8 @@ Gist 同步要求当前 userscript manager 提供 GM storage。本地 `Snapshot 
 2. `Gist ID` 首次配置可留空。
 3. 脚本会在当前 GitHub 账号下查找描述为 `Codex Quota Compass Snapshot Archive` 且包含 `codex-quota-compass-snapshot-archive.v1.json` 的 gist。
 4. 找不到时，脚本会创建一个 `public: false` 的 secret gist。
-5. 后续设备使用同一个 GitHub 账号 token 时，脚本会自动找到同一个 gist；也可以手动填入已有 Gist ID。
+5. 勾选「启用自动同步」并保存——不勾选只会保存 token，不会同步。
+6. 后续设备使用同一个 GitHub 账号 token 时，脚本会自动找到同一个 gist；也可以手动填入已有 Gist ID。
 
 每次成功计算并保存快照后，脚本会排队同步；打开页面时若 Gist 同步已启用，也会静默拉取并合并一次。
 

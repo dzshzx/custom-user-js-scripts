@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.1
+// @version      0.1.2
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
 // @grant        GM_registerMenuCommand
 // @grant        GM_download
 // @run-at       document-idle
+// @downloadURL  https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js
+// @updateURL    https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js
 // ==/UserScript==
 
 (function () {
