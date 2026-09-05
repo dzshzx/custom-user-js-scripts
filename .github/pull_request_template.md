@@ -1,6 +1,6 @@
 ## Userscript release boundary
 
-- [ ] No installable userscript changed; or the `@version` decision was explicitly confirmed.
+- [ ] No installable userscript changed; or the task's existing release authorization covers the `@version` decision. If still undecided, obtain the decision before merging.
 - [ ] If this PR releases an update, its patch `@version` was bumped on this branch before CI.
 - [ ] If this PR intentionally does not release, the unchanged version and delayed installed-script update are understood.
 
