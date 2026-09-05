@@ -31,3 +31,11 @@ retract, because script managers treat a version as immutable once fetched.
   flow — the 2026-08-23 audit found them still on the push-era wording.
 - Non-releasing changes may merge without a bump; installed copies then stay on
   the prior version by design.
+
+## Amendment: reuse release authorization (2026-09-05)
+
+The authorization wording in decision 3 is superseded: an existing explicit
+request to release covers the version bump and candidate preparation. When the
+release decision is missing, complete the changes, validation, and PR before
+asking for it at the merge boundary. The green PR, rebuilt artifacts, exact
+candidate, and immutable published-version requirements remain in force.

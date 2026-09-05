@@ -145,9 +145,11 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
 
 ## Version Policy
 
-- Before pushing userscript changes, ask the user whether to bump `@version`
-  (patch level); do not bump without asking, and do not skip the question.
-  Script managers key update discovery and cache refresh on `@version`.
+- Use the user's existing release decision for the task. An explicit request to
+  release authorizes the patch `@version` bump and candidate preparation. If that
+  decision is missing, prepare and validate the changes and PR, then ask before
+  merging to `master`. Script managers key update discovery and cache refresh on
+  `@version`.
 - A releasing version bump belongs on the candidate branch before its pull
   request CI runs. Merge that exact green commit to `master`; because raw
   `@downloadURL` / `@updateURL` endpoints read `master`, that merge is the
