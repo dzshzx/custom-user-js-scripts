@@ -33,6 +33,8 @@ to heal them.
 
 - Installed scripts keep zero runtime dependencies; esbuild and happy-dom are
   devDependencies only.
+- Amendment (2026-09-08): runtime npm dependencies are welcome; esbuild bundles
+  them into dist, so the installed script stays self-contained without `@require`.
 - Every source change to a bundled script commits three files (entry/lib,
   dist, bridge); the diff is noisy but auditable because the bundle is not
   minified.
