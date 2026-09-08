@@ -107,9 +107,11 @@ npm test
 `npm run lint` 与 `npm test` 都会先自动执行构建，保证 dist 产物与源码一致；改动多模块脚本后需把重建出的 `dist/` 与桥接文件一并提交，否则 CI 的一致性门禁会失败。DOM 层测试依赖 devDependencies 里的 happy-dom；环境缺失时相关测试自动跳过。
 
 脚本的 raw `@downloadURL` / `@updateURL` 直接读取 `master`，因此合并带新
-`@version` 的提交就是外部发布。发版候选必须在分支中先递增 patch 版本并重建产物，
-等待 PR CI 全绿后再把该同一提交合入 `master`；不能先合并再等待 push CI 判断发布是否
-有效。已进入 `master` 的版本视为不可变，后续修复使用下一个 patch。若用户明确选择
+`@version` 的提交就是外部发布。发版候选在任务分支上先递增 patch 版本并重建产物，
+然后用 `scripts/candidate.sh` 推成 `candidate/**` 分支：CI 在候选上运行，全绿后
+`promote.yml` 把 `master` 快进到该同一提交。`master` 的 ruleset 要求每个提交都带绿色
+`verify` 检查并禁止非快进，因此没有「先推再看 CI」的路径，也不再需要 pull request。
+已进入 `master` 的版本视为不可变，后续修复使用下一个 patch。若用户明确选择
 暂不发版，可以不递增版本，但已安装脚本也不会自动获得这次变更。
 
 新建脚本可从 [src/userscripts/example/example.user.js](src/userscripts/example/example.user.js) 开始，并参考 [docs/script-template.md](docs/script-template.md)。有注入 UI 的脚本先看 [DESIGN.md](DESIGN.md)。

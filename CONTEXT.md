@@ -40,10 +40,11 @@ can update.
 _Avoid_: simple script, standalone script
 
 **Release Gate**:
-A `@version` bump on a candidate branch whose pull-request CI is green; merging
-that exact commit to `master` is the publication, because every raw install URL
-reads `master`. A version that reached `master` is immutable.
-_Avoid_: push-to-publish, tag release, hotfix in place
+A `@version` bump on a `candidate/**` branch whose CI is green; the promote
+workflow fast-forwarding `master` to that exact commit is the publication,
+because every raw install URL reads `master`. A version that reached `master`
+is immutable.
+_Avoid_: push-to-publish, pull-request merge, tag release, hotfix in place
 
 **Companion UI**:
 Floating controls, panels, and menu commands that live inside a host page: the

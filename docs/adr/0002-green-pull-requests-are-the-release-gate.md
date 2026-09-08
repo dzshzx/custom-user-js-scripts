@@ -39,3 +39,22 @@ request to release covers the version bump and candidate preparation. When the
 release decision is missing, complete the changes, validation, and PR before
 asking for it at the merge boundary. The green PR, rebuilt artifacts, exact
 candidate, and immutable published-version requirements remain in force.
+
+## Amendment: candidate branches replace the pull request (2026-09-08)
+
+The pull request was only the vehicle; the gate is "the exact commit that
+reaches `master` has green CI". With a single maintainer the review half of a
+PR is empty, so the vehicle changes and the gate becomes mechanical:
+
+1. Push the clean, rebased commit as `candidate/<sha12>-<id>`
+   (`scripts/candidate.sh`). CI runs on the candidate.
+2. `promote.yml` (loaded from `master`, never executing candidate code) waits
+   until every CI run for that sha is green, fast-forwards `master` to the
+   exact sha and deletes the candidate branch.
+3. The `master` ruleset requires the `verify` check on every pushed sha and
+   refuses non-fast-forward pushes, so neither a direct push nor a merge can
+   land an unverified commit. The gate is no longer procedural.
+
+Decisions 1–3 stand with "pull request" read as "candidate". The PR template
+is retired; external pull requests still run CI and are landed through a
+candidate by the maintainer.

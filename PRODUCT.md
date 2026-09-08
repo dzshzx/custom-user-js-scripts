@@ -147,14 +147,15 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
 
 - Use the user's existing release decision for the task. An explicit request to
   release authorizes the patch `@version` bump and candidate preparation. If that
-  decision is missing, prepare and validate the changes and PR, then ask before
-  merging to `master`. Script managers key update discovery and cache refresh on
-  `@version`.
-- A releasing version bump belongs on the candidate branch before its pull
-  request CI runs. Merge that exact green commit to `master`; because raw
-  `@downloadURL` / `@updateURL` endpoints read `master`, that merge is the
-  external publication boundary. Do not merge first and wait for push CI to
-  decide whether the release was valid.
+  decision is missing, prepare and validate the changes on the task branch, then
+  ask before pushing the candidate. Script managers key update discovery and
+  cache refresh on `@version`.
+- A releasing version bump belongs on the task branch before it is pushed as a
+  `candidate/**` branch (`scripts/candidate.sh`). CI runs on the candidate and
+  `promote.yml` fast-forwards `master` to that exact green commit; because raw
+  `@downloadURL` / `@updateURL` endpoints read `master`, that promotion is the
+  external publication boundary. The `master` ruleset refuses any sha without a
+  green `verify` check, so there is no push-first-then-see path.
 - A userscript change may keep its version only when the user explicitly chose
   not to release it yet; installed copies then remain on the prior version.
   Once a bumped version reaches `master`, treat it as immutable and publish any
