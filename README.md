@@ -107,8 +107,20 @@ npm test
 `npm run lint` 与 `npm test` 都会先自动执行构建，保证 dist 产物与源码一致；改动多模块脚本后需把重建出的 `dist/` 与桥接文件一并提交，否则 CI 的一致性门禁会失败。DOM 层测试依赖 devDependencies 里的 happy-dom；环境缺失时相关测试自动跳过。
 
 脚本的 raw `@downloadURL` / `@updateURL` 直接读取 `master`，因此合并带新
-`@version` 的提交就是外部发布。发版候选在任务分支上先递增 patch 版本并重建产物，
-然后用 `scripts/candidate.sh` 推成 `candidate/**` 分支：CI 在候选上运行，全绿后
+`@version` 的提交就是外部发布。修改版本前先运行
+`git fetch origin master` 刷新基线，再运行
+`node scripts/version-plan.mjs plan --target '<安装身份>=<目标版本>'`（多个目标重复传参），
+在不写文件的情况下查看全部可安装脚本从 `origin/master` 基线到目标版本的完整计划。
+任务已有发布授权只覆盖精确的下一 patch；minor、major、跳号等计划需要用户对该摘要
+明确确认。确认后再改 metadata、重建，把 `Version-Approval: <摘要>` trailer 记录在
+候选提交上，并把同一摘要传给
+`scripts/candidate.sh --confirmed-version-plan <摘要>`。
+候选入口会在推送前校验，受信任的 promote workflow 会在推进 `master` 前按最新基线
+再次校验。首次发版、基线未知、脚本集合不完整、孤立 dist、降级或生成副本版本不一致
+都会暂停。
+
+发版候选在任务分支上递增版本并重建产物，然后用 `scripts/candidate.sh` 推成
+`candidate/**` 分支：CI 在候选上运行，全绿后
 `promote.yml` 把 `master` 快进到该同一提交。`master` 的 ruleset 要求每个提交都带绿色
 `verify` 检查并禁止非快进，因此没有「先推再看 CI」的路径，也不再需要 pull request。
 已进入 `master` 的版本视为不可变，后续修复使用下一个 patch。若用户明确选择

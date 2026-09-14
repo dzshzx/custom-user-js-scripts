@@ -70,8 +70,10 @@ jobs:
           sha: ${{ inputs.candidate_sha || github.event.workflow_run.head_sha }}
           token: ${{ github.token }}
           mode: require
-      - name: Fast-forward master
-        run: git push origin "$CANDIDATE:refs/heads/master"
+      - name: Recheck the version plan and fast-forward master
+        # This script is checked out from trusted master. Candidate files are
+        # inspected as Git object data and never executed with the write token.
+        run: bash scripts/promote-version-plan.sh "$CANDIDATE"
       - name: Delete only the candidate revision that was promoted
         if: github.event_name == 'workflow_run'
         run: |

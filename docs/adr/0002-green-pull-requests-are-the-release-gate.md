@@ -58,3 +58,26 @@ PR is empty, so the vehicle changes and the gate becomes mechanical:
 Decisions 1–3 stand with "pull request" read as "candidate". The PR template
 is retired; external pull requests still run CI and are landed through a
 candidate by the maintainer.
+
+## Amendment: version-plan approval gate (2026-09-14)
+
+The task's existing release authorization covers only an exact next patch for
+each installable userscript. Before a candidate push,
+`scripts/version-plan.mjs` accepts read-only target proposals and compares the
+complete target set with published versions on `origin/master`. Unchanged items
+remain in the canonical plan. A minor, major, skipped patch, or another forward
+transition needs explicit approval of that plan's SHA-256 summary, recorded as
+exactly one `Version-Approval` trailer on the candidate commit and supplied to
+`scripts/candidate.sh`.
+
+The summary binds the normalized repository, every install identity, baseline,
+and target. It checks plan consistency but does not authenticate the approver.
+Changing a baseline or target invalidates the approval. Unknown baselines,
+missing targets, invalid versions, downgrades, and mismatched bundled copies are
+incomplete plans and cannot be approved through this mechanism.
+
+The local candidate script checks before pushing. The promote workflow, loaded
+from trusted `master`, fetches `origin/master` again after CI admission and
+rechecks the candidate tree and commit trailer in the same step that performs
+the fast-forward. It never executes candidate-owned guard code with its write
+token.

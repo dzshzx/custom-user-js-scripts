@@ -39,11 +39,15 @@ A userscript with no lib modules, installed straight from its `src/` path; its
 can update.
 _Avoid_: simple script, standalone script
 
+**Version Plan**:
+The repository-wide mapping from every published userscript identity and
+version to its proposed version, including identities that do not change.
+_Avoid_: partial bump list, selected scripts
+
 **Release Gate**:
-A `@version` bump on a `candidate/**` branch whose CI is green; the promote
-workflow fast-forwarding `master` to that exact commit is the publication,
-because every raw install URL reads `master`. A version that reached `master`
-is immutable.
+The complete Version Plan and green candidate evidence required before the
+promote workflow publishes by advancing `master`. Version authorization and
+immutability are defined by `PRODUCT.md` "Version Policy".
 _Avoid_: push-to-publish, pull-request merge, tag release, hotfix in place
 
 **Companion UI**:

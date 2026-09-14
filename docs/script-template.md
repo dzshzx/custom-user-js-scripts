@@ -5,7 +5,7 @@
 - `@name`: 脚本名称。
 - `@name:zh-CN` / `@name:en`: 脚本有中文用户界面或跨语言使用场景时，补充本地化名称。
 - `@namespace`: 通常使用仓库地址或个人域名。
-- `@version`: 递增与询问规则以 `PRODUCT.md`「Version Policy」为准（ADR-0002）。要发版时在候选分支先递增并重建，等待 PR CI 全绿后把该同一提交合入 `master`；合入即通过 raw update URL 发布，版本不再改写，修复使用下一个 patch。多模块脚本的版本写在 entry metadata，构建自动传播到 dist 与桥接文件。
+- `@version`: 递增与询问规则以 `PRODUCT.md`「Version Policy」为准（ADR-0002）。改版本前先 `git fetch origin master`，再用 `node scripts/version-plan.mjs plan --target '<安装身份>=<目标版本>'` 只读预览完整计划；只有精确下一 patch 可沿用任务发布授权，其他升级需确认并记录匹配的 `Version-Approval` trailer。候选 CI 全绿后由 promote 把同一提交快进到 `master`；该快进即通过 raw update URL 发布，版本不再改写，修复使用下一个 patch。多模块脚本的版本写在 entry metadata，构建自动传播到 dist 与桥接文件。
 - `@description`: 简短说明脚本功能。
 - `@description:zh-CN` / `@description:en`: 脚本有本地化名称时，同步补充本地化简介。
 - `@match`: 脚本生效的网址规则。
