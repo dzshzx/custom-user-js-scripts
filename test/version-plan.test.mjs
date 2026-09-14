@@ -204,6 +204,16 @@ test('check --help does not require a target ref', () => {
   assert.match(result.stdout, /check \[--base-ref REF\]/);
 });
 
+test('version comparison rejects integers that would lose precision', async () => {
+  const fixture = await fixtureRepository('1.2.9007199254740993');
+  const proposed = runPlan(
+    fixture.root, 'plan', '--target',
+    'https://example.test/userscripts :: Fixture=1.2.9007199254740992',
+  );
+  assert.equal(proposed.status, 1);
+  assert.match(proposed.stderr, /outside the safe integer range/);
+});
+
 test('minor requires an exact summary in one commit trailer', async () => {
   const fixture = await fixtureRepository();
   await commitVersion(fixture, '1.3.0');

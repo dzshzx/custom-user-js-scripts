@@ -79,7 +79,12 @@ function parseVersion(value, label, issues) {
     issues.push(`${label} has a non-SemVer @version "${value || '<missing>'}"`);
     return null;
   }
-  return match.slice(1).map(Number);
+  const parts = match.slice(1).map(Number);
+  if (!parts.every(Number.isSafeInteger)) {
+    issues.push(`${label} has a version component outside the safe integer range`);
+    return null;
+  }
+  return parts;
 }
 
 function transitionKind(baseline, target, namespace, issues) {
