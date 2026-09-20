@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.2
+// @version      0.5.3
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -35,6 +35,8 @@ import { applyActiveView, readSyncFormValues, isSyncFormEditing } from './codex-
 import { createSnapshotArchiveStoragePort } from './codex-quota-compass-storage.lib.js';
 import { normalizeSnapshotArchive, mergeSnapshots, createSnapshotArchiveStore } from './codex-quota-compass-archive.lib.js';
 import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compass-remote-sync.lib.js';
+import { buildTokenCss } from '../shared/shared-tokens.lib.js';
+import { createToaster } from '../shared/shared-toast.lib.js';
 
 (function () {
   'use strict';
@@ -44,7 +46,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
   const ROOT_ID = 'codex-quota-compass-root';
-  const SCRIPT_VERSION = '0.5.2';
+  const SCRIPT_VERSION = '0.5.3';
   const BUTTON_POSITION_KEY = 'codexQuotaCompassButtonPosition';
 
   let statusNode;
@@ -61,10 +63,11 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
   let latestImportReport = null;
   let pendingRunPromise = null;
   let floatingPanelShell = null;
+  let toaster = null;
+  const expandedViews = new Set();
   const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
   const panelRenderer = createQuotaPanelRenderer({
     t,
-    debugKey: DEBUG_KEY,
   });
   const archiveStoragePort = createSnapshotArchiveStoragePort({
     scriptName: SCRIPT_NAME,
@@ -160,6 +163,16 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     floatingPanelShell?.setStatus(text, tone);
   }
 
+  // All user-facing result/failure notices go through the in-page toaster; a
+  // missing toaster (early failures before mount) degrades to the console.
+  function showToast(message, tone = 'info') {
+    if (!toaster) {
+      console.info(`[${SCRIPT_NAME}] ${message}`);
+      return;
+    }
+    toaster.show({ message, tone });
+  }
+
   function openPanel() {
     floatingPanelShell?.openPanel();
   }
@@ -199,12 +212,14 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
   }
 
   // Shared render state for the renderer: the active top-level tab plus the
-  // Statistics tab's sub-state (active period + current drill-down range).
+  // Statistics tab's sub-state (active period + current drill-down range) and
+  // the data views the user expanded past their preview limit.
   function panelRenderState(overrides = {}) {
     return {
       activePanelView,
       statsPeriod: activeStatsPeriod,
       statsDrill,
+      expandedViews,
       ...overrides,
     };
   }
@@ -245,6 +260,9 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
   async function runAndRender() {
     setStatus(t('statusLoading'), 'loading');
     renderLoading();
+    // Start the run before opening the panel so the onOpen hook can see the
+    // in-flight promise and not kick off a duplicate run.
+    const runPromise = runAndReport({ silentAlert: true });
     if (isPanelCurrentlyOpen()) {
       positionPanelNearButton();
     } else {
@@ -252,7 +270,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     }
 
     try {
-      const result = await runAndReport({ silentAlert: true });
+      const result = await runPromise;
       await refreshLedgerCostForResult(result);
       renderResult(result);
       setStatus(t('statusUpdated'), 'success');
@@ -264,14 +282,13 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     }
   }
 
-  function activateCompassButton() {
-    if (isPanelCurrentlyOpen()) {
-      closePanel();
-    } else if (latestResult && !latestError) {
+  // The shared widget shell owns button toggling; this hook decides what an
+  // open means — render the cached result or start the first calculation.
+  function handlePanelOpen() {
+    if (latestResult && !latestError) {
       renderResult(latestResult);
       setStatus(t('statusCached'), 'success');
-      openPanel();
-    } else {
+    } else if (!pendingRunPromise) {
       runAndRender().catch(() => {});
     }
   }
@@ -288,7 +305,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     if (synced.status !== 'synced') {
       refreshCurrentPanel();
       if (!options.silent) {
-        alert(`${SCRIPT_NAME} ${t('remoteSyncSkipped', { status: synced.status })}`);
+        showToast(t('remoteSyncSkipped', { status: synced.status }), 'info');
         setStatus(t('statusUpdated'), 'success');
       }
       return synced;
@@ -343,7 +360,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
 
     if (!decision.ok) {
       setStatus(t('statusFailed'), 'error');
-      alert(`${SCRIPT_NAME} ${t('remoteSyncTokenRequired')}`);
+      showToast(t('remoteSyncTokenRequired'), 'error');
       return null;
     }
 
@@ -372,8 +389,9 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
   }
 
   function handleShellAction(action, event) {
+    // The shared widget shell already toggled the panel for the floating
+    // button's own click; the action is only forwarded for completeness.
     if (action === 'toggle') {
-      activateCompassButton();
       return;
     }
 
@@ -384,6 +402,19 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
 
     if (action === 'refresh') {
       runAndRender().catch(() => {});
+      return;
+    }
+
+    if (action === 'toggle-rows') {
+      const viewId = event.target?.closest?.('[data-view-id]')?.dataset?.viewId;
+      if (viewId) {
+        if (expandedViews.has(viewId)) {
+          expandedViews.delete(viewId);
+        } else {
+          expandedViews.add(viewId);
+        }
+        rerenderActiveView();
+      }
       return;
     }
 
@@ -425,7 +456,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     if (action === 'export-archive') {
       exportSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('exportFailed', { error: error?.message || error })}`);
+        showToast(t('exportFailed', { error: error?.message || error }), 'error');
       });
       return;
     }
@@ -433,7 +464,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     if (action === 'import-archive') {
       importSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('importFailed', { error: error?.message || error })}`);
+        showToast(t('importFailed', { error: error?.message || error }), 'error');
       });
       return;
     }
@@ -441,7 +472,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     if (action === 'save-remote-sync') {
       saveRemoteSyncFromForm().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Save remote sync failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
+        showToast(t('remoteSyncFailed', { error: error?.message || error }), 'error');
         setStatus(t('statusFailed'), 'error');
       });
       return;
@@ -450,7 +481,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     if (action === 'sync-remote') {
       syncRemoteArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Remote sync failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
+        showToast(t('remoteSyncFailed', { error: error?.message || error }), 'error');
         setStatus(t('statusFailed'), 'error');
       });
       return;
@@ -468,10 +499,16 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
         buttonAriaOpen: t('buttonAriaOpen'),
         statusIdle: t('statusIdle'),
         actionRefresh: t('actionRefresh'),
-        closeAria: 'Close',
+        closeAria: t('closeAria'),
       },
+      tokenCss: buildTokenCss({
+        rootSelector: `#${ROOT_ID}`,
+        accent: '#10a37f',
+        accentDark: '#19c37d',
+      }),
       positionKey: BUTTON_POSITION_KEY,
       onAction: handleShellAction,
+      onOpen: handlePanelOpen,
       document,
       window,
       storage: localStorage,
@@ -482,6 +519,14 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     const refs = mountedShell.refs();
     statusNode = refs.statusNode;
     contentNode = refs.contentNode;
+
+    toaster = createToaster({ root: refs.root });
+    if (!document.getElementById(`${ROOT_ID}-toast-style`)) {
+      const style = document.createElement('style');
+      style.id = `${ROOT_ID}-toast-style`;
+      style.textContent = toaster.cssText;
+      document.head.append(style);
+    }
   }
 
   async function runCompass() {
@@ -527,7 +572,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
         } catch (archiveError) {
           console.error(`[${SCRIPT_NAME}] Snapshot Archive save failed.`, archiveError);
           if (!options.silentAlert) {
-            alert(`${SCRIPT_NAME} ${t('saveArchiveFailed', { error: archiveError?.message || archiveError })}`);
+            showToast(t('saveArchiveFailed', { error: archiveError?.message || archiveError }), 'error');
           }
         }
       }
@@ -547,7 +592,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
       console.error(`[${SCRIPT_NAME}] Failed.`, error);
       latestError = error;
       if (!options.silentAlert) {
-        alert(`${SCRIPT_NAME} failed: ${error?.message || error}`);
+        showToast(t('runFailed', { error: error?.message || error }), 'error');
       }
       throw error;
     } finally {
@@ -579,7 +624,7 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     );
     latestArchiveSummary = await archiveStore.summarizeArchive();
     refreshCurrentPanel();
-    alert(`${SCRIPT_NAME} ${t('exportDone', { count: exportDocument.snapshotCount })}`);
+    showToast(t('exportDone', { count: exportDocument.snapshotCount }), 'success');
   }
 
   function chooseImportFileText() {
@@ -626,11 +671,11 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     latestImportReport = imported.report;
     scheduleRemoteArchiveSync();
     refreshCurrentPanel();
-    alert(`${SCRIPT_NAME} ${t('importDone', {
+    showToast(t('importDone', {
       added: imported.report.added,
       skipped: imported.report.skipped,
       invalid: imported.report.invalid,
-    })}`);
+    }), 'success');
   }
 
   createUi();
@@ -658,20 +703,20 @@ import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compas
     GM_registerMenuCommand(t('menuRemoteSync'), () => {
       syncRemoteArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Remote sync failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('remoteSyncFailed', { error: error?.message || error })}`);
+        showToast(t('remoteSyncFailed', { error: error?.message || error }), 'error');
         setStatus(t('statusFailed'), 'error');
       });
     });
     GM_registerMenuCommand(t('menuExport'), () => {
       exportSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('exportFailed', { error: error?.message || error })}`);
+        showToast(t('exportFailed', { error: error?.message || error }), 'error');
       });
     });
     GM_registerMenuCommand(t('menuImport'), () => {
       importSnapshotArchive().catch((error) => {
         console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
-        alert(`${SCRIPT_NAME} ${t('importFailed', { error: error?.message || error })}`);
+        showToast(t('importFailed', { error: error?.message || error }), 'error');
       });
     });
   }

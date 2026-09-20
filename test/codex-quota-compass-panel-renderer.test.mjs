@@ -36,17 +36,24 @@ const labels = {
   archiveSnapshotId: 'Snapshot ID',
   archiveStorageBackend: 'Storage',
   archiveWeeklyUsedPercent: 'Weekly used',
+  durationDaysHours: '{days}d {hours}h',
+  durationHoursMinutes: '{hours}h {minutes}m',
+  durationMinutes: '{minutes}m',
   errorTitle: 'Failed',
+  heroResetSubline: 'Resets in {duration}',
   loadingHint: 'Loading hint',
   loadingTitle: 'Loading',
+  metricRemainingUsdExcludingReset: 'Remaining excl',
   metricRemainingUsdIncludingReset: 'Remaining',
+  metricSevenDayUsedPercent: '7-day used',
   resetCountdown: 'Reset',
   sectionArchiveOverview: 'Archive Overview',
   sectionDailyQuery: 'Daily',
   syncBannerGmDetail: 'Using {backend}',
   syncBannerGmTitle: 'Sync enabled',
   tableNoData: 'No data',
-  tablePreviewHint: 'Showing {visible} of {total}; debug {debugKey}',
+  tableShowAll: 'Show all {total} rows',
+  tableShowLess: 'Show less',
   tabArchiveWorkspace: 'Sync',
   tabDetails: 'Details',
   tabStats: 'Stats',
@@ -59,7 +66,7 @@ function t(key, variables = {}) {
 }
 
 function createRenderer() {
-  return createQuotaPanelRenderer({ t, debugKey: '__debugKey' });
+  return createQuotaPanelRenderer({ t });
 }
 
 test('renderer module imports statistics styles before renderer styles', () => {
@@ -94,12 +101,19 @@ test('renderLoading and renderError return escaped panel states', () => {
   assert.match(errorHtml, /data-action="refresh"/);
 });
 
-test('renderResult renders metrics, tabs, archive actions, and active view', () => {
+test('renderResult renders hero, secondary metrics, tabs, archive actions, and active view', () => {
   const renderer = createRenderer();
   const rendered = renderer.renderResult({
-    primaryMetrics: [
-      { id: 'remaining', type: 'credit', labelKey: 'metricRemainingUsdIncludingReset', usd: 4.25 },
-      { id: 'reset', type: 'reset', hours: 26.5 },
+    heroMetric: {
+      id: 'remainingUsdIncludingReset',
+      type: 'credit',
+      labelKey: 'metricRemainingUsdIncludingReset',
+      usd: 4.25,
+      resetHours: 26.5,
+    },
+    secondaryMetrics: [
+      { id: 'remainingUsdExcludingReset', type: 'credit', labelKey: 'metricRemainingUsdExcludingReset', usd: 3.5 },
+      { id: 'sevenDayUsedPercent', type: 'value', labelKey: 'metricSevenDayUsedPercent', value: '40%' },
     ],
     tabs: [
       { id: 'details', labelKey: 'tabDetails' },
@@ -132,6 +146,12 @@ test('renderResult renders metrics, tabs, archive actions, and active view', () 
         kind: 'sections',
         sections: [
           {
+            type: 'metrics',
+            metrics: [
+              { id: 'monthTotal', type: 'credit', label: 'Month total', usd: 10 },
+            ],
+          },
+          {
             type: 'dataView',
             id: 'details-table',
             titleKey: 'sectionDailyQuery',
@@ -162,6 +182,15 @@ test('renderResult renders metrics, tabs, archive actions, and active view', () 
   }, { activePanelView: 'archive' });
 
   assert.equal(rendered.activePanelView, 'archive');
+  // Hero block: large remaining-USD value with the reset countdown sub-line.
+  assert.match(rendered.html, /class="cqc-hero"/);
+  assert.match(rendered.html, /class="cqc-hero-label">Remaining</);
+  assert.match(rendered.html, /class="cqc-hero-value">\$4\.3</);
+  assert.match(rendered.html, /class="cqc-hero-sub">Resets in 1d 2h</);
+  // Secondary metrics render as compact cards.
+  assert.match(rendered.html, /cqc-metrics cqc-metrics-secondary/);
+  assert.match(rendered.html, /\$3\.5/);
+  assert.match(rendered.html, /40%/);
   assert.match(rendered.html, /class="cqc-tab is-active"/);
   assert.match(rendered.html, /Sync enabled/);
   assert.match(rendered.html, /data-action="export-archive"/);
@@ -169,10 +198,92 @@ test('renderResult renders metrics, tabs, archive actions, and active view', () 
   assert.match(rendered.html, /&lt;snapshot-2&gt;/);
 });
 
+test('hero block omits the reset sub-line when no reset window is known', () => {
+  const renderer = createRenderer();
+  const rendered = renderer.renderResult({
+    heroMetric: { id: 'h', type: 'credit', label: 'Remaining', usd: 1 },
+    secondaryMetrics: [],
+    tabs: [{ id: 'details', labelKey: 'tabDetails' }],
+    views: { details: { kind: 'sections', sections: [] } },
+  });
+
+  assert.match(rendered.html, /class="cqc-hero-value">\$1\.0</);
+  assert.doesNotMatch(rendered.html, /cqc-hero-sub/);
+});
+
+test('details metrics section renders the demoted metric grid', () => {
+  const renderer = createRenderer();
+  const rendered = renderer.renderResult({
+    heroMetric: { id: 'h', type: 'credit', label: 'Remaining', usd: 1 },
+    secondaryMetrics: [],
+    tabs: [{ id: 'details', labelKey: 'tabDetails' }],
+    views: {
+      details: {
+        kind: 'sections',
+        sections: [
+          {
+            type: 'metrics',
+            metrics: [
+              { id: 'monthTotal', type: 'credit', label: 'Month total', usd: 10 },
+              { id: 'resetCountdown', type: 'reset', hours: 2.5 },
+            ],
+          },
+        ],
+      },
+    },
+  }, { activePanelView: 'details' });
+
+  assert.match(rendered.html, /Month total/);
+  assert.match(rendered.html, /\$10\.0/);
+  assert.match(rendered.html, /2h 30m/);
+});
+
+test('truncated data views offer an expand toggle instead of the debug hint', () => {
+  const renderer = createRenderer();
+  const rows = Array.from({ length: 15 }, (_, index) => ({ date: `2026-06-${String(index + 1).padStart(2, '0')}` }));
+  const viewModel = {
+    heroMetric: null,
+    secondaryMetrics: [],
+    tabs: [{ id: 'details', labelKey: 'tabDetails' }],
+    views: {
+      details: {
+        kind: 'sections',
+        sections: [
+          {
+            type: 'dataView',
+            id: 'details-long',
+            titleKey: 'sectionDailyQuery',
+            rows,
+            columns: [{ key: 'date', label: 'Date', priority: 'primary' }],
+          },
+        ],
+      },
+    },
+  };
+
+  const collapsed = renderer.renderResult(viewModel, { activePanelView: 'details' });
+  assert.match(collapsed.html, /data-action="toggle-rows"/);
+  assert.match(collapsed.html, /data-view-id="details-long"/);
+  assert.match(collapsed.html, /data-expanded="false"/);
+  assert.match(collapsed.html, /Show all 15 rows/);
+  assert.match(collapsed.html, /2026-06-12/);
+  assert.doesNotMatch(collapsed.html, /2026-06-13/);
+  assert.doesNotMatch(collapsed.html, /window\./);
+
+  const expanded = renderer.renderResult(viewModel, {
+    activePanelView: 'details',
+    expandedViews: new Set(['details-long']),
+  });
+  assert.match(expanded.html, /data-expanded="true"/);
+  assert.match(expanded.html, /Show less/);
+  assert.match(expanded.html, /2026-06-15/);
+});
+
 test('renderResult renders an inline sync form seeded from remote sync status', () => {
   const renderer = createRenderer();
   const rendered = renderer.renderResult({
-    primaryMetrics: [],
+    heroMetric: null,
+    secondaryMetrics: [],
     tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
     remoteSyncStatus: {
       enabled: true,
@@ -218,7 +329,8 @@ test('renderResult formats the last synced time through the injected timestamp f
     },
   });
   const rendered = renderer.renderResult({
-    primaryMetrics: [],
+    heroMetric: null,
+    secondaryMetrics: [],
     tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
     remoteSyncStatus: {
       enabled: true,
@@ -245,7 +357,8 @@ test('renderResult reformats a valid ISO sync time by default and keeps junk ver
       debugKey: '__debugKey',
     });
     return renderer.renderResult({
-      primaryMetrics: [],
+      heroMetric: null,
+    secondaryMetrics: [],
       tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
       remoteSyncStatus: { enabled: true, configured: true, hasToken: true, gistId: '', lastSyncedAt, lastError: '' },
       archive: { isLoaded: false },
@@ -274,7 +387,8 @@ test('renderResult localizes archive captured timestamps through the formatter',
     },
   });
   const rendered = renderer.renderResult({
-    primaryMetrics: [],
+    heroMetric: null,
+    secondaryMetrics: [],
     tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
     archive: {
       isLoaded: true,
@@ -300,7 +414,8 @@ test('renderResult localizes archive captured timestamps through the formatter',
 test('renderResult falls back to first tab when active view is unavailable', () => {
   const renderer = createRenderer();
   const rendered = renderer.renderResult({
-    primaryMetrics: [],
+    heroMetric: null,
+    secondaryMetrics: [],
     tabs: [
       { id: 'details', labelKey: 'tabDetails' },
       { id: 'stats', labelKey: 'tabStats' },

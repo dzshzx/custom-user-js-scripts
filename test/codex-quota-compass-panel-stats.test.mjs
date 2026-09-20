@@ -127,6 +127,28 @@ test('unknown period falls back to day', () => {
   assert.match(html, /is-active"[\s\S]*?data-period="day"/);
 });
 
+test('summary views render a 30-day settled USD bar chart, drills and empty states do not', () => {
+  const day = buildStatsView({ cost: COST, rolling: ROLLING, period: 'day' }, helpers);
+  assert.match(day, /cqc-stats-chart/);
+  assert.match(day, /aria-hidden="true"/);
+  // Three settled days, tallest bar scaled to 100%.
+  assert.equal((day.match(/cqc-stats-chart-bar/g) || []).length, 3);
+  assert.match(day, /style="height: 100%"/);
+
+  const drill = buildStatsView({
+    cost: COST,
+    rolling: ROLLING,
+    period: 'week',
+    drill: { from: '2026-06-08', to: '2026-06-14', label: 'range' },
+  }, helpers);
+  assert.doesNotMatch(drill, /cqc-stats-chart/);
+
+  assert.doesNotMatch(buildStatsView({ cost: null, period: 'day' }, helpers), /cqc-stats-chart/);
+
+  const zeroCost = { ...COST, allDays: [{ date: '2026-06-02', credits: 0, usd: 0 }] };
+  assert.doesNotMatch(buildStatsView({ cost: zeroCost, period: 'day' }, helpers), /cqc-stats-chart/);
+});
+
 test('period controls expose a single perceivable selected state', () => {
   const html = buildStatsView({ cost: COST, rolling: ROLLING, period: 'month' }, helpers);
 
@@ -158,8 +180,12 @@ test('statistics controls and focus treatment survive DOM rendering', { skip: do
   assert.match(styles, /#stats-test-root \.cqc-stats-tab:focus-visible/);
   assert.match(styles, /#stats-test-root \.cqc-stats-row:focus-visible/);
   assert.match(styles, /#stats-test-root \.cqc-stats-back:focus-visible/);
-  assert.match(styles, /--cqc-stats-space-control: 0\.5rem/);
+  assert.match(styles, /#stats-test-root \.cqc-stats-chart \{/);
+  assert.match(styles, /--cqc-stats-space-control: 8px/);
+  assert.match(styles, /--cqc-stats-font-meta: 11px/);
+  assert.match(styles, /--cqc-stats-radius-pill: 999px/);
   assert.match(styles, /--cqc-stats-motion-duration: 160ms/);
+  assert.doesNotMatch(styles, /rem\b/);
   assert.doesNotMatch(styles, /\n\s*\.cqc-stats-/);
 });
 

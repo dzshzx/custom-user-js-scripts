@@ -20,7 +20,7 @@ function safeRows(rows, limit = 12) {
   return Array.isArray(rows) ? rows.slice(0, limit) : [];
 }
 
-function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', formatTimestamp } = {}) {
+function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   if (typeof t !== 'function') {
     throw new Error('Quota panel renderer requires a translator function.');
   }
@@ -94,9 +94,12 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
     `;
   }
 
-  function dataViewHtml(view = {}) {
+  function dataViewHtml(view = {}, state = {}) {
     const rows = Array.isArray(view.rows) ? view.rows : [];
-    const visibleRows = safeRows(rows, view.limit ?? 12);
+    const limit = view.limit ?? 12;
+    const expandable = rows.length > limit;
+    const expanded = expandable && Boolean(state.expandedViews?.has?.(view.id));
+    const visibleRows = expanded ? rows : safeRows(rows, limit);
     const columns = normalizeDataColumns(visibleRows, view.columns);
 
     if (!visibleRows.length || !columns.length) {
@@ -121,8 +124,8 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
         </dl>
       `)
       .join('');
-    const more = rows.length > visibleRows.length
-      ? `<div class="cqc-table-note">${escapeHtml(t('tablePreviewHint', { visible: visibleRows.length, total: rows.length, debugKey }))}</div>`
+    const toggle = expandable
+      ? `<div class="cqc-table-note"><button type="button" class="cqc-table-expand" data-action="toggle-rows" data-view-id="${escapeHtml(view.id || '')}" data-expanded="${expanded ? 'true' : 'false'}">${escapeHtml(expanded ? t('tableShowLess') : t('tableShowAll', { total: rows.length }))}</button></div>`
       : '';
 
     return `
@@ -132,7 +135,7 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
         </div>
         <div class="cqc-compact-list">${compact}</div>
       </div>
-      ${more}
+      ${toggle}
     `;
   }
 
@@ -180,9 +183,9 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
     const remainingHours = Math.floor((totalMinutes % (24 * 60)) / 60);
     const minutes = totalMinutes % 60;
 
-    if (days > 0) return `${days} 天 ${remainingHours} 小时`;
-    if (remainingHours > 0) return `${remainingHours} 小时 ${minutes} 分钟`;
-    return `${minutes} 分钟`;
+    if (days > 0) return t('durationDaysHours', { days, hours: remainingHours });
+    if (remainingHours > 0) return t('durationHoursMinutes', { hours: remainingHours, minutes });
+    return t('durationMinutes', { minutes });
   }
 
   function creditMetricHtml(label, usd) {
@@ -202,6 +205,35 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
       return resetMetricHtml(metric.hours);
     }
     return metricHtml(label, metric?.value);
+  }
+
+  function heroHtml(metric) {
+    if (!metric) return '';
+    const label = metric.labelKey ? t(metric.labelKey) : (metric.label || '-');
+    const value = metric.type === 'credit' ? usdMetricValue(metric.usd) : formatValue(metric.value);
+    const hours = Number(metric.resetHours);
+    const subline = Number.isFinite(hours)
+      ? `<div class="cqc-hero-sub">${escapeHtml(t('heroResetSubline', { duration: formatHoursDuration(hours) }))}</div>`
+      : '';
+    return `
+      <section class="cqc-hero">
+        <div class="cqc-hero-label">${escapeHtml(label)}</div>
+        <div class="cqc-hero-value">${escapeHtml(value)}</div>
+        ${subline}
+      </section>
+    `;
+  }
+
+  function secondaryMetricsHtml(metrics) {
+    const list = Array.isArray(metrics) ? metrics : [];
+    if (!list.length) return '';
+    return `<div class="cqc-metrics cqc-metrics-secondary">${list.map(primaryMetricHtml).join('')}</div>`;
+  }
+
+  function detailMetricsHtml(metrics) {
+    const list = Array.isArray(metrics) ? metrics : [];
+    if (!list.length) return '';
+    return `<div class="cqc-metrics">${list.map(primaryMetricHtml).join('')}</div>`;
   }
 
   function syncBannerHtml(banner) {
@@ -285,7 +317,7 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
     `;
   }
 
-  function archiveSummaryHtml(model = {}) {
+  function archiveSummaryHtml(model = {}, state) {
     if (!model.isLoaded) {
       return `<div class="cqc-empty">${escapeHtml(t('archiveEmpty'))}</div>`;
     }
@@ -319,7 +351,7 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
         truncate: column !== t('archiveSnapshotCount'),
       })),
       limit: 1,
-    });
+    }, state);
 
     const recentSnapshots = safeRows(model.recentSnapshots || [], 5);
     const recent = recentSnapshots.length
@@ -337,7 +369,7 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
           priority: column === t('archiveSnapshotId') ? 'primary' : 'secondary',
           truncate: column === t('archiveSnapshotId') || column === t('archiveCapturedAt'),
         })),
-      })
+      }, state)
       : `<div class="cqc-empty">${escapeHtml(t('archiveNoSnapshot'))}</div>`;
 
     const importReport = model.importReport
@@ -376,10 +408,13 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
     `;
   }
 
-  function sectionFromModelHtml(section, viewModel) {
+  function sectionFromModelHtml(section, viewModel, state) {
     if (!section) return '';
+    if (section.type === 'metrics') {
+      return detailMetricsHtml(section.metrics);
+    }
     if (section.type === 'dataView') {
-      return sectionHtml(t(section.titleKey), dataViewHtml(section));
+      return sectionHtml(t(section.titleKey), dataViewHtml(section, state));
     }
     if (section.type === 'syncBanner') {
       return syncBannerHtml(viewModel?.syncBanner);
@@ -388,7 +423,7 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
       return syncFormHtml(viewModel?.remoteSyncStatus);
     }
     if (section.type === 'archiveSummary') {
-      return sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(viewModel?.archive));
+      return sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(viewModel?.archive, state));
     }
     if (section.type === 'note') {
       return `<div class="cqc-transfer-note">${escapeHtml(t(section.noteKey || 'transferNote'))}</div>`;
@@ -405,8 +440,8 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
     return '';
   }
 
-  function sectionsViewHtml(view, viewModel) {
-    return (view?.sections || []).map((section) => sectionFromModelHtml(section, viewModel)).join('');
+  function sectionsViewHtml(view, viewModel, state) {
+    return (view?.sections || []).map((section) => sectionFromModelHtml(section, viewModel, state)).join('');
   }
 
   function statsViewHtml(model, state = {}) {
@@ -421,12 +456,12 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
     );
   }
 
-  function archiveViewHtml(model) {
+  function archiveViewHtml(model, state) {
     const view = model?.views?.archive;
-    if (view) return sectionsViewHtml(view, model);
+    if (view) return sectionsViewHtml(view, model, state);
     return `
       ${syncBannerHtml(model?.syncBanner)}
-      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(model?.archive))}
+      ${sectionHtml(t('sectionArchiveOverview'), archiveSummaryHtml(model?.archive, state))}
       <div class="cqc-transfer-note">${escapeHtml(t('transferNote'))}</div>
       ${archiveTransferActionsHtml()}
     `;
@@ -435,15 +470,15 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
   function activeViewHtml(viewModel, activePanelView, state = {}) {
     const view = viewModel?.views?.[activePanelView] || viewModel?.views?.details;
     if (view?.kind === 'archiveWorkspace') {
-      return archiveViewHtml(viewModel);
+      return archiveViewHtml(viewModel, state);
     }
     if (view?.kind === 'stats') {
       return statsViewHtml(viewModel, state);
     }
     if (view?.kind === 'sections') {
-      return sectionsViewHtml(view, viewModel);
+      return sectionsViewHtml(view, viewModel, state);
     }
-    return sectionsViewHtml(viewModel?.views?.details, viewModel);
+    return sectionsViewHtml(viewModel?.views?.details, viewModel, state);
   }
 
   function normalizeActivePanelView(viewModel, requestedPanelView) {
@@ -460,9 +495,8 @@ function createQuotaPanelRenderer({ t, debugKey = '__codexQuotaCompassDebug', fo
     return {
       activePanelView,
       html: `
-        <div class="cqc-metrics">
-          ${(viewModel?.primaryMetrics || []).map(primaryMetricHtml).join('')}
-        </div>
+        ${heroHtml(viewModel?.heroMetric)}
+        ${secondaryMetricsHtml(viewModel?.secondaryMetrics)}
         ${panelTabsHtml(viewModel, activePanelView)}
         <div class="cqc-details">
           ${viewBody}

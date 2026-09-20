@@ -1,276 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createDomWindow, createMemoryStorage, domSkip } from './helpers/dom-env.mjs';
 
-import { createFloatingPanelShell } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js';
+import { createFloatingPanelShell, detectHostTheme } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js';
 
-class FakeClassList {
-  constructor() {
-    this.values = new Set();
-  }
+const POSITION_KEY = 'codexQuotaCompassButtonPosition';
+const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  add(...classes) {
-    classes.forEach((className) => this.values.add(className));
-  }
-
-  remove(...classes) {
-    classes.forEach((className) => this.values.delete(className));
-  }
-
-  contains(className) {
-    return this.values.has(className);
-  }
-
-  toggle(className, force) {
-    const shouldAdd = force ?? !this.values.has(className);
-    if (shouldAdd) {
-      this.values.add(className);
-    } else {
-      this.values.delete(className);
-    }
-    return shouldAdd;
-  }
-}
-
-class FakeElement {
-  constructor(tagName) {
-    this.tagName = tagName.toUpperCase();
-    this.children = [];
-    this.parentNode = null;
-    this.style = {};
-    this.dataset = {};
-    this.classList = new FakeClassList();
-    this.listeners = new Map();
-    this.hidden = false;
-    this.textContent = '';
-    this.id = '';
-    this.attributes = new Map();
-  }
-
-  set innerHTML(value) {
-    this._innerHTML = value;
-    if (String(value).includes('cqc-button')) {
-      this.children = createShellChildren(this);
-    }
-  }
-
-  get innerHTML() {
-    return this._innerHTML || '';
-  }
-
-  append(...nodes) {
-    nodes.forEach((node) => {
-      node.parentNode = this;
-      this.children.push(node);
-    });
-  }
-
-  appendChild(node) {
-    this.append(node);
-    return node;
-  }
-
-  remove() {
-    if (!this.parentNode) return;
-    this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
-    this.parentNode = null;
-  }
-
-  addEventListener(type, listener) {
-    if (!this.listeners.has(type)) this.listeners.set(type, []);
-    this.listeners.get(type).push(listener);
-  }
-
-  setAttribute(name, value) {
-    this.attributes.set(name, String(value));
-  }
-
-  getAttribute(name) {
-    return this.attributes.get(name) ?? null;
-  }
-
-  dispatchEvent(event) {
-    event.target ??= this;
-    for (const listener of this.listeners.get(event.type) || []) {
-      listener(event);
-    }
-  }
-
-  querySelector(selector) {
-    return findElement(this.children, (node) => node.matches(selector));
-  }
-
-  closest(selector) {
-    for (let node = this; node; node = node.parentNode) {
-      if (node.matches(selector)) return node;
-    }
-    return null;
-  }
-
-  matches(selector) {
-    if (selector === ':hover') return false;
-    if (selector === '[data-action]') return Boolean(this.dataset.action);
-    const actionMatch = selector.match(/^\[data-action="([^"]+)"\]$/);
-    if (actionMatch) return this.dataset.action === actionMatch[1];
-    if (selector.startsWith('.')) return this.classList.contains(selector.slice(1));
-    return false;
-  }
-
-  contains(node) {
-    if (node === this) return true;
-    return this.children.some((child) => child.contains(node));
-  }
-
-  getBoundingClientRect() {
-    const width = readPixels(this.style.width) || (this.classList.contains('cqc-panel') ? 560 : 168);
-    const height = readPixels(this.style.height) || (this.classList.contains('cqc-panel') ? 240 : 42);
-    const left = readPixels(this.style.left) || this.rect?.left || 40;
-    const top = readPixels(this.style.top) || this.rect?.top || 76;
-    return {
-      left,
-      top,
-      width,
-      height,
-      right: left + width,
-      bottom: top + height,
-    };
-  }
-
-  cloneNode(deep = false) {
-    const clone = new FakeElement(this.tagName);
-    clone.id = this.id;
-    clone.hidden = this.hidden;
-    clone.textContent = this.textContent;
-    clone.attributes = new Map(this.attributes);
-    clone.dataset = { ...this.dataset };
-    clone.style = { ...this.style };
-    clone.classList.add(...this.classList.values);
-    if (deep) {
-      this.children.forEach((child) => clone.append(child.cloneNode(true)));
-    }
-    return clone;
-  }
-
-  blur() {}
-
-  setPointerCapture() {}
-
-  hasPointerCapture() {
-    return false;
-  }
-
-  releasePointerCapture() {}
-}
-
-class FakeDocument {
-  constructor() {
-    this.documentElement = new FakeElement('html');
-    this.head = new FakeElement('head');
-    this.documentElement.append(this.head);
-    this.listeners = new Map();
-  }
-
-  createElement(tagName) {
-    return new FakeElement(tagName);
-  }
-
-  getElementById(id) {
-    return findElement([this.documentElement], (node) => node.id === id);
-  }
-
-  addEventListener(type, listener) {
-    if (!this.listeners.has(type)) this.listeners.set(type, []);
-    this.listeners.get(type).push(listener);
-  }
-}
-
-function createNode(tagName, classNames = [], options = {}) {
-  const node = new FakeElement(tagName);
-  node.classList.add(...classNames);
-  node.dataset = { ...options.dataset };
-  node.textContent = options.textContent || '';
-  node.hidden = Boolean(options.hidden);
-  return node;
-}
-
-function createShellChildren(root) {
-  const button = createNode('button', ['cqc-button'], { dataset: { action: 'toggle' } });
-  button.setAttribute('aria-expanded', 'false');
-  button.append(createNode('span', ['cqc-dot']));
-  const buttonText = createNode('span', ['cqc-button-text']);
-  buttonText.append(createNode('span', ['cqc-button-title'], { textContent: 'Quota' }));
-  buttonText.append(createNode('span', ['cqc-status'], { textContent: 'Idle' }));
-  button.append(buttonText);
-
-  const panel = createNode('div', ['cqc-panel'], { hidden: true });
-  const header = createNode('div', ['cqc-panel-header']);
-  const title = createNode('div', ['cqc-panel-title']);
-  title.append(createNode('span', ['cqc-dot']));
-  title.append(createNode('span', [], { textContent: 'Quota panel' }));
-  const actions = createNode('div', ['cqc-panel-actions']);
-  actions.append(createNode('button', ['cqc-refresh'], { dataset: { action: 'refresh' } }));
-  actions.append(createNode('button', ['cqc-icon-button'], { dataset: { action: 'close' } }));
-  header.append(title, actions);
-  panel.append(header, createNode('div', ['cqc-content']));
-
-  button.parentNode = root;
-  panel.parentNode = root;
-  return [button, panel];
-}
-
-function findElement(nodes, predicate) {
-  for (const node of nodes) {
-    if (predicate(node)) return node;
-    const childMatch = findElement(node.children, predicate);
-    if (childMatch) return childMatch;
-  }
-  return null;
-}
-
-function readPixels(value) {
-  if (typeof value !== 'string') return null;
-  const match = value.match(/^(-?\d+(?:\.\d+)?)px$/);
-  return match ? Number(match[1]) : null;
-}
-
-function createWindowAdapter() {
-  return {
-    innerWidth: 1024,
-    innerHeight: 768,
-    addEventListener() {},
-    requestAnimationFrame(callback) {
-      callback();
-    },
-    setTimeout(callback) {
-      callback();
-      return 1;
-    },
-    clearTimeout() {},
-  };
-}
-
-function createStorage(seed = {}) {
-  const values = new Map(Object.entries(seed));
-  const reads = [];
-  return {
-    reads,
-    getItem(key) {
-      reads.push(key);
-      return values.get(key) ?? null;
-    },
-    setItem(key, value) {
-      values.set(key, value);
-    },
-  };
-}
-
-function createMountedShell(options = {}) {
-  const document = new FakeDocument();
-  const window = createWindowAdapter();
-  const storage = options.storage || createStorage();
+function createMountedShell({ storage, labels, ...options } = {}) {
+  const window = createDomWindow();
   const actions = [];
   const shell = createFloatingPanelShell({
     rootId: 'cqc-test-root',
-    labels: {
+    labels: labels || {
       panelTitle: 'Quota panel',
       buttonTitle: 'Quota',
       buttonAriaOpen: 'Open quota panel',
@@ -278,23 +20,24 @@ function createMountedShell(options = {}) {
       actionRefresh: 'Refresh',
       closeAria: 'Close',
     },
-    positionKey: options.positionKey || 'codexQuotaCompassButtonPosition',
-    document,
+    positionKey: POSITION_KEY,
+    tokenCss: '#cqc-test-root { --wk-accent: #10a37f; }',
+    document: window.document,
     window,
-    storage,
+    storage: storage || createMemoryStorage(),
     onAction: (action) => actions.push(action),
+    ...options,
   });
 
   const mounted = shell.mount();
   assert.ok(mounted);
-  return { shell: mounted, document, storage, actions };
+  return { shell: mounted, window, actions };
 }
 
-test('createFloatingPanelShell mounts shell and preserves injected position key', () => {
-  const storage = createStorage({
-    codexQuotaCompassButtonPosition: JSON.stringify({ left: 10, top: 90, dockSide: 'left' }),
-  });
-  const { shell, storage: mountedStorage } = createMountedShell({ storage });
+test('createFloatingPanelShell mounts shell and preserves injected position key', { skip: domSkip }, async () => {
+  const storage = createMemoryStorage();
+  storage.setItem(POSITION_KEY, JSON.stringify({ left: 10, top: 90, dockSide: 'left' }));
+  const { shell, window } = createMountedShell({ storage });
   const refs = shell.refs();
 
   assert.equal(refs.root.id, 'cqc-test-root');
@@ -302,14 +45,48 @@ test('createFloatingPanelShell mounts shell and preserves injected position key'
   assert.equal(refs.panel.hidden, true);
   assert.equal(refs.button.getAttribute('aria-expanded'), 'false');
   assert.equal(refs.statusNode.textContent, 'Idle');
-  assert.deepEqual(mountedStorage.reads, ['codexQuotaCompassButtonPosition']);
-  assert.equal(refs.button.style.left, '8px');
+
+  await flush();
   assert.equal(refs.button.style.top, '90px');
-  assert.equal(refs.button.dataset.dockSide, 'left');
-  assert.equal(refs.button.classList.contains('is-docked'), true);
+  assert.equal(refs.button.dataset.wkDocked, 'left');
+  assert.equal(refs.button.style.right, 'auto');
+  assert.equal(refs.button.style.left, '8px');
+  shell.destroy();
 });
 
-test('createFloatingPanelShell updates status and delegates shell actions', () => {
+test('createFloatingPanelShell keeps the CQC DOM contract on the shared shell', { skip: domSkip }, () => {
+  const { shell } = createMountedShell();
+  const refs = shell.refs();
+
+  assert.equal(refs.button.dataset.action, 'toggle');
+  assert.ok(refs.button.classList.contains('cqc-button'));
+  assert.ok(refs.button.classList.contains('wk-widget-button'));
+  assert.ok(refs.panel.classList.contains('cqc-panel'));
+  assert.ok(refs.panel.classList.contains('wk-widget-panel'));
+  assert.ok(refs.panel.querySelector('.cqc-panel-header'));
+  assert.ok(refs.panel.querySelector('.cqc-content'));
+  assert.ok(refs.contentNode.classList.contains('cqc-content'));
+  assert.ok(refs.root.querySelector('[data-action="refresh"]'));
+  assert.ok(refs.root.querySelector('[data-action="close"]'));
+  // Lucide icons replace the old CSS close cross and the text-only refresh.
+  assert.ok(refs.root.querySelector('.cqc-refresh .wk-icon-refresh-cw'));
+  assert.ok(refs.root.querySelector('[data-action="close"] .wk-icon-x'));
+  assert.equal(refs.root.querySelector('.cqc-close-icon'), null);
+  shell.destroy();
+});
+
+test('createFloatingPanelShell installs tokens, kit and CQC styles once', { skip: domSkip }, () => {
+  const { shell, window } = createMountedShell();
+  const style = window.document.getElementById('cqc-test-root-shell-style');
+  assert.ok(style);
+  assert.match(style.textContent, /--wk-accent: #10a37f/);
+  assert.match(style.textContent, /\.wk-widget-panel/);
+  assert.match(style.textContent, /#cqc-test-root\[data-wk-theme="dark"\]/);
+  assert.match(style.textContent, /\.cqc-button\[data-wk-docked\]/);
+  shell.destroy();
+});
+
+test('createFloatingPanelShell updates status and delegates shell actions', { skip: domSkip }, () => {
   const { shell, actions } = createMountedShell();
   const refs = shell.refs();
 
@@ -317,40 +94,61 @@ test('createFloatingPanelShell updates status and delegates shell actions', () =
   assert.equal(refs.statusNode.textContent, 'Ready');
   assert.equal(refs.statusNode.dataset.tone, 'success');
 
-  refs.root.dispatchEvent({ type: 'click', target: refs.button });
-  refs.root.dispatchEvent({ type: 'click', target: refs.root.querySelector('[data-action="refresh"]') });
-  refs.root.dispatchEvent({ type: 'click', target: refs.root.querySelector('[data-action="close"]') });
+  refs.root.querySelector('[data-action="refresh"]').click();
+  refs.root.querySelector('[data-action="close"]').click();
 
-  assert.deepEqual(actions, ['toggle', 'refresh', 'close']);
+  assert.deepEqual(actions, ['refresh', 'close']);
+  shell.destroy();
 });
 
-test('createFloatingPanelShell opens, resizes, and closes panel state', () => {
+test('createFloatingPanelShell opens, repositions, and closes panel state', { skip: domSkip }, async () => {
   const { shell } = createMountedShell();
   const refs = shell.refs();
 
   shell.openPanel();
   assert.equal(shell.isOpen(), true);
   assert.equal(refs.panel.hidden, false);
-  assert.equal(refs.panel.classList.contains('is-open'), true);
   assert.equal(refs.button.classList.contains('is-active'), true);
   assert.equal(refs.button.getAttribute('aria-expanded'), 'true');
 
   shell.schedulePanelResize();
+  await flush();
   assert.equal(refs.panel.style.width, '560px');
 
   shell.closePanel();
   assert.equal(shell.isOpen(), false);
-  assert.equal(refs.panel.hidden, true);
   assert.equal(refs.button.classList.contains('is-active'), false);
   assert.equal(refs.button.getAttribute('aria-expanded'), 'false');
+  await flush(260);
+  assert.equal(refs.panel.hidden, true);
+  shell.destroy();
 });
 
-test('createFloatingPanelShell escapes labels in shell markup', () => {
-  const document = new FakeDocument();
-  const window = createWindowAdapter();
-  const storage = createStorage();
-  const shell = createFloatingPanelShell({
-    rootId: 'cqc-escape-test',
+test('Escape closes the panel and focus returns to the floating button', { skip: domSkip }, () => {
+  const { shell, window } = createMountedShell();
+
+  shell.openPanel();
+  assert.equal(window.document.activeElement, shell.refs().panel.querySelector('.cqc-refresh'));
+
+  window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.equal(shell.isOpen(), false);
+  assert.equal(window.document.activeElement, shell.refs().button);
+  shell.destroy();
+});
+
+test('pointerdown outside the shell closes the panel', { skip: domSkip }, () => {
+  const { shell, window } = createMountedShell();
+  shell.openPanel();
+
+  const outside = window.document.createElement('div');
+  window.document.body.append(outside);
+  outside.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+  assert.equal(shell.isOpen(), false);
+  shell.destroy();
+});
+
+test('createFloatingPanelShell escapes labels in shell markup', { skip: domSkip }, () => {
+  const { shell } = createMountedShell({
     labels: {
       panelTitle: 'Panel <title>',
       buttonTitle: 'Quota & Usage',
@@ -359,21 +157,63 @@ test('createFloatingPanelShell escapes labels in shell markup', () => {
       actionRefresh: 'Refresh',
       closeAria: 'Close',
     },
-    positionKey: 'testPos',
-    document,
+  });
+  const refs = shell.refs();
+  // Attribute values are set through setAttribute (verbatim), text through
+  // escaped innerHTML markup; both must round-trip the literal label text.
+  assert.equal(refs.button.getAttribute('aria-label'), 'Open <quota>');
+  assert.equal(refs.root.querySelector('.cqc-button-title').textContent, 'Quota & Usage');
+  assert.equal(refs.statusNode.textContent, 'Idle "now"');
+  assert.equal(refs.root.querySelector('.cqc-panel-title span:last-child').textContent, 'Panel <title>');
+  assert.match(refs.root.innerHTML, /Panel &lt;title&gt;/);
+  shell.destroy();
+});
+
+test('shell theme follows the host documentElement class', { skip: domSkip }, async () => {
+  const window = createDomWindow();
+  window.document.documentElement.className = 'dark';
+  const shell = createFloatingPanelShell({
+    rootId: 'cqc-theme-root',
+    labels: { statusIdle: 'Idle' },
+    document: window.document,
     window,
-    storage,
-    onAction() {},
+    storage: createMemoryStorage(),
   });
   const mounted = shell.mount();
   assert.ok(mounted);
-  const html = mounted.refs().root.innerHTML;
-  assert.match(html, /aria-label="Open &lt;quota&gt;"/);
-  assert.match(html, /Quota &amp; Usage/);
-  assert.match(html, /Idle &quot;now&quot;/);
-  assert.match(html, /Panel &lt;title&gt;/);
-  assert.match(html, /data-action="toggle"/);
-  assert.match(html, /data-action="refresh"/);
-  assert.match(html, /data-action="close"/);
-  assert.match(html, /class="cqc-content"/);
+  const root = window.document.getElementById('cqc-theme-root');
+  assert.equal(root.dataset.wkTheme, 'dark');
+
+  window.document.documentElement.className = 'light';
+  await flush();
+  assert.equal(root.dataset.wkTheme, 'light');
+  shell.destroy();
+});
+
+test('detectHostTheme reads chatgpt.com dark and light host signals', { skip: domSkip }, () => {
+  const window = createDomWindow();
+  const host = window.document.documentElement;
+
+  host.className = 'dark';
+  assert.equal(detectHostTheme(window.document), 'dark');
+
+  host.className = '';
+  host.style.colorScheme = 'dark';
+  assert.equal(detectHostTheme(window.document), 'dark');
+
+  host.style.colorScheme = 'light';
+  assert.equal(detectHostTheme(window.document), 'light');
+
+  host.style.colorScheme = '';
+  assert.equal(detectHostTheme(window.document), null);
+});
+
+test('destroy removes the root and releases listeners', { skip: domSkip }, () => {
+  const { shell, window } = createMountedShell();
+  shell.openPanel();
+  shell.destroy();
+
+  assert.equal(window.document.getElementById('cqc-test-root'), null);
+  window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.equal(shell.isOpen(), false);
 });

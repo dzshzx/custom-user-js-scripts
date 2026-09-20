@@ -63,14 +63,35 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
     return `<div class="cqc-stats-live cqc-table-note">${escapeHtml(t('statsRollingLive'))}: $${escapeHtml(usdValue)} · ${escapeHtml(String(creditsValue))} Credits</div>`;
   }
 
+  // Last-30-days settled USD as pure CSS bars; the daily table below is the
+  // text equivalent, so the chart itself is hidden from assistive technology.
+  function chartHtml() {
+    const days = (cost.allDays || []).slice(-30);
+    if (!days.length) return '';
+    const max = Math.max(...days.map((row) => Number(row.usd) || 0));
+    if (!(max > 0)) return '';
+    const bars = days.map((row) => {
+      const percent = Math.max(2, Math.round(((Number(row.usd) || 0) / max) * 100));
+      return `<span class="cqc-stats-chart-bar" style="height: ${percent}%"></span>`;
+    }).join('');
+    return `<div class="cqc-stats-chart" aria-hidden="true">${bars}</div>`;
+  }
+
   function dailyTableHtml(rows) {
     const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
-      日期桶: row.date,
-      Credits: round(row.credits),
-      折算USD: usd(row.usd),
+      date: row.date,
+      credits: round(row.credits),
+      usd: usd(row.usd),
     }));
     return mapped.length
-      ? tableHtml(mapped, { columns: ['日期桶', 'Credits', '折算USD'], limit: mapped.length })
+      ? tableHtml(mapped, {
+        columns: [
+          { key: 'date', labelKey: 'statsColumnDate', priority: 'primary' },
+          { key: 'credits', labelKey: 'statsColumnCredits' },
+          { key: 'usd', labelKey: 'statsColumnUsd' },
+        ],
+        limit: mapped.length,
+      })
       : emptyHtml();
   }
 
@@ -177,7 +198,7 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
   else if (activePeriod === 'all') body = allBody();
   else body = dayBody();
 
-  return periodTabsHtml() + rollingLiveHtml() + body;
+  return periodTabsHtml() + chartHtml() + rollingLiveHtml() + body;
 }
 
 export {

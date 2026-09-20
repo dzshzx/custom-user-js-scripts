@@ -217,11 +217,48 @@ function createQuotaPanelRendererStyles(rootId = 'codex-quota-compass-root') {
         margin: 0 0 12px;
       }
 
+      .cqc-hero,
       .cqc-metric,
       .cqc-section {
         border: 1px solid var(--cqc-border);
         border-radius: 10px;
         background: var(--cqc-surface);
+      }
+
+      .cqc-hero {
+        margin: 0 0 10px;
+        padding: 14px 16px;
+      }
+
+      .cqc-hero-label {
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .cqc-hero-value {
+        margin: 6px 0 2px;
+        font-size: var(--wk-fs-hero, 28px);
+        font-weight: 650;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+
+      .cqc-hero-sub {
+        margin-top: 4px;
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .cqc-metrics-secondary .cqc-metric {
+        padding: 8px 12px;
+      }
+
+      .cqc-metrics-secondary .cqc-metric-value {
+        margin: 3px 0 1px;
+        font-size: 15px;
       }
 
       .cqc-metric {
@@ -381,6 +418,20 @@ function createQuotaPanelRendererStyles(rootId = 'codex-quota-compass-root') {
         color: var(--cqc-text-muted);
         font-size: 12px;
         padding: 10px 12px;
+      }
+
+      .cqc-table-expand {
+        border: 0;
+        background: transparent;
+        color: var(--cqc-primary-strong);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 0;
+      }
+
+      .cqc-table-expand:hover {
+        text-decoration: underline;
       }
 
       .cqc-loading,

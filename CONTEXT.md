@@ -61,6 +61,12 @@ A standalone page fully rendered by a script at a route the host site does not
 serve (for example `/recommend-archive`), mirroring the host's own look.
 _Avoid_: overlay, modal, iframe app
 
+**Widget Kit**:
+The shared ES modules in `src/userscripts/shared/` (design tokens, Lucide
+icons, toast, widget shell) that bundled scripts import as
+`../shared/*.lib.js`; the build skips the directory because it has no entry.
+_Avoid_: common ui, design system package
+
 ### Web Page Assistant
 
 **Refresh Rule**:

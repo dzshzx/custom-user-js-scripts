@@ -57,9 +57,10 @@ out where script-owned pages differ.
   primary actions.
 - Use a separate low-saturation danger color for destructive actions.
 - New UI color values should prefer `oklch()` when practical.
-- Existing Codex Quota Compass styles currently use `--cqc-primary: #10a37f`
-  and related CSS variables; treat those as the current token surface until a
-  dedicated color-token migration is planned.
+- Codex Quota Compass bridges its `--cqc-*` variables onto the shared widget
+  kit tokens (`--wk-*` from `src/userscripts/shared/`, themed via
+  `[data-wk-theme]`); extend the kit tokens or the per-theme overrides in its
+  shell styles instead of adding new one-off colors.
 - Web Page Assistant already uses OKLCH-based `--part-*` tokens. Extend those
   tokens instead of creating unrelated one-off colors.
 
@@ -91,11 +92,30 @@ out where script-owned pages differ.
 - Buttons and form controls may wrap when needed, but labels must not collide
   with adjacent content.
 
+## Shared Widget Kit
+
+- Floating companion UI is built on the shared kit in `src/userscripts/shared/`
+  instead of per-script shell code: `shared-widget-shell.lib.js` owns the
+  draggable/dockable floating button, panel positioning, position persistence,
+  Esc close, focus hand-off, and outside-click close.
+- Color, type scale, radius, shadow, and focus-ring tokens come from
+  `shared-tokens.lib.js` (`--wk-*`); each script passes only its accent color.
+  Dark mode resolves through `resolveTheme`/`applyTheme` (host detection first,
+  `prefers-color-scheme` fallback) and applies via `[data-wk-theme]` on the
+  script root, not per-script media queries.
+- Icons come from `shared-icons.lib.js` (vendored Lucide SVG paths).
+- In-page feedback goes through `shared-toast.lib.js`.
+- Extend the kit when a script needs a capability it lacks; keep per-script
+  styles limited to domain presentation.
+
 ## Codex Quota Compass UI
 
 ### Shell
 
 - The floating button is draggable and can dock near the screen edge.
+- The shell is a thin adapter over the shared widget kit
+  (`src/userscripts/shared/`); drag/dock, position persistence, Esc close, and
+  focus hand-off come from the kit.
 - The shell owns the floating button, panel header, refresh action, close
   action, status text, and content container.
 - The content container is a CSS query container; renderer layout may use
@@ -189,3 +209,6 @@ out where script-owned pages differ.
 - No wide table forced into a narrow floating panel when compact rendering is
   available.
 - No global CSS selectors that can style the host page unintentionally.
+- No native `alert()` / `confirm()` for in-page feedback; use the kit toast.
+- No emoji, icon fonts, or CSS-drawn icons in script UI; use the kit's
+  vendored Lucide set.

@@ -70,9 +70,9 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   assert.deepEqual(model.tabs.map((tab) => tab.id), ['details', 'stats', 'archive']);
   assert.equal(model.views.stats.kind, 'stats');
   assert.equal(model.tabs.some((tab) => tab.id === 'transfer'), false);
-  assert.equal(model.views.details.sections[2].id, 'details-windows');
+  assert.equal(model.views.details.sections[3].id, 'details-windows');
   assert.equal(
-    model.views.details.sections[2].columns.find((column) => column.key === '本轮开始_本地').truncate,
+    model.views.details.sections[3].columns.find((column) => column.key === '本轮开始_本地').truncate,
     true,
   );
   assert.deepEqual(model.views.archive.actionIds, [
@@ -81,18 +81,32 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   ]);
   assert.equal(model.views.archive.sections[0].type, 'syncForm');
   assert.equal(model.remoteSyncStatus.gistId, 'gist-1');
-  assert.deepEqual(model.primaryMetrics.map((metric) => metric.id), [
-    'remainingUsdIncludingReset',
-    'remainingUsdExcludingReset',
+  assert.equal(model.views.details.sections[0].type, 'metrics');
+  assert.deepEqual(model.views.details.sections[0].metrics.map((metric) => metric.id), [
     'weeklyTotalIncludingReset',
     'weeklyTotalExcludingReset',
-    'sevenDayUsedPercent',
     'sinceResetTotal',
     'monthTotal',
-    'resetCountdown',
   ]);
-  assert.equal(model.primaryMetrics.find((metric) => metric.id === 'resetCountdown').hours, 12);
-  for (const metric of model.primaryMetrics) {
+  assert.deepEqual(model.heroMetric, {
+    id: 'remainingUsdIncludingReset',
+    type: 'credit',
+    labelKey: 'metricRemainingUsdIncludingReset',
+    label: '剩余 USD · 含重置日',
+    usd: undefined,
+    resetHours: 12,
+  });
+  assert.deepEqual(model.secondaryMetrics.map((metric) => metric.id), [
+    'remainingUsdExcludingReset',
+    'sevenDayUsedPercent',
+  ]);
+  assert.deepEqual(model.detailMetrics.map((metric) => metric.id), [
+    'weeklyTotalIncludingReset',
+    'weeklyTotalExcludingReset',
+    'sinceResetTotal',
+    'monthTotal',
+  ]);
+  for (const metric of [model.heroMetric, ...model.secondaryMetrics, ...model.detailMetrics]) {
     assert.equal(Object.hasOwn(metric, 'credits'), false, `${metric.id} exposes secondary credits`);
     assert.equal(Object.hasOwn(metric, 'hint'), false, `${metric.id} exposes secondary hint`);
     assert.equal(Object.hasOwn(metric, 'hintKey'), false, `${metric.id} exposes secondary hint key`);
@@ -272,9 +286,10 @@ test('createQuotaPanelViewModel renders model summary and reset credit views whe
   const sectionIds = model.views.details.sections.map((section) => section.id);
   const modelSection = model.views.details.sections.find((section) => section.id === 'details-model-summary');
   const resetSection = model.views.details.sections.find((section) => section.id === 'details-reset-credits');
-  const resetMetric = model.primaryMetrics.find((metric) => metric.id === 'resetCreditsAvailable');
+  const resetMetric = model.detailMetrics.find((metric) => metric.id === 'resetCreditsAvailable');
 
-  assert.equal(sectionIds[2], 'details-windows');
+  assert.equal(sectionIds[0], undefined);
+  assert.equal(sectionIds[3], 'details-windows');
   assert.equal(modelSection.titleKey, 'sectionModelSummary');
   assert.equal(modelSection.rows[0].模型, 'gpt-5.6-sol');
   assert.equal(resetSection.titleKey, 'sectionResetCredits');
@@ -297,5 +312,5 @@ test('createQuotaPanelViewModel omits the reset credit metric for legacy results
 
   const model = createQuotaPanelViewModel({ result });
 
-  assert.equal(model.primaryMetrics.some((metric) => metric.id === 'resetCreditsAvailable'), false);
+  assert.equal(model.detailMetrics.some((metric) => metric.id === 'resetCreditsAvailable'), false);
 });

@@ -8,16 +8,34 @@ function createQuotaPanelStatsStyles(rootId) {
 
   return `
       ${scope} {
-        --cqc-stats-space-tight: 0.25rem;
-        --cqc-stats-space-control: 0.5rem;
-        --cqc-stats-space-section: 0.75rem;
-        --cqc-stats-radius-control: 0.5rem;
-        --cqc-stats-radius-section: 0.625rem;
-        --cqc-stats-radius-pill: 100rem;
-        --cqc-stats-font-control: 0.75rem;
-        --cqc-stats-font-meta: 0.6875rem;
-        --cqc-stats-font-value: 0.8125rem;
+        --cqc-stats-space-tight: 4px;
+        --cqc-stats-space-control: 8px;
+        --cqc-stats-space-section: 12px;
+        --cqc-stats-radius-control: 8px;
+        --cqc-stats-radius-section: 10px;
+        --cqc-stats-radius-pill: 999px;
+        --cqc-stats-font-control: 12px;
+        --cqc-stats-font-meta: 11px;
+        --cqc-stats-font-value: 13px;
         --cqc-stats-motion-duration: 160ms;
+      }
+
+      ${scope} .cqc-stats-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 48px;
+        margin: 0 0 var(--cqc-stats-space-section);
+        padding: 6px 8px;
+        border-radius: var(--cqc-stats-radius-control);
+        background: var(--cqc-surface-sunken);
+      }
+
+      ${scope} .cqc-stats-chart-bar {
+        flex: 1 1 0;
+        min-width: 2px;
+        border-radius: 2px 2px 1px 1px;
+        background: var(--cqc-primary);
       }
 
       ${scope} .cqc-stats-tabs {

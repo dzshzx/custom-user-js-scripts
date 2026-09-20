@@ -43,3 +43,26 @@ test('resolveLocale preserves the current English-prefix rule', () => {
   assert.equal(resolveLocale({ locale: 'en-GB' }), 'en');
   assert.equal(resolveLocale({ locale: 'fr-FR' }), 'zh-CN');
 });
+
+test('zh-CN and en message tables carry identical key sets', () => {
+  const zhKeys = Object.keys(messages['zh-CN']).sort();
+  const enKeys = Object.keys(messages.en).sort();
+  assert.deepEqual(enKeys, zhKeys);
+});
+
+test('new UI strings are translated in both locales', () => {
+  const zh = createQuotaCompassTranslator({ locale: 'zh-CN' });
+  const en = createQuotaCompassTranslator({ locale: 'en' });
+
+  assert.equal(zh.t('closeAria'), '关闭');
+  assert.equal(en.t('closeAria'), 'Close');
+  assert.equal(zh.t('durationDaysHours', { days: 2, hours: 3 }), '2 天 3 小时');
+  assert.equal(en.t('durationDaysHours', { days: 2, hours: 3 }), '2d 3h');
+  assert.equal(zh.t('tableShowAll', { total: 30 }), '显示全部 30 条');
+  assert.equal(en.t('tableShowAll', { total: 30 }), 'Show all 30 rows');
+  assert.equal(zh.t('statsColumnDate'), '日期');
+  assert.equal(en.t('statsColumnDate'), 'Date');
+  assert.match(zh.t('statsEmpty'), /自动累计/);
+  assert.match(en.t('statsEmpty'), /after each run/);
+  assert.match(zh.t('tableNoData'), /刷新/);
+});

@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.2
+// @version      0.5.3
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -47,6 +47,7 @@
       statusCached: "已缓存",
       actionRefresh: "刷新",
       actionRetry: "重试",
+      closeAria: "关闭",
       tabStats: "统计",
       tabDetails: "详情",
       tabArchiveWorkspace: "同步",
@@ -61,7 +62,11 @@
       statsAllTotal: "累计已结算",
       statsCoverDays: "已结算 {days} 天",
       statsRollingLive: "近30天滚动（实时）",
-      statsEmpty: "暂无已结算数据",
+      statsEmpty: "还没有已结算数据 · 每次计算后自动累计",
+      statsColumnDate: "日期",
+      statsColumnCredits: "Credits",
+      statsColumnUsd: "折算USD",
+      sectionKeyMetrics: "关键指标",
       sectionWeeklyEstimate: "周额度估算",
       sectionRangeSummary: "区间汇总",
       sectionWindows: "限制窗口",
@@ -75,6 +80,34 @@
       columnIncludedResetUsd: "含重置日已用USD",
       columnIncludedResetTotalUsd: "含重置日周总USD",
       columnIncludedResetRemainingUsd: "含重置日剩余USD",
+      columnUsedPercent: "已用百分比",
+      columnRemainingRatio: "剩余比例小数",
+      columnIncludedResetUsedCredits: "含重置日已用 Credits",
+      columnIncludedResetRemainingCredits: "含重置日剩余 Credits",
+      columnExcludedResetUsedUsd: "排除重置日已用 USD",
+      columnExcludedResetRemainingUsd: "排除重置日剩余 USD",
+      columnExcludedResetUsedCredits: "排除重置日已用 Credits",
+      columnExcludedResetRemainingCredits: "排除重置日剩余 Credits",
+      columnErrorNote: "误差说明",
+      columnRange: "范围",
+      columnTotalUsd: "累计折算 USD",
+      columnTotalCredits: "累计 Credits",
+      columnBucketCount: "返回日期桶数",
+      columnTotalTokens: "累计 Token",
+      columnTotalThreads: "累计线程数",
+      columnTotalTurns: "累计轮数",
+      columnName: "名称",
+      columnWindowDays: "窗口天数",
+      columnWindowStartLocal: "本轮开始",
+      columnNextResetLocal: "下次重置",
+      columnHoursToReset: "距离重置小时",
+      columnModel: "模型",
+      columnSpeed: "速度",
+      columnSharePercent: "占比百分比",
+      columnCredits: "Credits",
+      columnTitle: "标题",
+      columnStatus: "状态",
+      columnExpiresLocal: "过期时间",
       metricRemainingUsdIncludingReset: "剩余 USD · 含重置日",
       metricRemainingUsdExcludingReset: "剩余 USD · 排除重置日",
       metricWeeklyTotalIncludingReset: "周总额度 · 含重置日",
@@ -99,8 +132,9 @@
       loadingHint: "会请求 usage 和 daily analytics 接口，结果不会包含 token 或 cookie。",
       errorTitle: "计算失败",
       errorUnknown: "未知错误",
-      archiveEmpty: "记录尚未加载。",
-      archiveNoSnapshot: "还没有保存过用量记录。",
+      runFailed: "计算失败：{error}",
+      archiveEmpty: "记录尚未加载 · 打开或刷新统计后自动读取。",
+      archiveNoSnapshot: "还没有保存过用量记录 · 每次计算后自动保存一条。",
       archiveLatestImport: "上次导入：新增 {added} 条，跳过 {skipped} 条，无效 {invalid} 条。",
       remoteSyncNowAction: "立即同步",
       remoteSyncFormTitle: "GitHub Gist 同步",
@@ -127,9 +161,14 @@
       archiveMonthlyCredits: "本月用量",
       archiveWeeklyUsedPercent: "7 天已用",
       archiveStorageBackend: "存储位置",
-      tableNoData: "暂无数据",
-      tablePreviewHint: "仅显示前 {visible} 条，共 {total} 条。需要完整调试输出时，先设置 window.{debugKey} = true 后刷新。",
+      tableNoData: "暂无数据 · 点击面板头部的「刷新」重新计算",
+      tableShowAll: "显示全部 {total} 条",
+      tableShowLess: "收起",
       resetCountdown: "距离重置",
+      heroResetSubline: "距离重置 {duration}",
+      durationDaysHours: "{days} 天 {hours} 小时",
+      durationHoursMinutes: "{hours} 小时 {minutes} 分钟",
+      durationMinutes: "{minutes} 分钟",
       menuRun: "运行 Codex Quota Compass",
       menuRemoteConfigure: "配置 Gist 同步",
       menuRemoteSync: "立即 Gist 同步",
@@ -159,6 +198,7 @@
       statusCached: "Cached",
       actionRefresh: "Refresh",
       actionRetry: "Retry",
+      closeAria: "Close",
       tabStats: "Stats",
       tabDetails: "Details",
       tabArchiveWorkspace: "Sync",
@@ -173,7 +213,11 @@
       statsAllTotal: "Settled total",
       statsCoverDays: "{days} settled days",
       statsRollingLive: "Last 30d rolling (live)",
-      statsEmpty: "No settled data yet",
+      statsEmpty: "No settled data yet · it accumulates automatically after each run",
+      statsColumnDate: "Date",
+      statsColumnCredits: "Credits",
+      statsColumnUsd: "USD",
+      sectionKeyMetrics: "Key metrics",
       sectionWeeklyEstimate: "Weekly Estimate",
       sectionRangeSummary: "Range Summary",
       sectionWindows: "Limit Windows",
@@ -187,6 +231,34 @@
       columnIncludedResetUsd: "Used USD incl reset day",
       columnIncludedResetTotalUsd: "Weekly USD incl reset day",
       columnIncludedResetRemainingUsd: "Remaining USD incl reset day",
+      columnUsedPercent: "Used %",
+      columnRemainingRatio: "Remaining ratio",
+      columnIncludedResetUsedCredits: "Used credits · incl reset day",
+      columnIncludedResetRemainingCredits: "Remaining credits · incl reset day",
+      columnExcludedResetUsedUsd: "Used USD · excl reset day",
+      columnExcludedResetRemainingUsd: "Remaining USD · excl reset day",
+      columnExcludedResetUsedCredits: "Used credits · excl reset day",
+      columnExcludedResetRemainingCredits: "Remaining credits · excl reset day",
+      columnErrorNote: "Estimate notes",
+      columnRange: "Range",
+      columnTotalUsd: "Total USD",
+      columnTotalCredits: "Total credits",
+      columnBucketCount: "Buckets returned",
+      columnTotalTokens: "Total tokens",
+      columnTotalThreads: "Total threads",
+      columnTotalTurns: "Total turns",
+      columnName: "Name",
+      columnWindowDays: "Window days",
+      columnWindowStartLocal: "Window start",
+      columnNextResetLocal: "Next reset",
+      columnHoursToReset: "Hours to reset",
+      columnModel: "Model",
+      columnSpeed: "Speed",
+      columnSharePercent: "Share %",
+      columnCredits: "Credits",
+      columnTitle: "Title",
+      columnStatus: "Status",
+      columnExpiresLocal: "Expires",
       metricRemainingUsdIncludingReset: "Remaining USD · incl reset day",
       metricRemainingUsdExcludingReset: "Remaining USD · excl reset day",
       metricWeeklyTotalIncludingReset: "Weekly total · incl reset day",
@@ -211,8 +283,9 @@
       loadingHint: "This requests usage and daily analytics endpoints, and does not expose token or cookie.",
       errorTitle: "Calculation Failed",
       errorUnknown: "Unknown error",
-      archiveEmpty: "Archive not loaded yet.",
-      archiveNoSnapshot: "No snapshot has been recorded yet.",
+      runFailed: "Calculation failed: {error}",
+      archiveEmpty: "Archive not loaded yet · it loads on the next refresh.",
+      archiveNoSnapshot: "No snapshots yet · one is saved automatically after each run.",
       archiveLatestImport: "Latest import: {added} added, {skipped} skipped, {invalid} invalid.",
       remoteSyncNowAction: "Sync Now",
       remoteSyncFormTitle: "GitHub Gist Sync",
@@ -239,9 +312,14 @@
       archiveMonthlyCredits: "Monthly Credits",
       archiveWeeklyUsedPercent: "7-day Used Percent",
       archiveStorageBackend: "Storage Backend",
-      tableNoData: "No data",
-      tablePreviewHint: "Showing first {visible} of {total} rows. For full debug output, set window.{debugKey} = true and refresh.",
+      tableNoData: "No data · hit Refresh in the panel header to recalculate",
+      tableShowAll: "Show all {total} rows",
+      tableShowLess: "Show less",
       resetCountdown: "Reset in",
+      heroResetSubline: "Resets in {duration}",
+      durationDaysHours: "{days}d {hours}h",
+      durationHoursMinutes: "{hours}h {minutes}m",
+      durationMinutes: "{minutes}m",
       menuRun: "Run Codex Quota Compass",
       menuRemoteConfigure: "Configure Gist Sync",
       menuRemoteSync: "Sync Gist Archive Now",
@@ -973,50 +1051,52 @@
     rolling,
     windows,
     modelSummaries,
-    resetCredits
+    resetCredits,
+    detailMetrics
   }) {
     return [
+      { type: "metrics", titleKey: "sectionKeyMetrics", metrics: detailMetrics },
       dataView("details-weekly-estimate", "sectionWeeklyEstimate", [weekly], [
-        dataColumn("已用百分比", { priority: "primary" }),
-        dataColumn("剩余比例小数", { priority: "secondary" }),
+        dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
+        dataColumn("剩余比例小数", { labelKey: "columnRemainingRatio", priority: "secondary" }),
         dataColumn("包含重置日_已用折算USD", { labelKey: "columnIncludedResetUsd", priority: "primary" }),
         dataColumn("反推周总USD_包含重置日", { labelKey: "columnIncludedResetTotalUsd", priority: "primary" }),
         dataColumn("剩余USD_包含重置日口径", { labelKey: "columnIncludedResetRemainingUsd", priority: "primary" }),
-        dataColumn("包含重置日_已用Credits", { priority: "secondary" }),
-        dataColumn("剩余Credits_包含重置日口径", { priority: "secondary" }),
-        dataColumn("排除重置日_已用折算USD", { priority: "secondary" }),
-        dataColumn("剩余USD_排除重置日口径", { priority: "secondary" }),
-        dataColumn("排除重置日_已用Credits", { priority: "debug" }),
-        dataColumn("剩余Credits_排除重置日口径", { priority: "debug" }),
-        dataColumn("误差说明", { priority: "debug", wrap: true })
+        dataColumn("包含重置日_已用Credits", { labelKey: "columnIncludedResetUsedCredits", priority: "secondary" }),
+        dataColumn("剩余Credits_包含重置日口径", { labelKey: "columnIncludedResetRemainingCredits", priority: "secondary" }),
+        dataColumn("排除重置日_已用折算USD", { labelKey: "columnExcludedResetUsedUsd", priority: "secondary" }),
+        dataColumn("剩余USD_排除重置日口径", { labelKey: "columnExcludedResetRemainingUsd", priority: "secondary" }),
+        dataColumn("排除重置日_已用Credits", { labelKey: "columnExcludedResetUsedCredits", priority: "debug" }),
+        dataColumn("剩余Credits_排除重置日口径", { labelKey: "columnExcludedResetRemainingCredits", priority: "debug" }),
+        dataColumn("误差说明", { labelKey: "columnErrorNote", priority: "debug", wrap: true })
       ]),
       dataView("details-range-summary", "sectionRangeSummary", [sinceReset, month, rolling], [
-        dataColumn("范围", { priority: "primary", wrap: true }),
-        dataColumn("累计折算USD", { priority: "primary" }),
-        dataColumn("累计Credits", { priority: "primary" }),
-        dataColumn("返回日期桶数", { priority: "secondary" }),
-        dataColumn("累计Token", { priority: "debug" }),
-        dataColumn("累计线程数", { priority: "debug" }),
-        dataColumn("累计轮数", { priority: "debug" })
+        dataColumn("范围", { labelKey: "columnRange", priority: "primary", wrap: true }),
+        dataColumn("累计折算USD", { labelKey: "columnTotalUsd", priority: "primary" }),
+        dataColumn("累计Credits", { labelKey: "columnTotalCredits", priority: "primary" }),
+        dataColumn("返回日期桶数", { labelKey: "columnBucketCount", priority: "secondary" }),
+        dataColumn("累计Token", { labelKey: "columnTotalTokens", priority: "debug" }),
+        dataColumn("累计线程数", { labelKey: "columnTotalThreads", priority: "debug" }),
+        dataColumn("累计轮数", { labelKey: "columnTotalTurns", priority: "debug" })
       ]),
       dataView("details-windows", "sectionWindows", windows, [
-        dataColumn("名称", { priority: "primary", wrap: true }),
-        dataColumn("已用百分比", { priority: "primary" }),
-        dataColumn("窗口天数", { priority: "secondary" }),
-        dataColumn("本轮开始_本地", { priority: "secondary", truncate: true }),
-        dataColumn("下次重置_本地", { priority: "secondary", truncate: true }),
-        dataColumn("距离重置小时", { priority: "primary" })
+        dataColumn("名称", { labelKey: "columnName", priority: "primary", wrap: true }),
+        dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
+        dataColumn("窗口天数", { labelKey: "columnWindowDays", priority: "secondary" }),
+        dataColumn("本轮开始_本地", { labelKey: "columnWindowStartLocal", priority: "secondary", truncate: true }),
+        dataColumn("下次重置_本地", { labelKey: "columnNextResetLocal", priority: "secondary", truncate: true }),
+        dataColumn("距离重置小时", { labelKey: "columnHoursToReset", priority: "primary" })
       ]),
       dataView("details-model-summary", "sectionModelSummary", modelSummaries, [
-        dataColumn("模型", { priority: "primary", wrap: true }),
-        dataColumn("速度", { priority: "secondary" }),
-        dataColumn("占比百分比", { priority: "primary" }),
-        dataColumn("Credits", { priority: "secondary" })
+        dataColumn("模型", { labelKey: "columnModel", priority: "primary", wrap: true }),
+        dataColumn("速度", { labelKey: "columnSpeed", priority: "secondary" }),
+        dataColumn("占比百分比", { labelKey: "columnSharePercent", priority: "primary" }),
+        dataColumn("Credits", { labelKey: "columnCredits", priority: "secondary" })
       ]),
       dataView("details-reset-credits", "sectionResetCredits", resetCredits?.明细, [
-        dataColumn("标题", { priority: "primary", wrap: true }),
-        dataColumn("状态", { priority: "secondary" }),
-        dataColumn("过期时间_本地", { priority: "primary", truncate: true })
+        dataColumn("标题", { labelKey: "columnTitle", priority: "primary", wrap: true }),
+        dataColumn("状态", { labelKey: "columnStatus", priority: "secondary" }),
+        dataColumn("过期时间_本地", { labelKey: "columnExpiresLocal", priority: "primary", truncate: true })
       ], { emptyKey: "resetCreditsEmpty" })
     ];
   }
@@ -1028,7 +1108,8 @@
     windows,
     modelSummaries,
     resetCredits,
-    transfer
+    transfer,
+    detailMetrics
   }) {
     const tabs = [
       { id: "details", labelKey: "tabDetails" },
@@ -1054,7 +1135,8 @@
             rolling,
             windows,
             modelSummaries,
-            resetCredits
+            resetCredits,
+            detailMetrics
           })
         },
         archive: {
@@ -1116,22 +1198,18 @@
       allDays
     };
   }
-  function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow, resetCredits }) {
-    const resetCreditMetrics = resetCredits ? [{
-      id: "resetCreditsAvailable",
-      type: "value",
-      labelKey: "metricResetCredits",
-      label: "重置券 可用/适用",
-      value: `${resetCredits.可用张数 ?? "-"} / ${resetCredits.当前适用张数 ?? "-"}`
-    }] : [];
+  function createHeroMetric({ weekly, mainSevenDayWindow }) {
+    return {
+      id: "remainingUsdIncludingReset",
+      type: "credit",
+      labelKey: "metricRemainingUsdIncludingReset",
+      label: "剩余 USD · 含重置日",
+      usd: weekly.剩余USD_包含重置日口径,
+      resetHours: mainSevenDayWindow?.距离重置小时
+    };
+  }
+  function createSecondaryMetrics({ weekly }) {
     return [
-      {
-        id: "remainingUsdIncludingReset",
-        type: "credit",
-        labelKey: "metricRemainingUsdIncludingReset",
-        label: "剩余 USD · 含重置日",
-        usd: weekly.剩余USD_包含重置日口径
-      },
       {
         id: "remainingUsdExcludingReset",
         type: "credit",
@@ -1139,6 +1217,17 @@
         label: "剩余 USD · 排除重置日",
         usd: weekly.剩余USD_排除重置日口径
       },
+      {
+        id: "sevenDayUsedPercent",
+        type: "value",
+        labelKey: "metricSevenDayUsedPercent",
+        label: "7 天已用",
+        value: weekly.已用百分比 !== void 0 ? `${weekly.已用百分比}%` : "-"
+      }
+    ];
+  }
+  function createDetailMetrics({ weekly, sinceReset, month, resetCredits }) {
+    const metrics = [
       {
         id: "weeklyTotalIncludingReset",
         type: "credit",
@@ -1154,13 +1243,6 @@
         usd: weekly.反推周总USD_排除重置日
       },
       {
-        id: "sevenDayUsedPercent",
-        type: "value",
-        labelKey: "metricSevenDayUsedPercent",
-        label: "7 天已用",
-        value: weekly.已用百分比 !== void 0 ? `${weekly.已用百分比}%` : "-"
-      },
-      {
         id: "sinceResetTotal",
         type: "credit",
         labelKey: "metricSinceResetTotal",
@@ -1173,14 +1255,18 @@
         labelKey: "metricMonthTotal",
         label: "本月累计",
         usd: month.累计折算USD
-      },
-      {
-        id: "resetCountdown",
-        type: "reset",
-        hours: mainSevenDayWindow?.距离重置小时
-      },
-      ...resetCreditMetrics
+      }
     ];
+    if (resetCredits) {
+      metrics.push({
+        id: "resetCreditsAvailable",
+        type: "value",
+        labelKey: "metricResetCredits",
+        label: "重置券 可用/适用",
+        value: `${resetCredits.可用张数 ?? "-"} / ${resetCredits.当前适用张数 ?? "-"}`
+      });
+    }
+    return metrics;
   }
   function createQuotaPanelViewModel({
     result,
@@ -1221,6 +1307,12 @@
       remoteSyncStatus: normalizedRemoteSyncStatus,
       actions: createTransferActions()
     };
+    const detailMetrics = createDetailMetrics({
+      weekly,
+      sinceReset,
+      month,
+      resetCredits: snapshotAccess.resetCredits
+    });
     const panelViews = createPanelViews({
       weekly,
       sinceReset,
@@ -1229,7 +1321,8 @@
       windows: snapshotAccess.windows,
       modelSummaries: snapshotAccess.rolling.modelSummaries,
       resetCredits: snapshotAccess.resetCredits,
-      transfer
+      transfer,
+      detailMetrics
     });
     return {
       rollingKey,
@@ -1244,13 +1337,12 @@
       transfer,
       tabs: panelViews.tabs,
       views: panelViews.views,
-      primaryMetrics: createPrimaryMetrics({
+      heroMetric: createHeroMetric({
         weekly,
-        sinceReset,
-        month,
-        mainSevenDayWindow,
-        resetCredits: snapshotAccess.resetCredits
+        mainSevenDayWindow
       }),
+      secondaryMetrics: createSecondaryMetrics({ weekly }),
+      detailMetrics,
       rollingRows: snapshotAccess.rolling.dailyRows,
       sinceResetRows: snapshotAccess.sinceReset.dailyRows,
       sinceResetClients: snapshotAccess.sinceReset.clientSummaries,
@@ -1393,78 +1485,703 @@ ${text.slice(0, 800)}`);
     return { run };
   }
 
+  // src/userscripts/shared/shared-icons.lib.js
+  var ICON_CONTENT = {
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1-1-1.73l-.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15-.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    "chevron-left": '<path d="m15 18-6-6 6-6"/>',
+    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    "alert-triangle": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    loader: '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>'
+  };
+  var ICON_NAMES = Object.keys(ICON_CONTENT);
+  function toPositiveNumber(value, name) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) {
+      throw new Error(`shared-icons: ${name} must be a positive number, got ${JSON.stringify(value)}`);
+    }
+    return number;
+  }
+  function iconSvg(name, { size = 16, strokeWidth = 2 } = {}) {
+    const content = ICON_CONTENT[name];
+    if (!content) {
+      throw new Error(`shared-icons: unknown icon "${name}". Available: ${ICON_NAMES.join(", ")}`);
+    }
+    const resolvedSize = toPositiveNumber(size, "size");
+    const resolvedStrokeWidth = toPositiveNumber(strokeWidth, "strokeWidth");
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${resolvedStrokeWidth}" stroke-linecap="round" stroke-linejoin="round" width="${resolvedSize}" height="${resolvedSize}" class="wk-icon wk-icon-${name}" aria-hidden="true" focusable="false">${content}</svg>`;
+  }
+
+  // src/userscripts/shared/shared-tokens.lib.js
+  var SAFE_COLOR_PATTERN = /^[#a-zA-Z0-9(),.\s%/+-]+$/;
+  var UNSAFE_SELECTOR_CHARS = /[{};<@\\]/;
+  var COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
+  function assertSafeColor(value, name) {
+    const color = String(value ?? "").trim();
+    if (!color || !SAFE_COLOR_PATTERN.test(color)) {
+      throw new Error(`shared-tokens: invalid ${name} color ${JSON.stringify(value)}`);
+    }
+    return color;
+  }
+  function assertSafeSelector(value) {
+    const selector = String(value ?? "").trim();
+    if (!selector || UNSAFE_SELECTOR_CHARS.test(selector)) {
+      throw new Error(`shared-tokens: invalid rootSelector ${JSON.stringify(value)}`);
+    }
+    return selector;
+  }
+  function buildTokenCss({ rootSelector, accent, accentDark } = {}) {
+    const root = assertSafeSelector(rootSelector);
+    const lightAccent = assertSafeColor(accent, "accent");
+    const darkAccent = accentDark == null ? lightAccent : assertSafeColor(accentDark, "accentDark");
+    return `
+${root} {
+  --wk-surface: oklch(99.2% 0.002 250);
+  --wk-surface-muted: oklch(96.8% 0.003 250);
+  --wk-surface-sunken: oklch(97.8% 0.003 250);
+  --wk-text: oklch(23% 0.012 250);
+  --wk-text-muted: oklch(47% 0.012 250);
+  --wk-border: oklch(24% 0.012 250 / 0.10);
+  --wk-border-strong: oklch(24% 0.012 250 / 0.16);
+  --wk-danger: oklch(52% 0.19 27);
+  --wk-warning: oklch(55% 0.13 75);
+  --wk-accent: ${lightAccent};
+  --wk-shadow-panel: 0 24px 80px oklch(20% 0.02 250 / 0.22);
+  --wk-shadow-pop: 0 8px 28px oklch(20% 0.02 250 / 0.14);
+  --wk-fs-sm: 12px;
+  --wk-fs-md: 13px;
+  --wk-fs-lg: 15px;
+  --wk-fs-xl: 20px;
+  --wk-fs-hero: 28px;
+  --wk-radius-ctl: 8px;
+  --wk-radius-panel: 12px;
+  --wk-radius-pill: 999px;
+  color-scheme: light dark;
+}
+
+${root}[data-wk-theme="dark"] {
+  --wk-surface: oklch(25% 0.012 250);
+  --wk-surface-muted: oklch(21% 0.010 250);
+  --wk-surface-sunken: oklch(23% 0.011 250);
+  --wk-text: oklch(93% 0.008 250);
+  --wk-text-muted: oklch(74% 0.010 250);
+  --wk-border: oklch(95% 0.01 250 / 0.12);
+  --wk-border-strong: oklch(95% 0.01 250 / 0.18);
+  --wk-danger: oklch(68% 0.18 27);
+  --wk-warning: oklch(75% 0.13 80);
+  --wk-accent: ${darkAccent};
+  --wk-shadow-panel: 0 24px 80px oklch(10% 0.01 250 / 0.50);
+  --wk-shadow-pop: 0 8px 28px oklch(10% 0.01 250 / 0.35);
+}
+
+${root} *,
+${root} *::before,
+${root} *::after {
+  box-sizing: border-box;
+}
+
+${root} button,
+${root} input,
+${root} select,
+${root} textarea {
+  font: inherit;
+  color: inherit;
+}
+
+${root} :focus-visible {
+  outline: 2px solid var(--wk-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ${root} *,
+  ${root} *::before,
+  ${root} *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+`.trim();
+  }
+  function systemPrefersDark() {
+    try {
+      const matchMedia = globalThis.window?.matchMedia;
+      if (typeof matchMedia === "function") {
+        return Boolean(matchMedia.call(globalThis.window, COLOR_SCHEME_QUERY).matches);
+      }
+    } catch {
+    }
+    return false;
+  }
+  function resolveTheme(detectHost) {
+    if (typeof detectHost === "function") {
+      try {
+        const detected = detectHost();
+        if (detected === "light" || detected === "dark") return detected;
+      } catch {
+      }
+    }
+    return systemPrefersDark() ? "dark" : "light";
+  }
+  function applyTheme(root, { detectHost, observeHost = false } = {}) {
+    if (!root) {
+      throw new Error("shared-tokens: applyTheme requires a root element.");
+    }
+    const apply = () => {
+      root.dataset.wkTheme = resolveTheme(detectHost);
+    };
+    apply();
+    let media = null;
+    const onChange = () => apply();
+    try {
+      const matchMedia = globalThis.window?.matchMedia;
+      if (typeof matchMedia === "function") {
+        media = matchMedia.call(globalThis.window, COLOR_SCHEME_QUERY);
+        if (typeof media?.addEventListener === "function") {
+          media.addEventListener("change", onChange);
+        } else if (typeof media?.addListener === "function") {
+          media.addListener(onChange);
+        } else {
+          media = null;
+        }
+      }
+    } catch {
+      media = null;
+    }
+    let observer = null;
+    if (observeHost) {
+      try {
+        const documentObject = root.ownerDocument ?? globalThis.document;
+        const windowObject = documentObject?.defaultView ?? globalThis.window;
+        const MutationObserverImpl = windowObject?.MutationObserver ?? globalThis.MutationObserver;
+        const hostElement = documentObject?.documentElement;
+        if (typeof MutationObserverImpl === "function" && hostElement && hostElement !== root) {
+          observer = new MutationObserverImpl(onChange);
+          observer.observe(hostElement, { attributes: true, attributeFilter: ["class", "style"] });
+        }
+      } catch {
+        observer = null;
+      }
+    }
+    return () => {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      if (!media) return;
+      if (typeof media.removeEventListener === "function") {
+        media.removeEventListener("change", onChange);
+      } else if (typeof media.removeListener === "function") {
+        media.removeListener(onChange);
+      }
+      media = null;
+    };
+  }
+
+  // src/userscripts/shared/shared-widget-shell.lib.js
+  var BUTTON_SAFE_MARGIN = 12;
+  var DOCK_THRESHOLD = 32;
+  var DOCK_OFFSET = 8;
+  var PANEL_SAFE_MARGIN = 12;
+  var PANEL_GAP = 8;
+  var DRAG_THRESHOLD_PX = 4;
+  var FALLBACK_BUTTON_SIZE = 44;
+  var PANEL_ANIMATION_MS = 200;
+  var PANEL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+  var FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  function isDockSide(value) {
+    return value === "left" || value === "right";
+  }
+  function appendClasses(el, classes) {
+    const list = String(classes ?? "").split(/\s+/).filter(Boolean);
+    if (list.length) el.classList.add(...list);
+  }
+  function eventContainsNode(event, node) {
+    if (!node) return false;
+    const path = event.composedPath?.();
+    return Array.isArray(path) ? path.includes(node) : node.contains(event.target);
+  }
+  var WIDGET_SHELL_CSS = `
+.wk-widget-button {
+  position: fixed;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--wk-border-strong);
+  border-radius: var(--wk-radius-pill);
+  background: var(--wk-surface);
+  color: var(--wk-text);
+  box-shadow: var(--wk-shadow-pop);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--wk-fs-md);
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.wk-widget-button.is-dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.wk-widget-button[data-wk-docked="left"],
+.wk-widget-button[data-wk-docked="right"] {
+  opacity: 0.55;
+  transform: scale(0.72);
+}
+
+.wk-widget-button[data-wk-docked="left"] {
+  transform-origin: left center;
+}
+
+.wk-widget-button[data-wk-docked="right"] {
+  transform-origin: right center;
+}
+
+.wk-widget-button[data-wk-docked]:hover,
+.wk-widget-button[data-wk-docked]:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.wk-widget-panel {
+  position: fixed;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--wk-border);
+  border-radius: var(--wk-radius-panel);
+  background: var(--wk-surface);
+  color: var(--wk-text);
+  box-shadow: var(--wk-shadow-panel);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--wk-fs-md);
+  line-height: 1.45;
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+  transition:
+    opacity ${PANEL_ANIMATION_MS}ms ${PANEL_EASING},
+    transform ${PANEL_ANIMATION_MS}ms ${PANEL_EASING};
+}
+
+.wk-widget-panel[hidden] {
+  display: none;
+}
+
+.wk-widget-panel.is-open {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.wk-widget-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--wk-border);
+}
+
+.wk-widget-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-widget-button,
+  .wk-widget-panel {
+    transition: none;
+  }
+}
+`.trim();
+  function createWidgetShell({
+    root,
+    buttonId,
+    buttonAriaLabel,
+    buttonContent,
+    buttonClass,
+    panelClass,
+    panelWidth = 560,
+    panelMaxHeight = 760,
+    storage,
+    positionKey,
+    defaultPosition = { top: 76, right: 24 },
+    dock = true,
+    onOpen,
+    onClose,
+    renderPanelHeader: renderPanelHeader2,
+    renderPanelBody
+  } = {}) {
+    if (!root?.append) {
+      throw new Error("shared-widget-shell: createWidgetShell requires a root element.");
+    }
+    const documentObject = root.ownerDocument ?? globalThis.document;
+    if (!documentObject?.createElement) {
+      throw new Error("shared-widget-shell: root must expose ownerDocument.");
+    }
+    const windowObject = documentObject.defaultView ?? globalThis.window ?? globalThis;
+    const scheduleTimeout = typeof windowObject.setTimeout === "function" ? windowObject.setTimeout.bind(windowObject) : (callback, ms) => setTimeout(callback, ms);
+    const cancelTimeout = typeof windowObject.clearTimeout === "function" ? windowObject.clearTimeout.bind(windowObject) : (timer) => clearTimeout(timer);
+    const requestFrame = typeof windowObject.requestAnimationFrame === "function" ? windowObject.requestAnimationFrame.bind(windowObject) : (callback) => scheduleTimeout(callback, 16);
+    const buttonEl = documentObject.createElement("button");
+    buttonEl.type = "button";
+    if (buttonId) buttonEl.id = buttonId;
+    buttonEl.className = "wk-widget-button";
+    appendClasses(buttonEl, buttonClass);
+    if (buttonAriaLabel) buttonEl.setAttribute("aria-label", buttonAriaLabel);
+    buttonEl.setAttribute("aria-expanded", "false");
+    if (buttonContent != null) {
+      if (typeof buttonContent === "string") {
+        buttonEl.innerHTML = buttonContent;
+      } else {
+        buttonEl.append(buttonContent);
+      }
+    }
+    const panelEl = documentObject.createElement("div");
+    panelEl.className = "wk-widget-panel";
+    appendClasses(panelEl, panelClass);
+    if (buttonId) panelEl.id = `${buttonId}-panel`;
+    panelEl.hidden = true;
+    const headerEl = documentObject.createElement("div");
+    headerEl.className = "wk-widget-header";
+    const bodyEl = documentObject.createElement("div");
+    bodyEl.className = "wk-widget-body";
+    panelEl.append(headerEl, bodyEl);
+    renderPanelHeader2?.(headerEl);
+    renderPanelBody?.(bodyEl);
+    root.append(buttonEl, panelEl);
+    let position = { left: 0, top: 0, dockSide: null };
+    let isOpenState = false;
+    let suppressNextClick = false;
+    let closeTimer = null;
+    function measureButton() {
+      const rect = buttonEl.getBoundingClientRect?.();
+      return {
+        width: rect?.width || buttonEl.offsetWidth || FALLBACK_BUTTON_SIZE,
+        height: rect?.height || buttonEl.offsetHeight || FALLBACK_BUTTON_SIZE
+      };
+    }
+    function clampPosition(left, top) {
+      const { width, height } = measureButton();
+      const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
+      const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
+      return {
+        left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
+        top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop)
+      };
+    }
+    function dockedPosition(dockSide, top) {
+      const { width } = measureButton();
+      const clamped = clampPosition(0, top);
+      return {
+        left: dockSide === "right" ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
+        top: clamped.top
+      };
+    }
+    function detectDockSide(left) {
+      const { width } = measureButton();
+      if (left <= DOCK_THRESHOLD) return "left";
+      if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return "right";
+      return null;
+    }
+    function resolveDefaultPosition() {
+      const { width } = measureButton();
+      const top = Number.isFinite(defaultPosition?.top) ? defaultPosition.top : 76;
+      const right = Number.isFinite(defaultPosition?.right) ? defaultPosition.right : 24;
+      return clampPosition(windowObject.innerWidth - right - width, top);
+    }
+    function applyPosition(next) {
+      const dockSide = dock && isDockSide(next?.dockSide) ? next.dockSide : null;
+      const resolved = dockSide ? dockedPosition(dockSide, next?.top ?? position.top) : clampPosition(next?.left ?? position.left, next?.top ?? position.top);
+      position = { ...resolved, dockSide };
+      if (dockSide) {
+        buttonEl.dataset.wkDocked = dockSide;
+      } else {
+        delete buttonEl.dataset.wkDocked;
+      }
+      buttonEl.style.top = `${Math.round(resolved.top)}px`;
+      if (dockSide === "right") {
+        buttonEl.style.left = "auto";
+        buttonEl.style.right = `${DOCK_OFFSET}px`;
+      } else {
+        buttonEl.style.left = `${Math.round(resolved.left)}px`;
+        buttonEl.style.right = "auto";
+      }
+      return position;
+    }
+    async function persistPosition() {
+      if (!storage?.set || !positionKey) return;
+      const value = { left: Math.round(position.left), top: Math.round(position.top) };
+      if (position.dockSide) value.dockSide = position.dockSide;
+      try {
+        await storage.set(positionKey, JSON.stringify(value));
+      } catch {
+      }
+    }
+    async function restorePosition() {
+      if (!storage?.get || !positionKey) return;
+      try {
+        const raw = await storage.get(positionKey);
+        const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (parsed && Number.isFinite(parsed.left) && Number.isFinite(parsed.top)) {
+          applyPosition({
+            left: parsed.left,
+            top: parsed.top,
+            dockSide: isDockSide(parsed.dockSide) ? parsed.dockSide : null
+          });
+          if (isOpenState) positionPanel();
+        }
+      } catch {
+      }
+    }
+    function positionPanel() {
+      const safe = PANEL_SAFE_MARGIN;
+      const { width: buttonWidth, height: buttonHeight } = measureButton();
+      const width = Math.min(panelWidth, windowObject.innerWidth - safe * 2);
+      const maxHeight = Math.min(panelMaxHeight, windowObject.innerHeight - safe * 2);
+      const height = Math.min(maxHeight, panelEl.offsetHeight || maxHeight);
+      const maxLeft = Math.max(safe, windowObject.innerWidth - width - safe);
+      const left = Math.min(Math.max(safe, position.left + buttonWidth - width), maxLeft);
+      const belowTop = position.top + buttonHeight + PANEL_GAP;
+      const aboveTop = position.top - height - PANEL_GAP;
+      const fitsBelow = belowTop + height <= windowObject.innerHeight - safe;
+      const maxTop = Math.max(safe, windowObject.innerHeight - height - safe);
+      const top = fitsBelow ? Math.min(belowTop, maxTop) : Math.min(Math.max(safe, aboveTop), maxTop);
+      panelEl.style.left = `${Math.round(left)}px`;
+      panelEl.style.top = `${Math.round(top)}px`;
+      panelEl.style.width = `${Math.round(width)}px`;
+      panelEl.style.maxHeight = `${Math.round(maxHeight)}px`;
+      const originX = Math.min(Math.max(position.left + buttonWidth / 2 - left, 24), width - 24);
+      const originY = Math.min(Math.max(position.top + buttonHeight / 2 - top, 24), height - 24);
+      panelEl.style.transformOrigin = `${Math.round(originX)}px ${Math.round(originY)}px`;
+      panelEl.dataset.wkPlacement = fitsBelow ? "below" : "above";
+    }
+    function syncExpanded() {
+      buttonEl.setAttribute("aria-expanded", isOpenState ? "true" : "false");
+    }
+    function open() {
+      if (isOpenState) return;
+      isOpenState = true;
+      cancelTimeout(closeTimer);
+      panelEl.hidden = false;
+      panelEl.classList.remove("is-open");
+      positionPanel();
+      buttonEl.classList.add("is-active");
+      syncExpanded();
+      requestFrame(() => {
+        if (isOpenState) panelEl.classList.add("is-open");
+      });
+      const focusTarget = panelEl.querySelector(FOCUSABLE_SELECTOR);
+      focusTarget?.focus?.();
+      onOpen?.();
+    }
+    function close() {
+      if (!isOpenState) return;
+      isOpenState = false;
+      panelEl.classList.remove("is-open");
+      buttonEl.classList.remove("is-active");
+      syncExpanded();
+      if (panelEl.contains(documentObject.activeElement)) {
+        buttonEl.focus?.();
+      }
+      closeTimer = scheduleTimeout(() => {
+        if (!isOpenState) panelEl.hidden = true;
+      }, PANEL_ANIMATION_MS);
+      onClose?.();
+    }
+    function toggle() {
+      if (isOpenState) {
+        close();
+      } else {
+        open();
+      }
+    }
+    function installDrag() {
+      let dragState = null;
+      buttonEl.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        dragState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startLeft: position.left,
+          startTop: position.top,
+          moved: false
+        };
+        buttonEl.classList.add("is-dragging");
+        try {
+          buttonEl.setPointerCapture?.(event.pointerId);
+        } catch {
+        }
+      });
+      buttonEl.addEventListener("pointermove", (event) => {
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+        const dx = event.clientX - dragState.startX;
+        const dy = event.clientY - dragState.startY;
+        if (Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;
+        if (!dragState.moved) return;
+        applyPosition({
+          left: dragState.startLeft + dx,
+          top: dragState.startTop + dy,
+          dockSide: null
+        });
+        if (isOpenState) positionPanel();
+      });
+      function finishDrag(event) {
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+        const moved = dragState.moved;
+        dragState = null;
+        buttonEl.classList.remove("is-dragging");
+        try {
+          if (buttonEl.hasPointerCapture?.(event.pointerId)) {
+            buttonEl.releasePointerCapture(event.pointerId);
+          }
+        } catch {
+        }
+        if (!moved) return;
+        const dockSide = dock ? detectDockSide(position.left) : null;
+        applyPosition({ ...position, dockSide });
+        persistPosition();
+        if (isOpenState) positionPanel();
+        suppressNextClick = true;
+        scheduleTimeout(() => {
+          suppressNextClick = false;
+        }, 0);
+      }
+      buttonEl.addEventListener("pointerup", finishDrag);
+      buttonEl.addEventListener("pointercancel", finishDrag);
+    }
+    function onDocumentPointerDown(event) {
+      if (!isOpenState) return;
+      if (eventContainsNode(event, panelEl) || eventContainsNode(event, buttonEl)) return;
+      close();
+    }
+    function onDocumentKeydown(event) {
+      if (!isOpenState) return;
+      if (event.key === "Escape") close();
+    }
+    function onWindowResize() {
+      applyPosition(position);
+      if (isOpenState) positionPanel();
+    }
+    buttonEl.addEventListener("click", () => {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      toggle();
+    });
+    documentObject.addEventListener("pointerdown", onDocumentPointerDown, true);
+    documentObject.addEventListener("keydown", onDocumentKeydown);
+    windowObject.addEventListener?.("resize", onWindowResize);
+    applyPosition(resolveDefaultPosition());
+    installDrag();
+    restorePosition();
+    function destroy() {
+      cancelTimeout(closeTimer);
+      isOpenState = false;
+      syncExpanded();
+      documentObject.removeEventListener("pointerdown", onDocumentPointerDown, true);
+      documentObject.removeEventListener("keydown", onDocumentKeydown);
+      windowObject.removeEventListener?.("resize", onWindowResize);
+      buttonEl.remove();
+      panelEl.remove();
+    }
+    function reposition() {
+      if (isOpenState) positionPanel();
+    }
+    return {
+      cssText: WIDGET_SHELL_CSS,
+      buttonEl,
+      panelEl,
+      open,
+      close,
+      toggle,
+      reposition,
+      isOpen: () => isOpenState,
+      destroy
+    };
+  }
+
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js
-  function createShellStyles(rootId, constants = {}) {
-    const {
-      BUTTON_FULL_WIDTH: BUTTON_FULL_WIDTH2 = 168,
-      BUTTON_HEIGHT: BUTTON_HEIGHT2 = 42,
-      PANEL_OPEN_ANIMATION_MS: PANEL_OPEN_ANIMATION_MS2 = 220,
-      PANEL_CLOSE_ANIMATION_MS: PANEL_CLOSE_ANIMATION_MS2 = PANEL_OPEN_ANIMATION_MS2 * 2,
-      PANEL_OPEN_EASING: PANEL_OPEN_EASING2 = "cubic-bezier(0.22, 1, 0.36, 1)",
-      PANEL_CLOSE_EASING: PANEL_CLOSE_EASING2 = "cubic-bezier(0.64, 0, 0.78, 0)"
-    } = constants;
+  var BUTTON_FULL_WIDTH = 168;
+  var BUTTON_HEIGHT = 42;
+  function createShellStyles(rootId) {
     return `
     #${rootId} {
-      color-scheme: light dark;
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      /* Single source of truth for theming: light values here, dark overrides
-         only flip these variables in the prefers-color-scheme block below. */
-      --cqc-primary: #10a37f;
+      --cqc-primary: var(--wk-accent);
       --cqc-primary-strong: #0f766e;
       --cqc-primary-soft: rgba(16, 163, 127, 0.12);
       --cqc-primary-border: rgba(16, 163, 127, 0.55);
       --cqc-primary-ring: rgba(16, 163, 127, 0.18);
-      --cqc-accent: #f59e0b;
-      --cqc-surface: #ffffff;
-      --cqc-surface-muted: #f7f7f8;
-      --cqc-surface-sunken: #f8fafc;
-      --cqc-text: #202123;
-      --cqc-text-muted: #6e6e80;
-      --cqc-border: rgba(0, 0, 0, 0.1);
-      --cqc-border-strong: rgba(0, 0, 0, 0.16);
+      --cqc-surface: var(--wk-surface);
+      --cqc-surface-muted: var(--wk-surface-muted);
+      --cqc-surface-sunken: var(--wk-surface-sunken);
+      --cqc-text: var(--wk-text);
+      --cqc-text-muted: var(--wk-text-muted);
+      --cqc-border: var(--wk-border);
+      --cqc-border-strong: var(--wk-border-strong);
       --cqc-row-hover: rgba(16, 163, 127, 0.06);
-      --cqc-danger: #d92d20;
-      --cqc-warning: #b45309;
+      --cqc-danger: var(--wk-danger);
+      --cqc-warning: var(--wk-warning);
       --cqc-warning-surface: rgba(245, 158, 11, 0.1);
       --cqc-warning-border: rgba(245, 158, 11, 0.32);
-      --cqc-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.22);
-      --cqc-shadow-button: 0 8px 28px rgba(0, 0, 0, 0.14);
-      --cqc-button-bg: rgba(248, 250, 252, 0.95);
-      --cqc-button-bg-docked: rgba(255, 255, 255, 0.62);
-      --cqc-button-bg-docked-active: rgba(255, 255, 255, 0.94);
+      --cqc-shadow-panel: var(--wk-shadow-panel);
+      --cqc-shadow-button: var(--wk-shadow-pop);
+      --cqc-button-bg: var(--wk-surface);
+      --cqc-button-bg-docked: var(--wk-surface);
+      --cqc-button-bg-docked-active: var(--wk-surface);
       position: fixed;
       inset: 0;
       z-index: 2147483647;
       pointer-events: none;
     }
 
-    #${rootId} * {
-      box-sizing: border-box;
+    #${rootId}[data-wk-theme="dark"] {
+      --cqc-primary-strong: #34d399;
+      --cqc-primary-soft: rgba(25, 195, 125, 0.2);
+      --cqc-primary-border: rgba(25, 195, 125, 0.5);
+      --cqc-primary-ring: rgba(25, 195, 125, 0.22);
+      --cqc-row-hover: rgba(25, 195, 125, 0.14);
+      --cqc-warning-surface: rgba(245, 158, 11, 0.16);
+      --cqc-warning-border: rgba(245, 158, 11, 0.3);
     }
 
-    .cqc-button {
-      position: fixed;
-      z-index: 1;
-      display: inline-flex;
-      align-items: center;
+    /* Widget kit overrides: keep the 168x42 pill that shrinks to a dot-only
+       button when docked at a screen edge. */
+    #${rootId} .cqc-button {
+      width: ${BUTTON_FULL_WIDTH}px;
+      min-width: ${BUTTON_HEIGHT}px;
+      height: ${BUTTON_HEIGHT}px;
+      min-height: ${BUTTON_HEIGHT}px;
       justify-content: flex-start;
       gap: 8px;
-      width: ${BUTTON_FULL_WIDTH2}px;
-      min-width: ${BUTTON_HEIGHT2}px;
-      height: 42px;
-      border: 1px solid var(--cqc-border-strong);
-      border-radius: 999px;
       padding: 0 14px;
+      border-color: var(--cqc-border-strong);
       background: var(--cqc-button-bg);
-      color: var(--cqc-text);
       box-shadow: var(--cqc-shadow-button);
-      cursor: pointer;
-      pointer-events: auto;
-      user-select: none;
-      backdrop-filter: blur(18px);
       overflow: hidden;
+      pointer-events: auto;
       transition:
         width 160ms ease,
+        gap 160ms ease,
         padding 160ms ease,
         opacity 160ms ease,
         background-color 160ms ease,
@@ -1472,71 +2189,55 @@ ${text.slice(0, 800)}`);
         box-shadow 160ms ease;
     }
 
-    .cqc-button:active,
-    .cqc-button.is-dragging {
+    #${rootId} .cqc-button:active,
+    #${rootId} .cqc-button.is-dragging {
       cursor: grabbing;
     }
 
-    .cqc-button.is-active {
+    #${rootId} .cqc-button.is-active {
       border-color: var(--cqc-primary-border);
       box-shadow: 0 10px 32px var(--cqc-primary-ring);
     }
 
-    .cqc-button:focus-visible,
-    .cqc-refresh:focus-visible,
-    .cqc-icon-button:focus-visible,
-    .cqc-detail-footnote button:focus-visible,
-    .cqc-sync-form button:focus-visible,
-    .cqc-sync-form input:focus-visible {
-      outline: 2px solid var(--cqc-primary);
-      outline-offset: 2px;
-    }
-
-    .cqc-button.is-docked {
-      width: ${BUTTON_HEIGHT2}px;
+    #${rootId} .cqc-button[data-wk-docked] {
+      width: ${BUTTON_HEIGHT}px;
       gap: 0;
       padding: 0;
       justify-content: center;
       background: var(--cqc-button-bg-docked);
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
       opacity: 0.72;
+      transform: none;
     }
 
-    .cqc-button.is-docked:hover,
-    .cqc-button.is-docked:focus-visible,
-    .cqc-button.is-docked.is-active,
-    .cqc-button.is-docked.is-dragging {
-      width: ${BUTTON_FULL_WIDTH2}px;
+    #${rootId} .cqc-button[data-wk-docked]:hover,
+    #${rootId} .cqc-button[data-wk-docked]:focus-visible,
+    #${rootId} .cqc-button[data-wk-docked].is-active,
+    #${rootId} .cqc-button[data-wk-docked].is-dragging {
+      width: ${BUTTON_FULL_WIDTH}px;
       gap: 8px;
       padding: 0 14px;
       justify-content: flex-start;
       background: var(--cqc-button-bg-docked-active);
       opacity: 1;
+      transform: none;
     }
 
-    .cqc-button.is-panel-source-hidden,
-    .cqc-button.is-docked.is-panel-source-hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    .cqc-button.is-docked.is-hover-locked {
-      width: ${BUTTON_HEIGHT2}px;
-      gap: 0;
-      padding: 0;
-      justify-content: center;
-      background: var(--cqc-button-bg-docked);
-      opacity: 0.72;
-    }
-
-    .cqc-button.is-docked.is-hover-locked .cqc-button-text,
-    .cqc-button.is-docked .cqc-button-text {
+    #${rootId} .cqc-button[data-wk-docked] .cqc-button-text {
       max-width: 0;
       opacity: 0;
       transform: translateX(-4px);
     }
 
-    .cqc-button-text {
+    #${rootId} .cqc-button[data-wk-docked]:hover .cqc-button-text,
+    #${rootId} .cqc-button[data-wk-docked]:focus-visible .cqc-button-text,
+    #${rootId} .cqc-button[data-wk-docked].is-active .cqc-button-text,
+    #${rootId} .cqc-button[data-wk-docked].is-dragging .cqc-button-text {
+      max-width: 116px;
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    #${rootId} .cqc-button-text {
       display: grid;
       gap: 1px;
       text-align: left;
@@ -1549,16 +2250,7 @@ ${text.slice(0, 800)}`);
         transform 160ms ease;
     }
 
-    .cqc-button.is-docked:hover .cqc-button-text,
-    .cqc-button.is-docked:focus-visible .cqc-button-text,
-    .cqc-button.is-docked.is-active .cqc-button-text,
-    .cqc-button.is-docked.is-dragging .cqc-button-text {
-      max-width: 116px;
-      opacity: 1;
-      transform: translateX(0);
-    }
-
-    .cqc-dot {
+    #${rootId} .cqc-dot {
       width: 10px;
       height: 10px;
       border-radius: 50%;
@@ -1567,73 +2259,32 @@ ${text.slice(0, 800)}`);
       flex: 0 0 auto;
     }
 
-    .cqc-button-title {
+    #${rootId} .cqc-button-title {
       font-size: 13px;
       font-weight: 650;
     }
 
-    .cqc-status {
+    #${rootId} .cqc-status {
       color: var(--cqc-text-muted);
       font-size: 11px;
     }
 
-    .cqc-status[data-tone="loading"] { color: var(--cqc-primary-strong); }
-    .cqc-status[data-tone="success"] { color: var(--cqc-primary); }
-    .cqc-status[data-tone="error"] { color: var(--cqc-danger); }
+    #${rootId} .cqc-status[data-tone="loading"] { color: var(--cqc-primary-strong); }
+    #${rootId} .cqc-status[data-tone="success"] { color: var(--cqc-primary); }
+    #${rootId} .cqc-status[data-tone="error"] { color: var(--cqc-danger); }
 
-    .cqc-panel {
-      position: fixed;
-      z-index: 2;
-      top: 88px;
-      right: auto;
-      width: min(560px, calc(100vw - 32px));
-      height: auto;
-      max-height: min(760px, calc(100vh - 24px));
-      border: 1px solid var(--cqc-border-strong);
-      border-radius: 12px;
-      background: var(--cqc-surface);
-      color: var(--cqc-text);
-      box-shadow: var(--cqc-shadow-panel);
-      overflow: hidden;
-      pointer-events: auto;
-      opacity: 0;
-      transition:
-        left ${PANEL_OPEN_ANIMATION_MS2}ms ${PANEL_OPEN_EASING2},
-        top ${PANEL_OPEN_ANIMATION_MS2}ms ${PANEL_OPEN_EASING2},
-        width ${PANEL_OPEN_ANIMATION_MS2}ms ${PANEL_OPEN_EASING2},
-        height ${PANEL_OPEN_ANIMATION_MS2}ms ${PANEL_OPEN_EASING2},
-        border-radius ${PANEL_OPEN_ANIMATION_MS2}ms ${PANEL_OPEN_EASING2},
-        opacity 120ms ease;
+    #${rootId} .cqc-panel {
+      border-color: var(--cqc-border-strong);
     }
 
-    .cqc-panel.is-open {
-      opacity: 1;
-    }
-
-    .cqc-panel.is-closing {
-      transition:
-        left ${PANEL_CLOSE_ANIMATION_MS2}ms ${PANEL_CLOSE_EASING2},
-        top ${PANEL_CLOSE_ANIMATION_MS2}ms ${PANEL_CLOSE_EASING2},
-        width ${PANEL_CLOSE_ANIMATION_MS2}ms ${PANEL_CLOSE_EASING2},
-        height ${PANEL_CLOSE_ANIMATION_MS2}ms ${PANEL_CLOSE_EASING2},
-        border-radius ${PANEL_CLOSE_ANIMATION_MS2}ms ${PANEL_CLOSE_EASING2},
-        opacity ${PANEL_CLOSE_ANIMATION_MS2}ms ease;
-    }
-
-    .cqc-panel-header {
-      display: flex;
-      align-items: center;
+    #${rootId} .cqc-panel-header {
       justify-content: space-between;
-      gap: 12px;
       min-height: 48px;
       padding: 12px 14px;
-      border-bottom: 1px solid var(--cqc-border);
       background: var(--cqc-surface-muted);
-      opacity: 0;
-      transition: opacity 120ms ease 80ms;
     }
 
-    .cqc-panel-title {
+    #${rootId} .cqc-panel-title {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -1642,14 +2293,18 @@ ${text.slice(0, 800)}`);
       font-weight: 650;
     }
 
-    .cqc-panel-actions {
+    #${rootId} .cqc-panel-actions {
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
-    .cqc-icon-button,
-    .cqc-refresh {
+    #${rootId} .cqc-icon-button,
+    #${rootId} .cqc-refresh {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       border: 1px solid var(--cqc-border-strong);
       border-radius: 8px;
       background: var(--cqc-surface);
@@ -1660,184 +2315,76 @@ ${text.slice(0, 800)}`);
       cursor: pointer;
     }
 
-    .cqc-icon-button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
+    #${rootId} .cqc-icon-button {
       width: 32px;
       height: 32px;
       min-height: 32px;
       padding: 0;
-      font-size: 18px;
-      line-height: 1;
     }
 
-    .cqc-close-icon {
-      position: relative;
-      width: 14px;
-      height: 14px;
-      display: block;
-      flex: 0 0 auto;
-    }
-
-    .cqc-close-icon::before,
-    .cqc-close-icon::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 14px;
-      height: 2px;
-      border-radius: 999px;
-      background: currentColor;
-      transform-origin: center;
-    }
-
-    .cqc-close-icon::before {
-      transform: translate(-50%, -50%) rotate(45deg);
-    }
-
-    .cqc-close-icon::after {
-      transform: translate(-50%, -50%) rotate(-45deg);
-    }
-
-    .cqc-refresh:hover,
-    .cqc-icon-button:hover {
+    #${rootId} .cqc-refresh:hover,
+    #${rootId} .cqc-icon-button:hover {
       background: var(--cqc-surface-muted);
       border-color: var(--cqc-primary-border);
     }
 
-    .cqc-content {
+    #${rootId} .cqc-content {
       container-type: inline-size;
-      height: calc(100% - 49px);
-      overflow: auto;
       padding: 14px;
-      opacity: 0;
-      transition: opacity 120ms ease 100ms;
-    }
-
-    .cqc-panel.is-open .cqc-panel-header,
-    .cqc-panel.is-open .cqc-content {
-      opacity: 1;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .cqc-button,
-      .cqc-panel,
-      .cqc-panel-header,
-      .cqc-content {
-        transition: none !important;
-      }
-    }
-
-    @media (max-width: 720px) {
-      .cqc-panel {
-        width: calc(100vw - 24px);
-        height: auto;
-        max-height: calc(100vh - 24px);
-      }
-
-      .cqc-content {
-        height: calc(100% - 49px);
-      }
-    }
-
-    @media (prefers-color-scheme: dark) {
-      #${rootId} {
-        --cqc-primary: #19c37d;
-        --cqc-primary-strong: #34d399;
-        --cqc-primary-soft: rgba(25, 195, 125, 0.2);
-        --cqc-primary-border: rgba(25, 195, 125, 0.5);
-        --cqc-primary-ring: rgba(25, 195, 125, 0.22);
-        --cqc-surface: #2f2f2f;
-        --cqc-surface-muted: #212121;
-        --cqc-surface-sunken: #262626;
-        --cqc-text: #ececf1;
-        --cqc-text-muted: #b4b4b4;
-        --cqc-border: rgba(255, 255, 255, 0.12);
-        --cqc-border-strong: rgba(255, 255, 255, 0.18);
-        --cqc-row-hover: rgba(25, 195, 125, 0.14);
-        --cqc-warning: #fbbf24;
-        --cqc-warning-surface: rgba(245, 158, 11, 0.16);
-        --cqc-warning-border: rgba(245, 158, 11, 0.3);
-        --cqc-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.5);
-        --cqc-shadow-button: 0 8px 28px rgba(0, 0, 0, 0.4);
-        --cqc-button-bg: rgba(47, 47, 47, 0.95);
-        --cqc-button-bg-docked: rgba(47, 47, 47, 0.64);
-        --cqc-button-bg-docked-active: rgba(47, 47, 47, 0.96);
-      }
     }
   `;
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js
   var DEFAULT_BUTTON_POSITION = { top: 76, right: 24 };
-  var BUTTON_FULL_WIDTH = 168;
-  var BUTTON_HEIGHT = 42;
-  var BUTTON_SAFE = 12;
-  var BUTTON_DOCK_OFFSET = 8;
-  var BUTTON_DOCK_THRESHOLD = 32;
-  var PANEL_OPEN_ANIMATION_MS = 220;
-  var PANEL_CLOSE_ANIMATION_MS = PANEL_OPEN_ANIMATION_MS * 2;
-  var PANEL_OPEN_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
-  var PANEL_CLOSE_EASING = "cubic-bezier(0.64, 0, 0.78, 0)";
   function escapeHtml(value) {
     return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
-  function createShellMarkup(labels = {}) {
+  function detectHostTheme(documentObject = globalThis.document) {
+    const host = documentObject?.documentElement;
+    if (!host) return null;
+    const className = typeof host.className === "string" ? host.className : "";
+    if (/(^|\s)dark(\s|$)/.test(className)) return "dark";
+    const inlineScheme = String(host.style?.colorScheme || "").toLowerCase();
+    if (inlineScheme.includes("dark")) return "dark";
+    if (/(^|\s)light(\s|$)/.test(className) || inlineScheme.includes("light")) return "light";
+    return null;
+  }
+  function createButtonContentMarkup(labels = {}) {
     return `
-    <button type="button" class="cqc-button" data-action="toggle" aria-expanded="false" aria-label="${escapeHtml(labels.buttonAriaOpen || "")}">
-      <span class="cqc-dot" aria-hidden="true"></span>
-      <span class="cqc-button-text">
-        <span class="cqc-button-title">${escapeHtml(labels.buttonTitle || "")}</span>
-        <span class="cqc-status" data-tone="idle">${escapeHtml(labels.statusIdle || "")}</span>
-      </span>
-    </button>
-    <div class="cqc-panel" hidden>
-      <div class="cqc-panel-header">
-        <div class="cqc-panel-title">
-          <span class="cqc-dot" aria-hidden="true"></span>
-          <span>${escapeHtml(labels.panelTitle || "")}</span>
-        </div>
-        <div class="cqc-panel-actions">
-          <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml(labels.actionRefresh || "")}</button>
-          <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || "Close")}">
-            <span class="cqc-close-icon" aria-hidden="true"></span>
-          </button>
-        </div>
-      </div>
-      <div class="cqc-content"></div>
-    </div>
+    <span class="cqc-dot" aria-hidden="true"></span>
+    <span class="cqc-button-text">
+      <span class="cqc-button-title">${escapeHtml(labels.buttonTitle || "")}</span>
+      <span class="cqc-status" data-tone="idle">${escapeHtml(labels.statusIdle || "")}</span>
+    </span>
   `;
   }
-  function isDockSide(value) {
-    return value === "left" || value === "right";
-  }
-  function shellStyles(rootId) {
-    return createShellStyles(rootId, {
-      BUTTON_FULL_WIDTH,
-      BUTTON_HEIGHT,
-      PANEL_OPEN_ANIMATION_MS,
-      PANEL_CLOSE_ANIMATION_MS,
-      PANEL_OPEN_EASING,
-      PANEL_CLOSE_EASING
-    });
-  }
-  function eventContainsNode(event, node) {
-    if (!node) return false;
-    const path = event.composedPath?.();
-    return Array.isArray(path) ? path.includes(node) : node.contains(event.target);
+  function renderPanelHeader(headerEl, labels = {}) {
+    headerEl.classList.add("cqc-panel-header");
+    headerEl.innerHTML = `
+    <div class="cqc-panel-title">
+      <span class="cqc-dot" aria-hidden="true"></span>
+      <span>${escapeHtml(labels.panelTitle || "")}</span>
+    </div>
+    <div class="cqc-panel-actions">
+      <button type="button" class="cqc-refresh" data-action="refresh">${iconSvg("refresh-cw", { size: 14 })}<span>${escapeHtml(labels.actionRefresh || "")}</span></button>
+      <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || "Close")}">${iconSvg("x", { size: 16 })}</button>
+    </div>
+  `;
   }
   function createFloatingPanelShell({
     rootId,
     labels = {},
     positionKey = `${rootId}:buttonPosition`,
+    tokenCss = "",
+    detectHost = detectHostTheme,
     document: documentObject = globalThis.document,
     window: windowObject = globalThis,
     storage = globalThis.localStorage,
     onAction = () => {
-    }
+    },
+    onOpen,
+    onClose
   } = {}) {
     if (!rootId) {
       throw new Error("Floating panel shell requires rootId.");
@@ -1849,408 +2396,102 @@ ${text.slice(0, 800)}`);
       throw new Error("Floating panel shell requires a window adapter.");
     }
     let root = null;
-    let panel = null;
-    let button = null;
+    let shell = null;
     let statusNode = null;
     let contentNode = null;
-    let isPanelOpen = false;
-    let buttonDockSide = null;
-    let panelCloseTimer = null;
-    let suppressNextButtonClick = false;
+    let themeCleanup = null;
     function refs() {
-      return { root, button, panel, statusNode, contentNode };
+      return { root, button: shell?.buttonEl || null, panel: shell?.panelEl || null, statusNode, contentNode };
     }
     function setStatus(text, tone = "idle") {
       if (!statusNode) return;
       statusNode.textContent = text;
       statusNode.dataset.tone = tone;
     }
-    function syncPanelExpandedState() {
-      button?.setAttribute?.("aria-expanded", isPanelOpen ? "true" : "false");
-    }
-    function loadButtonPosition() {
-      try {
-        const parsed = JSON.parse(storage?.getItem(positionKey) || "null");
-        if (parsed && Number.isFinite(parsed.left) && Number.isFinite(parsed.top)) {
-          return {
-            left: parsed.left,
-            top: parsed.top,
-            dockSide: isDockSide(parsed.dockSide) ? parsed.dockSide : detectDockSide(parsed.left)
-          };
-        }
-      } catch {
-      }
-      return null;
-    }
-    function persistButtonPosition(left, top, dockSide = buttonDockSide) {
-      const value = {
-        left: Math.round(left),
-        top: Math.round(top)
-      };
-      if (isDockSide(dockSide)) {
-        value.dockSide = dockSide;
-      }
-      storage?.setItem(positionKey, JSON.stringify(value));
-    }
-    function setButtonDockSide(dockSide) {
-      buttonDockSide = isDockSide(dockSide) ? dockSide : null;
-      if (!button) return;
-      button.classList.toggle("is-docked", Boolean(buttonDockSide));
-      if (!buttonDockSide) {
-        button.classList.remove("is-hover-locked");
-      }
-      if (buttonDockSide) {
-        button.dataset.dockSide = buttonDockSide;
-      } else {
-        delete button.dataset.dockSide;
-      }
-    }
-    function clampButtonPosition(left, top, options = {}) {
-      const width = options.width || BUTTON_FULL_WIDTH;
-      const height = options.height || BUTTON_HEIGHT;
-      const safe = options.safe ?? BUTTON_SAFE;
-      const maxLeft = Math.max(safe, windowObject.innerWidth - width - safe);
-      const maxTop = Math.max(safe, windowObject.innerHeight - height - safe);
-      return {
-        left: Math.min(Math.max(safe, left), maxLeft),
-        top: Math.min(Math.max(safe, top), maxTop)
-      };
-    }
-    function dockedButtonPosition(dockSide, top) {
-      const clamped = clampButtonPosition(0, top);
-      return {
-        left: dockSide === "right" ? windowObject.innerWidth - BUTTON_DOCK_OFFSET - BUTTON_FULL_WIDTH : BUTTON_DOCK_OFFSET,
-        top: clamped.top
-      };
-    }
-    function detectDockSide(left) {
-      if (left <= BUTTON_DOCK_THRESHOLD) return "left";
-      if (windowObject.innerWidth - (left + BUTTON_FULL_WIDTH) <= BUTTON_DOCK_THRESHOLD) return "right";
-      return null;
-    }
-    function getExpandedButtonRect() {
-      const rect = button?.getBoundingClientRect();
-      const top = rect?.top ?? DEFAULT_BUTTON_POSITION.top;
-      if (buttonDockSide === "left") {
-        return {
-          left: BUTTON_DOCK_OFFSET,
-          right: BUTTON_DOCK_OFFSET + BUTTON_FULL_WIDTH,
-          top,
-          bottom: top + BUTTON_HEIGHT,
-          width: BUTTON_FULL_WIDTH,
-          height: BUTTON_HEIGHT
-        };
-      }
-      if (buttonDockSide === "right") {
-        const right = windowObject.innerWidth - BUTTON_DOCK_OFFSET;
-        return {
-          left: right - BUTTON_FULL_WIDTH,
-          right,
-          top,
-          bottom: top + BUTTON_HEIGHT,
-          width: BUTTON_FULL_WIDTH,
-          height: BUTTON_HEIGHT
-        };
-      }
-      return rect;
-    }
-    function applyButtonPosition(position) {
-      if (!button) return;
-      if (position) {
-        const dockSide = isDockSide(position.dockSide) ? position.dockSide : null;
-        const clamped = dockSide ? dockedButtonPosition(dockSide, position.top) : clampButtonPosition(position.left, position.top);
-        setButtonDockSide(dockSide);
-        button.style.top = `${clamped.top}px`;
-        if (dockSide === "right") {
-          button.style.left = "auto";
-          button.style.right = `${BUTTON_DOCK_OFFSET}px`;
-        } else {
-          button.style.left = `${clamped.left}px`;
-          button.style.right = "auto";
-        }
-        return;
-      }
-      setButtonDockSide(null);
-      button.style.top = `${DEFAULT_BUTTON_POSITION.top}px`;
-      button.style.right = `${DEFAULT_BUTTON_POSITION.right}px`;
-      button.style.left = "auto";
-    }
-    function lockDockedButtonHover() {
-      if (!button || !buttonDockSide) return;
-      button.blur();
-      button.classList.toggle("is-hover-locked", button.matches(":hover"));
-    }
-    function unlockDockedButtonHover() {
-      button?.classList.remove("is-hover-locked");
-    }
-    function measurePanelNaturalHeight(measureWidth) {
-      if (!panel || !Number.isFinite(measureWidth)) return BUTTON_HEIGHT;
-      const clone = panel.cloneNode(true);
-      clone.hidden = false;
-      clone.classList.add("is-open");
-      clone.classList.remove("is-closing");
-      clone.style.cssText = [
-        "position: fixed",
-        "left: -9999px",
-        "top: 0",
-        `width: ${Math.round(measureWidth)}px`,
-        "height: auto",
-        "max-height: none",
-        "min-height: 0",
-        "visibility: hidden",
-        "pointer-events: none",
-        "opacity: 0",
-        "transition: none",
-        "transform: none"
-      ].join(";");
-      const cloneHeader = clone.querySelector(".cqc-panel-header");
-      if (cloneHeader) {
-        cloneHeader.style.opacity = "1";
-        cloneHeader.style.transition = "none";
-      }
-      const cloneContent = clone.querySelector(".cqc-content");
-      if (cloneContent) {
-        cloneContent.style.height = "auto";
-        cloneContent.style.maxHeight = "none";
-        cloneContent.style.overflow = "visible";
-        cloneContent.style.opacity = "1";
-        cloneContent.style.transition = "none";
-      }
-      (root || documentObject.documentElement).append(clone);
-      const measuredHeight = Math.ceil(clone.getBoundingClientRect().height);
-      clone.remove();
-      return measuredHeight || BUTTON_HEIGHT;
-    }
-    function getPreferredPanelHeight(maxPanelHeight, fallbackHeight = BUTTON_HEIGHT, measureWidth) {
-      const naturalHeight = measurePanelNaturalHeight(measureWidth);
-      return Math.min(maxPanelHeight, Math.max(fallbackHeight, naturalHeight));
-    }
-    function getPanelTargetRect(sourceRect) {
-      const safe = 12;
-      const panelWidth = Math.min(560, windowObject.innerWidth - safe * 2);
-      const maxPanelHeight = Math.min(760, windowObject.innerHeight - safe * 2);
-      const panelHeight = getPreferredPanelHeight(maxPanelHeight, sourceRect.height, panelWidth);
-      const left = Math.min(
-        Math.max(safe, sourceRect.right - panelWidth),
-        windowObject.innerWidth - panelWidth - safe
-      );
-      const top = Math.min(
-        Math.max(safe, sourceRect.top),
-        windowObject.innerHeight - panelHeight - safe
-      );
-      const originX = Math.min(
-        Math.max(sourceRect.left + sourceRect.width / 2 - left, 24),
-        panelWidth - 24
-      );
-      const originY = Math.min(
-        Math.max(sourceRect.top + sourceRect.height / 2 - top, 24),
-        panelHeight - 24
-      );
-      return {
-        left,
-        top,
-        width: panelWidth,
-        height: panelHeight,
-        originX,
-        originY,
-        placement: sourceRect.top + sourceRect.height / 2 < top + panelHeight / 2 ? "below" : "above"
-      };
-    }
-    function applyPanelRect(rect, borderRadius) {
-      if (!panel || !rect) return;
-      panel.style.left = `${Math.round(rect.left)}px`;
-      panel.style.top = `${Math.round(rect.top)}px`;
-      panel.style.right = "auto";
-      panel.style.width = `${Math.round(rect.width)}px`;
-      panel.style.height = `${Math.round(rect.height)}px`;
-      panel.style.borderRadius = `${borderRadius}px`;
-    }
-    function positionPanelNearButton() {
-      if (!panel || !button) return;
-      const sourceRect = getExpandedButtonRect();
-      if (!sourceRect) return;
-      const targetRect = getPanelTargetRect(sourceRect);
-      applyPanelRect(targetRect, 12);
-      panel.style.transformOrigin = `${Math.round(targetRect.originX)}px ${Math.round(targetRect.originY)}px`;
-      panel.dataset.placement = targetRect.placement;
-    }
-    function schedulePanelResize() {
-      if (!isPanelOpen) return;
-      windowObject.requestAnimationFrame(() => {
-        if (isPanelOpen) positionPanelNearButton();
-      });
-    }
-    function openPanel() {
-      if (!panel || !button) return;
-      windowObject.clearTimeout(panelCloseTimer);
-      const sourceRect = getExpandedButtonRect();
-      if (!sourceRect) return;
-      isPanelOpen = true;
-      syncPanelExpandedState();
-      button.classList.add("is-active");
-      panel.hidden = false;
-      panel.classList.remove("is-open", "is-closing");
-      applyPanelRect(sourceRect, 999);
-      button.classList.add("is-panel-source-hidden");
-      const targetRect = getPanelTargetRect(sourceRect);
-      panel.style.transformOrigin = `${Math.round(targetRect.originX)}px ${Math.round(targetRect.originY)}px`;
-      panel.dataset.placement = targetRect.placement;
-      windowObject.requestAnimationFrame(() => {
-        if (!isPanelOpen) return;
-        applyPanelRect(targetRect, 12);
-        panel?.classList.add("is-open");
-      });
-    }
-    function closePanel() {
-      if (!panel) return;
-      windowObject.clearTimeout(panelCloseTimer);
-      isPanelOpen = false;
-      syncPanelExpandedState();
-      const sourceRect = getExpandedButtonRect();
-      panel.classList.remove("is-open");
-      panel.classList.add("is-closing");
-      if (sourceRect) {
-        applyPanelRect(sourceRect, 999);
-        const panelRect = panel.getBoundingClientRect();
-        const originX = sourceRect.left + sourceRect.width / 2 - panelRect.left;
-        const originY = sourceRect.top + sourceRect.height / 2 - panelRect.top;
-        panel.style.transformOrigin = `${Math.round(originX)}px ${Math.round(originY)}px`;
-      }
-      panelCloseTimer = windowObject.setTimeout(() => {
-        if (!isPanelOpen && panel) {
-          panel.hidden = true;
-          panel.classList.remove("is-closing");
-          button?.classList.remove("is-active", "is-panel-source-hidden");
-          lockDockedButtonHover();
-        }
-      }, PANEL_CLOSE_ANIMATION_MS);
-    }
     function installShellStyles() {
       if (documentObject.getElementById(`${rootId}-shell-style`)) return;
       const style = documentObject.createElement("style");
       style.id = `${rootId}-shell-style`;
-      style.textContent = shellStyles(rootId);
+      style.textContent = [tokenCss, shell.cssText, createShellStyles(rootId)].filter(Boolean).join("\n\n");
       documentObject.head.append(style);
     }
-    function installDrag() {
-      let dragState = null;
-      button.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
-        unlockDockedButtonHover();
-        const rect = getExpandedButtonRect() || button.getBoundingClientRect();
-        button.classList.add("is-dragging");
-        dragState = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          startLeft: rect.left,
-          startTop: rect.top,
-          moved: false
-        };
-        button.setPointerCapture(event.pointerId);
-      });
-      button.addEventListener("pointermove", (event) => {
-        if (!dragState || dragState.pointerId !== event.pointerId) return;
-        const dx = event.clientX - dragState.startX;
-        const dy = event.clientY - dragState.startY;
-        if (Math.abs(dx) + Math.abs(dy) > 4) dragState.moved = true;
-        if (dragState.moved && buttonDockSide) {
-          setButtonDockSide(null);
-        }
-        const next = clampButtonPosition(
-          dragState.startLeft + dx,
-          dragState.startTop + dy
-        );
-        applyButtonPosition(next);
-        if (isPanelOpen) positionPanelNearButton();
-      });
-      function finishDrag(event) {
-        if (!dragState || dragState.pointerId !== event.pointerId) return;
-        const moved = dragState.moved;
-        dragState = null;
-        button.classList.remove("is-dragging");
-        if (button.hasPointerCapture(event.pointerId)) {
-          button.releasePointerCapture(event.pointerId);
-        }
-        const rect = button.getBoundingClientRect();
-        if (moved) {
-          const dockSide = detectDockSide(rect.left);
-          const next = dockSide ? { ...dockedButtonPosition(dockSide, rect.top), dockSide } : clampButtonPosition(rect.left, rect.top);
-          applyButtonPosition(next);
-          persistButtonPosition(next.left, next.top, dockSide);
-          if (isPanelOpen) positionPanelNearButton();
-        } else {
-          persistButtonPosition(rect.left, rect.top);
-        }
-        if (moved) {
-          suppressNextButtonClick = true;
-          windowObject.setTimeout(() => {
-            suppressNextButtonClick = false;
-          }, 0);
-        }
+    function requestFrame(callback) {
+      if (typeof windowObject.requestAnimationFrame === "function") {
+        windowObject.requestAnimationFrame(callback);
+      } else {
+        windowObject.setTimeout(callback, 16);
       }
-      button.addEventListener("pointerup", finishDrag);
-      button.addEventListener("pointercancel", finishDrag);
-      button.addEventListener("pointerenter", unlockDockedButtonHover);
-      button.addEventListener("pointerleave", unlockDockedButtonHover);
-    }
-    function installOutsideClose() {
-      documentObject.addEventListener(
-        "pointerdown",
-        (event) => {
-          if (!isPanelOpen) return;
-          if (eventContainsNode(event, root)) return;
-          closePanel();
-        },
-        true
-      );
     }
     function mount() {
       if (documentObject.getElementById(rootId)) return null;
-      installShellStyles();
       root = documentObject.createElement("div");
       root.id = rootId;
-      root.innerHTML = createShellMarkup(labels);
       documentObject.documentElement.append(root);
-      button = root.querySelector(".cqc-button");
-      panel = root.querySelector(".cqc-panel");
-      statusNode = root.querySelector(".cqc-status");
-      contentNode = root.querySelector(".cqc-content");
+      themeCleanup = applyTheme(root, { detectHost: () => detectHost(documentObject), observeHost: true });
+      shell = createWidgetShell({
+        root,
+        buttonAriaLabel: labels.buttonAriaOpen,
+        buttonContent: createButtonContentMarkup(labels),
+        buttonClass: "cqc-button",
+        panelClass: "cqc-panel",
+        panelWidth: 560,
+        panelMaxHeight: 760,
+        storage: storage?.getItem ? {
+          get: (key) => storage.getItem(key),
+          set: (key, value) => storage.setItem(key, value)
+        } : storage,
+        positionKey,
+        defaultPosition: DEFAULT_BUTTON_POSITION,
+        dock: true,
+        onOpen,
+        onClose,
+        renderPanelHeader: (headerEl) => renderPanelHeader(headerEl, labels),
+        renderPanelBody: (bodyEl) => {
+          bodyEl.classList.add("cqc-content");
+        }
+      });
+      installShellStyles();
+      shell.buttonEl.dataset.action = "toggle";
+      statusNode = shell.buttonEl.querySelector(".cqc-status");
+      contentNode = shell.panelEl.querySelector(".cqc-content");
       root.addEventListener("click", (event) => {
         const actionNode = event.target?.closest?.("[data-action]");
         const action = actionNode?.dataset?.action;
         if (!action) return;
-        if (action === "toggle" && suppressNextButtonClick) {
-          suppressNextButtonClick = false;
-          return;
-        }
         onAction(action, event, actionNode);
       });
-      windowObject.addEventListener("resize", () => {
-        const rect = getExpandedButtonRect() || button.getBoundingClientRect();
-        applyButtonPosition({
-          left: rect.left,
-          top: rect.top,
-          dockSide: buttonDockSide
-        });
-        if (isPanelOpen) positionPanelNearButton();
-      });
-      applyButtonPosition(loadButtonPosition());
-      installDrag();
-      installOutsideClose();
       setStatus(labels.statusIdle || "", "idle");
-      syncPanelExpandedState();
       return api;
+    }
+    function positionPanelNearButton() {
+      shell?.reposition();
+    }
+    function schedulePanelResize() {
+      if (!shell?.isOpen()) return;
+      requestFrame(() => {
+        if (shell?.isOpen()) shell.reposition();
+      });
+    }
+    function destroy() {
+      themeCleanup?.();
+      themeCleanup = null;
+      shell?.destroy();
+      shell = null;
+      root?.remove?.();
+      root = null;
+      statusNode = null;
+      contentNode = null;
     }
     const api = {
       mount,
       refs,
       setStatus,
-      openPanel,
-      closePanel,
+      openPanel: () => shell?.open(),
+      closePanel: () => shell?.close(),
       positionPanelNearButton,
       schedulePanelResize,
-      isOpen: () => isPanelOpen
+      isOpen: () => Boolean(shell?.isOpen()),
+      destroy
     };
     return api;
   }
@@ -2264,16 +2505,34 @@ ${text.slice(0, 800)}`);
     const scope = `#${rootId}`;
     return `
       ${scope} {
-        --cqc-stats-space-tight: 0.25rem;
-        --cqc-stats-space-control: 0.5rem;
-        --cqc-stats-space-section: 0.75rem;
-        --cqc-stats-radius-control: 0.5rem;
-        --cqc-stats-radius-section: 0.625rem;
-        --cqc-stats-radius-pill: 100rem;
-        --cqc-stats-font-control: 0.75rem;
-        --cqc-stats-font-meta: 0.6875rem;
-        --cqc-stats-font-value: 0.8125rem;
+        --cqc-stats-space-tight: 4px;
+        --cqc-stats-space-control: 8px;
+        --cqc-stats-space-section: 12px;
+        --cqc-stats-radius-control: 8px;
+        --cqc-stats-radius-section: 10px;
+        --cqc-stats-radius-pill: 999px;
+        --cqc-stats-font-control: 12px;
+        --cqc-stats-font-meta: 11px;
+        --cqc-stats-font-value: 13px;
         --cqc-stats-motion-duration: 160ms;
+      }
+
+      ${scope} .cqc-stats-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 48px;
+        margin: 0 0 var(--cqc-stats-space-section);
+        padding: 6px 8px;
+        border-radius: var(--cqc-stats-radius-control);
+        background: var(--cqc-surface-sunken);
+      }
+
+      ${scope} .cqc-stats-chart-bar {
+        flex: 1 1 0;
+        min-width: 2px;
+        border-radius: 2px 2px 1px 1px;
+        background: var(--cqc-primary);
       }
 
       ${scope} .cqc-stats-tabs {
@@ -2645,11 +2904,48 @@ ${text.slice(0, 800)}`);
         margin: 0 0 12px;
       }
 
+      .cqc-hero,
       .cqc-metric,
       .cqc-section {
         border: 1px solid var(--cqc-border);
         border-radius: 10px;
         background: var(--cqc-surface);
+      }
+
+      .cqc-hero {
+        margin: 0 0 10px;
+        padding: 14px 16px;
+      }
+
+      .cqc-hero-label {
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .cqc-hero-value {
+        margin: 6px 0 2px;
+        font-size: var(--wk-fs-hero, 28px);
+        font-weight: 650;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+
+      .cqc-hero-sub {
+        margin-top: 4px;
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .cqc-metrics-secondary .cqc-metric {
+        padding: 8px 12px;
+      }
+
+      .cqc-metrics-secondary .cqc-metric-value {
+        margin: 3px 0 1px;
+        font-size: 15px;
       }
 
       .cqc-metric {
@@ -2811,6 +3107,20 @@ ${text.slice(0, 800)}`);
         padding: 10px 12px;
       }
 
+      .cqc-table-expand {
+        border: 0;
+        background: transparent;
+        color: var(--cqc-primary-strong);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 0;
+      }
+
+      .cqc-table-expand:hover {
+        text-decoration: underline;
+      }
+
       .cqc-loading,
       .cqc-error {
         display: flex;
@@ -2954,13 +3264,31 @@ ${text.slice(0, 800)}`);
       const creditsValue = round(rolling["累计Credits"]);
       return `<div class="cqc-stats-live cqc-table-note">${escapeHtml3(t("statsRollingLive"))}: $${escapeHtml3(usdValue)} · ${escapeHtml3(String(creditsValue))} Credits</div>`;
     }
+    function chartHtml() {
+      const days = (cost.allDays || []).slice(-30);
+      if (!days.length) return "";
+      const max = Math.max(...days.map((row) => Number(row.usd) || 0));
+      if (!(max > 0)) return "";
+      const bars = days.map((row) => {
+        const percent = Math.max(2, Math.round((Number(row.usd) || 0) / max * 100));
+        return `<span class="cqc-stats-chart-bar" style="height: ${percent}%"></span>`;
+      }).join("");
+      return `<div class="cqc-stats-chart" aria-hidden="true">${bars}</div>`;
+    }
     function dailyTableHtml(rows) {
       const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
-        日期桶: row.date,
-        Credits: round(row.credits),
-        折算USD: usd(row.usd)
+        date: row.date,
+        credits: round(row.credits),
+        usd: usd(row.usd)
       }));
-      return mapped.length ? tableHtml(mapped, { columns: ["日期桶", "Credits", "折算USD"], limit: mapped.length }) : emptyHtml();
+      return mapped.length ? tableHtml(mapped, {
+        columns: [
+          { key: "date", labelKey: "statsColumnDate", priority: "primary" },
+          { key: "credits", labelKey: "statsColumnCredits" },
+          { key: "usd", labelKey: "statsColumnUsd" }
+        ],
+        limit: mapped.length
+      }) : emptyHtml();
     }
     function estimateLineHtml(label, range, creditsValue, usdValue) {
       return `
@@ -3047,7 +3375,7 @@ ${text.slice(0, 800)}`);
     else if (activePeriod === "month") body = monthBody();
     else if (activePeriod === "all") body = allBody();
     else body = dayBody();
-    return periodTabsHtml() + rollingLiveHtml() + body;
+    return periodTabsHtml() + chartHtml() + rollingLiveHtml() + body;
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js
@@ -3062,7 +3390,7 @@ ${text.slice(0, 800)}`);
   function safeRows(rows, limit = 12) {
     return Array.isArray(rows) ? rows.slice(0, limit) : [];
   }
-  function createQuotaPanelRenderer({ t, debugKey = "__codexQuotaCompassDebug", formatTimestamp } = {}) {
+  function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     if (typeof t !== "function") {
       throw new Error("Quota panel renderer requires a translator function.");
     }
@@ -3116,9 +3444,12 @@ ${text.slice(0, 800)}`);
       </div>
     `;
     }
-    function dataViewHtml(view = {}) {
+    function dataViewHtml(view = {}, state = {}) {
       const rows = Array.isArray(view.rows) ? view.rows : [];
-      const visibleRows = safeRows(rows, view.limit ?? 12);
+      const limit = view.limit ?? 12;
+      const expandable = rows.length > limit;
+      const expanded = expandable && Boolean(state.expandedViews?.has?.(view.id));
+      const visibleRows = expanded ? rows : safeRows(rows, limit);
       const columns = normalizeDataColumns(visibleRows, view.columns);
       if (!visibleRows.length || !columns.length) {
         return `<div class="cqc-empty">${escapeHtml2(t(view.emptyKey || "tableNoData"))}</div>`;
@@ -3131,7 +3462,7 @@ ${text.slice(0, 800)}`);
           ${compactColumns.map((column) => compactValueHtml(row, column)).join("")}
         </dl>
       `).join("");
-      const more = rows.length > visibleRows.length ? `<div class="cqc-table-note">${escapeHtml2(t("tablePreviewHint", { visible: visibleRows.length, total: rows.length, debugKey }))}</div>` : "";
+      const toggle = expandable ? `<div class="cqc-table-note"><button type="button" class="cqc-table-expand" data-action="toggle-rows" data-view-id="${escapeHtml2(view.id || "")}" data-expanded="${expanded ? "true" : "false"}">${escapeHtml2(expanded ? t("tableShowLess") : t("tableShowAll", { total: rows.length }))}</button></div>` : "";
       return `
       <div class="cqc-data-view" data-view-id="${escapeHtml2(view.id || "")}" data-compact="${view.compactOnMobile === false ? "false" : "true"}">
         <div class="cqc-table-wrap cqc-data-table">
@@ -3139,7 +3470,7 @@ ${text.slice(0, 800)}`);
         </div>
         <div class="cqc-compact-list">${compact}</div>
       </div>
-      ${more}
+      ${toggle}
     `;
     }
     function tableHtml(rows, options = {}) {
@@ -3178,9 +3509,9 @@ ${text.slice(0, 800)}`);
       const days = Math.floor(totalMinutes / (24 * 60));
       const remainingHours = Math.floor(totalMinutes % (24 * 60) / 60);
       const minutes = totalMinutes % 60;
-      if (days > 0) return `${days} 天 ${remainingHours} 小时`;
-      if (remainingHours > 0) return `${remainingHours} 小时 ${minutes} 分钟`;
-      return `${minutes} 分钟`;
+      if (days > 0) return t("durationDaysHours", { days, hours: remainingHours });
+      if (remainingHours > 0) return t("durationHoursMinutes", { hours: remainingHours, minutes });
+      return t("durationMinutes", { minutes });
     }
     function creditMetricHtml(label, usd2) {
       return metricHtml(label, usdMetricValue(usd2));
@@ -3197,6 +3528,30 @@ ${text.slice(0, 800)}`);
         return resetMetricHtml(metric.hours);
       }
       return metricHtml(label, metric?.value);
+    }
+    function heroHtml(metric) {
+      if (!metric) return "";
+      const label = metric.labelKey ? t(metric.labelKey) : metric.label || "-";
+      const value = metric.type === "credit" ? usdMetricValue(metric.usd) : formatValue(metric.value);
+      const hours = Number(metric.resetHours);
+      const subline = Number.isFinite(hours) ? `<div class="cqc-hero-sub">${escapeHtml2(t("heroResetSubline", { duration: formatHoursDuration(hours) }))}</div>` : "";
+      return `
+      <section class="cqc-hero">
+        <div class="cqc-hero-label">${escapeHtml2(label)}</div>
+        <div class="cqc-hero-value">${escapeHtml2(value)}</div>
+        ${subline}
+      </section>
+    `;
+    }
+    function secondaryMetricsHtml(metrics) {
+      const list = Array.isArray(metrics) ? metrics : [];
+      if (!list.length) return "";
+      return `<div class="cqc-metrics cqc-metrics-secondary">${list.map(primaryMetricHtml).join("")}</div>`;
+    }
+    function detailMetricsHtml(metrics) {
+      const list = Array.isArray(metrics) ? metrics : [];
+      if (!list.length) return "";
+      return `<div class="cqc-metrics">${list.map(primaryMetricHtml).join("")}</div>`;
     }
     function syncBannerHtml(banner) {
       if (!banner) return "";
@@ -3268,7 +3623,7 @@ ${text.slice(0, 800)}`);
       </div>
     `;
     }
-    function archiveSummaryHtml(model = {}) {
+    function archiveSummaryHtml(model = {}, state) {
       if (!model.isLoaded) {
         return `<div class="cqc-empty">${escapeHtml2(t("archiveEmpty"))}</div>`;
       }
@@ -3301,7 +3656,7 @@ ${text.slice(0, 800)}`);
           truncate: column !== t("archiveSnapshotCount")
         })),
         limit: 1
-      });
+      }, state);
       const recentSnapshots = safeRows(model.recentSnapshots || [], 5);
       const recent = recentSnapshots.length ? dataViewHtml({
         id: "archive-recent",
@@ -3317,7 +3672,7 @@ ${text.slice(0, 800)}`);
           priority: column === t("archiveSnapshotId") ? "primary" : "secondary",
           truncate: column === t("archiveSnapshotId") || column === t("archiveCapturedAt")
         }))
-      }) : `<div class="cqc-empty">${escapeHtml2(t("archiveNoSnapshot"))}</div>`;
+      }, state) : `<div class="cqc-empty">${escapeHtml2(t("archiveNoSnapshot"))}</div>`;
       const importReport = model.importReport ? `<div class="cqc-table-note">${escapeHtml2(t("archiveLatestImport", { added: model.importReport.added, skipped: model.importReport.skipped, invalid: model.importReport.invalid }))}</div>` : "";
       return `${overview}${importReport}${recent}`;
     }
@@ -3346,10 +3701,13 @@ ${text.slice(0, 800)}`);
       </div>
     `;
     }
-    function sectionFromModelHtml(section, viewModel) {
+    function sectionFromModelHtml(section, viewModel, state) {
       if (!section) return "";
+      if (section.type === "metrics") {
+        return detailMetricsHtml(section.metrics);
+      }
       if (section.type === "dataView") {
-        return sectionHtml(t(section.titleKey), dataViewHtml(section));
+        return sectionHtml(t(section.titleKey), dataViewHtml(section, state));
       }
       if (section.type === "syncBanner") {
         return syncBannerHtml(viewModel?.syncBanner);
@@ -3358,7 +3716,7 @@ ${text.slice(0, 800)}`);
         return syncFormHtml(viewModel?.remoteSyncStatus);
       }
       if (section.type === "archiveSummary") {
-        return sectionHtml(t("sectionArchiveOverview"), archiveSummaryHtml(viewModel?.archive));
+        return sectionHtml(t("sectionArchiveOverview"), archiveSummaryHtml(viewModel?.archive, state));
       }
       if (section.type === "note") {
         return `<div class="cqc-transfer-note">${escapeHtml2(t(section.noteKey || "transferNote"))}</div>`;
@@ -3372,8 +3730,8 @@ ${text.slice(0, 800)}`);
       }
       return "";
     }
-    function sectionsViewHtml(view, viewModel) {
-      return (view?.sections || []).map((section) => sectionFromModelHtml(section, viewModel)).join("");
+    function sectionsViewHtml(view, viewModel, state) {
+      return (view?.sections || []).map((section) => sectionFromModelHtml(section, viewModel, state)).join("");
     }
     function statsViewHtml(model, state = {}) {
       return buildStatsView(
@@ -3386,12 +3744,12 @@ ${text.slice(0, 800)}`);
         { t, sectionHtml, tableHtml, escapeHtml: escapeHtml2 }
       );
     }
-    function archiveViewHtml(model) {
+    function archiveViewHtml(model, state) {
       const view = model?.views?.archive;
-      if (view) return sectionsViewHtml(view, model);
+      if (view) return sectionsViewHtml(view, model, state);
       return `
       ${syncBannerHtml(model?.syncBanner)}
-      ${sectionHtml(t("sectionArchiveOverview"), archiveSummaryHtml(model?.archive))}
+      ${sectionHtml(t("sectionArchiveOverview"), archiveSummaryHtml(model?.archive, state))}
       <div class="cqc-transfer-note">${escapeHtml2(t("transferNote"))}</div>
       ${archiveTransferActionsHtml()}
     `;
@@ -3399,15 +3757,15 @@ ${text.slice(0, 800)}`);
     function activeViewHtml(viewModel, activePanelView, state = {}) {
       const view = viewModel?.views?.[activePanelView] || viewModel?.views?.details;
       if (view?.kind === "archiveWorkspace") {
-        return archiveViewHtml(viewModel);
+        return archiveViewHtml(viewModel, state);
       }
       if (view?.kind === "stats") {
         return statsViewHtml(viewModel, state);
       }
       if (view?.kind === "sections") {
-        return sectionsViewHtml(view, viewModel);
+        return sectionsViewHtml(view, viewModel, state);
       }
-      return sectionsViewHtml(viewModel?.views?.details, viewModel);
+      return sectionsViewHtml(viewModel?.views?.details, viewModel, state);
     }
     function normalizeActivePanelView(viewModel, requestedPanelView) {
       const tabs = Array.isArray(viewModel?.tabs) ? viewModel.tabs : [];
@@ -3422,9 +3780,8 @@ ${text.slice(0, 800)}`);
       return {
         activePanelView,
         html: `
-        <div class="cqc-metrics">
-          ${(viewModel?.primaryMetrics || []).map(primaryMetricHtml).join("")}
-        </div>
+        ${heroHtml(viewModel?.heroMetric)}
+        ${secondaryMetricsHtml(viewModel?.secondaryMetrics)}
         ${panelTabsHtml(viewModel, activePanelView)}
         <div class="cqc-details">
           ${viewBody}
@@ -4804,6 +5161,211 @@ ${text.slice(0, 800)}`);
     };
   }
 
+  // src/userscripts/shared/shared-toast.lib.js
+  var TOAST_LIMIT = 3;
+  var DEFAULT_DURATION_MS = 4e3;
+  var ERROR_DURATION_MS = 6e3;
+  var EXIT_ANIMATION_MS = 160;
+  var TONE_ICONS = {
+    success: "check",
+    error: "alert-triangle",
+    progress: "loader"
+  };
+  var TOAST_CSS = `
+.wk-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  pointer-events: none;
+}
+
+.wk-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border: 1px solid var(--wk-border);
+  border-radius: var(--wk-radius-ctl);
+  background: var(--wk-surface);
+  color: var(--wk-text);
+  box-shadow: var(--wk-shadow-pop);
+  font-size: var(--wk-fs-md);
+  line-height: 1.4;
+  pointer-events: auto;
+  animation: wk-toast-in 160ms ease-out;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.wk-toast.is-leaving {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.wk-toast-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.wk-toast[data-tone="success"] .wk-toast-icon {
+  color: var(--wk-accent);
+}
+
+.wk-toast[data-tone="error"] .wk-toast-icon {
+  color: var(--wk-danger);
+}
+
+.wk-toast[data-tone="progress"] .wk-toast-icon {
+  color: var(--wk-text-muted);
+}
+
+.wk-toast .wk-spin {
+  animation: wk-spin 0.9s linear infinite;
+}
+
+@keyframes wk-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-toast {
+    animation: none;
+    transition: none;
+  }
+
+  .wk-toast .wk-spin {
+    animation: none;
+  }
+}
+`.trim();
+  function createToaster({ root } = {}) {
+    if (!root?.append) {
+      throw new Error("shared-toast: createToaster requires a root element.");
+    }
+    const documentObject = root.ownerDocument ?? globalThis.document;
+    if (!documentObject?.createElement) {
+      throw new Error("shared-toast: root must expose ownerDocument.");
+    }
+    const timers = /* @__PURE__ */ new Set();
+    const container = documentObject.createElement("div");
+    container.className = "wk-toasts";
+    container.setAttribute("role", "status");
+    container.setAttribute("aria-live", "polite");
+    root.append(container);
+    function schedule(callback, delay) {
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        callback();
+      }, delay);
+      timers.add(timer);
+    }
+    function dismiss(toast) {
+      if (!toast.parentNode) return;
+      toast.classList.add("is-leaving");
+      schedule(() => toast.remove(), EXIT_ANIMATION_MS);
+    }
+    function enforceLimit() {
+      while (container.children.length > TOAST_LIMIT) {
+        container.firstElementChild?.remove();
+      }
+    }
+    function setTone(toast, tone) {
+      toast.dataset.tone = tone;
+      const iconNode = toast.querySelector(".wk-toast-icon");
+      const iconName = TONE_ICONS[tone];
+      if (iconName) {
+        iconNode.innerHTML = iconSvg(iconName);
+        iconNode.classList.toggle("wk-spin", tone === "progress");
+        iconNode.hidden = false;
+      } else {
+        iconNode.innerHTML = "";
+        iconNode.classList.remove("wk-spin");
+        iconNode.hidden = true;
+      }
+    }
+    function setMessage(toast, message) {
+      toast.querySelector(".wk-toast-message").textContent = String(message ?? "");
+    }
+    function buildToast({ message, tone }) {
+      const toast = documentObject.createElement("div");
+      toast.className = "wk-toast";
+      const iconNode = documentObject.createElement("span");
+      iconNode.className = "wk-toast-icon";
+      const messageNode = documentObject.createElement("span");
+      messageNode.className = "wk-toast-message";
+      toast.append(iconNode, messageNode);
+      setTone(toast, tone);
+      setMessage(toast, message);
+      return toast;
+    }
+    function autoDismiss(toast, duration) {
+      if (Number.isFinite(duration) && duration > 0) {
+        schedule(() => dismiss(toast), duration);
+      }
+    }
+    function show({ message, tone = "info", duration } = {}) {
+      const resolvedTone = ["success", "error", "info"].includes(tone) ? tone : "info";
+      const toast = buildToast({ message, tone: resolvedTone });
+      container.append(toast);
+      enforceLimit();
+      autoDismiss(toast, duration ?? (resolvedTone === "error" ? ERROR_DURATION_MS : DEFAULT_DURATION_MS));
+      return toast;
+    }
+    function showProgress({ message } = {}) {
+      const toast = buildToast({ message, tone: "progress" });
+      container.append(toast);
+      enforceLimit();
+      let settled = false;
+      function settle(tone, nextMessage, duration) {
+        if (settled) return;
+        settled = true;
+        if (nextMessage != null) setMessage(toast, nextMessage);
+        setTone(toast, tone);
+        autoDismiss(toast, duration);
+      }
+      return {
+        update(nextMessage) {
+          if (!settled) setMessage(toast, nextMessage);
+        },
+        done(successMessage) {
+          settle("success", successMessage, DEFAULT_DURATION_MS);
+        },
+        fail(errorMessage) {
+          settle("error", errorMessage, ERROR_DURATION_MS);
+        }
+      };
+    }
+    function destroy() {
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+      container.remove();
+    }
+    return {
+      cssText: TOAST_CSS,
+      show,
+      showProgress,
+      destroy
+    };
+  }
+
   // src/userscripts/codex-quota-compass/codex-quota-compass.entry.js
   (function() {
     "use strict";
@@ -4812,7 +5374,7 @@ ${text.slice(0, 800)}`);
     const LAST_RESULT_KEY = "__codexQuotaCompassLastResult";
     const RUNNING_KEY = "__codexQuotaCompassRunning";
     const ROOT_ID = "codex-quota-compass-root";
-    const SCRIPT_VERSION = "0.5.2";
+    const SCRIPT_VERSION = "0.5.3";
     const BUTTON_POSITION_KEY = "codexQuotaCompassButtonPosition";
     let statusNode;
     let contentNode;
@@ -4828,10 +5390,11 @@ ${text.slice(0, 800)}`);
     let latestImportReport = null;
     let pendingRunPromise = null;
     let floatingPanelShell = null;
+    let toaster = null;
+    const expandedViews = /* @__PURE__ */ new Set();
     const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
     const panelRenderer = createQuotaPanelRenderer({
-      t,
-      debugKey: DEBUG_KEY
+      t
     });
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,
@@ -4907,6 +5470,13 @@ ${text.slice(0, 800)}`);
     function setStatus(text, tone = "idle") {
       floatingPanelShell?.setStatus(text, tone);
     }
+    function showToast(message, tone = "info") {
+      if (!toaster) {
+        console.info(`[${SCRIPT_NAME}] ${message}`);
+        return;
+      }
+      toaster.show({ message, tone });
+    }
     function openPanel() {
       floatingPanelShell?.openPanel();
     }
@@ -4944,6 +5514,7 @@ ${text.slice(0, 800)}`);
         activePanelView,
         statsPeriod: activeStatsPeriod,
         statsDrill,
+        expandedViews,
         ...overrides
       };
     }
@@ -4974,13 +5545,14 @@ ${text.slice(0, 800)}`);
     async function runAndRender() {
       setStatus(t("statusLoading"), "loading");
       renderLoading();
+      const runPromise = runAndReport({ silentAlert: true });
       if (isPanelCurrentlyOpen()) {
         positionPanelNearButton();
       } else {
         openPanel();
       }
       try {
-        const result = await runAndReport({ silentAlert: true });
+        const result = await runPromise;
         await refreshLedgerCostForResult(result);
         renderResult(result);
         setStatus(t("statusUpdated"), "success");
@@ -4991,14 +5563,11 @@ ${text.slice(0, 800)}`);
         throw error;
       }
     }
-    function activateCompassButton() {
-      if (isPanelCurrentlyOpen()) {
-        closePanel();
-      } else if (latestResult && !latestError) {
+    function handlePanelOpen() {
+      if (latestResult && !latestError) {
         renderResult(latestResult);
         setStatus(t("statusCached"), "success");
-        openPanel();
-      } else {
+      } else if (!pendingRunPromise) {
         runAndRender().catch(() => {
         });
       }
@@ -5013,7 +5582,7 @@ ${text.slice(0, 800)}`);
       if (synced.status !== "synced") {
         refreshCurrentPanel();
         if (!options.silent) {
-          alert(`${SCRIPT_NAME} ${t("remoteSyncSkipped", { status: synced.status })}`);
+          showToast(t("remoteSyncSkipped", { status: synced.status }), "info");
           setStatus(t("statusUpdated"), "success");
         }
         return synced;
@@ -5059,7 +5628,7 @@ ${text.slice(0, 800)}`);
       const decision = planRemoteSyncSave(formValues, { hasToken: current.hasToken });
       if (!decision.ok) {
         setStatus(t("statusFailed"), "error");
-        alert(`${SCRIPT_NAME} ${t("remoteSyncTokenRequired")}`);
+        showToast(t("remoteSyncTokenRequired"), "error");
         return null;
       }
       await remoteSyncClient.configure(decision.patch);
@@ -5084,7 +5653,6 @@ ${text.slice(0, 800)}`);
     }
     function handleShellAction(action, event) {
       if (action === "toggle") {
-        activateCompassButton();
         return;
       }
       if (action === "close") {
@@ -5094,6 +5662,18 @@ ${text.slice(0, 800)}`);
       if (action === "refresh") {
         runAndRender().catch(() => {
         });
+        return;
+      }
+      if (action === "toggle-rows") {
+        const viewId = event.target?.closest?.("[data-view-id]")?.dataset?.viewId;
+        if (viewId) {
+          if (expandedViews.has(viewId)) {
+            expandedViews.delete(viewId);
+          } else {
+            expandedViews.add(viewId);
+          }
+          rerenderActiveView();
+        }
         return;
       }
       if (action === "switch-view" && latestResult) {
@@ -5130,21 +5710,21 @@ ${text.slice(0, 800)}`);
       if (action === "export-archive") {
         exportSnapshotArchive().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-          alert(`${SCRIPT_NAME} ${t("exportFailed", { error: error?.message || error })}`);
+          showToast(t("exportFailed", { error: error?.message || error }), "error");
         });
         return;
       }
       if (action === "import-archive") {
         importSnapshotArchive().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
-          alert(`${SCRIPT_NAME} ${t("importFailed", { error: error?.message || error })}`);
+          showToast(t("importFailed", { error: error?.message || error }), "error");
         });
         return;
       }
       if (action === "save-remote-sync") {
         saveRemoteSyncFromForm().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Save remote sync failed.`, error);
-          alert(`${SCRIPT_NAME} ${t("remoteSyncFailed", { error: error?.message || error })}`);
+          showToast(t("remoteSyncFailed", { error: error?.message || error }), "error");
           setStatus(t("statusFailed"), "error");
         });
         return;
@@ -5152,7 +5732,7 @@ ${text.slice(0, 800)}`);
       if (action === "sync-remote") {
         syncRemoteArchive().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Remote sync failed.`, error);
-          alert(`${SCRIPT_NAME} ${t("remoteSyncFailed", { error: error?.message || error })}`);
+          showToast(t("remoteSyncFailed", { error: error?.message || error }), "error");
           setStatus(t("statusFailed"), "error");
         });
         return;
@@ -5168,10 +5748,16 @@ ${text.slice(0, 800)}`);
           buttonAriaOpen: t("buttonAriaOpen"),
           statusIdle: t("statusIdle"),
           actionRefresh: t("actionRefresh"),
-          closeAria: "Close"
+          closeAria: t("closeAria")
         },
+        tokenCss: buildTokenCss({
+          rootSelector: `#${ROOT_ID}`,
+          accent: "#10a37f",
+          accentDark: "#19c37d"
+        }),
         positionKey: BUTTON_POSITION_KEY,
         onAction: handleShellAction,
+        onOpen: handlePanelOpen,
         document,
         window,
         storage: localStorage
@@ -5181,6 +5767,13 @@ ${text.slice(0, 800)}`);
       const refs = mountedShell.refs();
       statusNode = refs.statusNode;
       contentNode = refs.contentNode;
+      toaster = createToaster({ root: refs.root });
+      if (!document.getElementById(`${ROOT_ID}-toast-style`)) {
+        const style = document.createElement("style");
+        style.id = `${ROOT_ID}-toast-style`;
+        style.textContent = toaster.cssText;
+        document.head.append(style);
+      }
     }
     async function runCompass() {
       if (window[RUNNING_KEY]) {
@@ -5219,7 +5812,7 @@ ${text.slice(0, 800)}`);
           } catch (archiveError) {
             console.error(`[${SCRIPT_NAME}] Snapshot Archive save failed.`, archiveError);
             if (!options.silentAlert) {
-              alert(`${SCRIPT_NAME} ${t("saveArchiveFailed", { error: archiveError?.message || archiveError })}`);
+              showToast(t("saveArchiveFailed", { error: archiveError?.message || archiveError }), "error");
             }
           }
         }
@@ -5237,7 +5830,7 @@ ${text.slice(0, 800)}`);
         console.error(`[${SCRIPT_NAME}] Failed.`, error);
         latestError = error;
         if (!options.silentAlert) {
-          alert(`${SCRIPT_NAME} failed: ${error?.message || error}`);
+          showToast(t("runFailed", { error: error?.message || error }), "error");
         }
         throw error;
       } finally {
@@ -5266,7 +5859,7 @@ ${text.slice(0, 800)}`);
       );
       latestArchiveSummary = await archiveStore.summarizeArchive();
       refreshCurrentPanel();
-      alert(`${SCRIPT_NAME} ${t("exportDone", { count: exportDocument.snapshotCount })}`);
+      showToast(t("exportDone", { count: exportDocument.snapshotCount }), "success");
     }
     function chooseImportFileText() {
       return new Promise((resolve, reject) => {
@@ -5307,11 +5900,11 @@ ${text.slice(0, 800)}`);
       latestImportReport = imported.report;
       scheduleRemoteArchiveSync();
       refreshCurrentPanel();
-      alert(`${SCRIPT_NAME} ${t("importDone", {
+      showToast(t("importDone", {
         added: imported.report.added,
         skipped: imported.report.skipped,
         invalid: imported.report.invalid
-      })}`);
+      }), "success");
     }
     createUi();
     Promise.all([refreshArchiveSummary(), refreshRemoteSyncStatus()]).then(() => {
@@ -5336,20 +5929,20 @@ ${text.slice(0, 800)}`);
       GM_registerMenuCommand(t("menuRemoteSync"), () => {
         syncRemoteArchive().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Remote sync failed.`, error);
-          alert(`${SCRIPT_NAME} ${t("remoteSyncFailed", { error: error?.message || error })}`);
+          showToast(t("remoteSyncFailed", { error: error?.message || error }), "error");
           setStatus(t("statusFailed"), "error");
         });
       });
       GM_registerMenuCommand(t("menuExport"), () => {
         exportSnapshotArchive().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-          alert(`${SCRIPT_NAME} ${t("exportFailed", { error: error?.message || error })}`);
+          showToast(t("exportFailed", { error: error?.message || error }), "error");
         });
       });
       GM_registerMenuCommand(t("menuImport"), () => {
         importSnapshotArchive().catch((error) => {
           console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
-          alert(`${SCRIPT_NAME} ${t("importFailed", { error: error?.message || error })}`);
+          showToast(t("importFailed", { error: error?.message || error }), "error");
         });
       });
     }

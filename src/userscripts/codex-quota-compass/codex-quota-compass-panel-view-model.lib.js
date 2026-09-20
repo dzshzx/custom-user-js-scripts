@@ -123,56 +123,57 @@ function dataView(id, titleKey, rows, columns, options = {}) {
 }
 
 function createDetailsSections({
-  weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits,
+  weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits, detailMetrics,
 }) {
   return [
+    { type: 'metrics', titleKey: 'sectionKeyMetrics', metrics: detailMetrics },
     dataView('details-weekly-estimate', 'sectionWeeklyEstimate', [weekly], [
-      dataColumn('已用百分比', { priority: 'primary' }),
-      dataColumn('剩余比例小数', { priority: 'secondary' }),
+      dataColumn('已用百分比', { labelKey: 'columnUsedPercent', priority: 'primary' }),
+      dataColumn('剩余比例小数', { labelKey: 'columnRemainingRatio', priority: 'secondary' }),
       dataColumn('包含重置日_已用折算USD', { labelKey: 'columnIncludedResetUsd', priority: 'primary' }),
       dataColumn('反推周总USD_包含重置日', { labelKey: 'columnIncludedResetTotalUsd', priority: 'primary' }),
       dataColumn('剩余USD_包含重置日口径', { labelKey: 'columnIncludedResetRemainingUsd', priority: 'primary' }),
-      dataColumn('包含重置日_已用Credits', { priority: 'secondary' }),
-      dataColumn('剩余Credits_包含重置日口径', { priority: 'secondary' }),
-      dataColumn('排除重置日_已用折算USD', { priority: 'secondary' }),
-      dataColumn('剩余USD_排除重置日口径', { priority: 'secondary' }),
-      dataColumn('排除重置日_已用Credits', { priority: 'debug' }),
-      dataColumn('剩余Credits_排除重置日口径', { priority: 'debug' }),
-      dataColumn('误差说明', { priority: 'debug', wrap: true }),
+      dataColumn('包含重置日_已用Credits', { labelKey: 'columnIncludedResetUsedCredits', priority: 'secondary' }),
+      dataColumn('剩余Credits_包含重置日口径', { labelKey: 'columnIncludedResetRemainingCredits', priority: 'secondary' }),
+      dataColumn('排除重置日_已用折算USD', { labelKey: 'columnExcludedResetUsedUsd', priority: 'secondary' }),
+      dataColumn('剩余USD_排除重置日口径', { labelKey: 'columnExcludedResetRemainingUsd', priority: 'secondary' }),
+      dataColumn('排除重置日_已用Credits', { labelKey: 'columnExcludedResetUsedCredits', priority: 'debug' }),
+      dataColumn('剩余Credits_排除重置日口径', { labelKey: 'columnExcludedResetRemainingCredits', priority: 'debug' }),
+      dataColumn('误差说明', { labelKey: 'columnErrorNote', priority: 'debug', wrap: true }),
     ]),
     dataView('details-range-summary', 'sectionRangeSummary', [sinceReset, month, rolling], [
-      dataColumn('范围', { priority: 'primary', wrap: true }),
-      dataColumn('累计折算USD', { priority: 'primary' }),
-      dataColumn('累计Credits', { priority: 'primary' }),
-      dataColumn('返回日期桶数', { priority: 'secondary' }),
-      dataColumn('累计Token', { priority: 'debug' }),
-      dataColumn('累计线程数', { priority: 'debug' }),
-      dataColumn('累计轮数', { priority: 'debug' }),
+      dataColumn('范围', { labelKey: 'columnRange', priority: 'primary', wrap: true }),
+      dataColumn('累计折算USD', { labelKey: 'columnTotalUsd', priority: 'primary' }),
+      dataColumn('累计Credits', { labelKey: 'columnTotalCredits', priority: 'primary' }),
+      dataColumn('返回日期桶数', { labelKey: 'columnBucketCount', priority: 'secondary' }),
+      dataColumn('累计Token', { labelKey: 'columnTotalTokens', priority: 'debug' }),
+      dataColumn('累计线程数', { labelKey: 'columnTotalThreads', priority: 'debug' }),
+      dataColumn('累计轮数', { labelKey: 'columnTotalTurns', priority: 'debug' }),
     ]),
     dataView('details-windows', 'sectionWindows', windows, [
-      dataColumn('名称', { priority: 'primary', wrap: true }),
-      dataColumn('已用百分比', { priority: 'primary' }),
-      dataColumn('窗口天数', { priority: 'secondary' }),
-      dataColumn('本轮开始_本地', { priority: 'secondary', truncate: true }),
-      dataColumn('下次重置_本地', { priority: 'secondary', truncate: true }),
-      dataColumn('距离重置小时', { priority: 'primary' }),
+      dataColumn('名称', { labelKey: 'columnName', priority: 'primary', wrap: true }),
+      dataColumn('已用百分比', { labelKey: 'columnUsedPercent', priority: 'primary' }),
+      dataColumn('窗口天数', { labelKey: 'columnWindowDays', priority: 'secondary' }),
+      dataColumn('本轮开始_本地', { labelKey: 'columnWindowStartLocal', priority: 'secondary', truncate: true }),
+      dataColumn('下次重置_本地', { labelKey: 'columnNextResetLocal', priority: 'secondary', truncate: true }),
+      dataColumn('距离重置小时', { labelKey: 'columnHoursToReset', priority: 'primary' }),
     ]),
     dataView('details-model-summary', 'sectionModelSummary', modelSummaries, [
-      dataColumn('模型', { priority: 'primary', wrap: true }),
-      dataColumn('速度', { priority: 'secondary' }),
-      dataColumn('占比百分比', { priority: 'primary' }),
-      dataColumn('Credits', { priority: 'secondary' }),
+      dataColumn('模型', { labelKey: 'columnModel', priority: 'primary', wrap: true }),
+      dataColumn('速度', { labelKey: 'columnSpeed', priority: 'secondary' }),
+      dataColumn('占比百分比', { labelKey: 'columnSharePercent', priority: 'primary' }),
+      dataColumn('Credits', { labelKey: 'columnCredits', priority: 'secondary' }),
     ]),
     dataView('details-reset-credits', 'sectionResetCredits', resetCredits?.明细, [
-      dataColumn('标题', { priority: 'primary', wrap: true }),
-      dataColumn('状态', { priority: 'secondary' }),
-      dataColumn('过期时间_本地', { priority: 'primary', truncate: true }),
+      dataColumn('标题', { labelKey: 'columnTitle', priority: 'primary', wrap: true }),
+      dataColumn('状态', { labelKey: 'columnStatus', priority: 'secondary' }),
+      dataColumn('过期时间_本地', { labelKey: 'columnExpiresLocal', priority: 'primary', truncate: true }),
     ], { emptyKey: 'resetCreditsEmpty' }),
   ];
 }
 
 function createPanelViews({
-  weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits, transfer,
+  weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits, transfer, detailMetrics,
 }) {
   const tabs = [
     { id: 'details', labelKey: 'tabDetails' },
@@ -193,7 +194,7 @@ function createPanelViews({
         labelKey: 'tabDetails',
         kind: 'sections',
         sections: createDetailsSections({
-          weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits,
+          weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits, detailMetrics,
         }),
       },
       archive: {
@@ -263,24 +264,22 @@ function buildCostViewModel(ledgerCost) {
   };
 }
 
-function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow, resetCredits }) {
-  const resetCreditMetrics = resetCredits
-    ? [{
-      id: 'resetCreditsAvailable',
-      type: 'value',
-      labelKey: 'metricResetCredits',
-      label: '重置券 可用/适用',
-      value: `${resetCredits.可用张数 ?? '-'} / ${resetCredits.当前适用张数 ?? '-'}`,
-    }]
-    : [];
+// First-screen hierarchy: one hero metric (remaining USD incl reset day, with
+// the reset countdown as its sub-line), two compact secondary metrics, and the
+// remaining figures demoted to a grid at the top of the Details tab.
+function createHeroMetric({ weekly, mainSevenDayWindow }) {
+  return {
+    id: 'remainingUsdIncludingReset',
+    type: 'credit',
+    labelKey: 'metricRemainingUsdIncludingReset',
+    label: '剩余 USD · 含重置日',
+    usd: weekly.剩余USD_包含重置日口径,
+    resetHours: mainSevenDayWindow?.距离重置小时,
+  };
+}
+
+function createSecondaryMetrics({ weekly }) {
   return [
-    {
-      id: 'remainingUsdIncludingReset',
-      type: 'credit',
-      labelKey: 'metricRemainingUsdIncludingReset',
-      label: '剩余 USD · 含重置日',
-      usd: weekly.剩余USD_包含重置日口径,
-    },
     {
       id: 'remainingUsdExcludingReset',
       type: 'credit',
@@ -288,6 +287,18 @@ function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow, r
       label: '剩余 USD · 排除重置日',
       usd: weekly.剩余USD_排除重置日口径,
     },
+    {
+      id: 'sevenDayUsedPercent',
+      type: 'value',
+      labelKey: 'metricSevenDayUsedPercent',
+      label: '7 天已用',
+      value: weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-',
+    },
+  ];
+}
+
+function createDetailMetrics({ weekly, sinceReset, month, resetCredits }) {
+  const metrics = [
     {
       id: 'weeklyTotalIncludingReset',
       type: 'credit',
@@ -303,13 +314,6 @@ function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow, r
       usd: weekly.反推周总USD_排除重置日,
     },
     {
-      id: 'sevenDayUsedPercent',
-      type: 'value',
-      labelKey: 'metricSevenDayUsedPercent',
-      label: '7 天已用',
-      value: weekly.已用百分比 !== undefined ? `${weekly.已用百分比}%` : '-',
-    },
-    {
       id: 'sinceResetTotal',
       type: 'credit',
       labelKey: 'metricSinceResetTotal',
@@ -323,13 +327,17 @@ function createPrimaryMetrics({ weekly, sinceReset, month, mainSevenDayWindow, r
       label: '本月累计',
       usd: month.累计折算USD,
     },
-    {
-      id: 'resetCountdown',
-      type: 'reset',
-      hours: mainSevenDayWindow?.距离重置小时,
-    },
-    ...resetCreditMetrics,
   ];
+  if (resetCredits) {
+    metrics.push({
+      id: 'resetCreditsAvailable',
+      type: 'value',
+      labelKey: 'metricResetCredits',
+      label: '重置券 可用/适用',
+      value: `${resetCredits.可用张数 ?? '-'} / ${resetCredits.当前适用张数 ?? '-'}`,
+    });
+  }
+  return metrics;
 }
 
 function createQuotaPanelViewModel({
@@ -374,6 +382,12 @@ function createQuotaPanelViewModel({
     remoteSyncStatus: normalizedRemoteSyncStatus,
     actions: createTransferActions(),
   };
+  const detailMetrics = createDetailMetrics({
+    weekly,
+    sinceReset,
+    month,
+    resetCredits: snapshotAccess.resetCredits,
+  });
   const panelViews = createPanelViews({
     weekly,
     sinceReset,
@@ -383,6 +397,7 @@ function createQuotaPanelViewModel({
     modelSummaries: snapshotAccess.rolling.modelSummaries,
     resetCredits: snapshotAccess.resetCredits,
     transfer,
+    detailMetrics,
   });
 
   return {
@@ -398,13 +413,12 @@ function createQuotaPanelViewModel({
     transfer,
     tabs: panelViews.tabs,
     views: panelViews.views,
-    primaryMetrics: createPrimaryMetrics({
+    heroMetric: createHeroMetric({
       weekly,
-      sinceReset,
-      month,
       mainSevenDayWindow,
-      resetCredits: snapshotAccess.resetCredits,
     }),
+    secondaryMetrics: createSecondaryMetrics({ weekly }),
+    detailMetrics,
     rollingRows: snapshotAccess.rolling.dailyRows,
     sinceResetRows: snapshotAccess.sinceReset.dailyRows,
     sinceResetClients: snapshotAccess.sinceReset.clientSummaries,
