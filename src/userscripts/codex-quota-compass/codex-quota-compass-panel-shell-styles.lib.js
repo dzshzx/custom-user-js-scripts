@@ -34,11 +34,11 @@ function createShellStyles(rootId, constants = {}) {
       --cqc-warning: #b45309;
       --cqc-warning-surface: rgba(245, 158, 11, 0.1);
       --cqc-warning-border: rgba(245, 158, 11, 0.32);
-      --cqc-shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.16);
-      --cqc-shadow-button: 0 3px 10px rgba(0, 0, 0, 0.12);
-      --cqc-button-bg: #f8fafc;
-      --cqc-button-bg-docked: #f8fafc;
-      --cqc-button-bg-docked-active: #f8fafc;
+      --cqc-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.22);
+      --cqc-shadow-button: 0 8px 28px rgba(0, 0, 0, 0.14);
+      --cqc-button-bg: rgba(248, 250, 252, 0.95);
+      --cqc-button-bg-docked: rgba(255, 255, 255, 0.62);
+      --cqc-button-bg-docked-active: rgba(255, 255, 255, 0.94);
       position: fixed;
       inset: 0;
       z-index: 2147483647;
@@ -68,6 +68,7 @@ function createShellStyles(rootId, constants = {}) {
       cursor: pointer;
       pointer-events: auto;
       user-select: none;
+      backdrop-filter: blur(18px);
       overflow: hidden;
       transition:
         width 160ms ease,
@@ -85,7 +86,7 @@ function createShellStyles(rootId, constants = {}) {
 
     .cqc-button.is-active {
       border-color: var(--cqc-primary-border);
-      box-shadow: var(--cqc-shadow-button);
+      box-shadow: 0 10px 32px var(--cqc-primary-ring);
     }
 
     .cqc-button:focus-visible,
@@ -104,8 +105,8 @@ function createShellStyles(rootId, constants = {}) {
       padding: 0;
       justify-content: center;
       background: var(--cqc-button-bg-docked);
-      box-shadow: var(--cqc-shadow-button);
-      opacity: 1;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+      opacity: 0.72;
     }
 
     .cqc-button.is-docked:hover,
@@ -132,7 +133,7 @@ function createShellStyles(rootId, constants = {}) {
       padding: 0;
       justify-content: center;
       background: var(--cqc-button-bg-docked);
-      opacity: 1;
+      opacity: 0.72;
     }
 
     .cqc-button.is-docked.is-hover-locked .cqc-button-text,
@@ -169,6 +170,7 @@ function createShellStyles(rootId, constants = {}) {
       height: 10px;
       border-radius: 50%;
       background: var(--cqc-primary);
+      box-shadow: 0 0 0 4px var(--cqc-primary-ring);
       flex: 0 0 auto;
     }
 
@@ -279,15 +281,32 @@ function createShellStyles(rootId, constants = {}) {
     }
 
     .cqc-close-icon {
-      width: 16px;
-      height: 16px;
+      position: relative;
+      width: 14px;
+      height: 14px;
       display: block;
       flex: 0 0 auto;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
+    }
+
+    .cqc-close-icon::before,
+    .cqc-close-icon::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 2px;
+      border-radius: 999px;
+      background: currentColor;
+      transform-origin: center;
+    }
+
+    .cqc-close-icon::before {
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .cqc-close-icon::after {
+      transform: translate(-50%, -50%) rotate(-45deg);
     }
 
     .cqc-refresh:hover,
@@ -312,7 +331,6 @@ function createShellStyles(rootId, constants = {}) {
 
     @media (prefers-reduced-motion: reduce) {
       .cqc-button,
-      .cqc-button-text,
       .cqc-panel,
       .cqc-panel-header,
       .cqc-content {
@@ -350,11 +368,11 @@ function createShellStyles(rootId, constants = {}) {
         --cqc-warning: #fbbf24;
         --cqc-warning-surface: rgba(245, 158, 11, 0.16);
         --cqc-warning-border: rgba(245, 158, 11, 0.3);
-        --cqc-shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.32);
-        --cqc-shadow-button: 0 3px 10px rgba(0, 0, 0, 0.25);
-        --cqc-button-bg: #2f2f2f;
-        --cqc-button-bg-docked: #2f2f2f;
-        --cqc-button-bg-docked-active: #2f2f2f;
+        --cqc-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.5);
+        --cqc-shadow-button: 0 8px 28px rgba(0, 0, 0, 0.4);
+        --cqc-button-bg: rgba(47, 47, 47, 0.95);
+        --cqc-button-bg-docked: rgba(47, 47, 47, 0.64);
+        --cqc-button-bg-docked-active: rgba(47, 47, 47, 0.96);
       }
     }
   `;

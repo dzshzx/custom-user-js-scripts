@@ -3,11 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import {
-  createDialogElement,
-  createPageAssistantDialogContract,
-} from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js';
-import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
+import { createPageAssistantDialogContract } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js';
 
 const entryPath = path.resolve(
   import.meta.dirname,
@@ -144,31 +140,4 @@ test('dialog contract reads unlocker form intent from role selectors', () => {
   assert.equal(setting.allowContextMenu, false);
   assert.equal(setting.allowDrag, false);
   assert.equal(setting.suppressBeforeUnload, true);
-});
-
-test('dialog renders the selected scope and hostname as text across tabs', { skip: domSkip }, () => {
-  const window = createDomWindow();
-  const contract = createDialogContract();
-  const hostname = 'example.com<img src=x onerror=alert(1)>';
-  const model = contract.createViewModel({
-    preferredTab: 'unlocker',
-    preferredScope: 'site',
-    activeTab: 'refresh',
-    activeRefreshMatch: null,
-    activeUnlockerMatch: null,
-    settings: { refresh: { page: {}, site: {} }, unlocker: { page: {}, site: {} } },
-    pageKey: 'https://example.com/a',
-    siteKey: hostname,
-    statusText: '未启用',
-    unlockerStatusText: '未启用',
-  });
-  const dialog = createDialogElement({ documentObject: window.document, model });
-  contract.applyModel(dialog, model, []);
-
-  assert.equal(dialog.querySelector('[data-part-role="site-hostname"]').textContent, `主机名：${hostname}`);
-  assert.equal(dialog.querySelector('[data-part-role="site-hostname"] img'), null);
-  assert.equal(contract.readSelectedScope(dialog), 'site');
-  assert.equal(dialog.querySelector('[data-part-tab-panel="unlocker"]').hasAttribute('hidden'), false);
-  assert.equal(dialog.querySelector('[data-part-tab-panel="refresh"]').hasAttribute('hidden'), true);
-  assert.equal(dialog.querySelector('[data-part-action="close-dialog"] svg').classList.contains('lucide-x'), true);
 });

@@ -310,26 +310,18 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
 	        font-size: 18px;
 	        line-height: 1;
 	        transition:
-	          background-color 140ms ease;
+	          background-color 140ms ease,
+	          transform 140ms ease;
 	      }
 
 	      #${rootId} .part-icon-button:hover {
 	        background: var(--part-panel);
+	        transform: translateY(-1px);
     }
 
     #${rootId} .part-icon-button .part-icon-svg {
       width: 16px;
       height: 16px;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      #${rootId} *,
-      #${rootId} *::before,
-      #${rootId} *::after {
-        animation-duration: 0.01ms !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-      }
     }
 
 `;

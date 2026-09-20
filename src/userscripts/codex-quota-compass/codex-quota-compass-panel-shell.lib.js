@@ -19,15 +19,6 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
-// Icon is sourced from Lucide (https://lucide.dev), ISC License.
-// Copyright (c) 2026 Lucide Icons and Contributors.
-const LUCIDE_X_ICON_HTML = `
-  <svg class="cqc-close-icon lucide lucide-x" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="M18 6 6 18"></path>
-    <path d="m6 6 12 12"></path>
-  </svg>
-`;
-
 function createShellMarkup(labels = {}) {
   return `
     <button type="button" class="cqc-button" data-action="toggle" aria-expanded="false" aria-label="${escapeHtml(labels.buttonAriaOpen || '')}">
@@ -46,7 +37,7 @@ function createShellMarkup(labels = {}) {
         <div class="cqc-panel-actions">
           <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml(labels.actionRefresh || '')}</button>
           <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || 'Close')}">
-            ${LUCIDE_X_ICON_HTML}
+            <span class="cqc-close-icon" aria-hidden="true"></span>
           </button>
         </div>
       </div>

@@ -55,9 +55,10 @@ function createQuotaPanelRendererStyles(rootId = 'codex-quota-compass-root') {
         margin: 0 0 12px;
         padding: 10px 12px;
         border: 1px solid var(--cqc-border);
+        border-left: 3px solid var(--cqc-border-strong);
         border-radius: 10px;
         background: var(--cqc-surface-sunken);
-        color: var(--cqc-text);
+        color: var(--cqc-text-muted);
         font-size: 12px;
         line-height: 1.45;
       }
@@ -67,8 +68,20 @@ function createQuotaPanelRendererStyles(rootId = 'codex-quota-compass-root') {
         font-size: 13px;
       }
 
+      .cqc-sync-banner[data-tone="success"] {
+        border-left-color: var(--cqc-primary);
+        background: var(--cqc-primary-soft);
+        color: var(--cqc-primary-strong);
+      }
+
       .cqc-sync-banner[data-tone="success"] strong {
         color: var(--cqc-primary-strong);
+      }
+
+      .cqc-sync-banner[data-tone="warning"] {
+        border-left-color: var(--cqc-warning);
+        background: var(--cqc-warning-surface);
+        color: var(--cqc-warning);
       }
 
       .cqc-sync-banner[data-tone="warning"] strong {

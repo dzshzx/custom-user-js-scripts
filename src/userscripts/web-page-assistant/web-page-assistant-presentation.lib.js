@@ -16,12 +16,6 @@ const LUCIDE_SETTINGS_ICON_HTML = `
     <circle cx="12" cy="12" r="3"></circle>
   </svg>
 `;
-const LUCIDE_X_ICON_HTML = `
-  <svg class="part-icon-svg lucide lucide-x" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="M18 6 6 18"></path>
-    <path d="m6 6 12 12"></path>
-  </svg>
-`;
 
 function createPageAssistantDialogContract(adapters) {
   const {
@@ -35,7 +29,6 @@ function createPageAssistantDialogContract(adapters) {
     status: 'status',
     pageKey: 'page-key',
     siteKey: 'site-key',
-    siteHostname: 'site-hostname',
     presets: 'presets',
     customValue: 'custom-value',
     customUnit: 'custom-unit',
@@ -103,7 +96,6 @@ function createPageAssistantDialogContract(adapters) {
       message: input.message || '',
       activeTab: nextTab,
       selectedScope,
-      siteKey: input.siteKey,
       pageSetting,
       siteSetting,
       pageUnlockerSetting,
@@ -125,7 +117,6 @@ function createPageAssistantDialogContract(adapters) {
       [roles.status, model.statusText],
       [roles.pageKey, model.pageRefreshText],
       [roles.siteKey, model.siteRefreshText],
-      [roles.siteHostname, `主机名：${model.siteKey}`],
       [roles.unlockerStatus, model.unlockerStatusText],
       [roles.unlockerPageKey, model.pageUnlockerText],
       [roles.unlockerSiteKey, model.siteUnlockerText],
@@ -251,7 +242,7 @@ function createDialogElement({ documentObject, model }) {
           <p class="part-subtitle">按页面或站点管理自动刷新与限制解除。</p>
         </div>
         <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
-          ${LUCIDE_X_ICON_HTML}
+          <span class="part-close-icon" aria-hidden="true"></span>
         </button>
       </div>
       <div class="part-tabs" role="tablist" aria-label="网页助手功能">
@@ -271,8 +262,7 @@ function createDialogElement({ documentObject, model }) {
           <label class="part-scope-card">
             <input type="radio" name="part-scope" value="site">
             整个站点
-            <span class="part-key">匹配同一主机名下的页面。</span>
-            <span class="part-key" data-part-role="site-hostname"></span>
+            <span class="part-key">匹配同一 hostname 下的页面。</span>
           </label>
 	          </div>
 	        </section>
@@ -327,7 +317,7 @@ function createDialogElement({ documentObject, model }) {
 	          <section class="part-section">
 	            <p class="part-section-title">解除能力</p>
 	            <div class="part-row">
-	              <label class="part-check-card part-check-primary">
+	              <label class="part-check-card">
 	                <input type="checkbox" data-part-role="unlocker-enabled">
 	                <span>启用当前范围的限制解除</span>
 	              </label>

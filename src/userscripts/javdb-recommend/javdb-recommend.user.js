@@ -291,23 +291,16 @@
     var CSS = [
       'html:not(.jdb-ra-native) body{background:#f5f5f5}',
       '.jdb-ra{max-width:1700px;margin:0 auto;padding:4px 16px 40px;font-family:BlinkMacSystemFont,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;color:#4a4a4a}',
-      '.jdb-ra .jdb-ra-hd{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:6px 0 2px}',
+      '.jdb-ra .jdb-ra-hd{display:flex;align-items:baseline;gap:10px;padding:6px 0 2px}',
       '.jdb-ra .jdb-ra-hd h1{font-size:17px;margin:0;color:#363636}',
       '.jdb-ra .jdb-ra-hd .sub{font-size:12px;color:#7a7a7a}',
       '.jdb-ra .jdb-ra-hd .home{margin-left:auto;font-size:13px;color:#3273dc;text-decoration:none}',
-      '.jdb-ra .jdb-ra-bar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;padding:8px 0;position:sticky;top:0;z-index:20;background:#f5f5f5}',
+      '.jdb-ra .jdb-ra-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;position:sticky;top:0;z-index:20;background:#f5f5f5}',
       'html.jdb-ra-native .jdb-ra .jdb-ra-bar{top:52px}',
-      '.jdb-ra .jdb-ra-group{display:flex;flex:1 1 auto;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}',
-      '.jdb-ra .jdb-ra-browse{flex-basis:370px}',
-      '.jdb-ra .jdb-ra-find{flex-basis:260px}',
-      '.jdb-ra .jdb-ra-maintain{flex:0 1 auto}',
-      '.jdb-ra .jdb-ra-bar .select{flex:1 1 140px;min-width:0;max-width:340px}',
+      '.jdb-ra .jdb-ra-bar .select{flex:1 1 200px;max-width:340px}',
       '.jdb-ra .jdb-ra-bar .select select{width:100%}',
       '.jdb-ra .jdb-ra-bar .jdb-ra-jump{flex:0 0 90px;width:90px}',
-      '.jdb-ra .jdb-ra-bar .jdb-ra-search{flex:1 1 150px;min-width:0;max-width:280px}',
-      '.jdb-ra .jdb-ra-bar .jdb-ra-minor{background:transparent;border-color:transparent;box-shadow:none;color:#666}',
-      '.jdb-ra .jdb-ra-bar .jdb-ra-minor:hover{background:#e8e8e8;color:#363636}',
-      '.jdb-ra a:focus-visible,.jdb-ra button:focus-visible,.jdb-ra input:focus-visible,.jdb-ra select:focus-visible{outline:2px solid #3273dc!important;outline-offset:2px}',
+      '.jdb-ra .jdb-ra-bar .jdb-ra-search{flex:1 1 160px;max-width:280px}',
       '.jdb-ra .jdb-ra-status{min-height:20px;padding:2px 0 6px;font-size:13px;color:#7a7a7a}',
       '.jdb-ra .jdb-ra-sec{scroll-margin-top:118px}',
       '@supports(content-visibility:auto){.jdb-ra .jdb-ra-sec{content-visibility:auto;contain-intrinsic-size:auto 820px}}',
@@ -330,24 +323,11 @@
       // 深色主题跟随官网（data-theme 由官网首页复制而来）
       'html[data-theme=dark] .jdb-ra{color:#eee}',
       'html[data-theme=dark] .jdb-ra .jdb-ra-hd h1,html[data-theme=dark] .jdb-ra .jdb-ra-ph{color:#eee}',
-      'html[data-theme=dark] .jdb-ra .sub,html[data-theme=dark] .jdb-ra .jdb-ra-status,html[data-theme=dark] .jdb-ra .jdb-ra-empty{color:#b8bbc3}',
       'html[data-theme=dark] .jdb-ra .jdb-ra-bar{background:#17181c}',
-      'html[data-theme=dark] .jdb-ra .jdb-ra-bar .jdb-ra-minor{color:#b8bbc3}',
-      'html[data-theme=dark] .jdb-ra .jdb-ra-bar .jdb-ra-minor:hover{background:#303239;color:#eee}',
-      'html[data-theme=dark] .jdb-ra a:focus-visible,html[data-theme=dark] .jdb-ra button:focus-visible,html[data-theme=dark] .jdb-ra input:focus-visible,html[data-theme=dark] .jdb-ra select:focus-visible{outline-color:#9dc2ff!important}',
       'html[data-theme=dark] .jdb-ra .movie-list .item .cover{background:#222}',
       // 官网样式缺失时的兜底
-      'html:not(.jdb-ra-native) .jdb-ra select,html:not(.jdb-ra-native) .jdb-ra input,html:not(.jdb-ra-native) .jdb-ra button{background:#fff;color:#4a4a4a;border:1px solid #dbdbdb;border-radius:4px;padding:6px 10px;font-size:13px}',
-      'html:not(.jdb-ra-native) .jdb-ra .jdb-ra-minor{background:transparent;border-color:transparent;color:#666}',
+      'html:not(.jdb-ra-native) .jdb-ra select,html:not(.jdb-ra-native) .jdb-ra input,html:not(.jdb-ra-native) .jdb-ra button{background:#fff;color:#4a4a4a;border:1px solid #dbdbdb;border-radius:4px;padding:6px 10px;font-size:13px;outline:none}',
       'html:not(.jdb-ra-native) .jdb-ra button{cursor:pointer}',
-      'html:not(.jdb-ra-native) .jdb-ra button:disabled{cursor:default;opacity:.65}',
-      'html[data-theme=dark]:not(.jdb-ra-native) body{background:#17181c}',
-      'html[data-theme=dark]:not(.jdb-ra-native) .jdb-ra select,html[data-theme=dark]:not(.jdb-ra-native) .jdb-ra input,html[data-theme=dark]:not(.jdb-ra-native) .jdb-ra button{background:#282a30;border-color:#50535c;color:#eee}',
-      'html[data-theme=dark]:not(.jdb-ra-native) .jdb-ra .jdb-ra-minor{background:transparent;border-color:transparent;color:#b8bbc3}',
-      'html[data-theme=dark]:not(.jdb-ra-native) .jdb-ra .jdb-ra-minor:hover{background:#303239;color:#eee}',
-      'html[data-theme=dark]:not(.jdb-ra-native) .jdb-ra .box{background:#282a30;color:#eee}',
-      'html[data-theme=dark]:not(.jdb-ra-native) .jdb-ra .video-title{color:#9dc2ff}',
-      'html[data-theme=dark]:not(.jdb-ra-native) .jdb-ra .meta{color:#b8bbc3}',
       'html:not(.jdb-ra-native) .jdb-ra .box{display:block;background:#fff;border-radius:6px;box-shadow:0 .5em 1em -.125em rgba(10,10,10,.1),0 0 0 1px rgba(10,10,10,.02);padding-bottom:.6rem;color:#4a4a4a;text-decoration:none}',
       'html:not(.jdb-ra-native) .jdb-ra .cover{position:relative;padding-top:67%;background:#fff;overflow:hidden;border-radius:6px 6px 0 0}',
       'html:not(.jdb-ra-native) .jdb-ra .cover img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain}',
@@ -362,22 +342,16 @@
     document.body.innerHTML =
       '<main class="jdb-ra">' +
       '<header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span>' +
-      '<a class="home" href="/">返回首页</a></header>' +
+      '<a class="home" href="/">← 返回首页</a></header>' +
       '<div class="jdb-ra-bar">' +
-      '<div class="jdb-ra-group jdb-ra-browse" role="group" aria-label="浏览期数">' +
       '<div class="select is-small"><select id="jdb-ra-select" aria-label="选择期数"></select></div>' +
-      '<button type="button" class="button is-small" id="jdb-ra-prev">上一期</button>' +
-      '<button type="button" class="button is-small" id="jdb-ra-next">下一期</button>' +
+      '<button type="button" class="button is-small" id="jdb-ra-prev">◀ 上一期</button>' +
+      '<button type="button" class="button is-small" id="jdb-ra-next">下一期 ▶</button>' +
       '<input class="input is-small jdb-ra-jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转">' +
-      '</div>' +
-      '<div class="jdb-ra-group jdb-ra-find" role="group" aria-label="搜索">' +
-      '<input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="搜索已加载内容" aria-label="搜索已加载内容">' +
+      '<input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="🔍 搜索已加载内容" aria-label="搜索已加载内容">' +
       '<button type="button" class="button is-small" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button>' +
-      '</div>' +
-      '<div class="jdb-ra-group jdb-ra-maintain" role="group" aria-label="维护">' +
       '<button type="button" class="button is-small" id="jdb-ra-refresh" title="重新检查期数目录">刷新期数</button>' +
-      '<button type="button" class="button is-small jdb-ra-minor" id="jdb-ra-clear" title="清除本脚本的本地缓存">清缓存</button>' +
-      '</div>' +
+      '<button type="button" class="button is-small" id="jdb-ra-clear" title="清除本脚本的本地缓存">清缓存</button>' +
       '</div>' +
       '<div class="jdb-ra-status" id="jdb-ra-status" role="status">加载期数列表中…</div>' +
       '<div class="jdb-ra-results" id="jdb-ra-results" hidden></div>' +
