@@ -6,14 +6,21 @@ function createWidgetLayoutRuntime(adapters) {
     persistPosition,
     onPositionChange,
     setTimeout,
+    clearTimeout: clearTimeoutAdapter,
+    isCoarsePointer = () => false,
+    hoverIntentMs = 150,
     logger,
     constants,
     scriptName = 'Web Page Assistant',
   } = adapters;
+  const clearTimer = typeof clearTimeoutAdapter === 'function'
+    ? clearTimeoutAdapter
+    : (timer) => globalThis.clearTimeout(timer);
   let widget = null;
   let widgetButton = null;
   let position = null;
   let suppressExpansion = false;
+  let hoverTimer = null;
 
   function defaultPosition() {
     const viewport = getViewportSize();
@@ -97,9 +104,31 @@ function createWidgetLayoutRuntime(adapters) {
     widget.classList.toggle('is-expanded', isExpanded);
   }
 
+  // Hover expansion carries a short intent delay so a passing cursor does not
+  // flash the panel; leaving the widget before the delay cancels it. Coarse
+  // pointers (touch, no hover) toggle expansion with a click on the button
+  // instead — the trailing click after a drag stays swallowed via
+  // suppressExpansion.
   function installExpansion() {
-    widget.addEventListener('mouseenter', () => setExpanded(true));
-    widget.addEventListener('mouseleave', () => setExpanded(false));
+    if (isCoarsePointer()) {
+      widgetButton.addEventListener('click', () => {
+        if (suppressExpansion) return;
+        setExpanded(!widget.classList.contains('is-expanded'));
+      });
+    } else {
+      widget.addEventListener('mouseenter', () => {
+        clearTimer(hoverTimer);
+        hoverTimer = setTimeout(() => {
+          hoverTimer = null;
+          setExpanded(true);
+        }, hoverIntentMs);
+      });
+      widget.addEventListener('mouseleave', () => {
+        clearTimer(hoverTimer);
+        hoverTimer = null;
+        setExpanded(false);
+      });
+    }
     widget.addEventListener('focusin', () => setExpanded(true));
     widget.addEventListener('focusout', (event) => {
       if (!event.relatedTarget || !widget.contains(event.relatedTarget)) {

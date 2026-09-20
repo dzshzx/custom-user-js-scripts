@@ -158,8 +158,15 @@ function createHarness(options = {}) {
       positions.push(position);
     },
     setTimeout(handler, delay) {
-      timers.push({ handler, delay });
+      const entry = { handler, delay };
+      timers.push(entry);
+      return entry;
     },
+    clearTimeout(handle) {
+      const index = timers.indexOf(handle);
+      if (index >= 0) timers.splice(index, 1);
+    },
+    isCoarsePointer: () => options.isCoarsePointer === true,
     logger: {
       warn(...args) {
         warnings.push(args);
@@ -244,4 +251,58 @@ test('widget layout runtime persists clamped drag position and resets expansion 
 
   harness.timers[0].handler();
   assert.equal(harness.runtime.isExpansionSuppressed(), false);
+});
+
+test('hover expansion waits for the intent delay and mouseleave cancels it', () => {
+  const harness = createHarness();
+  const widget = createWidget({ left: 100, top: 100 });
+  const button = createButton();
+  harness.runtime.attach(widget, button, { left: 100, top: 100 });
+  harness.runtime.applyPosition();
+
+  widget.dispatch('mouseenter');
+  assert.equal(widget.classList.contains('is-expanded'), false);
+  assert.equal(harness.timers.length, 1);
+  assert.equal(harness.timers[0].delay, 150);
+
+  // Firing a real timer consumes it; mirror that in the harness queue.
+  harness.timers.splice(0, 1)[0].handler();
+  assert.equal(widget.classList.contains('is-expanded'), true);
+
+  widget.dispatch('mouseleave');
+  assert.equal(widget.classList.contains('is-expanded'), false);
+
+  // A quick pass-through cancels the pending timer and never expands.
+  widget.dispatch('mouseenter');
+  widget.dispatch('mouseleave');
+  assert.equal(harness.timers.length, 0);
+  assert.equal(widget.classList.contains('is-expanded'), false);
+});
+
+test('coarse pointers toggle expansion via click and swallow the post-drag click', () => {
+  const harness = createHarness({ isCoarsePointer: true });
+  const widget = createWidget({ left: 100, top: 100 });
+  const button = createButton();
+  harness.runtime.attach(widget, button, { left: 100, top: 100 });
+  harness.runtime.applyPosition();
+
+  // No hover intent timer is armed on coarse pointers.
+  widget.dispatch('mouseenter');
+  assert.equal(harness.timers.length, 0);
+  assert.equal(widget.classList.contains('is-expanded'), false);
+
+  button.dispatch('click');
+  assert.equal(widget.classList.contains('is-expanded'), true);
+  button.dispatch('click');
+  assert.equal(widget.classList.contains('is-expanded'), false);
+
+  button.dispatch('pointerdown', { button: 0, pointerId: 3, clientX: 100, clientY: 100 });
+  button.dispatch('pointermove', { pointerId: 3, clientX: 140, clientY: 100 });
+  button.dispatch('pointerup', { pointerId: 3 });
+  button.dispatch('click');
+  assert.equal(widget.classList.contains('is-expanded'), false);
+
+  harness.timers.at(-1).handler();
+  button.dispatch('click');
+  assert.equal(widget.classList.contains('is-expanded'), true);
 });

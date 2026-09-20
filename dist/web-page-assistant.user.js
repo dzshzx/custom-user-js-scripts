@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.1
+// @version      0.3.2
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -454,25 +454,52 @@
 	        font-size: 14px;
 	        line-height: 1.4;
 	        color: var(--part-text);
-	        --part-text: oklch(22% 0.012 250);
-	        --part-muted-text: oklch(48% 0.012 250);
-	        --part-soft-text: oklch(35% 0.014 250);
-	        --part-surface: oklch(98.8% 0.003 250);
-	        --part-panel: oklch(96.4% 0.004 250);
-	        --part-panel-strong: oklch(92.8% 0.006 250);
-	        --part-field: oklch(99.4% 0.003 250);
-	        --part-line: oklch(88% 0.006 250);
-	        --part-line-strong: oklch(73% 0.01 250);
-	        --part-action: oklch(24% 0.012 250);
-	        --part-action-hover: oklch(18% 0.01 250);
-	        --part-accent: oklch(52% 0.045 160);
-	        --part-accent-strong: oklch(37% 0.038 160);
-	        --part-accent-soft: oklch(94.5% 0.012 160);
-	        --part-danger: oklch(45% 0.13 25);
-	        --part-danger-soft: oklch(95% 0.02 25);
-	        --part-shadow-soft: 0 10px 30px oklch(20% 0.01 250 / 0.12);
-	        --part-shadow-strong: 0 24px 72px oklch(20% 0.012 250 / 0.24);
+	        --part-text: var(--wk-text);
+	        --part-muted-text: var(--wk-text-muted);
+	        --part-soft-text: var(--wk-text-muted);
+	        --part-surface: var(--wk-surface);
+	        --part-panel: var(--wk-surface-muted);
+	        --part-panel-strong: var(--wk-surface-sunken);
+	        --part-field: var(--wk-surface);
+	        --part-line: var(--wk-border);
+	        --part-line-strong: var(--wk-border-strong);
+	        --part-action: var(--wk-accent);
+	        --part-action-hover: color-mix(in oklab, var(--wk-accent), black 14%);
+	        --part-accent: var(--wk-accent);
+	        --part-danger: var(--wk-danger);
+	        --part-danger-soft: color-mix(in oklab, var(--wk-danger) 9%, var(--wk-surface));
+	        --part-shadow-soft: var(--wk-shadow-pop);
+	        --part-shadow-strong: var(--wk-shadow-panel);
 	      }
+
+	    #${rootId} .part-sr-only {
+	      position: absolute;
+	      width: 1px;
+	      height: 1px;
+	      padding: 0;
+	      margin: -1px;
+	      overflow: hidden;
+	      clip: rect(0 0 0 0);
+	      clip-path: inset(50%);
+	      white-space: nowrap;
+	      border: 0;
+	    }
+
+	    #${rootId} .part-widget.is-idle .part-widget-button {
+	      opacity: 0.55;
+	    }
+
+	    #${rootId} .part-widget.is-idle:hover .part-widget-button,
+	    #${rootId} .part-widget.is-idle:focus-within .part-widget-button,
+	    #${rootId} .part-widget.is-idle.is-expanded .part-widget-button {
+	      opacity: 1;
+	    }
+
+    #${rootId} .wk-icon {
+      display: block;
+      flex: none;
+      pointer-events: none;
+    }
 
     #${rootId} *,
     #${rootId} *::before,
@@ -594,19 +621,7 @@
       line-height: 1;
     }
 
-    #${rootId} .part-icon-svg {
-      display: block;
-      width: 16px;
-      height: 16px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.4;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      pointer-events: none;
-    }
-
-    #${rootId} .part-widget-button-icon .part-icon-svg {
+    #${rootId} .part-widget-button-icon .wk-icon {
       width: 16px;
       height: 16px;
     }
@@ -720,11 +735,6 @@
 	        transform: translateY(1px);
 	      }
 
-	      #${rootId} .part-button[data-variant="secondary"] {
-	        background: var(--part-panel-strong);
-	        color: var(--part-text);
-	      }
-
 	      #${rootId} .part-button[data-variant="danger"] {
 	        background: var(--part-danger-soft);
 	        color: var(--part-danger);
@@ -756,7 +766,7 @@
 	        transform: translateY(-1px);
     }
 
-    #${rootId} .part-icon-button .part-icon-svg {
+    #${rootId} .part-icon-button .wk-icon {
       width: 16px;
       height: 16px;
     }
@@ -774,34 +784,7 @@
     if (documentObject.getElementById(styleId)) return;
     const style = documentObject.createElement("style");
     style.id = styleId;
-    style.textContent = `      #${rootId} .part-close-icon {
-      position: relative;
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-    }
-
-    #${rootId} .part-close-icon::before,
-    #${rootId} .part-close-icon::after {
-      content: "";
-      position: absolute;
-      top: 6px;
-      left: 1px;
-      width: 12px;
-      height: 2px;
-      border-radius: 999px;
-      background: currentColor;
-    }
-
-    #${rootId} .part-close-icon::before {
-      transform: rotate(45deg);
-    }
-
-    #${rootId} .part-close-icon::after {
-      transform: rotate(-45deg);
-    }
-
-    #${rootId} .part-backdrop {
+    style.textContent = `      #${rootId} .part-backdrop {
       position: fixed;
 	        inset: 0;
 	        display: grid;
@@ -1068,22 +1051,55 @@
     documentObject.documentElement.append(style);
   }
 
+  // src/userscripts/shared/shared-icons.lib.js
+  var ICON_CONTENT = {
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1-1-1.73l-.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15-.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    "chevron-left": '<path d="m15 18-6-6 6-6"/>',
+    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    "alert-triangle": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    loader: '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>'
+  };
+  var ICON_NAMES = Object.keys(ICON_CONTENT);
+  function toPositiveNumber(value, name) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) {
+      throw new Error(`shared-icons: ${name} must be a positive number, got ${JSON.stringify(value)}`);
+    }
+    return number;
+  }
+  function iconSvg(name, { size = 16, strokeWidth = 2 } = {}) {
+    const content = ICON_CONTENT[name];
+    if (!content) {
+      throw new Error(`shared-icons: unknown icon "${name}". Available: ${ICON_NAMES.join(", ")}`);
+    }
+    const resolvedSize = toPositiveNumber(size, "size");
+    const resolvedStrokeWidth = toPositiveNumber(strokeWidth, "strokeWidth");
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${resolvedStrokeWidth}" stroke-linecap="round" stroke-linejoin="round" width="${resolvedSize}" height="${resolvedSize}" class="wk-icon wk-icon-${name}" aria-hidden="true" focusable="false">${content}</svg>`;
+  }
+
   // src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js
   var LIB_NAME3 = "WebPageAssistantPresentationLib";
-  var LUCIDE_REFRESH_CW_ICON_HTML = `
-  <svg class="part-icon-svg lucide lucide-refresh-cw" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
-    <path d="M21 3v5h-5"></path>
-    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
-    <path d="M8 16H3v5"></path>
-  </svg>
-`;
-  var LUCIDE_SETTINGS_ICON_HTML = `
-  <svg class="part-icon-svg lucide lucide-settings" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
-    <circle cx="12" cy="12" r="3"></circle>
-  </svg>
-`;
+  var REFRESH_ICON_HTML = iconSvg("refresh-cw", { size: 16, strokeWidth: 2.4 });
+  var SETTINGS_ICON_HTML = iconSvg("settings", { size: 16, strokeWidth: 2.4 });
+  var CLOSE_ICON_HTML = iconSvg("x", { size: 16, strokeWidth: 2.4 });
+  function isCoarsePointer(windowObject = globalThis.window) {
+    try {
+      const matchMedia = windowObject?.matchMedia;
+      if (typeof matchMedia === "function") {
+        return Boolean(
+          matchMedia.call(windowObject, "(hover: none), (pointer: coarse)").matches
+        );
+      }
+    } catch {
+    }
+    return false;
+  }
   function createPageAssistantDialogContract(adapters) {
     const {
       settingsContract,
@@ -1231,34 +1247,37 @@
   function createWidgetElement({ documentObject, model }) {
     if (!documentObject) throw new Error(`${LIB_NAME3}: documentObject is required.`);
     if (!model) throw new Error(`${LIB_NAME3}: widget model is required.`);
+    const enabled = model.enabled !== false;
     const widget = documentObject.createElement("section");
-    widget.className = "part-widget";
-    widget.setAttribute("aria-live", "polite");
+    widget.className = enabled ? "part-widget" : "part-widget is-idle";
     widget.innerHTML = `
-    <button type="button" class="part-widget-button" aria-label="自动刷新倒计时，悬停或聚焦查看控制">
+    <button type="button" class="part-widget-button"${enabled ? "" : ' data-part-action="open-settings"'} aria-label="${enabled ? "自动刷新倒计时，悬停或聚焦查看控制" : "自动刷新未启用，打开设置"}">
       <span class="part-widget-button-icon" aria-hidden="true">
-        ${LUCIDE_REFRESH_CW_ICON_HTML}
+        ${REFRESH_ICON_HTML}
       </span>
-      <span class="part-widget-button-text" data-part-role="countdown">--:--</span>
+      ${enabled ? '<span class="part-widget-button-text" data-part-role="countdown" aria-hidden="true">--:--</span>' : ""}
     </button>
     <div class="part-widget-panel">
       <div class="part-widget-panel-header">
         <p class="part-title">自动刷新</p>
-        <button type="button" class="part-icon-button" data-part-action="open-settings" aria-label="打开自动刷新设置">${LUCIDE_SETTINGS_ICON_HTML}</button>
+        <button type="button" class="part-icon-button" data-part-action="open-settings" aria-label="打开自动刷新设置">${SETTINGS_ICON_HTML}</button>
       </div>
-      <div class="part-widget-countdown" data-part-role="countdown">--:--</div>
+      ${enabled ? '<div class="part-widget-countdown" data-part-role="countdown" aria-hidden="true">--:--</div>' : ""}
       <div class="part-muted" data-part-role="widget-summary"></div>
+      ${enabled ? `
       <div class="part-widget-actions">
         <button type="button" class="part-button" data-part-action="toggle-pause"></button>
         <button type="button" class="part-button" data-variant="danger" data-part-action="disable-active">停用</button>
-      </div>
+      </div>` : ""}
     </div>
+    <span class="part-sr-only" role="status" data-part-role="widget-status"></span>
   `;
     widget.querySelector('[data-part-role="widget-summary"]').textContent = model.summary;
     return {
       widget,
       widgetButton: widget.querySelector(".part-widget-button"),
-      countdownNodes: [...widget.querySelectorAll('[data-part-role="countdown"]')]
+      countdownNodes: [...widget.querySelectorAll('[data-part-role="countdown"]')],
+      statusNode: widget.querySelector('[data-part-role="widget-status"]')
     };
   }
   function createDialogElement({ documentObject, model }) {
@@ -1281,7 +1300,7 @@
           <p class="part-subtitle">按页面或站点管理自动刷新与限制解除。</p>
         </div>
         <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
-          <span class="part-close-icon" aria-hidden="true"></span>
+          ${CLOSE_ICON_HTML}
         </button>
       </div>
       <div class="part-tabs" role="tablist" aria-label="网页助手功能">
@@ -1584,14 +1603,19 @@
       persistPosition,
       onPositionChange,
       setTimeout,
+      clearTimeout: clearTimeoutAdapter,
+      isCoarsePointer: isCoarsePointer2 = () => false,
+      hoverIntentMs = 150,
       logger,
       constants,
       scriptName = "Web Page Assistant"
     } = adapters;
+    const clearTimer = typeof clearTimeoutAdapter === "function" ? clearTimeoutAdapter : (timer) => globalThis.clearTimeout(timer);
     let widget = null;
     let widgetButton = null;
     let position = null;
     let suppressExpansion = false;
+    let hoverTimer = null;
     function defaultPosition() {
       const viewport = getViewportSize();
       return {
@@ -1664,8 +1688,25 @@
       widget.classList.toggle("is-expanded", isExpanded);
     }
     function installExpansion() {
-      widget.addEventListener("mouseenter", () => setExpanded(true));
-      widget.addEventListener("mouseleave", () => setExpanded(false));
+      if (isCoarsePointer2()) {
+        widgetButton.addEventListener("click", () => {
+          if (suppressExpansion) return;
+          setExpanded(!widget.classList.contains("is-expanded"));
+        });
+      } else {
+        widget.addEventListener("mouseenter", () => {
+          clearTimer(hoverTimer);
+          hoverTimer = setTimeout(() => {
+            hoverTimer = null;
+            setExpanded(true);
+          }, hoverIntentMs);
+        });
+        widget.addEventListener("mouseleave", () => {
+          clearTimer(hoverTimer);
+          hoverTimer = null;
+          setExpanded(false);
+        });
+      }
       widget.addEventListener("focusin", () => setExpanded(true));
       widget.addEventListener("focusout", (event) => {
         if (!event.relatedTarget || !widget.contains(event.relatedTarget)) {
@@ -1837,6 +1878,173 @@
     };
   }
 
+  // src/userscripts/shared/shared-tokens.lib.js
+  var SAFE_COLOR_PATTERN = /^[#a-zA-Z0-9(),.\s%/+-]+$/;
+  var UNSAFE_SELECTOR_CHARS = /[{};<@\\]/;
+  var COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
+  function assertSafeColor(value, name) {
+    const color = String(value ?? "").trim();
+    if (!color || !SAFE_COLOR_PATTERN.test(color)) {
+      throw new Error(`shared-tokens: invalid ${name} color ${JSON.stringify(value)}`);
+    }
+    return color;
+  }
+  function assertSafeSelector(value) {
+    const selector = String(value ?? "").trim();
+    if (!selector || UNSAFE_SELECTOR_CHARS.test(selector)) {
+      throw new Error(`shared-tokens: invalid rootSelector ${JSON.stringify(value)}`);
+    }
+    return selector;
+  }
+  function buildTokenCss({ rootSelector, accent, accentDark } = {}) {
+    const root = assertSafeSelector(rootSelector);
+    const lightAccent = assertSafeColor(accent, "accent");
+    const darkAccent = accentDark == null ? lightAccent : assertSafeColor(accentDark, "accentDark");
+    return `
+${root} {
+  --wk-surface: oklch(99.2% 0.002 250);
+  --wk-surface-muted: oklch(96.8% 0.003 250);
+  --wk-surface-sunken: oklch(97.8% 0.003 250);
+  --wk-text: oklch(23% 0.012 250);
+  --wk-text-muted: oklch(47% 0.012 250);
+  --wk-border: oklch(24% 0.012 250 / 0.10);
+  --wk-border-strong: oklch(24% 0.012 250 / 0.16);
+  --wk-danger: oklch(52% 0.19 27);
+  --wk-warning: oklch(55% 0.13 75);
+  --wk-accent: ${lightAccent};
+  --wk-shadow-panel: 0 24px 80px oklch(20% 0.02 250 / 0.22);
+  --wk-shadow-pop: 0 8px 28px oklch(20% 0.02 250 / 0.14);
+  --wk-fs-sm: 12px;
+  --wk-fs-md: 13px;
+  --wk-fs-lg: 15px;
+  --wk-fs-xl: 20px;
+  --wk-fs-hero: 28px;
+  --wk-radius-ctl: 8px;
+  --wk-radius-panel: 12px;
+  --wk-radius-pill: 999px;
+  color-scheme: light dark;
+}
+
+${root}[data-wk-theme="dark"] {
+  --wk-surface: oklch(25% 0.012 250);
+  --wk-surface-muted: oklch(21% 0.010 250);
+  --wk-surface-sunken: oklch(23% 0.011 250);
+  --wk-text: oklch(93% 0.008 250);
+  --wk-text-muted: oklch(74% 0.010 250);
+  --wk-border: oklch(95% 0.01 250 / 0.12);
+  --wk-border-strong: oklch(95% 0.01 250 / 0.18);
+  --wk-danger: oklch(68% 0.18 27);
+  --wk-warning: oklch(75% 0.13 80);
+  --wk-accent: ${darkAccent};
+  --wk-shadow-panel: 0 24px 80px oklch(10% 0.01 250 / 0.50);
+  --wk-shadow-pop: 0 8px 28px oklch(10% 0.01 250 / 0.35);
+}
+
+${root} *,
+${root} *::before,
+${root} *::after {
+  box-sizing: border-box;
+}
+
+${root} button,
+${root} input,
+${root} select,
+${root} textarea {
+  font: inherit;
+  color: inherit;
+}
+
+${root} :focus-visible {
+  outline: 2px solid var(--wk-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ${root} *,
+  ${root} *::before,
+  ${root} *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+`.trim();
+  }
+  function systemPrefersDark() {
+    try {
+      const matchMedia = globalThis.window?.matchMedia;
+      if (typeof matchMedia === "function") {
+        return Boolean(matchMedia.call(globalThis.window, COLOR_SCHEME_QUERY).matches);
+      }
+    } catch {
+    }
+    return false;
+  }
+  function resolveTheme(detectHost) {
+    if (typeof detectHost === "function") {
+      try {
+        const detected = detectHost();
+        if (detected === "light" || detected === "dark") return detected;
+      } catch {
+      }
+    }
+    return systemPrefersDark() ? "dark" : "light";
+  }
+  function applyTheme(root, { detectHost, observeHost = false } = {}) {
+    if (!root) {
+      throw new Error("shared-tokens: applyTheme requires a root element.");
+    }
+    const apply = () => {
+      root.dataset.wkTheme = resolveTheme(detectHost);
+    };
+    apply();
+    let media = null;
+    const onChange = () => apply();
+    try {
+      const matchMedia = globalThis.window?.matchMedia;
+      if (typeof matchMedia === "function") {
+        media = matchMedia.call(globalThis.window, COLOR_SCHEME_QUERY);
+        if (typeof media?.addEventListener === "function") {
+          media.addEventListener("change", onChange);
+        } else if (typeof media?.addListener === "function") {
+          media.addListener(onChange);
+        } else {
+          media = null;
+        }
+      }
+    } catch {
+      media = null;
+    }
+    let observer = null;
+    if (observeHost) {
+      try {
+        const documentObject = root.ownerDocument ?? globalThis.document;
+        const windowObject = documentObject?.defaultView ?? globalThis.window;
+        const MutationObserverImpl = windowObject?.MutationObserver ?? globalThis.MutationObserver;
+        const hostElement = documentObject?.documentElement;
+        if (typeof MutationObserverImpl === "function" && hostElement && hostElement !== root) {
+          observer = new MutationObserverImpl(onChange);
+          observer.observe(hostElement, { attributes: true, attributeFilter: ["class", "style"] });
+        }
+      } catch {
+        observer = null;
+      }
+    }
+    return () => {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      if (!media) return;
+      if (typeof media.removeEventListener === "function") {
+        media.removeEventListener("change", onChange);
+      } else if (typeof media.removeListener === "function") {
+        media.removeListener(onChange);
+      }
+      media = null;
+    };
+  }
+
   // src/userscripts/web-page-assistant/web-page-assistant.entry.js
   (function() {
     "use strict";
@@ -1844,6 +2052,7 @@
     const SCRIPT_NAME = "Web Page Assistant";
     const ROOT_ID = "page-auto-refresh-timer-root";
     const STYLE_ID = `${ROOT_ID}-style`;
+    const TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
     const DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
     const UNLOCKER_STYLE_ID = `${ROOT_ID}-unlocker-style`;
     const STORAGE_KEY = "pageAutoRefreshTimerSettings";
@@ -1884,11 +2093,32 @@
     let dialog;
     let activeDialogTab = "refresh";
     let countdownNodes = [];
+    let widgetStatusNode = null;
+    let lastWidgetStatusText = "";
+    let dialogReturnFocus = null;
+    let inertedElements = [];
+    let themeCleanup = null;
     let hasRootListener = false;
     let webPageAssistantSession;
     let widgetLayoutRuntime;
     let unlockerRuntime;
     let initialStateReady = Promise.resolve();
+    const TOKEN_CSS = buildTokenCss({
+      rootSelector: `#${ROOT_ID}`,
+      accent: "oklch(55% 0.10 160)",
+      accentDark: "oklch(70% 0.12 160)"
+    });
+    const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const WRITE_ACTIONS = /* @__PURE__ */ new Set([
+      "save-preset",
+      "save-custom",
+      "delete-page",
+      "delete-site",
+      "save-unlocker",
+      "delete-unlocker-page",
+      "delete-unlocker-site",
+      "disable-active"
+    ]);
     function isRecord2(value) {
       return Boolean(value) && typeof value === "object" && !Array.isArray(value);
     }
@@ -1937,6 +2167,12 @@
       callback();
     }
     function installStyles() {
+      if (!document.getElementById(TOKEN_STYLE_ID)) {
+        const tokenStyle = document.createElement("style");
+        tokenStyle.id = TOKEN_STYLE_ID;
+        tokenStyle.textContent = TOKEN_CSS;
+        document.documentElement.append(tokenStyle);
+      }
       installAssistantBaseStyles({
         documentObject: document,
         rootId: ROOT_ID,
@@ -1957,6 +2193,9 @@
         root = document.createElement("div");
         root.id = ROOT_ID;
         document.documentElement.append(root);
+      }
+      if (!themeCleanup) {
+        themeCleanup = applyTheme(root);
       }
       if (!hasRootListener) {
         root.addEventListener("click", handleRootClick);
@@ -2021,6 +2260,7 @@
         activeMatch = state.activeMatch;
         updatePauseButton();
         updateCountdownText();
+        updateWidgetStatusText();
       }
     });
     webPageAssistantSession = createWebPageAssistantSession({
@@ -2072,6 +2312,8 @@
         widgetPosition = nextPosition;
       },
       setTimeout: (handler, delay) => window.setTimeout(handler, delay),
+      clearTimeout: (timer) => window.clearTimeout(timer),
+      isCoarsePointer: () => isCoarsePointer(window),
       logger: console,
       scriptName: SCRIPT_NAME,
       constants: {
@@ -2085,8 +2327,8 @@
       }
     });
     function createWidgetViewModel() {
-      if (!activeMatch) return null;
       return {
+        enabled: Boolean(activeMatch),
         summary: currentStatusText()
       };
     }
@@ -2097,21 +2339,23 @@
         widget = null;
         widgetButton = null;
         countdownNodes = [];
+        widgetStatusNode = null;
       }
-      const model = createWidgetViewModel();
-      if (!model) return;
       const renderedWidget = createWidgetElement({
         documentObject: document,
-        model
+        model: createWidgetViewModel()
       });
       widget = renderedWidget.widget;
       widgetButton = renderedWidget.widgetButton;
       countdownNodes = renderedWidget.countdownNodes;
+      widgetStatusNode = renderedWidget.statusNode;
+      lastWidgetStatusText = "";
       widgetLayoutRuntime.attach(widget, widgetButton, widgetPosition);
       root.append(widget);
       widgetLayoutRuntime.applyPosition();
       updatePauseButton();
       updateCountdownText();
+      updateWidgetStatusText();
     }
     function createDialogViewModel(message = "", preferredScope = null, preferredTab = null) {
       return dialogContract.createViewModel({
@@ -2128,9 +2372,86 @@
         unlockerStatusText: unlockerStatusText()
       });
     }
+    function captureDialogState() {
+      if (!dialog) return null;
+      const panel = dialog.querySelector(".part-dialog");
+      let focusSelector = null;
+      const active = document.activeElement;
+      if (active && dialog.contains(active)) {
+        const roleNode = active.closest?.("[data-part-role]");
+        const actionNode = active.closest?.("[data-part-action]");
+        if (roleNode) {
+          focusSelector = dialogContract.roleSelector(roleNode.dataset.partRole);
+        } else if (active.matches?.('input[name="part-scope"]')) {
+          focusSelector = `input[name="part-scope"][value="${active.value}"]`;
+        } else if (actionNode) {
+          focusSelector = dialogContract.actionSelector(actionNode.dataset.partAction);
+          for (const [datasetKey, attribute] of [["partTab", "data-part-tab"], ["intervalMs", "data-interval-ms"]]) {
+            if (actionNode.dataset[datasetKey]) {
+              focusSelector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
+            }
+          }
+        }
+      }
+      return {
+        scrollTop: panel?.scrollTop || 0,
+        focusSelector
+      };
+    }
+    function restoreDialogState(preserved) {
+      if (!preserved || !dialog) return;
+      const panel = dialog.querySelector(".part-dialog");
+      if (panel && preserved.scrollTop) panel.scrollTop = preserved.scrollTop;
+      if (preserved.focusSelector) {
+        dialog.querySelector(preserved.focusSelector)?.focus?.();
+      }
+    }
+    function applyBackgroundInert() {
+      if (inertedElements.length) return;
+      for (const child of Array.from(document.body?.children || [])) {
+        if (child === root) continue;
+        child.setAttribute("inert", "");
+        inertedElements.push(child);
+      }
+    }
+    function releaseBackgroundInert() {
+      for (const element of inertedElements) {
+        element.removeAttribute("inert");
+      }
+      inertedElements = [];
+    }
+    function handleDialogKeydown(event) {
+      if (!dialog) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeDialog();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const panel = dialog.querySelector(".part-dialog");
+      if (!panel) return;
+      const focusables = [...panel.querySelectorAll(FOCUSABLE_SELECTOR)].filter((element) => !element.disabled && !element.closest("[hidden]"));
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !panel.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
     function renderDialog(message = "", preferredScope = null, preferredTab = null) {
       ensureRoot();
-      if (dialog) {
+      const preserved = captureDialogState();
+      if (!dialog) {
+        const active = document.activeElement;
+        dialogReturnFocus = active && root.contains(active) ? active : widgetButton || null;
+        applyBackgroundInert();
+      } else {
         dialog.remove();
         dialog = null;
       }
@@ -2140,14 +2461,25 @@
         documentObject: document,
         model
       });
+      dialog.addEventListener("keydown", handleDialogKeydown);
       root.append(dialog);
       dialogContract.applyModel(dialog, model, PRESETS);
+      restoreDialogState(preserved);
       setMessage(model.message);
     }
     function closeDialog() {
       if (!dialog) return;
-      dialog.remove();
-      dialog = null;
+      try {
+        dialog.remove();
+        dialog = null;
+      } finally {
+        releaseBackgroundInert();
+        const returnTarget = dialogReturnFocus;
+        dialogReturnFocus = null;
+        if (returnTarget && returnTarget.isConnected !== false) {
+          returnTarget.focus?.();
+        }
+      }
     }
     function parseCustomInterval() {
       const valueNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.customValue));
@@ -2182,6 +2514,22 @@
       for (const node of countdownNodes) {
         node.textContent = text;
       }
+    }
+    function widgetStatusText() {
+      const runtimeState = refreshRuntime.getState();
+      if (!runtimeState.activeMatch) return "当前未启用自动刷新。";
+      if (runtimeState.isPaused) {
+        const remaining = formatInterval(Math.max(1e3, Math.ceil(runtimeState.remainingMs / 1e3) * 1e3));
+        return `自动刷新已暂停，剩余 ${remaining}。`;
+      }
+      return `${scopeLabel(runtimeState.activeMatch.scope)}自动刷新已启用，每 ${formatInterval(runtimeState.activeMatch.setting.intervalMs)} 刷新一次。`;
+    }
+    function updateWidgetStatusText() {
+      if (!widgetStatusNode) return;
+      const text = widgetStatusText();
+      if (text === lastWidgetStatusText) return;
+      lastWidgetStatusText = text;
+      widgetStatusNode.textContent = text;
     }
     function updatePauseButton() {
       const pauseButton = widget?.querySelector('[data-part-action="toggle-pause"]');
@@ -2224,13 +2572,26 @@
       if (action === "close-dialog" && dialog && actionNode === dialog) {
         return;
       }
+      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && widgetLayoutRuntime.isExpansionSuppressed()) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
+      const isWrite = WRITE_ACTIONS.has(action);
+      const pendingLabel = isWrite ? actionNode.textContent : null;
+      if (isWrite) {
+        actionNode.disabled = true;
+        actionNode.textContent = "处理中…";
+      }
       try {
         await webPageAssistantSession.dispatch(action, actionNode);
       } catch (error) {
         console.warn(`${SCRIPT_NAME}: action failed.`, error);
-        setMessage("操作失败，请查看浏览器控制台。", "error");
+        if (isWrite && actionNode.isConnected !== false) {
+          actionNode.disabled = false;
+          actionNode.textContent = pendingLabel;
+        }
+        setMessage(`操作失败：${error?.message || error}`, "error");
       }
     }
     function handleRootChange(event) {
@@ -2259,9 +2620,13 @@
       activeUnlockerMatch = resolveActiveUnlockerSetting2(settings);
       window.addEventListener("resize", () => widgetLayoutRuntime.applyPosition());
       refreshUnlockerState();
-      if (activeMatch) {
-        onReady(restartActiveCountdown);
-      }
+      onReady(() => {
+        if (activeMatch) {
+          restartActiveCountdown();
+        } else {
+          renderWidget();
+        }
+      });
     }
     initialStateReady = init();
     initialStateReady.catch((error) => {

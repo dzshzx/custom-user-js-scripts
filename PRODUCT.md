@@ -37,8 +37,9 @@ Runs on `*://*/*`.
 
 It provides a page-level assistant for automatic refresh and optional unlocking
 of page restrictions. Users can configure refresh rules for the current page or
-the whole site, view a countdown in a floating widget, pause or resume refresh,
-and selectively allow text selection, copy/cut, context menu, drag, and
+the whole site, view a countdown in a floating widget that stays on the page
+(collapsed and dimmed when no rule is active), pause or resume refresh, and
+selectively allow text selection, copy/cut, context menu, drag, and
 beforeunload suppression.
 
 Persistent settings prefer userscript manager storage and fall back to page

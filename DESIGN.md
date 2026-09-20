@@ -61,8 +61,10 @@ out where script-owned pages differ.
   kit tokens (`--wk-*` from `src/userscripts/shared/`, themed via
   `[data-wk-theme]`); extend the kit tokens or the per-theme overrides in its
   shell styles instead of adding new one-off colors.
-- Web Page Assistant already uses OKLCH-based `--part-*` tokens. Extend those
-  tokens instead of creating unrelated one-off colors.
+- Web Page Assistant bridges its `--part-*` variables onto the shared widget
+  kit tokens (`--wk-*`, themed via `[data-wk-theme]` resolved from
+  `prefers-color-scheme`); extend the kit tokens instead of adding new one-off
+  colors.
 
 ## Layout
 
@@ -147,10 +149,26 @@ out where script-owned pages differ.
 
 - The floating widget shows countdown status and lightweight actions without
   forcing the user into settings.
+- The widget is always rendered: with no active refresh rule it stays as a
+  dimmed idle dot whose panel explains the idle state and offers the settings
+  entry; its collapsed button opens the dialog directly.
+- The per-second countdown is `aria-hidden`; a visually-hidden status node
+  announces only lifecycle changes (enabled/paused/resumed/disabled) as full
+  sentences.
+- Hover expansion carries a short intent delay; coarse pointers toggle
+  expansion by clicking the widget button instead.
 - The settings dialog owns scope selection, refresh settings, unlocker
   capability toggles, status boxes, and destructive delete actions.
+- The dialog behaves as a true modal: focus trap, Esc close, inert page
+  background while open, and focus returned to the trigger on close. Full
+  rebuilds (tab/scope/save) preserve the panel scroll offset and the focused
+  control.
+- Write actions disable their button with a pending label while storage is in
+  flight; failures restore the button and surface the error reason in the
+  dialog message line.
 - Presentation responsibilities belong in presentation support modules:
   scoped styles, icons, dialog contract, widget markup, and dialog markup.
+  Icons come from the shared `shared-icons` module (vendored Lucide).
 - Runtime state, storage, refresh timers, widget positioning, and unlocker
   behavior should stay outside presentation modules.
 - Page and site scope labels must remain clear; users need to know whether a

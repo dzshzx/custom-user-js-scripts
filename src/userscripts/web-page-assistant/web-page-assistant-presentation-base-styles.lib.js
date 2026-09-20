@@ -7,6 +7,9 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
 
   if (documentObject.getElementById(styleId)) return;
 
+  // WPA tokens bridge the shared widget kit tokens (--wk-*) injected on the
+  // same root by buildTokenCss; theme flips via [data-wk-theme="dark"] set by
+  // applyTheme. Only derivatives without a --wk-* counterpart stay local.
   const style = documentObject.createElement('style');
   style.id = styleId;
   style.textContent = `
@@ -17,25 +20,52 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
 	        font-size: 14px;
 	        line-height: 1.4;
 	        color: var(--part-text);
-	        --part-text: oklch(22% 0.012 250);
-	        --part-muted-text: oklch(48% 0.012 250);
-	        --part-soft-text: oklch(35% 0.014 250);
-	        --part-surface: oklch(98.8% 0.003 250);
-	        --part-panel: oklch(96.4% 0.004 250);
-	        --part-panel-strong: oklch(92.8% 0.006 250);
-	        --part-field: oklch(99.4% 0.003 250);
-	        --part-line: oklch(88% 0.006 250);
-	        --part-line-strong: oklch(73% 0.01 250);
-	        --part-action: oklch(24% 0.012 250);
-	        --part-action-hover: oklch(18% 0.01 250);
-	        --part-accent: oklch(52% 0.045 160);
-	        --part-accent-strong: oklch(37% 0.038 160);
-	        --part-accent-soft: oklch(94.5% 0.012 160);
-	        --part-danger: oklch(45% 0.13 25);
-	        --part-danger-soft: oklch(95% 0.02 25);
-	        --part-shadow-soft: 0 10px 30px oklch(20% 0.01 250 / 0.12);
-	        --part-shadow-strong: 0 24px 72px oklch(20% 0.012 250 / 0.24);
+	        --part-text: var(--wk-text);
+	        --part-muted-text: var(--wk-text-muted);
+	        --part-soft-text: var(--wk-text-muted);
+	        --part-surface: var(--wk-surface);
+	        --part-panel: var(--wk-surface-muted);
+	        --part-panel-strong: var(--wk-surface-sunken);
+	        --part-field: var(--wk-surface);
+	        --part-line: var(--wk-border);
+	        --part-line-strong: var(--wk-border-strong);
+	        --part-action: var(--wk-accent);
+	        --part-action-hover: color-mix(in oklab, var(--wk-accent), black 14%);
+	        --part-accent: var(--wk-accent);
+	        --part-danger: var(--wk-danger);
+	        --part-danger-soft: color-mix(in oklab, var(--wk-danger) 9%, var(--wk-surface));
+	        --part-shadow-soft: var(--wk-shadow-pop);
+	        --part-shadow-strong: var(--wk-shadow-panel);
 	      }
+
+	    #${rootId} .part-sr-only {
+	      position: absolute;
+	      width: 1px;
+	      height: 1px;
+	      padding: 0;
+	      margin: -1px;
+	      overflow: hidden;
+	      clip: rect(0 0 0 0);
+	      clip-path: inset(50%);
+	      white-space: nowrap;
+	      border: 0;
+	    }
+
+	    #${rootId} .part-widget.is-idle .part-widget-button {
+	      opacity: 0.55;
+	    }
+
+	    #${rootId} .part-widget.is-idle:hover .part-widget-button,
+	    #${rootId} .part-widget.is-idle:focus-within .part-widget-button,
+	    #${rootId} .part-widget.is-idle.is-expanded .part-widget-button {
+	      opacity: 1;
+	    }
+
+    #${rootId} .wk-icon {
+      display: block;
+      flex: none;
+      pointer-events: none;
+    }
 
     #${rootId} *,
     #${rootId} *::before,
@@ -157,19 +187,7 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
       line-height: 1;
     }
 
-    #${rootId} .part-icon-svg {
-      display: block;
-      width: 16px;
-      height: 16px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.4;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      pointer-events: none;
-    }
-
-    #${rootId} .part-widget-button-icon .part-icon-svg {
+    #${rootId} .part-widget-button-icon .wk-icon {
       width: 16px;
       height: 16px;
     }
@@ -283,11 +301,6 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
 	        transform: translateY(1px);
 	      }
 
-	      #${rootId} .part-button[data-variant="secondary"] {
-	        background: var(--part-panel-strong);
-	        color: var(--part-text);
-	      }
-
 	      #${rootId} .part-button[data-variant="danger"] {
 	        background: var(--part-danger-soft);
 	        color: var(--part-danger);
@@ -319,7 +332,7 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
 	        transform: translateY(-1px);
     }
 
-    #${rootId} .part-icon-button .part-icon-svg {
+    #${rootId} .part-icon-button .wk-icon {
       width: 16px;
       height: 16px;
     }

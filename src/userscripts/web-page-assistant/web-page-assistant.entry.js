@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.1
+// @version      0.3.2
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -36,10 +36,12 @@ import {
   createPageAssistantDialogContract,
   createWidgetElement,
   createDialogElement,
+  isCoarsePointer,
 } from './web-page-assistant-presentation.lib.js';
 import { createWebPageAssistantSession } from './web-page-assistant-session.lib.js';
 import { createWidgetLayoutRuntime } from './web-page-assistant-widget-layout.lib.js';
 import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
+import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
 
 (function () {
   'use strict';
@@ -49,6 +51,7 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
   const SCRIPT_NAME = 'Web Page Assistant';
   const ROOT_ID = 'page-auto-refresh-timer-root';
   const STYLE_ID = `${ROOT_ID}-style`;
+  const TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
   const DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
   const UNLOCKER_STYLE_ID = `${ROOT_ID}-unlocker-style`;
   const STORAGE_KEY = 'pageAutoRefreshTimerSettings';
@@ -90,11 +93,35 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
   let dialog;
   let activeDialogTab = 'refresh';
   let countdownNodes = [];
+  let widgetStatusNode = null;
+  let lastWidgetStatusText = '';
+  let dialogReturnFocus = null;
+  let inertedElements = [];
+  let themeCleanup = null;
   let hasRootListener = false;
   let webPageAssistantSession;
   let widgetLayoutRuntime;
   let unlockerRuntime;
   let initialStateReady = Promise.resolve();
+
+  // WPA runs on arbitrary hosts, so there is no host theme probe: the shared
+  // tokens resolve via the prefers-color-scheme media query.
+  const TOKEN_CSS = buildTokenCss({
+    rootSelector: `#${ROOT_ID}`,
+    accent: 'oklch(55% 0.10 160)',
+    accentDark: 'oklch(70% 0.12 160)',
+  });
+  const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const WRITE_ACTIONS = new Set([
+    'save-preset',
+    'save-custom',
+    'delete-page',
+    'delete-site',
+    'save-unlocker',
+    'delete-unlocker-page',
+    'delete-unlocker-site',
+    'disable-active',
+  ]);
 
   function isRecord(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -153,6 +180,12 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
   }
 
   function installStyles() {
+    if (!document.getElementById(TOKEN_STYLE_ID)) {
+      const tokenStyle = document.createElement('style');
+      tokenStyle.id = TOKEN_STYLE_ID;
+      tokenStyle.textContent = TOKEN_CSS;
+      document.documentElement.append(tokenStyle);
+    }
     installAssistantBaseStyles({
       documentObject: document,
       rootId: ROOT_ID,
@@ -175,6 +208,10 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
       root = document.createElement('div');
       root.id = ROOT_ID;
       document.documentElement.append(root);
+    }
+
+    if (!themeCleanup) {
+      themeCleanup = applyTheme(root);
     }
 
     if (!hasRootListener) {
@@ -255,6 +292,7 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
       activeMatch = state.activeMatch;
       updatePauseButton();
       updateCountdownText();
+      updateWidgetStatusText();
     },
   });
 
@@ -309,6 +347,8 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
       widgetPosition = nextPosition;
     },
     setTimeout: (handler, delay) => window.setTimeout(handler, delay),
+    clearTimeout: (timer) => window.clearTimeout(timer),
+    isCoarsePointer: () => isCoarsePointer(window),
     logger: console,
     scriptName: SCRIPT_NAME,
     constants: {
@@ -322,10 +362,11 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
     },
   });
 
+  // The widget is always rendered: with no active refresh setting it stays as
+  // a dimmed idle dot whose panel offers the settings entry.
   function createWidgetViewModel() {
-    if (!activeMatch) return null;
-
     return {
+      enabled: Boolean(activeMatch),
       summary: currentStatusText(),
     };
   }
@@ -338,23 +379,24 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
       widget = null;
       widgetButton = null;
       countdownNodes = [];
+      widgetStatusNode = null;
     }
-
-    const model = createWidgetViewModel();
-    if (!model) return;
 
     const renderedWidget = createWidgetElement({
       documentObject: document,
-      model,
+      model: createWidgetViewModel(),
     });
     widget = renderedWidget.widget;
     widgetButton = renderedWidget.widgetButton;
     countdownNodes = renderedWidget.countdownNodes;
+    widgetStatusNode = renderedWidget.statusNode;
+    lastWidgetStatusText = '';
     widgetLayoutRuntime.attach(widget, widgetButton, widgetPosition);
     root.append(widget);
     widgetLayoutRuntime.applyPosition();
     updatePauseButton();
     updateCountdownText();
+    updateWidgetStatusText();
   }
 
   function createDialogViewModel(message = '', preferredScope = null, preferredTab = null) {
@@ -373,10 +415,102 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
     });
   }
 
+  function captureDialogState() {
+    if (!dialog) return null;
+
+    const panel = dialog.querySelector('.part-dialog');
+    let focusSelector = null;
+    const active = document.activeElement;
+    if (active && dialog.contains(active)) {
+      const roleNode = active.closest?.('[data-part-role]');
+      const actionNode = active.closest?.('[data-part-action]');
+      if (roleNode) {
+        focusSelector = dialogContract.roleSelector(roleNode.dataset.partRole);
+      } else if (active.matches?.('input[name="part-scope"]')) {
+        focusSelector = `input[name="part-scope"][value="${active.value}"]`;
+      } else if (actionNode) {
+        focusSelector = dialogContract.actionSelector(actionNode.dataset.partAction);
+        for (const [datasetKey, attribute] of [['partTab', 'data-part-tab'], ['intervalMs', 'data-interval-ms']]) {
+          if (actionNode.dataset[datasetKey]) {
+            focusSelector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
+          }
+        }
+      }
+    }
+
+    return {
+      scrollTop: panel?.scrollTop || 0,
+      focusSelector,
+    };
+  }
+
+  // The whole dialog tree is rebuilt on tab/scope/save changes; keep the
+  // panel scroll offset and the focused control across the rebuild.
+  function restoreDialogState(preserved) {
+    if (!preserved || !dialog) return;
+    const panel = dialog.querySelector('.part-dialog');
+    if (panel && preserved.scrollTop) panel.scrollTop = preserved.scrollTop;
+    if (preserved.focusSelector) {
+      dialog.querySelector(preserved.focusSelector)?.focus?.();
+    }
+  }
+
+  function applyBackgroundInert() {
+    if (inertedElements.length) return;
+    for (const child of Array.from(document.body?.children || [])) {
+      if (child === root) continue;
+      child.setAttribute('inert', '');
+      inertedElements.push(child);
+    }
+  }
+
+  function releaseBackgroundInert() {
+    for (const element of inertedElements) {
+      element.removeAttribute('inert');
+    }
+    inertedElements = [];
+  }
+
+  function handleDialogKeydown(event) {
+    if (!dialog) return;
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeDialog();
+      return;
+    }
+
+    if (event.key !== 'Tab') return;
+    const panel = dialog.querySelector('.part-dialog');
+    if (!panel) return;
+    const focusables = [...panel.querySelectorAll(FOCUSABLE_SELECTOR)]
+      .filter((element) => !element.disabled && !element.closest('[hidden]'));
+    if (!focusables.length) return;
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !panel.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   function renderDialog(message = '', preferredScope = null, preferredTab = null) {
     ensureRoot();
 
-    if (dialog) {
+    const preserved = captureDialogState();
+    if (!dialog) {
+      // Opening (not rebuilding): remember the trigger to return focus to.
+      // GM menu opens land on the page body, so fall back to the widget button.
+      const active = document.activeElement;
+      dialogReturnFocus = active && root.contains(active) ? active : (widgetButton || null);
+      applyBackgroundInert();
+    } else {
       dialog.remove();
       dialog = null;
     }
@@ -388,15 +522,26 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
       documentObject: document,
       model,
     });
+    dialog.addEventListener('keydown', handleDialogKeydown);
     root.append(dialog);
     dialogContract.applyModel(dialog, model, PRESETS);
+    restoreDialogState(preserved);
     setMessage(model.message);
   }
 
   function closeDialog() {
     if (!dialog) return;
-    dialog.remove();
-    dialog = null;
+    try {
+      dialog.remove();
+      dialog = null;
+    } finally {
+      releaseBackgroundInert();
+      const returnTarget = dialogReturnFocus;
+      dialogReturnFocus = null;
+      if (returnTarget && returnTarget.isConnected !== false) {
+        returnTarget.focus?.();
+      }
+    }
   }
 
   function parseCustomInterval() {
@@ -440,6 +585,27 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
     for (const node of countdownNodes) {
       node.textContent = text;
     }
+  }
+
+  // Full-sentence widget status for the visually-hidden live region. The text
+  // only changes on lifecycle transitions (enable/pause/resume/disable), so
+  // assistive technology is not spammed by the per-second countdown.
+  function widgetStatusText() {
+    const runtimeState = refreshRuntime.getState();
+    if (!runtimeState.activeMatch) return '当前未启用自动刷新。';
+    if (runtimeState.isPaused) {
+      const remaining = formatInterval(Math.max(1000, Math.ceil(runtimeState.remainingMs / 1000) * 1000));
+      return `自动刷新已暂停，剩余 ${remaining}。`;
+    }
+    return `${scopeLabel(runtimeState.activeMatch.scope)}自动刷新已启用，每 ${formatInterval(runtimeState.activeMatch.setting.intervalMs)} 刷新一次。`;
+  }
+
+  function updateWidgetStatusText() {
+    if (!widgetStatusNode) return;
+    const text = widgetStatusText();
+    if (text === lastWidgetStatusText) return;
+    lastWidgetStatusText = text;
+    widgetStatusNode.textContent = text;
   }
 
   function updatePauseButton() {
@@ -491,14 +657,35 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
       return;
     }
 
+    // The idle widget's collapsed button opens settings on click; swallow the
+    // click that trails a drag gesture.
+    if (
+      action === 'open-settings'
+      && actionNode.classList.contains('part-widget-button')
+      && widgetLayoutRuntime.isExpansionSuppressed()
+    ) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
+
+    const isWrite = WRITE_ACTIONS.has(action);
+    const pendingLabel = isWrite ? actionNode.textContent : null;
+    if (isWrite) {
+      actionNode.disabled = true;
+      actionNode.textContent = '处理中…';
+    }
 
     try {
       await webPageAssistantSession.dispatch(action, actionNode);
     } catch (error) {
       console.warn(`${SCRIPT_NAME}: action failed.`, error);
-      setMessage('操作失败，请查看浏览器控制台。', 'error');
+      if (isWrite && actionNode.isConnected !== false) {
+        actionNode.disabled = false;
+        actionNode.textContent = pendingLabel;
+      }
+      setMessage(`操作失败：${error?.message || error}`, 'error');
     }
   }
 
@@ -536,9 +723,13 @@ import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
     window.addEventListener('resize', () => widgetLayoutRuntime.applyPosition());
     refreshUnlockerState();
 
-    if (activeMatch) {
-      onReady(restartActiveCountdown);
-    }
+    onReady(() => {
+      if (activeMatch) {
+        restartActiveCountdown();
+      } else {
+        renderWidget();
+      }
+    });
   }
 
   initialStateReady = init();

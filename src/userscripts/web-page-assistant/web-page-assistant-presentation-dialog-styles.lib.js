@@ -9,34 +9,7 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
 
   const style = documentObject.createElement('style');
   style.id = styleId;
-  style.textContent = `      #${rootId} .part-close-icon {
-      position: relative;
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-    }
-
-    #${rootId} .part-close-icon::before,
-    #${rootId} .part-close-icon::after {
-      content: "";
-      position: absolute;
-      top: 6px;
-      left: 1px;
-      width: 12px;
-      height: 2px;
-      border-radius: 999px;
-      background: currentColor;
-    }
-
-    #${rootId} .part-close-icon::before {
-      transform: rotate(45deg);
-    }
-
-    #${rootId} .part-close-icon::after {
-      transform: rotate(-45deg);
-    }
-
-    #${rootId} .part-backdrop {
+  style.textContent = `      #${rootId} .part-backdrop {
       position: fixed;
 	        inset: 0;
 	        display: grid;
