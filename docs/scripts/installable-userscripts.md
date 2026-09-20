@@ -14,6 +14,7 @@
 
 - 在网页上提供可配置的页面辅助能力。
 - 包含设置、刷新、session、unlocker 能力和浮动控件。
+- 范围设置显示实际主机名；限制解除采用可点击选项列表，桌面两列、窄屏单列。按钮保留键盘焦点提示，动效遵循减少动态效果偏好。
 - 当前脚本运行范围较广，安装前应确认目标用户脚本管理器的授权提示。
 - 源码是 `web-page-assistant.entry.js` 加同目录 `*.lib.js` ES 模块，`npm run build` 打包为 dist 单文件。
 
@@ -33,6 +34,7 @@
 - 在 `https://chatgpt.com/*` 页面运行，通过悬浮按钮或菜单命令计算当前 Codex 用量。
 - 每次成功运行后保存一条本地 `Quota Snapshot`。
 - 面板里显示 `Snapshot Archive` 概况和最近快照。
+- 悬浮入口与面板使用实色背景和轻阴影；同步提示保持中性背景，仅状态标题使用成功或警告色，适配明暗主题。
 - 展示近 30 天按模型汇总和当前可用的重置券明细。
 - 通过 `Cost Ledger` 展示日 / 周（滚动 7 天）/ 月 / 全量已结算消耗，并支持区间下钻。
 - 支持从面板导出整个归档。
@@ -63,12 +65,13 @@
 - 从当前页面里找最大的可见图片。
 - 优先用 `GM_download` 下载。
 - 下载文件名默认取当前飞书文档标题。
+- 图片获取、读取、下载失败和超时分别给出中文操作建议；详细错误留在浏览器控制台。
 
 迁移说明：
 
 - 旧路径：`src/feishu-preview-image-export.user.js`
 - 新路径：`src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`
-- 当前脚本没有 `@downloadURL` / `@updateURL`；如已手动安装，直接用新路径重新安装即可。
+- 已配置 `@downloadURL` / `@updateURL`，指向当前 src 路径的 raw 地址。
 
 ## JavDB Recommend Archive
 
@@ -89,6 +92,7 @@
 - 请求设 12 秒超时，对网络错误、408、429 和 5xx 最多尝试 3 次并指数退避；换期会中止没有其他消费者的旧详情请求。屏外期区块使用 `content-visibility` 降低渲染成本，工具栏提供“刷新期数”和“清缓存”。
 - 封面统一改写为官网页面使用的 `c0.jdbstatic.com` 图床；接口默认返回的 App 图床 `tp.spfcas.com` 在网页端常被拦截，导致封面不显示。
 - 已加载内容即时过滤 + 全期关键词搜索（逐期扫描、可随时停止）。
+- 工具栏分为浏览、搜索、维护三组，窄屏自动换行；清缓存使用次要按钮样式，原站样式和降级样式均提供键盘焦点提示。
 - 数据走官网自身的 `/api/v1/movies/recommend_periods` 与 `/api/v1/movies/recommend` 接口（同域请求）。
 
 说明：

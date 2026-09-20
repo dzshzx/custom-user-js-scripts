@@ -747,18 +747,26 @@
 	        font-size: 18px;
 	        line-height: 1;
 	        transition:
-	          background-color 140ms ease,
-	          transform 140ms ease;
+	          background-color 140ms ease;
 	      }
 
 	      #${rootId} .part-icon-button:hover {
 	        background: var(--part-panel);
-	        transform: translateY(-1px);
     }
 
     #${rootId} .part-icon-button .part-icon-svg {
       width: 16px;
       height: 16px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #${rootId} *,
+      #${rootId} *::before,
+      #${rootId} *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
     }
 
 `;
@@ -774,34 +782,7 @@
     if (documentObject.getElementById(styleId)) return;
     const style = documentObject.createElement("style");
     style.id = styleId;
-    style.textContent = `      #${rootId} .part-close-icon {
-      position: relative;
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-    }
-
-    #${rootId} .part-close-icon::before,
-    #${rootId} .part-close-icon::after {
-      content: "";
-      position: absolute;
-      top: 6px;
-      left: 1px;
-      width: 12px;
-      height: 2px;
-      border-radius: 999px;
-      background: currentColor;
-    }
-
-    #${rootId} .part-close-icon::before {
-      transform: rotate(45deg);
-    }
-
-    #${rootId} .part-close-icon::after {
-      transform: rotate(-45deg);
-    }
-
-    #${rootId} .part-backdrop {
+    style.textContent = `      #${rootId} .part-backdrop {
       position: fixed;
 	        inset: 0;
 	        display: grid;
@@ -890,6 +871,10 @@
 	        border-top: 0;
 	      }
 
+      #${rootId} .part-tab-panel > .part-section:first-child {
+        margin-top: 18px;
+      }
+
 	      #${rootId} .part-section-title {
 	        margin: 0 0 8px;
 	        font-size: 12px;
@@ -962,11 +947,9 @@
 	          transform 140ms ease;
 	      }
 
-	      #${rootId} .part-preset:hover,
-	      #${rootId} .part-preset:focus-visible {
+	      #${rootId} .part-preset:hover {
 	        border-color: var(--part-line-strong);
 	        background: var(--part-panel);
-	        outline: none;
 	      }
 
 	      #${rootId} .part-preset:active {
@@ -1003,33 +986,37 @@
 	      #${rootId} .part-check-list {
 	        display: grid;
 	        grid-template-columns: repeat(2, minmax(0, 1fr));
-	        gap: 8px;
+	        gap: 2px 8px;
 	      }
 
 	      #${rootId} .part-check-card {
 	        display: flex;
-	        align-items: flex-start;
+	        align-items: center;
 	        gap: 8px;
-	        min-height: 42px;
-	        padding: 10px;
-	        border: 1px solid var(--part-line);
-	        border-radius: 7px;
-	        background: var(--part-field);
+	        min-height: 38px;
+	        padding: 8px 10px;
+	        border-radius: 5px;
+	        background: transparent;
+	        cursor: pointer;
 	        transition:
-	          border-color 140ms ease,
-	          background-color 140ms ease,
-	          box-shadow 140ms ease;
+	          background-color 140ms ease;
+	      }
+
+	      #${rootId} .part-check-card:hover {
+	        background: var(--part-panel);
 	      }
 
 	      #${rootId} .part-check-card input {
-	        margin-top: 2px;
+	        margin: 0;
 	        accent-color: var(--part-accent);
 	      }
 
 	      #${rootId} .part-check-card:has(input:checked) {
-	        border-color: var(--part-line-strong);
-	        background: var(--part-panel);
-	        box-shadow: inset 0 0 0 1px oklch(75% 0.01 250 / 0.18);
+	        background: var(--part-accent-soft);
+	      }
+
+	      #${rootId} .part-check-primary {
+	        font-weight: 650;
 	      }
 
 	      #${rootId} .part-message {
@@ -1084,6 +1071,12 @@
     <circle cx="12" cy="12" r="3"></circle>
   </svg>
 `;
+  var LUCIDE_X_ICON_HTML = `
+  <svg class="part-icon-svg lucide lucide-x" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M18 6 6 18"></path>
+    <path d="m6 6 12 12"></path>
+  </svg>
+`;
   function createPageAssistantDialogContract(adapters) {
     const {
       settingsContract,
@@ -1096,6 +1089,7 @@
       status: "status",
       pageKey: "page-key",
       siteKey: "site-key",
+      siteHostname: "site-hostname",
       presets: "presets",
       customValue: "custom-value",
       customUnit: "custom-unit",
@@ -1150,6 +1144,7 @@
         message: input.message || "",
         activeTab: nextTab,
         selectedScope,
+        siteKey: input.siteKey,
         pageSetting,
         siteSetting,
         pageUnlockerSetting,
@@ -1170,6 +1165,7 @@
         [roles.status, model.statusText],
         [roles.pageKey, model.pageRefreshText],
         [roles.siteKey, model.siteRefreshText],
+        [roles.siteHostname, `主机名：${model.siteKey}`],
         [roles.unlockerStatus, model.unlockerStatusText],
         [roles.unlockerPageKey, model.pageUnlockerText],
         [roles.unlockerSiteKey, model.siteUnlockerText]
@@ -1281,7 +1277,7 @@
           <p class="part-subtitle">按页面或站点管理自动刷新与限制解除。</p>
         </div>
         <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
-          <span class="part-close-icon" aria-hidden="true"></span>
+          ${LUCIDE_X_ICON_HTML}
         </button>
       </div>
       <div class="part-tabs" role="tablist" aria-label="网页助手功能">
@@ -1301,7 +1297,8 @@
           <label class="part-scope-card">
             <input type="radio" name="part-scope" value="site">
             整个站点
-            <span class="part-key">匹配同一 hostname 下的页面。</span>
+            <span class="part-key">匹配同一主机名下的页面。</span>
+            <span class="part-key" data-part-role="site-hostname"></span>
           </label>
 	          </div>
 	        </section>
@@ -1356,7 +1353,7 @@
 	          <section class="part-section">
 	            <p class="part-section-title">解除能力</p>
 	            <div class="part-row">
-	              <label class="part-check-card">
+	              <label class="part-check-card part-check-primary">
 	                <input type="checkbox" data-part-role="unlocker-enabled">
 	                <span>启用当前范围的限制解除</span>
 	              </label>

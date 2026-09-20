@@ -17,6 +17,20 @@
 
   const SCRIPT_NAME = 'Feishu Preview Image Export';
   const MIN_IMAGE_AREA = 20_000;
+  const ERROR_MESSAGES = {
+    network: '图片获取失败，请检查网络或页面权限后重试。',
+    read: '图片读取失败，请刷新页面后重试。',
+    downloadTimeout: '下载超时，请稍后重试。',
+    download: '下载失败，请检查浏览器下载权限后重试。',
+    unknown: '导出失败，请刷新页面后重试。',
+  };
+
+  class ExportError extends Error {
+    constructor(kind, cause) {
+      super(ERROR_MESSAGES[kind], { cause });
+      this.name = 'ExportError';
+    }
+  }
 
   function notify(message) {
     console.log(`${SCRIPT_NAME}: ${message}`);
@@ -55,7 +69,7 @@
   function parseDataUrl(dataUrl) {
     const match = String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);
     if (!match) {
-      throw new Error('Unsupported data URL format');
+      throw new ExportError('read', new Error('Unsupported data URL format'));
     }
     return {
       mime: match[1],
@@ -65,17 +79,23 @@
 
   function blobToDataUrl(blob) {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(reader.error || new Error('Failed to read blob'));
-      reader.readAsDataURL(blob);
+      try {
+        const reader = new FileReader();
+        reader.onload = () => reader.result
+          ? resolve(String(reader.result))
+          : reject(new ExportError('read', new Error('FileReader returned empty data')));
+        reader.onerror = () => reject(new ExportError('read', reader.error || new Error('Failed to read blob')));
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        reject(new ExportError('read', error));
+      }
     });
   }
 
   async function imageToDownloadPayload(item) {
     const src = item.src;
     if (!src) {
-      throw new Error('Image source is empty');
+      throw new ExportError('read', new Error('Image source is empty'));
     }
 
     if (src.startsWith('data:')) {
@@ -86,11 +106,21 @@
       };
     }
 
-    const response = await fetch(src, { credentials: 'include' });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    let response;
+    try {
+      response = await fetch(src, { credentials: 'include' });
+    } catch (error) {
+      throw new ExportError('network', error);
     }
-    const blob = await response.blob();
+    if (!response.ok) {
+      throw new ExportError('network', new Error(`Failed to fetch image: ${response.status} ${response.statusText}`));
+    }
+    let blob;
+    try {
+      blob = await response.blob();
+    } catch (error) {
+      throw new ExportError('read', error);
+    }
     return {
       mime: blob.type || 'application/octet-stream',
       url: await blobToDataUrl(blob),
@@ -127,14 +157,18 @@
 
     if (typeof GM_download === 'function') {
       await new Promise((resolve, reject) => {
-        GM_download({
-          url: payload.url,
-          name: filename,
-          saveAs: true,
-          onload: resolve,
-          onerror: (error) => reject(error || new Error('GM_download failed')),
-          ontimeout: () => reject(new Error('GM_download timed out')),
-        });
+        try {
+          GM_download({
+            url: payload.url,
+            name: filename,
+            saveAs: true,
+            onload: resolve,
+            onerror: (error) => reject(new ExportError('download', error || new Error('GM_download failed'))),
+            ontimeout: () => reject(new ExportError('downloadTimeout', new Error('GM_download timed out'))),
+          });
+        } catch (error) {
+          reject(new ExportError('download', error));
+        }
       });
       return;
     }
@@ -145,7 +179,7 @@
   function runExport() {
     downloadCurrentImage().catch((error) => {
       console.error(`${SCRIPT_NAME}: export failed.`, error);
-      notify(`导出失败：${error instanceof Error ? error.message : String(error)}`);
+      notify(error instanceof ExportError ? error.message : ERROR_MESSAGES.unknown);
     });
   }
 

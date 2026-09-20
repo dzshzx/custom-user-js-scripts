@@ -1427,11 +1427,11 @@ ${text.slice(0, 800)}`);
       --cqc-warning: #b45309;
       --cqc-warning-surface: rgba(245, 158, 11, 0.1);
       --cqc-warning-border: rgba(245, 158, 11, 0.32);
-      --cqc-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.22);
-      --cqc-shadow-button: 0 8px 28px rgba(0, 0, 0, 0.14);
-      --cqc-button-bg: rgba(248, 250, 252, 0.95);
-      --cqc-button-bg-docked: rgba(255, 255, 255, 0.62);
-      --cqc-button-bg-docked-active: rgba(255, 255, 255, 0.94);
+      --cqc-shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.16);
+      --cqc-shadow-button: 0 3px 10px rgba(0, 0, 0, 0.12);
+      --cqc-button-bg: #f8fafc;
+      --cqc-button-bg-docked: #f8fafc;
+      --cqc-button-bg-docked-active: #f8fafc;
       position: fixed;
       inset: 0;
       z-index: 2147483647;
@@ -1461,7 +1461,6 @@ ${text.slice(0, 800)}`);
       cursor: pointer;
       pointer-events: auto;
       user-select: none;
-      backdrop-filter: blur(18px);
       overflow: hidden;
       transition:
         width 160ms ease,
@@ -1479,7 +1478,7 @@ ${text.slice(0, 800)}`);
 
     .cqc-button.is-active {
       border-color: var(--cqc-primary-border);
-      box-shadow: 0 10px 32px var(--cqc-primary-ring);
+      box-shadow: var(--cqc-shadow-button);
     }
 
     .cqc-button:focus-visible,
@@ -1498,8 +1497,8 @@ ${text.slice(0, 800)}`);
       padding: 0;
       justify-content: center;
       background: var(--cqc-button-bg-docked);
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-      opacity: 0.72;
+      box-shadow: var(--cqc-shadow-button);
+      opacity: 1;
     }
 
     .cqc-button.is-docked:hover,
@@ -1526,7 +1525,7 @@ ${text.slice(0, 800)}`);
       padding: 0;
       justify-content: center;
       background: var(--cqc-button-bg-docked);
-      opacity: 0.72;
+      opacity: 1;
     }
 
     .cqc-button.is-docked.is-hover-locked .cqc-button-text,
@@ -1563,7 +1562,6 @@ ${text.slice(0, 800)}`);
       height: 10px;
       border-radius: 50%;
       background: var(--cqc-primary);
-      box-shadow: 0 0 0 4px var(--cqc-primary-ring);
       flex: 0 0 auto;
     }
 
@@ -1674,32 +1672,15 @@ ${text.slice(0, 800)}`);
     }
 
     .cqc-close-icon {
-      position: relative;
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
       display: block;
       flex: 0 0 auto;
-    }
-
-    .cqc-close-icon::before,
-    .cqc-close-icon::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 14px;
-      height: 2px;
-      border-radius: 999px;
-      background: currentColor;
-      transform-origin: center;
-    }
-
-    .cqc-close-icon::before {
-      transform: translate(-50%, -50%) rotate(45deg);
-    }
-
-    .cqc-close-icon::after {
-      transform: translate(-50%, -50%) rotate(-45deg);
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .cqc-refresh:hover,
@@ -1724,6 +1705,7 @@ ${text.slice(0, 800)}`);
 
     @media (prefers-reduced-motion: reduce) {
       .cqc-button,
+      .cqc-button-text,
       .cqc-panel,
       .cqc-panel-header,
       .cqc-content {
@@ -1761,11 +1743,11 @@ ${text.slice(0, 800)}`);
         --cqc-warning: #fbbf24;
         --cqc-warning-surface: rgba(245, 158, 11, 0.16);
         --cqc-warning-border: rgba(245, 158, 11, 0.3);
-        --cqc-shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.5);
-        --cqc-shadow-button: 0 8px 28px rgba(0, 0, 0, 0.4);
-        --cqc-button-bg: rgba(47, 47, 47, 0.95);
-        --cqc-button-bg-docked: rgba(47, 47, 47, 0.64);
-        --cqc-button-bg-docked-active: rgba(47, 47, 47, 0.96);
+        --cqc-shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.32);
+        --cqc-shadow-button: 0 3px 10px rgba(0, 0, 0, 0.25);
+        --cqc-button-bg: #2f2f2f;
+        --cqc-button-bg-docked: #2f2f2f;
+        --cqc-button-bg-docked-active: #2f2f2f;
       }
     }
   `;
@@ -1785,6 +1767,12 @@ ${text.slice(0, 800)}`);
   function escapeHtml(value) {
     return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
+  var LUCIDE_X_ICON_HTML = `
+  <svg class="cqc-close-icon lucide lucide-x" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M18 6 6 18"></path>
+    <path d="m6 6 12 12"></path>
+  </svg>
+`;
   function createShellMarkup(labels = {}) {
     return `
     <button type="button" class="cqc-button" data-action="toggle" aria-expanded="false" aria-label="${escapeHtml(labels.buttonAriaOpen || "")}">
@@ -1803,7 +1791,7 @@ ${text.slice(0, 800)}`);
         <div class="cqc-panel-actions">
           <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml(labels.actionRefresh || "")}</button>
           <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || "Close")}">
-            <span class="cqc-close-icon" aria-hidden="true"></span>
+            ${LUCIDE_X_ICON_HTML}
           </button>
         </div>
       </div>
@@ -2483,10 +2471,9 @@ ${text.slice(0, 800)}`);
         margin: 0 0 12px;
         padding: 10px 12px;
         border: 1px solid var(--cqc-border);
-        border-left: 3px solid var(--cqc-border-strong);
         border-radius: 10px;
         background: var(--cqc-surface-sunken);
-        color: var(--cqc-text-muted);
+        color: var(--cqc-text);
         font-size: 12px;
         line-height: 1.45;
       }
@@ -2496,20 +2483,8 @@ ${text.slice(0, 800)}`);
         font-size: 13px;
       }
 
-      .cqc-sync-banner[data-tone="success"] {
-        border-left-color: var(--cqc-primary);
-        background: var(--cqc-primary-soft);
-        color: var(--cqc-primary-strong);
-      }
-
       .cqc-sync-banner[data-tone="success"] strong {
         color: var(--cqc-primary-strong);
-      }
-
-      .cqc-sync-banner[data-tone="warning"] {
-        border-left-color: var(--cqc-warning);
-        background: var(--cqc-warning-surface);
-        color: var(--cqc-warning);
       }
 
       .cqc-sync-banner[data-tone="warning"] strong {

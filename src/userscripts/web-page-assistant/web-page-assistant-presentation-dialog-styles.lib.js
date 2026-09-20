@@ -9,34 +9,7 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
 
   const style = documentObject.createElement('style');
   style.id = styleId;
-  style.textContent = `      #${rootId} .part-close-icon {
-      position: relative;
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-    }
-
-    #${rootId} .part-close-icon::before,
-    #${rootId} .part-close-icon::after {
-      content: "";
-      position: absolute;
-      top: 6px;
-      left: 1px;
-      width: 12px;
-      height: 2px;
-      border-radius: 999px;
-      background: currentColor;
-    }
-
-    #${rootId} .part-close-icon::before {
-      transform: rotate(45deg);
-    }
-
-    #${rootId} .part-close-icon::after {
-      transform: rotate(-45deg);
-    }
-
-    #${rootId} .part-backdrop {
+  style.textContent = `      #${rootId} .part-backdrop {
       position: fixed;
 	        inset: 0;
 	        display: grid;
@@ -125,6 +98,10 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
 	        border-top: 0;
 	      }
 
+      #${rootId} .part-tab-panel > .part-section:first-child {
+        margin-top: 18px;
+      }
+
 	      #${rootId} .part-section-title {
 	        margin: 0 0 8px;
 	        font-size: 12px;
@@ -197,11 +174,9 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
 	          transform 140ms ease;
 	      }
 
-	      #${rootId} .part-preset:hover,
-	      #${rootId} .part-preset:focus-visible {
+	      #${rootId} .part-preset:hover {
 	        border-color: var(--part-line-strong);
 	        background: var(--part-panel);
-	        outline: none;
 	      }
 
 	      #${rootId} .part-preset:active {
@@ -238,33 +213,37 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
 	      #${rootId} .part-check-list {
 	        display: grid;
 	        grid-template-columns: repeat(2, minmax(0, 1fr));
-	        gap: 8px;
+	        gap: 2px 8px;
 	      }
 
 	      #${rootId} .part-check-card {
 	        display: flex;
-	        align-items: flex-start;
+	        align-items: center;
 	        gap: 8px;
-	        min-height: 42px;
-	        padding: 10px;
-	        border: 1px solid var(--part-line);
-	        border-radius: 7px;
-	        background: var(--part-field);
+	        min-height: 38px;
+	        padding: 8px 10px;
+	        border-radius: 5px;
+	        background: transparent;
+	        cursor: pointer;
 	        transition:
-	          border-color 140ms ease,
-	          background-color 140ms ease,
-	          box-shadow 140ms ease;
+	          background-color 140ms ease;
+	      }
+
+	      #${rootId} .part-check-card:hover {
+	        background: var(--part-panel);
 	      }
 
 	      #${rootId} .part-check-card input {
-	        margin-top: 2px;
+	        margin: 0;
 	        accent-color: var(--part-accent);
 	      }
 
 	      #${rootId} .part-check-card:has(input:checked) {
-	        border-color: var(--part-line-strong);
-	        background: var(--part-panel);
-	        box-shadow: inset 0 0 0 1px oklch(75% 0.01 250 / 0.18);
+	        background: var(--part-accent-soft);
+	      }
+
+	      #${rootId} .part-check-primary {
+	        font-weight: 650;
 	      }
 
 	      #${rootId} .part-message {
