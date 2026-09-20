@@ -176,10 +176,12 @@ out where script-owned pages differ.
 
 ## Feishu Preview Image Export UI
 
-- The installable surface is primarily a userscript menu command and browser
-  alert/log feedback.
-- Keep feedback direct and operational. This script should not introduce a
-  persistent floating UI unless a future task proves it is needed.
+- The installable surface is a userscript menu command plus transient in-page
+  toast feedback (shared-kit toaster on a script-owned root); no alert() and no
+  persistent floating UI.
+- Keep feedback direct and operational: progress while fetching, the exported
+  file name on success, and a concrete Chinese failure reason on error (raw
+  internal errors stay in the console).
 - File names should be sanitized from the Feishu document title and remain
   understandable to the user.
 
@@ -194,6 +196,10 @@ out where script-owned pages differ.
 - Navigation payloads and the full-search index are separate caches. Search index admission must not evict browsing payloads; detail transport remains single-flight per period and uses consumer leases so cancellation only aborts a request after its last consumer releases it.
 - Full-archive search renders each matching period exactly once as it arrives. Off-screen period sections may use browser-native rendering containment, but the DOM order and first externally decorated movie grid remain stable for multi-userscript compatibility.
 - Movie cards reuse the site's native `movie-list` markup and link directly to the site's `/v/<id>` detail pages. Covers are landscape and must render uncropped (`contain`); release dates share the restrained metadata row with scores instead of adding another card section.
+- All glyphs are inline Lucide SVGs (vendored from `src/userscripts/shared/shared-icons.lib.js`, inlined because the script stays single-file); never emoji. Buttons keep icon plus text.
+- The search box is disambiguated by a segmented control (loaded stream vs. all periods): the loaded segment filters instantly on input, the all-periods segment runs the stoppable full-archive search from an explicit submit (Enter or the search button).
+- Period sections render gray skeleton cards at the native card aspect ratio (`padding-top: 67%`) while loading, swapped wholesale when data arrives; a failed cover image yields a labelled placeholder box instead of a hidden hole.
+- On narrow viewports (<769px) the sticky toolbar becomes two fixed rows (period navigation, then search and actions), with anchor scroll margins recalculated to match.
 
 ## Components
 

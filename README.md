@@ -9,7 +9,7 @@
 | Web Page Assistant / 网页助手 | `*://*/*` | 管理网页自动刷新，并可按需解除复制、选择、右键菜单、拖拽和离开确认限制。 | [dist/web-page-assistant.user.js](dist/web-page-assistant.user.js) |
 | Codex Quota Compass | `https://chatgpt.com/*` | 查看 Codex 用量、保存本地快照、远程同步、导出 / 导入用量归档。 | [dist/codex-quota-compass.user.js](dist/codex-quota-compass.user.js) |
 | JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数 | `https://javdb.com/*` 等 | 在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索与全期关键词搜索。 | [javdb-recommend.user.js](src/userscripts/javdb-recommend/javdb-recommend.user.js) |
-| Feishu Preview Image Export | `https://mi.feishu.cn/file/*` | 从飞书文件预览页导出当前最大可见图片。 | [feishu-preview-image-export.user.js](src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js) |
+| Feishu Preview Image Export | `https://mi.feishu.cn/file/*` | 从飞书文件预览页导出当前最大可见图片。 | [feishu-preview-image-export.user.js](dist/feishu-preview-image-export.user.js) |
 
 安装方式：
 

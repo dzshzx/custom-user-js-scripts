@@ -56,7 +56,7 @@
 
 安装入口：
 
-- [../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js](../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js)
+- [../../dist/feishu-preview-image-export.user.js](../../dist/feishu-preview-image-export.user.js)
 
 用途：
 
@@ -64,12 +64,13 @@
 - 从当前页面里找最大的可见图片。
 - 优先用 `GM_download` 下载。
 - 下载文件名默认取当前飞书文档标题。
+- 用户反馈经页面内 toast（导出进度 / 成功文件名 / 中文失败原因），不再弹 alert。
 
 迁移说明：
 
-- 旧路径：`src/feishu-preview-image-export.user.js`
-- 新路径：`src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`
-- 当前脚本没有 `@downloadURL` / `@updateURL`；如已手动安装，直接用新路径重新安装即可。
+- 更早：`src/feishu-preview-image-export.user.js`。
+- 其后：单文件 `src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`。
+- 当前：entry + lib ES 模块，`npm run build` 打包为 `dist/feishu-preview-image-export.user.js`；旧 src 路径保留构建生成的桥接文件（与 dist 逐字节一致），存量安装经一次版本更新自动切换到 dist。
 
 ## JavDB Recommend Archive
 
@@ -88,8 +89,11 @@
 - 期数目录在页面 `localStorage` 缓存 6 小时；过期时从最新页读取到缓存重叠点即停止并复用历史尾部，每 30 天完整校验一次。最新一期详情缓存 2 小时、历史详情缓存 30 天，浏览详情按最近使用保留最多 48 期、内存保留 24 期。
 - 全期搜索先查独立的紧凑本地索引，再以双工作线程补齐缺失期数；结果按期增量追加，停止搜索会释放其请求租约且不会中断仍被滚动流使用的同一期请求。索引补全后，同一目录下再次搜索不再请求详情接口。
 - 请求设 12 秒超时，对网络错误、408、429 和 5xx 最多尝试 3 次并指数退避；换期会中止没有其他消费者的旧详情请求。屏外期区块使用 `content-visibility` 降低渲染成本，工具栏提供“刷新期数”和“清缓存”。
-- 封面统一改写为官网页面使用的 `c0.jdbstatic.com` 图床；接口默认返回的 App 图床 `tp.spfcas.com` 在网页端常被拦截，导致封面不显示。
-- 已加载内容即时过滤 + 全期关键词搜索（逐期扫描、可随时停止）。
+- 封面统一改写为官网页面使用的 `c0.jdbstatic.com` 图床；接口默认返回的 App 图床 `tp.spfcas.com` 在网页端常被拦截，导致封面不显示。封面加载失败时显示带「封面加载失败」标签的占位盒，不再留空洞。
+- 搜索框左侧用分段控件区分范围：「已加载」输入即过滤当前流；「全部期数」回车或点「全期搜索」触发逐期扫描（可随时停止），两段的触发与状态行文案不再混用。
+- 期区块加载期间渲染与官网卡片同宽高比的灰色骨架占位卡，数据到达后整列替换。
+- 窄视口（<769px）吸顶工具栏固定为两行（期数导航行 / 搜索与动作行），锚点滚动边距随之重新核算。
+- 工具栏与卡片的图形符号全部为内联 Lucide SVG（与 `src/userscripts/shared/shared-icons.lib.js` 同源内联），不使用 emoji。
 - 数据走官网自身的 `/api/v1/movies/recommend_periods` 与 `/api/v1/movies/recommend` 接口（同域请求）。
 
 说明：

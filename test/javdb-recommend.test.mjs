@@ -15,9 +15,9 @@ const srcPath = path.resolve(
 const RAW_URL =
   'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/javdb-recommend/javdb-recommend.user.js';
 
-test('metadata pins auto-update URLs to the src raw path and carries version 0.0.6', async () => {
+test('metadata pins auto-update URLs to the src raw path and carries version 0.0.7', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
-  assert.deepEqual(metadata.get('@version'), ['0.0.6']);
+  assert.deepEqual(metadata.get('@version'), ['0.0.7']);
   assert.deepEqual(metadata.get('@downloadURL'), [RAW_URL]);
   assert.deepEqual(metadata.get('@updateURL'), [RAW_URL]);
 });
@@ -106,6 +106,13 @@ async function runScript(window, fetchImpl, extraGlobals = {}, storage = createM
   return context;
 }
 
+// 切搜索范围分段控件（已加载 / 全部期数）
+function switchSearchScope(window, value) {
+  const radio = window.document.querySelector(`input[name="jdb-ra-scope"][value="${value}"]`);
+  radio.checked = true;
+  radio.dispatchEvent(new window.Event('change', { bubbles: true }));
+}
+
 test('standalone archive page adopts site chrome and streams native-style cards', { skip: domSkip }, async () => {
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
   const calls = [];
@@ -147,12 +154,13 @@ test('standalone archive page adopts site chrome and streams native-style cards'
   const img2 = cards[1].querySelector('img');
   assert.equal(img2.getAttribute('src'), 'https://static.example.com/img/x.jpg');
 
-  // 卡片直链影片详情页，新标签打开
+  // 卡片直链影片详情页，新标签打开；评分前缀为内联 Lucide 星形图标（非 emoji）
   const link = cards[0].querySelector('a.box');
   assert.equal(link.getAttribute('href'), 'https://javdb.com/v/0827');
   assert.equal(link.getAttribute('target'), '_blank');
   assert.equal(link.getAttribute('rel'), 'noopener');
-  assert.equal(cards[0].querySelector('.meta').textContent, '★ 4.22 · 发售 2026-08-01');
+  assert.equal(cards[0].querySelector('.meta').textContent, '4.22 · 发售 2026-08-01');
+  assert.ok(cards[0].querySelector('.meta .jdb-ra-score svg.jdb-ra-icon'));
   assert.equal(cards[1].querySelector('.meta').textContent, '发售 2026-07-15');
 
   assert.ok(doc.querySelector('.jdb-ra-ph').textContent.includes('第 2 期'));
@@ -197,7 +205,7 @@ test('release-date metadata omits invalid dates without hiding independent score
   }, { IntersectionObserver: class { observe() {} disconnect() {} } });
 
   const cards = window.document.querySelectorAll('.jdb-ra-sec .item');
-  assert.equal(cards[0].querySelector('.meta').textContent, '★ 4.22');
+  assert.equal(cards[0].querySelector('.meta').textContent, '4.22');
   assert.equal(cards[1].querySelector('.meta'), null);
   await window.happyDOM.close();
 });
@@ -268,7 +276,7 @@ test('a fresh local cache avoids refetching the period catalog and loaded period
   }, { IntersectionObserver: class { observe() {} disconnect() {} } }, storage);
 
   assert.equal(secondWindow.document.querySelectorAll('.jdb-ra-sec .item').length, 2);
-  assert.equal(secondWindow.document.querySelector('.jdb-ra-sec .item .meta').textContent, '★ 4.22 · 发售 2026-08-01');
+  assert.equal(secondWindow.document.querySelector('.jdb-ra-sec .item .meta').textContent, '4.22 · 发售 2026-08-01');
   assert.equal(secondCalls.filter((url) => url.includes('/api/v1/movies/')).length, 0);
   assert.equal(secondCalls.filter((url) => url === 'https://javdb.com/').length, 1);
   firstWindow.close();
@@ -290,6 +298,7 @@ test('stream rendering and full-archive search share one in-flight detail reques
 
   const search = window.document.getElementById('jdb-ra-search');
   search.value = 'HND';
+  switchSearchScope(window, 'all');
   window.document.getElementById('jdb-ra-gsearch').click();
   for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 2);
@@ -347,7 +356,8 @@ test('a distant period jump re-anchors the stream without loading intermediate p
   const jump = window.document.getElementById('jdb-ra-jump');
   jump.value = '2';
   jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="2"] .item'); i += 1) {
+  // 骨架卡也带 .item；等真实卡片（a.box）才算加载完成
+  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="2"] .item .box'); i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   assert.deepEqual(detailCalls, [5, 2]);
@@ -361,7 +371,7 @@ test('a distant period jump re-anchors the stream without loading intermediate p
   );
 
   window.document.getElementById('jdb-ra-prev').click();
-  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="1"] .item'); i += 1) {
+  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="1"] .item .box'); i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   assert.deepEqual(detailCalls, [5, 2, 1]);
@@ -372,7 +382,7 @@ test('a distant period jump re-anchors the stream without loading intermediate p
 
   jump.value = '5';
   jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="5"] .item'); i += 1) {
+  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="5"] .item .box'); i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   assert.deepEqual(detailCalls, [5, 2, 1]);
@@ -581,6 +591,7 @@ test('a completed search index makes the same search local-only after reopen', {
       };
     }, { IntersectionObserver: class { observe() {} disconnect() {} }, AbortController }, storage);
     window.document.getElementById('jdb-ra-search').value = 'TEST';
+    switchSearchScope(window, 'all');
     window.document.getElementById('jdb-ra-gsearch').click();
     for (let i = 0; i < 100 && window.document.getElementById('jdb-ra-gsearch').textContent === '停止'; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -707,4 +718,155 @@ test('normal pages get a navbar entry pointing at the archive route, without tou
   assert.equal(fetchCalled, false);
   assert.equal(doc.querySelector('.jdb-ra'), null);
   await window.happyDOM.close();
+});
+
+/* ---------- Phase 3：图标 / 分段搜索 / 骨架屏 / 封面占位 / 窄屏工具栏 ---------- */
+
+test('toolbar icons are inline Lucide SVGs and the source carries no emoji icons', async () => {
+  const source = await readFile(srcPath, 'utf8');
+  for (const emoji of ['🔍', '◀', '▶', '★', '←']) {
+    assert.equal(source.includes(emoji), false, `source still contains ${emoji}`);
+  }
+  assert.match(source, /vendored from Lucide/);
+  assert.match(source, /'chevron-left': '<path d="m15 18-6-6 6-6"\/>'/);
+
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  await runScript(window, async (url) => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+    return { ok: true, json: async () => payload };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+
+  const doc = window.document;
+  assert.ok(doc.querySelector('.jdb-ra-hd .home svg.jdb-ra-icon'));
+  assert.ok(doc.querySelector('#jdb-ra-prev svg.jdb-ra-icon'));
+  assert.ok(doc.querySelector('#jdb-ra-next svg.jdb-ra-icon'));
+  // 图标+文字并存，不是图标-only 按钮
+  assert.match(doc.getElementById('jdb-ra-prev').textContent, /上一期/);
+  assert.match(doc.getElementById('jdb-ra-next').textContent, /下一期/);
+  assert.match(doc.querySelector('.jdb-ra-hd .home').textContent, /返回首页/);
+  assert.equal(doc.getElementById('jdb-ra-search').placeholder, '搜索已加载内容');
+  await window.happyDOM.close();
+});
+
+test('the segmented control disambiguates loaded-filter from full-archive search', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  await runScript(window, async (url) => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+    return { ok: true, json: async () => payload };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+
+  const doc = window.document;
+  const radios = [...doc.querySelectorAll('input[name="jdb-ra-scope"]')];
+  assert.equal(radios.length, 2);
+  assert.ok(doc.querySelector('.jdb-ra-scope[role="radiogroup"]'));
+  assert.equal(radios[0].checked, true);
+  assert.equal(radios[0].value, 'loaded');
+
+  const search = doc.getElementById('jdb-ra-search');
+  search.value = 'HND';
+
+  // 「已加载」段：输入即过滤
+  search.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.match(doc.getElementById('jdb-ra-status').textContent, /已加载内容中命中 1 部/);
+
+  // 过滤激活时切到「全部期数」：撤销过滤，提示显式触发
+  switchSearchScope(window, 'all');
+  assert.match(doc.getElementById('jdb-ra-status').textContent, /在全部期数中搜索/);
+  const visible = [...doc.querySelectorAll('.jdb-ra-stream .item')]
+    .filter((item) => item.style.display !== 'none');
+  assert.equal(visible.length, 2);
+
+  // 全期模式下输入不做即时过滤
+  search.value = 'HND-499';
+  search.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.doesNotMatch(doc.getElementById('jdb-ra-status').textContent, /已加载内容中命中/);
+
+  // 回车触发全期搜索（两期都已缓存，本地索引直接命中；两期 fixture 各含一张 HND-499）
+  search.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  for (let i = 0; i < 100 && doc.getElementById('jdb-ra-gsearch').textContent === '停止'; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.match(doc.getElementById('jdb-ra-status').textContent, /搜索完成 · 命中 2 部（2 期）/);
+  assert.equal(doc.querySelectorAll('.jdb-ra-results .jdb-ra-sec').length, 2);
+
+  // 切回「已加载」：退出结果模式，恢复即时过滤
+  switchSearchScope(window, 'loaded');
+  assert.equal(doc.getElementById('jdb-ra-results').hidden, true);
+  assert.match(doc.getElementById('jdb-ra-status').textContent, /已加载内容中命中 1 部/);
+
+  // 「已加载」段点全期搜索按钮只给提示，不启动
+  doc.getElementById('jdb-ra-gsearch').click();
+  assert.match(doc.getElementById('jdb-ra-status').textContent, /切换到「全部期数」/);
+  await window.happyDOM.close();
+});
+
+test('period sections render skeleton cards while loading and swap in real cards', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  let resolveDetail;
+  const detailGate = new Promise((resolve) => { resolveDetail = resolve; });
+  await runScript(window, async (url) => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    if (url.includes('recommend_periods')) return { ok: true, json: async () => PERIODS };
+    await detailGate;
+    return { ok: true, json: async () => DETAIL };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+
+  const doc = window.document;
+  // 详情未返回：期区块里是与卡片同宽高比的骨架占位
+  const section = doc.querySelector('.jdb-ra-stream .jdb-ra-sec');
+  assert.ok(section);
+  const skeletons = section.querySelectorAll('.jdb-ra-skel');
+  assert.equal(skeletons.length, 3); // movies_count=2 → 最少 3 张
+  assert.ok(section.querySelector('.jdb-ra-skel-cover'));
+  assert.equal(section.querySelectorAll('.jdb-ra-sec .item .box').length, 0);
+  assert.match(doc.querySelector('.jdb-ra style, style')?.textContent || '', /padding-top:67%/);
+
+  resolveDetail();
+  for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(section.querySelectorAll('.jdb-ra-skel').length, 0);
+  assert.equal(section.querySelectorAll('.item .box').length, 2);
+  await window.happyDOM.close();
+});
+
+test('a failed cover image is replaced by a labelled placeholder instead of a hole', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  await runScript(window, async (url) => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+    return { ok: true, json: async () => payload };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+
+  const doc = window.document;
+  const img = doc.querySelector('.jdb-ra-sec .item .cover img');
+  img.dispatchEvent(new window.Event('error', { bubbles: false }));
+
+  const cover = img.closest('.cover');
+  assert.equal(img.style.display, 'none');
+  const placeholder = cover.querySelector('.jdb-ra-cover-ph');
+  assert.ok(placeholder);
+  assert.equal(placeholder.getAttribute('role'), 'img');
+  assert.equal(placeholder.getAttribute('aria-label'), '封面加载失败');
+  assert.ok(placeholder.querySelector('svg.jdb-ra-icon'));
+
+  // 重复 error 不叠加占位
+  img.dispatchEvent(new window.Event('error', { bubbles: false }));
+  assert.equal(cover.querySelectorAll('.jdb-ra-cover-ph').length, 1);
+  await window.happyDOM.close();
+});
+
+test('the sticky toolbar splits into two rows on narrow viewports with recalculated offsets', async () => {
+  const source = await readFile(srcPath, 'utf8');
+  // 两行结构：期数导航行 / 搜索与动作行
+  assert.match(source, /jdb-ra-bar-row jdb-ra-bar-nav/);
+  assert.match(source, /jdb-ra-bar-row jdb-ra-bar-tools/);
+  // 宽屏行容器透明（display:contents），窄屏转两行 flex
+  assert.match(source, /\.jdb-ra-bar-row\{display:contents\}/);
+  assert.match(source, /@media \(max-width:768px\)[^]*\.jdb-ra-bar\{flex-direction:column/);
+  // 锚点滚动边距随两行高度重新核算，native（吸顶 52px）/兜底分别给出
+  assert.match(source, /scroll-margin-top:150px/);
+  assert.match(source, /html:not\(\.jdb-ra-native\) \.jdb-ra \.jdb-ra-sec\{scroll-margin-top:96px\}/);
 });

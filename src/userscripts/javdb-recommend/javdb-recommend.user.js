@@ -2,7 +2,7 @@
 // @name         JavDB Recommend Archive
 // @name:zh-CN   JavDB 佳片推荐 · 历史期数
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.0.6
+// @version      0.0.7
 // @description  Adds a "Recommend" entry to the JavDB navbar that opens a standalone archive page for every historical issue (updated Mon/Thu), with flip, search and full-archive keyword search.
 // @description:zh-CN  在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索、全期关键词搜索。
 // @author       dzshzx
@@ -132,6 +132,24 @@
   // 接口返回的封面是 App 图床 tp.spfcas.com（网页端常被拦截导致封面不显示）；
   // 官网页面自身使用 c0.jdbstatic.com，且 /covers/<前缀>/<id>.jpg 路径完全一致，直接换宿主即可。
   var SITE_IMG_HOST = 'https://c0.jdbstatic.com';
+
+  /* 图标 vendored from Lucide (https://lucide.dev), ISC License —— 与
+     src/userscripts/shared/shared-icons.lib.js 同源；本脚本是单文件脚本，
+     不能 import，只能内联 path 数据。 */
+  var ICON_PATHS = {
+    'search': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+    'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+    'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    'star': '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 1-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 1 1.597-1.16z"/>',
+    'x': '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'
+  };
+
+  function iconSvg(name, size) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="' + size + '" height="' + size + '" ' +
+      'class="jdb-ra-icon" aria-hidden="true" focusable="false">' + ICON_PATHS[name] + '</svg>';
+  }
 
   function coverUrl(url) {
     var m = /\/covers\/.*$/.exec(url || '');
@@ -320,15 +338,44 @@
       '.jdb-ra .jdb-ra-empty{color:#7a7a7a;font-size:13px;padding:12px 0}',
       '.jdb-ra .jdb-ra-sentinel{display:block;margin:14px auto;padding:7px 18px;font-size:13px;color:#4a4a4a;background:#fff;border:1px solid #dbdbdb;border-radius:4px;cursor:pointer}',
       '.jdb-ra .jdb-ra-sentinel[disabled]{cursor:default;color:#7a7a7a}',
+      // 内联 Lucide 图标与文字对齐
+      '.jdb-ra .jdb-ra-icon{display:inline-block;vertical-align:-2px;flex:none}',
+      '.jdb-ra .jdb-ra-score{display:inline-flex;align-items:center;gap:3px}',
+      // 搜索范围分段控件（已加载 / 全部期数）
+      '.jdb-ra .jdb-ra-scope{display:inline-flex;align-items:center;gap:0;border:1px solid #dbdbdb;border-radius:4px;overflow:hidden;background:#fff}',
+      '.jdb-ra .jdb-ra-scope label{display:inline-flex;align-items:center;padding:5px 10px;font-size:13px;color:#4a4a4a;cursor:pointer}',
+      '.jdb-ra .jdb-ra-scope label:has(input:checked){background:#3273dc;color:#fff}',
+      '.jdb-ra .jdb-ra-scope input{position:absolute;opacity:0;pointer-events:none}',
+      // 期区块骨架屏：与官网卡片同宽高比（padding-top:67%），数据到达后整列替换
+      '.jdb-ra .jdb-ra-skel{min-width:0}',
+      '.jdb-ra .jdb-ra-skel-cover{position:relative;padding-top:67%;background:#e8e8e8;border-radius:6px 6px 0 0}',
+      '.jdb-ra .jdb-ra-skel-line{height:12px;margin:8px 8px 0;background:#eee;border-radius:4px}',
+      '.jdb-ra .jdb-ra-skel-line.short{width:60%}',
+      // 封面加载失败占位（替换原来的隐藏空洞）
+      '.jdb-ra .cover{position:relative}',
+      '.jdb-ra .jdb-ra-cover-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#eee;color:#a0a0a0;border-radius:6px 6px 0 0}',
+      // 窄视口：吸顶栏固定两行（期数导航行 / 搜索与动作行）
+      '.jdb-ra .jdb-ra-bar-row{display:contents}',
+      '@media (max-width:768px){.jdb-ra .jdb-ra-bar{flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:6px}',
+      '.jdb-ra .jdb-ra-bar-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;width:100%}',
+      '.jdb-ra .jdb-ra-bar-row .select{flex:1 1 160px}',
+      '.jdb-ra .jdb-ra-bar-row .jdb-ra-search{flex:1 1 140px}',
+      '.jdb-ra .jdb-ra-sec{scroll-margin-top:150px}}',
+      '@media (max-width:768px){html:not(.jdb-ra-native) .jdb-ra .jdb-ra-sec{scroll-margin-top:96px}}',
       // 深色主题跟随官网（data-theme 由官网首页复制而来）
       'html[data-theme=dark] .jdb-ra{color:#eee}',
       'html[data-theme=dark] .jdb-ra .jdb-ra-hd h1,html[data-theme=dark] .jdb-ra .jdb-ra-ph{color:#eee}',
       'html[data-theme=dark] .jdb-ra .jdb-ra-bar{background:#17181c}',
       'html[data-theme=dark] .jdb-ra .movie-list .item .cover{background:#222}',
+      'html[data-theme=dark] .jdb-ra .jdb-ra-scope{background:#232428;border-color:#3a3b40}',
+      'html[data-theme=dark] .jdb-ra .jdb-ra-scope label{color:#ccc}',
+      'html[data-theme=dark] .jdb-ra .jdb-ra-skel-cover{background:#26272b}',
+      'html[data-theme=dark] .jdb-ra .jdb-ra-skel-line{background:#2e2f34}',
+      'html[data-theme=dark] .jdb-ra .jdb-ra-cover-ph{background:#26272b;color:#555}',
       // 官网样式缺失时的兜底
       'html:not(.jdb-ra-native) .jdb-ra select,html:not(.jdb-ra-native) .jdb-ra input,html:not(.jdb-ra-native) .jdb-ra button{background:#fff;color:#4a4a4a;border:1px solid #dbdbdb;border-radius:4px;padding:6px 10px;font-size:13px;outline:none}',
       'html:not(.jdb-ra-native) .jdb-ra button{cursor:pointer}',
-      'html:not(.jdb-ra-native) .jdb-ra .box{display:block;background:#fff;border-radius:6px;box-shadow:0 .5em 1em -.125em rgba(10,10,10,.1),0 0 0 1px rgba(10,10,10,.02);padding-bottom:.6rem;color:#4a4a4a;text-decoration:none}',
+      'html:not(.jdb-ra-native) .jdb-ra .box,html:not(.jdb-ra-native) .jdb-ra .jdb-ra-skel{display:block;background:#fff;border-radius:6px;box-shadow:0 .5em 1em -.125em rgba(10,10,10,.1),0 0 0 1px rgba(10,10,10,.02);padding-bottom:.6rem;color:#4a4a4a;text-decoration:none}',
       'html:not(.jdb-ra-native) .jdb-ra .cover{position:relative;padding-top:67%;background:#fff;overflow:hidden;border-radius:6px 6px 0 0}',
       'html:not(.jdb-ra-native) .jdb-ra .cover img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain}',
       'html:not(.jdb-ra-native) .jdb-ra .video-title{color:#3273dc;font-size:13px;padding:6px 8px 0}',
@@ -342,16 +389,24 @@
     document.body.innerHTML =
       '<main class="jdb-ra">' +
       '<header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span>' +
-      '<a class="home" href="/">← 返回首页</a></header>' +
+      '<a class="home" href="/">' + iconSvg('arrow-left', 14) + ' 返回首页</a></header>' +
       '<div class="jdb-ra-bar">' +
+      '<div class="jdb-ra-bar-row jdb-ra-bar-nav">' +
       '<div class="select is-small"><select id="jdb-ra-select" aria-label="选择期数"></select></div>' +
-      '<button type="button" class="button is-small" id="jdb-ra-prev">◀ 上一期</button>' +
-      '<button type="button" class="button is-small" id="jdb-ra-next">下一期 ▶</button>' +
+      '<button type="button" class="button is-small" id="jdb-ra-prev">' + iconSvg('chevron-left', 14) + ' 上一期</button>' +
+      '<button type="button" class="button is-small" id="jdb-ra-next">下一期 ' + iconSvg('chevron-right', 14) + '</button>' +
       '<input class="input is-small jdb-ra-jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转">' +
-      '<input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="🔍 搜索已加载内容" aria-label="搜索已加载内容">' +
+      '</div>' +
+      '<div class="jdb-ra-bar-row jdb-ra-bar-tools">' +
+      '<div class="jdb-ra-scope" role="radiogroup" aria-label="搜索范围">' +
+      '<label><input type="radio" name="jdb-ra-scope" value="loaded" checked> 已加载</label>' +
+      '<label><input type="radio" name="jdb-ra-scope" value="all"> 全部期数</label>' +
+      '</div>' +
+      '<input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="搜索已加载内容" aria-label="搜索关键词">' +
       '<button type="button" class="button is-small" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button>' +
       '<button type="button" class="button is-small" id="jdb-ra-refresh" title="重新检查期数目录">刷新期数</button>' +
       '<button type="button" class="button is-small" id="jdb-ra-clear" title="清除本脚本的本地缓存">清缓存</button>' +
+      '</div>' +
       '</div>' +
       '<div class="jdb-ra-status" id="jdb-ra-status" role="status">加载期数列表中…</div>' +
       '<div class="jdb-ra-results" id="jdb-ra-results" hidden></div>' +
@@ -600,14 +655,29 @@
       sentinel.disabled = !!disabled;
     }
 
+    // 期区块加载期间渲染与官网卡片同宽高比（padding-top:67%）的灰色占位卡，
+    // 数据到达后整列替换；失败路径会移除整个区块。
+    function skeletonCardsHtml(count) {
+      var out = '';
+      for (var i = 0; i < count; i += 1) {
+        out += '<div class="item jdb-ra-skel" aria-hidden="true">' +
+          '<div class="jdb-ra-skel-cover"></div>' +
+          '<div class="jdb-ra-skel-line"></div>' +
+          '<div class="jdb-ra-skel-line short"></div>' +
+          '</div>';
+      }
+      return out;
+    }
+
     function sectionShell(p) {
       var sec = document.createElement('section');
       sec.className = 'jdb-ra-sec';
       sec.dataset.period = String(p.period);
+      var skeletonCount = Math.min(Math.max(parseInt(p.movies_count, 10) || 4, 3), 6);
       sec.innerHTML =
         '<h2 class="jdb-ra-ph">第 ' + p.period + ' 期 <span class="sub">' +
         esc(p.created_at.slice(0, 10)) + ' · ' + p.movies_count + ' 部</span></h2>' +
-        '<div class="movie-list"></div>';
+        '<div class="movie-list">' + skeletonCardsHtml(skeletonCount) + '</div>';
       return sec;
     }
 
@@ -627,7 +697,7 @@
 
     function cardMetaHtml(movie) {
       var parts = [];
-      if (movie.score) parts.push('★ ' + esc(movie.score));
+      if (movie.score) parts.push('<span class="jdb-ra-score">' + iconSvg('star', 14) + esc(movie.score) + '</span>');
       var releaseDate = normalizedReleaseDate(movie.release_date);
       if (releaseDate) parts.push('发售 ' + releaseDate);
       return parts.length ? '<div class="meta">' + parts.join(' · ') + '</div>' : '';
@@ -637,12 +707,25 @@
       var title = m.title || m.origin_title || '';
       return '<div class="item" data-q="' + esc((m.number + ' ' + (m.title || '') + ' ' + (m.origin_title || '')).toLowerCase()) + '">' +
         '<a class="box" href="' + esc(movieUrl(m)) + '" target="_blank" rel="noopener" title="' + esc(title) + '">' +
-        '<div class="cover contain"><img loading="lazy" src="' + esc(coverUrl(m.cover_url)) + '" alt="' + esc(m.number) + '" ' +
-        'onerror="this.style.visibility=\'hidden\'"></div>' +
+        '<div class="cover contain"><img loading="lazy" src="' + esc(coverUrl(m.cover_url)) + '" alt="' + esc(m.number) + '"></div>' +
         '<div class="video-title"><strong>' + esc(m.number) + '</strong> ' + esc(title) + '</div>' +
         cardMetaHtml(m) +
         '</a></div>';
     }
+
+    // 封面加载失败：隐藏破图，补一个同位占位盒（error 不冒泡，走捕获委托）
+    function onCoverError(img) {
+      var cover = img.closest ? img.closest('.cover') : img.parentNode;
+      if (!cover || cover.querySelector('.jdb-ra-cover-ph')) return;
+      img.style.display = 'none';
+      cover.insertAdjacentHTML('beforeend',
+        '<div class="jdb-ra-cover-ph" role="img" aria-label="封面加载失败" title="封面加载失败">' +
+        iconSvg('x', 20) + '</div>');
+    }
+
+    document.querySelector('.jdb-ra').addEventListener('error', function (event) {
+      if (event.target && event.target.tagName === 'IMG') onCoverError(event.target);
+    }, true);
 
     function currentQuery() { return $('jdb-ra-search').value.trim().toLowerCase(); }
 
@@ -846,6 +929,15 @@
       return (m.number + ' ' + (m.title || '') + ' ' + (m.origin_title || '')).toLowerCase().indexOf(q) !== -1;
     }
 
+    // 搜索范围分段控件：已加载 = 输入即过滤当前流；全部期数 = 回车/按钮触发全期搜索
+    function searchScope() {
+      var radios = document.querySelectorAll('input[name="jdb-ra-scope"]');
+      for (var i = 0; i < radios.length; i += 1) {
+        if (radios[i].checked) return radios[i].value === 'all' ? 'all' : 'loaded';
+      }
+      return 'loaded';
+    }
+
     function enterResultsMode() {
       resultsEl.hidden = false;
       streamEl.style.display = 'none';
@@ -864,11 +956,37 @@
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(function () {
         if (searching) return; // 全期搜索进行中不打断
+        if (searchScope() === 'all') {
+          // 全期模式不做即时过滤，等待显式触发
+          if (currentQuery()) setStatus('回车或点击「全期搜索」，在全部期数中搜索');
+          return;
+        }
         exitResultsMode();
         var q = currentQuery();
         var hits = applyFilter(q);
         setStatus(q ? '已加载内容中命中 ' + hits + ' 部' : (periods.length ? readyText() : '加载期数列表中…'));
       }, 300);
+    });
+
+    $('jdb-ra-search').addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || searchScope() !== 'all') return;
+      startFullSearch();
+    });
+
+    document.querySelectorAll('input[name="jdb-ra-scope"]').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        if (searchScope() === 'loaded') {
+          if (searching) stopSearch('已停止全期搜索');
+          exitResultsMode();
+          var q = currentQuery();
+          var hits = applyFilter(q);
+          setStatus(q ? '已加载内容中命中 ' + hits + ' 部' : (periods.length ? readyText() : '加载期数列表中…'));
+          return;
+        }
+        // 切到「全部期数」：撤销即时过滤，等待显式触发全期搜索
+        applyFilter('');
+        setStatus(currentQuery() ? '回车或点击「全期搜索」，在全部期数中搜索' : '输入关键词后回车，在全部期数中搜索');
+      });
     });
 
     var searchGeneration = 0;
@@ -897,7 +1015,7 @@
       scheduleArchiveGridSync();
     }
 
-    $('jdb-ra-gsearch').addEventListener('click', function () {
+    function startFullSearch() {
       var q = currentQuery();
       if (!q) { setStatus('请先输入关键词'); return; }
       if (searching) { stopSearch('已停止搜索'); return; }
@@ -967,6 +1085,15 @@
         setStatus('搜索完成 · 命中 ' + hits + ' 部（' + hitPeriods + ' 期）');
         if (!hits) resultsEl.innerHTML = '<div class="jdb-ra-empty">没有找到影片</div>';
       });
+    }
+
+    $('jdb-ra-gsearch').addEventListener('click', function () {
+      // 停止不受范围限制；启动只在「全部期数」段，避免与即时过滤混淆
+      if (!searching && searchScope() !== 'all') {
+        setStatus('搜索全部期数：先把搜索框左侧范围切换到「全部期数」');
+        return;
+      }
+      startFullSearch();
     });
 
     $('jdb-ra-refresh').addEventListener('click', function () {
