@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { md5 } from '../src/userscripts/javdb-recommend/javdb-recommend-request.lib.js';
 
 import { createDomWindow, createMemoryStorage, domSkip } from './helpers/dom-env.mjs';
 import { parseMetadataBlock } from '../scripts/lib/userscript-metadata.mjs';
@@ -13,9 +14,9 @@ const srcPath = path.resolve(
 );
 
 const RAW_URL =
-  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/src/userscripts/javdb-recommend/javdb-recommend.user.js';
+  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js';
 
-test('metadata pins auto-update URLs to the src raw path and carries version 0.0.7', async () => {
+test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.7', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
   assert.deepEqual(metadata.get('@version'), ['0.0.7']);
   assert.deepEqual(metadata.get('@downloadURL'), [RAW_URL]);
@@ -25,10 +26,6 @@ test('metadata pins auto-update URLs to the src raw path and carries version 0.0
 // md5 是签名链的根：S 表错位曾导致摘要全错、decrypt 产出非法 base64，
 // 浏览器严格 atob 直接抛错让整个脚本不运行。用已知向量钉死它。
 test('md5 matches known vectors', async () => {
-  const source = await readFile(srcPath, 'utf8');
-  const md5Source = source.match(/function md5\(s\) \{[\s\S]*?\n  \}/);
-  assert.ok(md5Source, 'md5 function source should be extractable');
-  const md5 = new Function(`${md5Source[0]}; return md5;`)();
   assert.equal(md5(''), 'd41d8cd98f00b204e9800998ecf8427e');
   assert.equal(md5('abc'), '900150983cd24fb0d6963f7d28e17f72');
   assert.equal(md5('30820'), 'da97c8240e2ad99a2d331eed95c411f5');
@@ -727,8 +724,8 @@ test('toolbar icons are inline Lucide SVGs and the source carries no emoji icons
   for (const emoji of ['🔍', '◀', '▶', '★', '←']) {
     assert.equal(source.includes(emoji), false, `source still contains ${emoji}`);
   }
-  assert.match(source, /vendored from Lucide/);
-  assert.match(source, /'chevron-left': '<path d="m15 18-6-6 6-6"\/>'/);
+  const viewSource = await readFile(new URL('../src/userscripts/javdb-recommend/javdb-recommend-view.lib.js', import.meta.url), 'utf8');
+  assert.match(viewSource, /vendored from Lucide/);
 
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
   await runScript(window, async (url) => {

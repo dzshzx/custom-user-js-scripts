@@ -85,7 +85,8 @@
 
 安装入口：
 
-- [../../src/userscripts/javdb-recommend/javdb-recommend.user.js](../../src/userscripts/javdb-recommend/javdb-recommend.user.js)
+- [../../dist/javdb-recommend.user.js](../../dist/javdb-recommend.user.js)
+- 旧 src 安装路径保留与 Dist Bundle 逐字节相同的完整 Bridge File。
 
 用途：
 
@@ -109,9 +110,12 @@
 
 - `@grant none`，不使用脚本管理器特权 API；上次浏览期数继续使用原 `localStorage` key，期数目录与详情缓存使用独立的版本化 key。
 - 无需登录即可使用；脚本内置与官网一致的 `jdsignature` 签名算法。
-- 已配置 `@downloadURL` / `@updateURL`（指向本文件的 raw 地址），推送新版本后脚本管理器会按 `@version` 自动更新。
+- 已配置 `@downloadURL` / `@updateURL`（指向 Dist Bundle 的 raw 地址），推送新版本后脚本管理器会按 `@version` 自动更新。
 
 迁移说明：
 
+- 当前源码为 `javdb-recommend.entry.js` 与数据、请求、展示 Lib Module，构建生成 Dist Bundle 和完整 Bridge File。数据模块拥有 Catalog、Navigation Payload、Search Index、Consumer Lease 及双路搜索；展示模块仅接收数据结果与进度。内存和磁盘均按来源时间判断 TTL，缓存投影不会延长来源有效期。
+- 搜索区分完成、取消和部分失败，并显示失败期数及使用旧缓存的期数。清缓存先取消工作，再删除缓存；迟到的响应不能重新写入。请求取消同时清理超时与退避计时器。
+- `@name`、`@namespace`、`@match`、`@grant none`、缓存版本及全部存储 key 保持不变。安装路径迁移保持同一个安装身份；正式升级仍需按发布流程步进版本。
 - 旧版为右下角「🎬」悬浮面板；现改为导航栏入口 + 独立归档页，卡片点击由官网搜索改为直达详情页。存储 key 与安装路径保持不变。
 - 版本号从 `1.0.0` 重置为 `0.0.2`：脚本管理器只向更高版本自动更新，已安装 `1.0.0` 的副本需用安装入口手动重装一次，之后恢复正常自动更新。
