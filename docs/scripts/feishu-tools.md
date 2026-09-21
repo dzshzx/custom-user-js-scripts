@@ -96,7 +96,9 @@ node scripts/browser-tools/export-image.mjs \
 
 - 使用已有 Playwright 登录 profile 打开飞书文件页。
 - 先进入 `演示` 视图，再导出当前页面里最大的可见图片。
-- 优先取页面里的原始 `img` 数据，不走截图；只有脚本后续扩展时才考虑截图兜底。
+- 通过与 userscript 共用的图片读取模块提取原始 `img` 数据，不走截图。
+- CLI 保留原有兼容规则：使用 `src` 属性原值，按未取整面积 `> 20000` 选图，fetch 使用页面默认凭据规则，响应头提供 MIME，并用 `arrayBuffer` 编码为 base64。
+- 没有候选或 data URL 格式无效时不写输出文件；网络、读取和编码失败直接以非零状态退出。
 
 常用参数：
 
@@ -110,17 +112,20 @@ node scripts/browser-tools/export-image.mjs \
 
 安装入口：
 
-- [../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js](../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js)
+- [../../dist/feishu-preview-image-export.user.js](../../dist/feishu-preview-image-export.user.js)
 
 行为：
 
 - 运行在 `https://mi.feishu.cn/file/*`
 - 从当前页面里找最大的可见图片
+- 使用 `currentSrc`（后备 `img.src`），宽高分别取整后按面积 `>= 20000` 选图；远端图片 fetch 明确携带当前登录凭据，Blob MIME 和 FileReader data URL 保持原值
 - 优先用 `GM_download` 下载
 - 下载文件名默认取当前飞书文档标题
+
+两条导出路径都调用 `readPreviewImage`，通过固定的 `userscript-v1` / `cli-v1` profile 保留上述历史差异。两者共享候选选择、data URL 解析和图片读取实现；命名、GM 下载、本地文件写入与页面准备仍由各自入口负责。
 
 迁移说明：
 
 - 旧路径：`src/feishu-preview-image-export.user.js`
-- 新路径：`src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`
-- 当前脚本没有 `@downloadURL` / `@updateURL`；如已手动安装，直接用新路径重新安装即可。
+- 其后路径：`src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`
+- 当前安装入口为 Dist Bundle，`@downloadURL` / `@updateURL` 均指向该路径；上述 src 路径保留与 Dist Bundle 逐字节相同的完整 Bridge File。

@@ -78,6 +78,22 @@ test('runtime returns null when no image passes the area threshold', { skip: dom
   assert.equal(await runtime.exportMainImage(), null);
 });
 
+test('runtime keeps the anchor fallback when GM_download is unavailable', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1' });
+  const clicks = [];
+  window.HTMLAnchorElement.prototype.click = function click() {
+    clicks.push({ href: this.href, download: this.download });
+  };
+  const img = window.document.createElement('img');
+  img.src = 'data:image/png;base64,aGk=';
+  img.getBoundingClientRect = () => ({ width: 800, height: 600 });
+  window.document.body.append(img);
+  const runtime = createImageExportRuntime({ documentObject: window.document });
+
+  assert.deepEqual(await runtime.exportMainImage(), { filename: 'feishu-image.png' });
+  assert.deepEqual(clicks, [{ href: 'data:image/png;base64,aGk=', download: 'feishu-image.png' }]);
+});
+
 test('runtime maps fetch failures into a throwable internal error', { skip: domSkip }, async () => {
   const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1' });
   const img = window.document.createElement('img');

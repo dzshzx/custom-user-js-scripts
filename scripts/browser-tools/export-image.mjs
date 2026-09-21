@@ -2,8 +2,10 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 
 import { resolvePlaywrightImport } from './playwright-loader.mjs'
+import { readPreviewImage } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js'
 
 const DEFAULT_URL = 'https://mi.feishu.cn/file/UxkDbtSZqo9Ya4xCGNZcWOmWnlf'
 const DEFAULT_PROFILE_DIR = path.join(os.homedir(), '.local', 'share', 'codex-browser', 'feishu-login', 'playwright-profile')
@@ -104,18 +106,14 @@ function parseArgs(argv) {
   return options
 }
 
-function guessOutputPath(output, mime) {
+function guessOutputPath(output, mime, now = new Date()) {
   if (output) {
     return output
   }
 
   const ext = mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'bin'
-  const ts = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
+  const ts = now.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
   return path.join(DEFAULT_OUTPUT_DIR, `feishu-image-${ts}.${ext}`)
-}
-
-async function ensureParentDirectory(filePath) {
-  await mkdir(path.dirname(filePath), { recursive: true })
 }
 
 async function openPresentation(page) {
@@ -126,69 +124,17 @@ async function openPresentation(page) {
 }
 
 async function extractLargestImage(page) {
-  return page.evaluate(async () => {
-    const visibleImages = [...document.querySelectorAll('img')]
-      .map((img) => {
-        const rect = img.getBoundingClientRect()
-        const area = rect.width * rect.height
-        return {
-          src: img.getAttribute('src') || '',
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-          area,
-        }
-      })
-      .filter((img) => img.area > 20000)
-      .sort((left, right) => right.area - left.area)
-
-    if (!visibleImages.length) {
-      return null
-    }
-
-    const target = visibleImages[0]
-    if (target.src.startsWith('data:')) {
-      const match = target.src.match(/^data:([^;]+);base64,(.+)$/)
-      if (!match) {
-        return null
-      }
-      return {
-        mode: 'data-url',
-        mime: match[1],
-        payload: match[2],
-        width: target.width,
-        height: target.height,
-      }
-    }
-
-    const response = await fetch(target.src)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`)
-    }
-    const mime = response.headers.get('content-type') || 'application/octet-stream'
-    const buffer = await response.arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-    let binary = ''
-    for (const byte of bytes) {
-      binary += String.fromCharCode(byte)
-    }
-    return {
-      mode: 'fetched',
-      mime,
-      payload: btoa(binary),
-      width: target.width,
-      height: target.height,
-    }
-  })
+  const result = await page.evaluate(readPreviewImage, { profile: 'cli-v1', mode: 'read' })
+  return result.kind === 'image' ? result : null
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2))
-  if (options.help) {
-    printHelp()
-    return
-  }
-
-  const { chromium } = await resolvePlaywrightImport()
+async function runExportImage(options, {
+  resolvePlaywright = resolvePlaywrightImport,
+  mkdirImpl = mkdir,
+  writeFileImpl = writeFile,
+  log = console.log,
+} = {}) {
+  const { chromium } = await resolvePlaywright()
   const context = await chromium.launchPersistentContext(options.profileDir, {
     headless: options.headless,
     args: DIRECT_PROXY_ARGS,
@@ -214,22 +160,47 @@ async function main() {
     }
 
     const outputPath = guessOutputPath(options.output, image.mime)
-    await ensureParentDirectory(outputPath)
-    await writeFile(outputPath, Buffer.from(image.payload, 'base64'))
+    await mkdirImpl(path.dirname(outputPath), { recursive: true })
+    await writeFileImpl(outputPath, Buffer.from(image.payload.data, 'base64'))
 
-    console.log(`Saved image: ${outputPath}`)
+    log(`Saved image: ${outputPath}`)
     if (options.debug) {
-      console.log(`Source mime: ${image.mime}`)
-      console.log(`Visible size: ${image.width}x${image.height}`)
-      console.log(`Mode: ${image.mode}`)
-      console.log(`Page URL: ${page.url()}`)
+      log(`Source mime: ${image.mime}`)
+      log(`Visible size: ${image.width}x${image.height}`)
+      log(`Mode: ${image.mode}`)
+      log(`Page URL: ${page.url()}`)
     }
+    return { outputPath, image }
   } finally {
     await context.close()
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exitCode = 1
-})
+async function main(argv = process.argv.slice(2), dependencies) {
+  const options = parseArgs(argv)
+  if (options.help) {
+    printHelp()
+    return
+  }
+  return runExportImage(options, dependencies)
+}
+
+function isMain(metaUrl, argvPath = process.argv[1]) {
+  return Boolean(argvPath) && path.resolve(argvPath) === fileURLToPath(metaUrl)
+}
+
+if (isMain(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  })
+}
+
+export {
+  extractLargestImage,
+  guessOutputPath,
+  isMain,
+  main,
+  parseArgs,
+  runExportImage,
+}

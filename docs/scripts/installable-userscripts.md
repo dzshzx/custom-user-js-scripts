@@ -74,12 +74,14 @@
 - 优先用 `GM_download` 下载。
 - 下载文件名默认取当前飞书文档标题。
 - 用户反馈经页面内 toast（导出进度 / 成功文件名 / 中文失败原因），不再弹 alert。
+- 图片选择与读取由 `readPreviewImage` 持有；userscript 使用固定 `userscript-v1` profile，本地 Playwright 导出工具使用 `cli-v1` profile。两者共享实现，同时保留 currentSrc/src、面积边界、fetch 凭据、MIME 与编码方式的历史差异。
 
 迁移说明：
 
 - 更早：`src/feishu-preview-image-export.user.js`。
 - 其后：单文件 `src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`。
 - 当前：entry + lib ES 模块，`npm run build` 打包为 `dist/feishu-preview-image-export.user.js`；旧 src 路径保留构建生成的桥接文件（与 dist 逐字节一致），存量安装经一次版本更新自动切换到 dist。
+- 图片读取迁移不改变脚本版本、metadata、下载文件名或安装身份；CLI 的页面准备、时间戳/`--output` 命名和本地写入仍由 CLI 持有。
 
 ## JavDB Recommend Archive
 

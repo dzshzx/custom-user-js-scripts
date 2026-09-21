@@ -421,9 +421,163 @@ ${root} :focus-visible {
     };
   }
 
+  // src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js
+  function readPreviewImage(options = {}, environment = {}) {
+    const profile = options.profile;
+    const mode = options.mode || "read";
+    if (profile !== "userscript-v1" && profile !== "cli-v1") {
+      throw new Error(`Unknown image profile: ${profile}`);
+    }
+    if (mode !== "read" && mode !== "inspect") {
+      throw new Error(`Unknown image mode: ${mode}`);
+    }
+    const attachDiagnostic = (cause, code, phase) => {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      try {
+        error.code = code;
+        error.phase = phase;
+      } catch {
+        const wrapped = new Error(error.message, { cause: error });
+        wrapped.code = code;
+        wrapped.phase = phase;
+        return wrapped;
+      }
+      return error;
+    };
+    const host = typeof globalThis === "object" && globalThis ? globalThis : {};
+    const documentObject = environment.documentObject || host.document;
+    const imageNodes = profile === "userscript-v1" ? [...documentObject.images || documentObject.getElementsByTagName("img")] : [...documentObject.querySelectorAll("img")];
+    const items = imageNodes.map((img, index) => {
+      const rect = img.getBoundingClientRect();
+      const rawWidth = rect.width;
+      const rawHeight = rect.height;
+      const width = Math.round(rawWidth);
+      const height = Math.round(rawHeight);
+      const area = profile === "userscript-v1" ? width * height : rawWidth * rawHeight;
+      return {
+        src: profile === "userscript-v1" ? img.currentSrc || img.src || "" : img.getAttribute("src") || "",
+        width,
+        height,
+        area,
+        index
+      };
+    }).filter((item) => profile === "userscript-v1" ? item.width > 0 && item.height > 0 && item.area >= 2e4 : item.area > 2e4).sort((left, right) => right.area - left.area || left.index - right.index).map(({ index: _index, ...item }) => item);
+    if (mode === "inspect") {
+      return { kind: "candidates", items };
+    }
+    return (async () => {
+      if (!items.length) {
+        return { kind: "empty", reason: "no-candidate" };
+      }
+      const target = items[0];
+      const source = target.src;
+      if (profile === "userscript-v1" && !source) {
+        throw attachDiagnostic(
+          new Error("Image source is empty"),
+          "FEISHU_IMAGE_SOURCE_EMPTY",
+          "source"
+        );
+      }
+      if (source.startsWith("data:")) {
+        const match = source.match(/^data:([^;]+);base64,(.+)$/);
+        if (!match) {
+          if (profile === "cli-v1") {
+            return { kind: "empty", reason: "invalid-data-url" };
+          }
+          throw attachDiagnostic(
+            new Error("Unsupported data URL format"),
+            "FEISHU_IMAGE_INVALID_DATA_URL",
+            "data-url"
+          );
+        }
+        return {
+          kind: "image",
+          mime: match[1],
+          width: target.width,
+          height: target.height,
+          mode: "data-url",
+          payload: profile === "userscript-v1" ? { encoding: "data-url", data: source } : { encoding: "base64", data: match[2] }
+        };
+      }
+      const fetcher = environment.fetchImpl || host.fetch?.bind(host);
+      if (typeof fetcher !== "function") {
+        throw attachDiagnostic(
+          new Error("fetch unavailable"),
+          "FEISHU_IMAGE_FETCH_FAILED",
+          "fetch"
+        );
+      }
+      let response;
+      try {
+        response = profile === "userscript-v1" ? await fetcher(source, { credentials: "include" }) : await fetcher(source);
+      } catch (error) {
+        throw attachDiagnostic(error, "FEISHU_IMAGE_FETCH_FAILED", "fetch");
+      }
+      if (!response.ok) {
+        throw attachDiagnostic(
+          new Error(`Failed to fetch image: ${response.status} ${response.statusText}`),
+          "FEISHU_IMAGE_FETCH_FAILED",
+          "fetch"
+        );
+      }
+      if (profile === "userscript-v1") {
+        let blob;
+        try {
+          blob = await response.blob();
+        } catch (error) {
+          throw attachDiagnostic(error, "FEISHU_IMAGE_BLOB_READ_FAILED", "blob-read");
+        }
+        const FileReaderCtor = environment.FileReaderCtor || host.FileReader;
+        let data2;
+        try {
+          data2 = await new Promise((resolve, reject) => {
+            const reader = new FileReaderCtor();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => reject(reader.error || new Error("Failed to read blob"));
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          throw attachDiagnostic(error, "FEISHU_IMAGE_BLOB_READ_FAILED", "blob-read");
+        }
+        return {
+          kind: "image",
+          mime: blob.type || "application/octet-stream",
+          width: target.width,
+          height: target.height,
+          mode: "fetched",
+          payload: { encoding: "data-url", data: data2 }
+        };
+      }
+      let bytes;
+      try {
+        bytes = new Uint8Array(await response.arrayBuffer());
+      } catch (error) {
+        throw attachDiagnostic(error, "FEISHU_IMAGE_BLOB_READ_FAILED", "blob-read");
+      }
+      let binary = "";
+      for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+      }
+      const encode = environment.btoaImpl || host.btoa?.bind(host);
+      let data;
+      try {
+        data = encode(binary);
+      } catch (error) {
+        throw attachDiagnostic(error, "FEISHU_IMAGE_ENCODE_FAILED", "encode");
+      }
+      return {
+        kind: "image",
+        mime: response.headers.get("content-type") || "application/octet-stream",
+        width: target.width,
+        height: target.height,
+        mode: "fetched",
+        payload: { encoding: "base64", data }
+      };
+    })();
+  }
+
   // src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.js
   var LIB_NAME = "FeishuPreviewImageExportLogicLib";
-  var MIN_IMAGE_AREA = 2e4;
   function sanitizeFilePart(value, fallback) {
     const text = String(value || "").trim().replace(/[\\/:*?"<>|]+/g, "-");
     return text || fallback;
@@ -463,70 +617,15 @@ ${root} :focus-visible {
     gmDownload
   } = {}) {
     if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
-    const fetcher = fetchImpl || globalThis.fetch?.bind(globalThis);
     function getDocumentTitle() {
       const raw = documentObject.title.replace(/\s*-\s*飞书云文档\s*$/u, "").trim();
       return sanitizeFilePart(raw, "feishu-image");
     }
     function getVisibleImages() {
-      const images = documentObject.images || documentObject.getElementsByTagName("img");
-      return [...images].map((img) => {
-        const rect = img.getBoundingClientRect();
-        const width = Math.round(rect.width);
-        const height = Math.round(rect.height);
-        return {
-          img,
-          width,
-          height,
-          area: width * height,
-          visible: width > 0 && height > 0,
-          src: img.currentSrc || img.src || ""
-        };
-      }).filter((item) => item.visible && item.area >= MIN_IMAGE_AREA).sort((left, right) => right.area - left.area);
-    }
-    function parseDataUrl(dataUrl) {
-      const match = String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);
-      if (!match) {
-        throw new Error("Unsupported data URL format");
-      }
-      return {
-        mime: match[1],
-        base64: match[2]
-      };
-    }
-    function blobToDataUrl(blob) {
-      return new Promise((resolve, reject) => {
-        const Reader = documentObject.defaultView?.FileReader || globalThis.FileReader;
-        const reader = new Reader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(reader.error || new Error("Failed to read blob"));
-        reader.readAsDataURL(blob);
-      });
-    }
-    async function imageToDownloadPayload(item) {
-      const src = item.src;
-      if (!src) {
-        throw new Error("Image source is empty");
-      }
-      if (src.startsWith("data:")) {
-        const parsed = parseDataUrl(src);
-        return {
-          mime: parsed.mime,
-          url: src
-        };
-      }
-      if (typeof fetcher !== "function") {
-        throw new Error("fetch unavailable");
-      }
-      const response = await fetcher(src, { credentials: "include" });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-      }
-      const blob = await response.blob();
-      return {
-        mime: blob.type || "application/octet-stream",
-        url: await blobToDataUrl(blob)
-      };
+      return readPreviewImage(
+        { profile: "userscript-v1", mode: "inspect" },
+        { documentObject }
+      ).items;
     }
     function fallbackDownload(url, filename) {
       const anchor = documentObject.createElement("a");
@@ -550,14 +649,21 @@ ${root} :focus-visible {
       });
     }
     async function exportMainImage() {
-      const images = getVisibleImages();
-      if (!images.length) return null;
-      const payload = await imageToDownloadPayload(images[0]);
-      const filename = `${getDocumentTitle()}.${extensionFromMime(payload.mime)}`;
+      const result = await readPreviewImage(
+        { profile: "userscript-v1", mode: "read" },
+        {
+          documentObject,
+          fetchImpl,
+          FileReaderCtor: documentObject.defaultView?.FileReader
+        }
+      );
+      if (result.kind === "empty") return null;
+      const filename = `${getDocumentTitle()}.${extensionFromMime(result.mime)}`;
+      const url = result.payload.data;
       if (typeof gmDownload === "function") {
-        await gmDownloadPromise(payload.url, filename);
+        await gmDownloadPromise(url, filename);
       } else {
-        fallbackDownload(payload.url, filename);
+        fallbackDownload(url, filename);
       }
       return { filename };
     }

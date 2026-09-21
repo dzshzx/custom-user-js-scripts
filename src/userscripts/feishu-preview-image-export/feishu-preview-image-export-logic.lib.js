@@ -1,5 +1,6 @@
+import { readPreviewImage } from './feishu-preview-image-export-extraction.lib.js';
+
 const LIB_NAME = 'FeishuPreviewImageExportLogicLib';
-const MIN_IMAGE_AREA = 20_000;
 
 function sanitizeFilePart(value, fallback) {
   const text = String(value || '').trim().replace(/[\\/:*?"<>|]+/g, '-');
@@ -44,80 +45,16 @@ function createImageExportRuntime({
   gmDownload,
 } = {}) {
   if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
-  const fetcher = fetchImpl || globalThis.fetch?.bind(globalThis);
-
   function getDocumentTitle() {
     const raw = documentObject.title.replace(/\s*-\s*飞书云文档\s*$/u, '').trim();
     return sanitizeFilePart(raw, 'feishu-image');
   }
 
   function getVisibleImages() {
-    const images = documentObject.images || documentObject.getElementsByTagName('img');
-    return [...images]
-      .map((img) => {
-        const rect = img.getBoundingClientRect();
-        const width = Math.round(rect.width);
-        const height = Math.round(rect.height);
-        return {
-          img,
-          width,
-          height,
-          area: width * height,
-          visible: width > 0 && height > 0,
-          src: img.currentSrc || img.src || '',
-        };
-      })
-      .filter((item) => item.visible && item.area >= MIN_IMAGE_AREA)
-      .sort((left, right) => right.area - left.area);
-  }
-
-  function parseDataUrl(dataUrl) {
-    const match = String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);
-    if (!match) {
-      throw new Error('Unsupported data URL format');
-    }
-    return {
-      mime: match[1],
-      base64: match[2],
-    };
-  }
-
-  function blobToDataUrl(blob) {
-    return new Promise((resolve, reject) => {
-      const Reader = documentObject.defaultView?.FileReader || globalThis.FileReader;
-      const reader = new Reader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(reader.error || new Error('Failed to read blob'));
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  async function imageToDownloadPayload(item) {
-    const src = item.src;
-    if (!src) {
-      throw new Error('Image source is empty');
-    }
-
-    if (src.startsWith('data:')) {
-      const parsed = parseDataUrl(src);
-      return {
-        mime: parsed.mime,
-        url: src,
-      };
-    }
-
-    if (typeof fetcher !== 'function') {
-      throw new Error('fetch unavailable');
-    }
-    const response = await fetcher(src, { credentials: 'include' });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-    }
-    const blob = await response.blob();
-    return {
-      mime: blob.type || 'application/octet-stream',
-      url: await blobToDataUrl(blob),
-    };
+    return readPreviewImage(
+      { profile: 'userscript-v1', mode: 'inspect' },
+      { documentObject },
+    ).items;
   }
 
   function fallbackDownload(url, filename) {
@@ -145,16 +82,23 @@ function createImageExportRuntime({
 
   // Returns { filename } on success, or null when no main image is on the page.
   async function exportMainImage() {
-    const images = getVisibleImages();
-    if (!images.length) return null;
+    const result = await readPreviewImage(
+      { profile: 'userscript-v1', mode: 'read' },
+      {
+        documentObject,
+        fetchImpl,
+        FileReaderCtor: documentObject.defaultView?.FileReader,
+      },
+    );
+    if (result.kind === 'empty') return null;
 
-    const payload = await imageToDownloadPayload(images[0]);
-    const filename = `${getDocumentTitle()}.${extensionFromMime(payload.mime)}`;
+    const filename = `${getDocumentTitle()}.${extensionFromMime(result.mime)}`;
+    const url = result.payload.data;
 
     if (typeof gmDownload === 'function') {
-      await gmDownloadPromise(payload.url, filename);
+      await gmDownloadPromise(url, filename);
     } else {
-      fallbackDownload(payload.url, filename);
+      fallbackDownload(url, filename);
     }
     return { filename };
   }
@@ -167,7 +111,6 @@ function createImageExportRuntime({
 }
 
 export {
-  MIN_IMAGE_AREA,
   createImageExportRuntime,
   extensionFromMime,
   sanitizeFilePart,
