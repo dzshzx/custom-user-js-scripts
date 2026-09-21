@@ -198,6 +198,18 @@ var BASE = location.origin;
       copiedGridStyles.delete(el);
     }
 
+    function releaseCopiedCardStyles(root) {
+      root.querySelectorAll('.jav-card-cover,.javdb-cover-frame,.jav-card-image,.javdb-card-image,' +
+        '.item[data-laosiji-grid-card="1"] .cover,.item[data-laosiji-grid-card="1"] img').forEach(function (node) {
+        releaseCopiedStyles(node);
+      });
+    }
+
+    function releaseCopiedGridStyles(list) {
+      releaseCopiedStyles(list);
+      list.querySelectorAll('.cover,img').forEach(function (node) { releaseCopiedStyles(node); });
+    }
+
     function countGridTracks(template) {
       var value = String(template || '').trim();
       if (!value || value === 'none') return 0;
@@ -263,9 +275,10 @@ var BASE = location.origin;
       if (!lastCompatibleGridLayout) return;
       document.querySelectorAll('.jdb-ra .movie-list').forEach(function (list) {
         if (enhancedGrid(list)) {
-          releaseCopiedStyles(list);
+          releaseCopiedGridStyles(list);
           return;
         }
+        releaseCopiedCardStyles(list);
         setCopiedStyle(list, 'grid-template-columns', lastCompatibleGridLayout.template);
         setCopiedStyle(list, '--jav-card-columns', lastCompatibleGridLayout.columns);
         setCopiedStyle(list, 'column-gap', lastCompatibleGridLayout.columnGap);

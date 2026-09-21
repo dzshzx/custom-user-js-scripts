@@ -115,6 +115,24 @@ test('real Chromium validates native CSS, fallback, mobile layout, and observabl
 
     await page.evaluate(() => {
       const second = document.querySelectorAll('.movie-list')[1];
+      const secondCard = second.querySelector('.item');
+      const secondImage = second.querySelector('img');
+      const secondCover = secondImage.closest('.cover');
+      const takeoverStyle = document.createElement('style');
+      takeoverStyle.textContent = '.jav-card-image{object-fit:contain!important;object-position:center!important}';
+      document.head.appendChild(takeoverStyle);
+      secondCard.dataset.laosijiGridCard = '1';
+      secondCard.classList.add('jav-card', 'javdb-grid-card');
+      secondImage.style.setProperty('object-position', 'left top', 'important');
+      secondImage.classList.add('jav-card-image', 'javdb-card-image');
+      secondCover.classList.add('jav-card-cover', 'javdb-cover-frame');
+    });
+    await page.waitForFunction(() => document.querySelectorAll('.movie-list')[1].querySelector('img').style.objectFit === '');
+    assert.equal(await page.locator('.movie-list').nth(1).locator('img').evaluate(node => getComputedStyle(node).objectFit), 'contain');
+    assert.equal(await page.locator('.movie-list').nth(1).locator('img').evaluate(node => node.style.objectPosition), 'left top');
+
+    await page.evaluate(() => {
+      const second = document.querySelectorAll('.movie-list')[1];
       second.classList.add('jav-card-grid', 'javdb-card-grid');
       second.dataset.laosijiGrid = '1';
       second.style.setProperty('grid-template-columns', 'repeat(2,minmax(0,1fr))', 'important');

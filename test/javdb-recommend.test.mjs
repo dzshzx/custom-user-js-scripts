@@ -317,12 +317,27 @@ test('layout copying leaves enhanced grids independent and releases only owned i
   first.style.setProperty('row-gap', '16px', 'important');
   const sourceImage = first.querySelector('img');
   sourceImage.style.setProperty('object-fit', 'cover', 'important');
+  sourceImage.style.setProperty('object-position', 'right center', 'important');
+  sourceImage.closest('.cover').style.setProperty('aspect-ratio', '380 / 538', 'important');
 
   ioCallback([{ isIntersecting: true }]);
   for (let index = 0; index < 20; index += 1) await new Promise(resolve => setTimeout(resolve, 0));
   const second = window.document.querySelectorAll('.movie-list')[1];
   assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
   assert.equal(second.querySelector('img').style.getPropertyValue('object-fit'), 'cover');
+
+  const secondImage = second.querySelector('img');
+  const secondCover = secondImage.closest('.cover');
+  secondImage.style.setProperty('object-position', 'left top', 'important');
+  second.querySelector('.item').dataset.laosijiGridCard = '1';
+  second.querySelector('.item').classList.add('jav-card', 'javdb-grid-card');
+  secondImage.classList.add('jav-card-image', 'javdb-card-image');
+  secondCover.classList.add('jav-card-cover', 'javdb-cover-frame');
+  for (let index = 0; index < 10; index += 1) await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(secondImage.style.getPropertyValue('object-fit'), '');
+  assert.equal(secondImage.style.getPropertyValue('object-position'), 'left top');
+  assert.equal(secondCover.style.getPropertyValue('aspect-ratio'), '');
+  assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
 
   second.style.setProperty('column-gap', '23px', 'important');
   second.classList.add('javdb-card-grid');
