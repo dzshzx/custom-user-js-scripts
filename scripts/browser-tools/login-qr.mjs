@@ -61,12 +61,14 @@ export async function waitForManualConfirmation({
   output.write('Scan and finish login in the browser, then press Enter to save storage state.')
   return new Promise((resolve) => {
     let settled = false
+    const restorePausedInput = input.readableFlowing !== true
     const cleanup = () => {
       input.removeListener('data', onData)
       input.removeListener('end', onEnd)
       input.removeListener('close', onEnd)
       input.removeListener('error', onError)
       signal?.removeEventListener('abort', onAbort)
+      if (restorePausedInput) input.pause?.()
     }
     const finish = (result) => {
       if (settled) return
