@@ -219,3 +219,18 @@ test('countdown ticks preserve dialog inputs, focus and lifecycle announcement',
   assert.notEqual(countdown.textContent, initialCountdown);
   window.dispatchEvent(new window.Event('pagehide'));
 });
+
+test('persisted pagehide keeps the interface alive and a real exit disposes it', { skip: domSkip }, async () => {
+  const { window, root } = await boot();
+  const persisted = new window.Event('pagehide');
+  Object.defineProperty(persisted, 'persisted', { value: true });
+  window.dispatchEvent(persisted);
+  root.querySelector('.part-widget-button').click();
+  await flush();
+  assert.ok(dialogOf(root), 'bfcache navigation keeps the view interactive');
+
+  const exiting = new window.Event('pagehide');
+  Object.defineProperty(exiting, 'persisted', { value: false });
+  window.dispatchEvent(exiting);
+  assert.equal(window.document.getElementById('page-auto-refresh-timer-root'), null);
+});

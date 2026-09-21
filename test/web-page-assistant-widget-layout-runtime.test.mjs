@@ -91,7 +91,12 @@ function createWidget(rectOverrides = {}) {
     style: createWidgetStyle(rect),
     listeners: new Map(),
     addEventListener(type, handler) {
-      this.listeners.set(type, handler);
+      const handlers = this.listeners.get(type) || new Set();
+      handlers.add(handler);
+      this.listeners.set(type, handlers);
+    },
+    removeEventListener(type, handler) {
+      this.listeners.get(type)?.delete(handler);
     },
     contains(node) {
       return node === this;
@@ -103,7 +108,7 @@ function createWidget(rectOverrides = {}) {
       return selector === '.part-widget-panel' ? panel : null;
     },
     dispatch(type, event = {}) {
-      this.listeners.get(type)?.(event);
+      for (const handler of this.listeners.get(type) || []) handler(event);
     },
   };
 }
@@ -113,7 +118,12 @@ function createButton() {
     listeners: new Map(),
     captures: new Set(),
     addEventListener(type, handler) {
-      this.listeners.set(type, handler);
+      const handlers = this.listeners.get(type) || new Set();
+      handlers.add(handler);
+      this.listeners.set(type, handlers);
+    },
+    removeEventListener(type, handler) {
+      this.listeners.get(type)?.delete(handler);
     },
     setPointerCapture(pointerId) {
       this.captures.add(pointerId);
@@ -125,7 +135,7 @@ function createButton() {
       this.captures.delete(pointerId);
     },
     dispatch(type, event = {}) {
-      this.listeners.get(type)?.(event);
+      for (const handler of this.listeners.get(type) || []) handler(event);
     },
   };
 }
@@ -305,4 +315,43 @@ test('coarse pointers toggle expansion via click and swallow the post-drag click
   harness.timers.at(-1).handler();
   button.dispatch('click');
   assert.equal(widget.classList.contains('is-expanded'), true);
+});
+
+test('reattach clears old hover callbacks before binding the next widget', () => {
+  const harness = createHarness();
+  const oldWidget = createWidget();
+  const oldButton = createButton();
+  const nextWidget = createWidget();
+  const nextButton = createButton();
+  harness.runtime.attach(oldWidget, oldButton);
+  oldWidget.dispatch('mouseenter');
+  const staleHover = harness.timers[0].handler;
+
+  harness.runtime.attach(nextWidget, nextButton);
+  staleHover();
+  assert.equal(oldWidget.classList.contains('is-expanded'), false);
+  assert.equal(nextWidget.classList.contains('is-expanded'), false);
+  assert.equal([...oldWidget.listeners.values()].every((handlers) => handlers.size === 0), true);
+});
+
+test('reattach releases pointer capture and dispose removes the active binding', () => {
+  const harness = createHarness();
+  const oldWidget = createWidget();
+  const oldButton = createButton();
+  harness.runtime.attach(oldWidget, oldButton);
+  oldButton.dispatch('pointerdown', {
+    button: 0,
+    pointerId: 9,
+    clientX: 100,
+    clientY: 100,
+  });
+  assert.equal(oldButton.hasPointerCapture(9), true);
+
+  const nextWidget = createWidget();
+  const nextButton = createButton();
+  harness.runtime.attach(nextWidget, nextButton);
+  assert.equal(oldButton.hasPointerCapture(9), false);
+  harness.runtime.dispose();
+  assert.equal([...nextWidget.listeners.values()].every((handlers) => handlers.size === 0), true);
+  assert.equal([...nextButton.listeners.values()].every((handlers) => handlers.size === 0), true);
 });

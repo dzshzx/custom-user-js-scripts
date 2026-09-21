@@ -21,6 +21,43 @@ function createWidgetLayoutRuntime(adapters) {
   let position = null;
   let suppressExpansion = false;
   let hoverTimer = null;
+  let suppressionTimer = null;
+  let dragState = null;
+  let bindingGeneration = 0;
+  let bindingCleanups = [];
+  let disposed = false;
+
+  function addListener(target, type, handler) {
+    target.addEventListener(type, handler);
+    bindingCleanups.push(() => target.removeEventListener(type, handler));
+  }
+
+  function releaseDragCapture() {
+    if (!dragState || !widgetButton) return;
+    try {
+      if (widgetButton.hasPointerCapture(dragState.pointerId)) {
+        widgetButton.releasePointerCapture(dragState.pointerId);
+      }
+    } catch {
+      // Synthetic and older pointer implementations may not expose capture.
+    }
+  }
+
+  function cleanupBinding() {
+    bindingGeneration += 1;
+    clearTimer(hoverTimer);
+    clearTimer(suppressionTimer);
+    hoverTimer = null;
+    suppressionTimer = null;
+    releaseDragCapture();
+    dragState = null;
+    widget?.classList.remove('is-expanded');
+    widget?.classList.remove('is-dragging');
+    for (const cleanup of bindingCleanups.splice(0)) cleanup();
+    widget = null;
+    widgetButton = null;
+    suppressExpansion = false;
+  }
 
   function defaultPosition() {
     const viewport = getViewportSize();
@@ -110,27 +147,35 @@ function createWidgetLayoutRuntime(adapters) {
   // instead — the trailing click after a drag stays swallowed via
   // suppressExpansion.
   function installExpansion() {
+    const generation = bindingGeneration;
     if (isCoarsePointer()) {
-      widgetButton.addEventListener('click', () => {
+      addListener(widgetButton, 'click', () => {
+        if (generation !== bindingGeneration) return;
         if (suppressExpansion) return;
         setExpanded(!widget.classList.contains('is-expanded'));
       });
     } else {
-      widget.addEventListener('mouseenter', () => {
+      addListener(widget, 'mouseenter', () => {
+        if (generation !== bindingGeneration) return;
         clearTimer(hoverTimer);
         hoverTimer = setTimeout(() => {
+          if (generation !== bindingGeneration) return;
           hoverTimer = null;
           setExpanded(true);
         }, hoverIntentMs);
       });
-      widget.addEventListener('mouseleave', () => {
+      addListener(widget, 'mouseleave', () => {
+        if (generation !== bindingGeneration) return;
         clearTimer(hoverTimer);
         hoverTimer = null;
         setExpanded(false);
       });
     }
-    widget.addEventListener('focusin', () => setExpanded(true));
-    widget.addEventListener('focusout', (event) => {
+    addListener(widget, 'focusin', () => {
+      if (generation === bindingGeneration) setExpanded(true);
+    });
+    addListener(widget, 'focusout', (event) => {
+      if (generation !== bindingGeneration) return;
       if (!event.relatedTarget || !widget.contains(event.relatedTarget)) {
         setExpanded(false);
       }
@@ -138,9 +183,10 @@ function createWidgetLayoutRuntime(adapters) {
   }
 
   function installDrag() {
-    let dragState = null;
+    const generation = bindingGeneration;
 
-    widgetButton.addEventListener('pointerdown', (event) => {
+    addListener(widgetButton, 'pointerdown', (event) => {
+      if (generation !== bindingGeneration) return;
       if (event.button !== 0) return;
 
       const rect = widget.getBoundingClientRect();
@@ -161,7 +207,8 @@ function createWidgetLayoutRuntime(adapters) {
       }
     });
 
-    widgetButton.addEventListener('pointermove', (event) => {
+    addListener(widgetButton, 'pointermove', (event) => {
+      if (generation !== bindingGeneration) return;
       if (!dragState || dragState.pointerId !== event.pointerId) return;
 
       const dx = event.clientX - dragState.startX;
@@ -181,6 +228,7 @@ function createWidgetLayoutRuntime(adapters) {
     });
 
     function finishDrag(event) {
+      if (generation !== bindingGeneration) return;
       if (!dragState || dragState.pointerId !== event.pointerId) return;
 
       const moved = dragState.moved;
@@ -204,16 +252,21 @@ function createWidgetLayoutRuntime(adapters) {
         });
       }
 
-      setTimeout(() => {
+      clearTimer(suppressionTimer);
+      suppressionTimer = setTimeout(() => {
+        if (generation !== bindingGeneration) return;
+        suppressionTimer = null;
         suppressExpansion = false;
       }, 0);
     }
 
-    widgetButton.addEventListener('pointerup', finishDrag);
-    widgetButton.addEventListener('pointercancel', finishDrag);
+    addListener(widgetButton, 'pointerup', finishDrag);
+    addListener(widgetButton, 'pointercancel', finishDrag);
   }
 
   function attach(nextWidget, nextWidgetButton, initialPosition) {
+    cleanupBinding();
+    if (disposed) return;
     widget = nextWidget;
     widgetButton = nextWidgetButton;
     if (initialPosition) position = normalizeWidgetPosition(initialPosition);
@@ -229,6 +282,12 @@ function createWidgetLayoutRuntime(adapters) {
     return suppressExpansion;
   }
 
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    cleanupBinding();
+  }
+
   return {
     attach,
     applyPosition,
@@ -237,6 +296,7 @@ function createWidgetLayoutRuntime(adapters) {
     clampPosition,
     getPosition,
     isExpansionSuppressed,
+    dispose,
   };
 }
 

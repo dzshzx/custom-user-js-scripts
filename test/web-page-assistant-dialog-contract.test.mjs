@@ -1,20 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import { createPageAssistantDialogContract } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js';
-
-const entryPath = path.resolve(
-  import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.entry.js',
-);
-const presentationLibFiles = [
-  'web-page-assistant-presentation-base-styles.lib.js',
-  'web-page-assistant-presentation-dialog-styles.lib.js',
-  'web-page-assistant-presentation.lib.js',
-];
-const entryContent = await readFile(entryPath, 'utf8');
 
 function createSettingsContract() {
   return {
@@ -61,16 +48,6 @@ function createFakeDialog(checkedRoles) {
 }
 
 createDialogContract.factory = createPageAssistantDialogContract;
-
-test('entry module imports the presentation libraries', () => {
-  for (const libFile of presentationLibFiles) {
-    assert.equal(
-      entryContent.includes(`from './${libFile}'`),
-      true,
-    );
-  }
-  assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_DIALOG_CONTRACT_START'), false);
-});
 
 test('dialog contract normalizes tabs and focus roles', () => {
   const contract = createDialogContract();

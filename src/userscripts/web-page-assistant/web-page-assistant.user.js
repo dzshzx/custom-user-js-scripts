@@ -329,6 +329,354 @@
     };
   }
 
+  // src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js
+  function createRefreshRuntime(adapters) {
+    const {
+      minIntervalMs,
+      tickMs,
+      now,
+      setInterval: setTimer,
+      clearInterval: clearTimer,
+      reload,
+      onStateChange
+    } = adapters;
+    const emptyState = {
+      activeMatch: null,
+      targetTime: 0,
+      remainingWhenPaused: 0,
+      isPaused: false,
+      isRefreshing: false,
+      timerId: null
+    };
+    let state = { ...emptyState };
+    function clearActiveTimer() {
+      if (!state.timerId) return;
+      clearTimer(state.timerId);
+      state = { ...state, timerId: null };
+    }
+    function snapshot() {
+      const remainingMs = state.activeMatch ? state.isPaused ? state.remainingWhenPaused : Math.max(0, state.targetTime - now()) : 0;
+      return {
+        activeMatch: state.activeMatch,
+        isPaused: state.isPaused,
+        isRefreshing: state.isRefreshing,
+        remainingMs
+      };
+    }
+    function emit() {
+      onStateChange(snapshot());
+    }
+    function tick() {
+      if (!state.activeMatch || state.isPaused || state.isRefreshing) {
+        emit();
+        return;
+      }
+      const remainingMs = state.targetTime - now();
+      emit();
+      if (remainingMs > 0) return;
+      state = { ...state, isRefreshing: true };
+      clearActiveTimer();
+      emit();
+      reload();
+    }
+    function startTimer() {
+      clearActiveTimer();
+      if (!state.activeMatch || state.isPaused) {
+        emit();
+        return;
+      }
+      state = { ...state, timerId: setTimer(tick, tickMs) };
+      tick();
+    }
+    function restart(activeMatch) {
+      clearActiveTimer();
+      if (!activeMatch) {
+        state = { ...emptyState };
+        emit();
+        return;
+      }
+      state = {
+        ...emptyState,
+        activeMatch,
+        targetTime: now() + activeMatch.setting.intervalMs
+      };
+      startTimer();
+    }
+    function stop() {
+      clearActiveTimer();
+      state = { ...emptyState };
+      emit();
+    }
+    function togglePause() {
+      if (!state.activeMatch) return snapshot();
+      if (state.isPaused) {
+        state = {
+          ...state,
+          targetTime: now() + state.remainingWhenPaused,
+          remainingWhenPaused: 0,
+          isPaused: false
+        };
+        startTimer();
+        return snapshot();
+      }
+      state = {
+        ...state,
+        remainingWhenPaused: Math.max(minIntervalMs, state.targetTime - now()),
+        isPaused: true
+      };
+      clearActiveTimer();
+      emit();
+      return snapshot();
+    }
+    return {
+      restart,
+      stop,
+      togglePause,
+      getState: snapshot,
+      tick
+    };
+  }
+
+  // src/userscripts/web-page-assistant/web-page-assistant-session.lib.js
+  function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker, ready = () => Promise.resolve(), onChange = () => {
+  } }) {
+    let settings = emptySettings();
+    let lifecycle = "idle";
+    let applicationError = null;
+    const applicationErrors = { refresh: null, unlocker: null };
+    let appliedUnlocker = null;
+    let startPromise;
+    let queue = Promise.resolve();
+    let finishDisposed;
+    const disposed = new Promise((resolve) => {
+      finishDisposed = resolve;
+    });
+    const runtime = createRefreshRuntime({
+      minIntervalMs: MIN_INTERVAL_MS,
+      tickMs: 1e3,
+      now: clock.now,
+      setInterval: clock.setInterval,
+      clearInterval: clock.clearInterval,
+      reload,
+      onStateChange: () => emit("countdown")
+    });
+    function getState() {
+      return JSON.parse(JSON.stringify({
+        lifecycle,
+        settings,
+        refresh: runtime.getState(),
+        appliedUnlocker,
+        applicationError,
+        applicationErrors,
+        matchedRefresh: resolveActiveRefreshSetting(settings, keys),
+        matchedUnlocker: resolveActiveUnlockerSetting(settings, keys)
+      }));
+    }
+    function emit(kind, area = null) {
+      if (lifecycle === "disposed") return;
+      try {
+        onChange(getState(), { kind, area });
+      } catch {
+      }
+    }
+    function result(code = null, persisted = false, scope = null) {
+      return { ok: !code, code, persisted, scope, state: getState() };
+    }
+    function apply(area) {
+      let failed = false;
+      for (const capability of area === "all" ? ["refresh", "unlocker"] : [area]) {
+        applicationErrors[capability] = null;
+        try {
+          if (capability === "refresh") runtime.restart(resolveActiveRefreshSetting(settings, keys));
+          else {
+            appliedUnlocker = null;
+            const match = resolveActiveUnlockerSetting(settings, keys);
+            unlocker.install(match?.setting);
+            appliedUnlocker = match;
+          }
+        } catch (error) {
+          failed = true;
+          applicationErrors[capability] = String(error?.message || error);
+          if (capability === "refresh") runtime.stop();
+          else {
+            appliedUnlocker = null;
+            try {
+              unlocker.uninstall();
+            } catch {
+            }
+          }
+        }
+      }
+      applicationError = Object.values(applicationErrors).filter(Boolean).join("; ") || null;
+      return failed ? "application-failed" : null;
+    }
+    function start() {
+      if (lifecycle === "disposed") return Promise.resolve(result("disposed"));
+      if (startPromise) return startPromise;
+      lifecycle = "starting";
+      emit("lifecycle");
+      const initialize = async () => {
+        try {
+          const [loaded] = await Promise.all([storage.readSettings(), ready()]);
+          if (lifecycle === "disposed") return result("disposed");
+          settings = normalizeSettings(loaded);
+          lifecycle = "ready";
+          const code = apply("all");
+          emit("lifecycle");
+          return result(code);
+        } catch (error) {
+          if (lifecycle === "disposed") return result("disposed");
+          lifecycle = "error";
+          applicationError = String(error?.message || error);
+          emit("lifecycle");
+          return result("storage-failed");
+        }
+      };
+      startPromise = Promise.race([initialize(), disposed.then(() => result("disposed"))]);
+      return startPromise;
+    }
+    async function write(command) {
+      if (lifecycle !== "ready") return result(lifecycle === "disposed" ? "disposed" : "not-ready");
+      const { type } = command;
+      const scope = type === "disable-active" ? runtime.getState().activeMatch?.scope : command.scope;
+      if (type === "disable-active" && !scope) return result();
+      if (!["page", "site"].includes(scope)) return result("invalid-input");
+      const key = scope === "page" ? keys.pageKey : keys.siteKey;
+      const area = type.includes("unlocker") ? "unlocker" : "refresh";
+      let next;
+      if (type === "save-refresh") {
+        if (!isValidIntervalMs(command.intervalMs)) return result("invalid-input");
+        next = setRefreshSetting(settings, scope, key, command.intervalMs, clock.now());
+      } else if (type === "save-unlocker") {
+        if (!normalizeUnlockerSetting(command.setting)) return result("invalid-input");
+        next = setUnlockerSetting(settings, scope, key, command.setting, clock.now());
+      } else if (type === "delete-unlocker") {
+        next = deleteUnlockerSetting(settings, scope, key);
+      } else if (type === "delete-refresh" || type === "disable-active") {
+        next = deleteRefreshSetting(settings, scope, key);
+      } else return result("invalid-input");
+      try {
+        await storage.writeSettings(next);
+      } catch (error) {
+        if (lifecycle === "disposed") return result("disposed");
+        return { ...result("storage-failed"), message: String(error?.message || error) };
+      }
+      settings = next;
+      if (lifecycle === "disposed") return result("disposed", true, scope);
+      const code = apply(area);
+      emit("settings", area);
+      return result(code, true, scope);
+    }
+    function dispatch(command) {
+      if (lifecycle !== "ready") return Promise.resolve(result(lifecycle === "disposed" ? "disposed" : "not-ready"));
+      if (command?.type === "toggle-pause") {
+        runtime.togglePause();
+        return Promise.resolve(result());
+      }
+      const captured = JSON.parse(JSON.stringify(command || {}));
+      let started = false;
+      const pending = queue.then(() => {
+        started = true;
+        return write(captured);
+      });
+      queue = pending.catch(() => {
+      });
+      return Promise.race([pending, disposed.then(() => started ? pending : result("disposed"))]);
+    }
+    function dispose() {
+      if (lifecycle === "disposed") return;
+      lifecycle = "disposed";
+      runtime.stop();
+      appliedUnlocker = null;
+      try {
+        unlocker.uninstall();
+      } catch {
+      }
+      finishDisposed();
+    }
+    return { start, dispatch, getState, dispose };
+  }
+
+  // src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.js
+  function createUnlockerRuntime(adapters) {
+    const {
+      hasUnlockerAction: hasUnlockerAction2,
+      rootContainsTarget,
+      getDocumentTarget,
+      getWindowTarget,
+      getStyle,
+      installStyle,
+      removeStyle,
+      rootId
+    } = adapters;
+    const capabilitySpecs = [
+      { option: "allowSelection", label: "选择文本", target: getDocumentTarget, type: "selectstart", handler: stopEvent },
+      { option: "allowCopy", label: "复制/剪切", target: getDocumentTarget, type: "copy", handler: stopEvent },
+      { option: "allowCopy", label: "复制/剪切", target: getDocumentTarget, type: "cut", handler: stopEvent },
+      { option: "allowContextMenu", label: "右键菜单", target: getDocumentTarget, type: "contextmenu", handler: stopEvent },
+      { option: "allowDrag", label: "拖拽", target: getDocumentTarget, type: "dragstart", handler: stopEvent },
+      { option: "suppressBeforeUnload", label: "离开提示", target: getWindowTarget, type: "beforeunload", handler: stopBeforeUnload }
+    ];
+    let cleanupStack = [];
+    function stopEvent(event) {
+      if (rootContainsTarget(event.target)) return;
+      event.stopPropagation();
+    }
+    function stopBeforeUnload(event) {
+      event.stopImmediatePropagation();
+      event.returnValue = void 0;
+      return void 0;
+    }
+    function addListener(target, type, handler) {
+      target.addEventListener(type, handler, true);
+      cleanupStack.push(() => target.removeEventListener(type, handler, true));
+    }
+    function installSelectionStyle(setting) {
+      if (!setting.allowSelection || getStyle()) return;
+      installStyle(`
+      html :not(#${rootId}):not(#${rootId} *) {
+        -webkit-user-select: text !important;
+        user-select: text !important;
+      }
+    `);
+    }
+    function describe(setting, scopeText) {
+      if (!setting?.enabled) return "当前未启用网页限制解除。";
+      const labels = [];
+      const seenOptions = /* @__PURE__ */ new Set();
+      for (const spec of capabilitySpecs) {
+        if (!setting[spec.option] || seenOptions.has(spec.option)) continue;
+        labels.push(spec.label);
+        seenOptions.add(spec.option);
+      }
+      if (!labels.length) return "网页限制解除已保存，但没有启用任何能力。";
+      return `${scopeText}已启用：${labels.join("、")}。`;
+    }
+    return {
+      describe,
+      getCapabilitySpecs() {
+        return capabilitySpecs.map(({ option, label, type }) => ({ option, label, type }));
+      },
+      install(setting) {
+        this.uninstall();
+        if (!hasUnlockerAction2(setting)) return;
+        installSelectionStyle(setting);
+        for (const spec of capabilitySpecs) {
+          if (setting[spec.option]) {
+            addListener(spec.target(), spec.type, spec.handler);
+          }
+        }
+      },
+      uninstall() {
+        for (const cleanup of cleanupStack) {
+          cleanup();
+        }
+        cleanupStack = [];
+        removeStyle();
+      }
+    };
+  }
+
   // src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.js
   var LIB_NAME = "WebPageAssistantPresentationBaseStylesLib";
   function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
@@ -996,7 +1344,7 @@
     const {
       settingsContract,
       defaultUnlockerSetting: defaultUnlockerSetting2,
-      formatInterval,
+      formatInterval: formatInterval2,
       defaultIntervalMs
     } = adapters;
     const tabs = { refresh: "refresh", unlocker: "unlocker" };
@@ -1066,8 +1414,8 @@
         customInterval,
         statusText: input.statusText,
         unlockerStatusText: input.unlockerStatusText,
-        pageRefreshText: `页面：${input.pageKey}${pageSetting ? `（${formatInterval(pageSetting.intervalMs)}）` : "（未设置）"}`,
-        siteRefreshText: `站点：${input.siteKey}${siteSetting ? `（${formatInterval(siteSetting.intervalMs)}）` : "（未设置）"}`,
+        pageRefreshText: `页面：${input.pageKey}${pageSetting ? `（${formatInterval2(pageSetting.intervalMs)}）` : "（未设置）"}`,
+        siteRefreshText: `站点：${input.siteKey}${siteSetting ? `（${formatInterval2(siteSetting.intervalMs)}）` : "（未设置）"}`,
         pageUnlockerText: `页面：${input.pageKey}${pageUnlockerSetting ? "（已保存）" : "（未设置）"}`,
         siteUnlockerText: `站点：${input.siteKey}${siteUnlockerSetting ? "（已保存）" : "（未设置）"}`,
         focusRole: focusRoleForTab(nextTab)
@@ -1313,274 +1661,6 @@
     return dialog;
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js
-  function createRefreshRuntime(adapters) {
-    const {
-      minIntervalMs,
-      tickMs,
-      now,
-      setInterval: setTimer,
-      clearInterval: clearTimer,
-      reload,
-      onStateChange
-    } = adapters;
-    const emptyState = {
-      activeMatch: null,
-      targetTime: 0,
-      remainingWhenPaused: 0,
-      isPaused: false,
-      isRefreshing: false,
-      timerId: null
-    };
-    let state = { ...emptyState };
-    function clearActiveTimer() {
-      if (!state.timerId) return;
-      clearTimer(state.timerId);
-      state = { ...state, timerId: null };
-    }
-    function snapshot() {
-      const remainingMs = state.activeMatch ? state.isPaused ? state.remainingWhenPaused : Math.max(0, state.targetTime - now()) : 0;
-      return {
-        activeMatch: state.activeMatch,
-        isPaused: state.isPaused,
-        isRefreshing: state.isRefreshing,
-        remainingMs
-      };
-    }
-    function emit() {
-      onStateChange(snapshot());
-    }
-    function tick() {
-      if (!state.activeMatch || state.isPaused || state.isRefreshing) {
-        emit();
-        return;
-      }
-      const remainingMs = state.targetTime - now();
-      emit();
-      if (remainingMs > 0) return;
-      state = { ...state, isRefreshing: true };
-      clearActiveTimer();
-      emit();
-      reload();
-    }
-    function startTimer() {
-      clearActiveTimer();
-      if (!state.activeMatch || state.isPaused) {
-        emit();
-        return;
-      }
-      state = { ...state, timerId: setTimer(tick, tickMs) };
-      tick();
-    }
-    function restart(activeMatch) {
-      clearActiveTimer();
-      if (!activeMatch) {
-        state = { ...emptyState };
-        emit();
-        return;
-      }
-      state = {
-        ...emptyState,
-        activeMatch,
-        targetTime: now() + activeMatch.setting.intervalMs
-      };
-      startTimer();
-    }
-    function stop() {
-      clearActiveTimer();
-      state = { ...emptyState };
-      emit();
-    }
-    function togglePause() {
-      if (!state.activeMatch) return snapshot();
-      if (state.isPaused) {
-        state = {
-          ...state,
-          targetTime: now() + state.remainingWhenPaused,
-          remainingWhenPaused: 0,
-          isPaused: false
-        };
-        startTimer();
-        return snapshot();
-      }
-      state = {
-        ...state,
-        remainingWhenPaused: Math.max(minIntervalMs, state.targetTime - now()),
-        isPaused: true
-      };
-      clearActiveTimer();
-      emit();
-      return snapshot();
-    }
-    return {
-      restart,
-      stop,
-      togglePause,
-      getState: snapshot,
-      tick
-    };
-  }
-
-  // src/userscripts/web-page-assistant/web-page-assistant-session.lib.js
-  function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker, ready = () => Promise.resolve(), onChange = () => {
-  } }) {
-    let settings = emptySettings();
-    let lifecycle = "idle";
-    let applicationError = null;
-    const applicationErrors = { refresh: null, unlocker: null };
-    let appliedUnlocker = null;
-    let startPromise;
-    let queue = Promise.resolve();
-    let finishDisposed;
-    const disposed = new Promise((resolve) => {
-      finishDisposed = resolve;
-    });
-    const runtime = createRefreshRuntime({
-      minIntervalMs: MIN_INTERVAL_MS,
-      tickMs: 1e3,
-      now: clock.now,
-      setInterval: clock.setInterval,
-      clearInterval: clock.clearInterval,
-      reload,
-      onStateChange: () => emit("countdown")
-    });
-    function getState() {
-      return JSON.parse(JSON.stringify({
-        lifecycle,
-        settings,
-        refresh: runtime.getState(),
-        appliedUnlocker,
-        applicationError,
-        applicationErrors,
-        matchedRefresh: resolveActiveRefreshSetting(settings, keys),
-        matchedUnlocker: resolveActiveUnlockerSetting(settings, keys)
-      }));
-    }
-    function emit(kind, area = null) {
-      if (lifecycle === "disposed") return;
-      try {
-        onChange(getState(), { kind, area });
-      } catch {
-      }
-    }
-    function result(code = null, persisted = false, scope = null) {
-      return { ok: !code, code, persisted, scope, state: getState() };
-    }
-    function apply(area) {
-      let failed = false;
-      for (const capability of area === "all" ? ["refresh", "unlocker"] : [area]) {
-        applicationErrors[capability] = null;
-        try {
-          if (capability === "refresh") runtime.restart(resolveActiveRefreshSetting(settings, keys));
-          else {
-            appliedUnlocker = null;
-            const match = resolveActiveUnlockerSetting(settings, keys);
-            unlocker.install(match?.setting);
-            appliedUnlocker = match;
-          }
-        } catch (error) {
-          failed = true;
-          applicationErrors[capability] = String(error?.message || error);
-          if (capability === "refresh") runtime.stop();
-          else {
-            appliedUnlocker = null;
-            try {
-              unlocker.uninstall();
-            } catch {
-            }
-          }
-        }
-      }
-      applicationError = Object.values(applicationErrors).filter(Boolean).join("; ") || null;
-      return failed ? "application-failed" : null;
-    }
-    function start() {
-      if (lifecycle === "disposed") return Promise.resolve(result("disposed"));
-      if (startPromise) return startPromise;
-      lifecycle = "starting";
-      emit("lifecycle");
-      const initialize = async () => {
-        try {
-          const [loaded] = await Promise.all([storage.readSettings(), ready()]);
-          if (lifecycle === "disposed") return result("disposed");
-          settings = normalizeSettings(loaded);
-          lifecycle = "ready";
-          const code = apply("all");
-          emit("lifecycle");
-          return result(code);
-        } catch (error) {
-          if (lifecycle === "disposed") return result("disposed");
-          lifecycle = "error";
-          applicationError = String(error?.message || error);
-          emit("lifecycle");
-          return result("storage-failed");
-        }
-      };
-      startPromise = Promise.race([initialize(), disposed.then(() => result("disposed"))]);
-      return startPromise;
-    }
-    async function write(command) {
-      if (lifecycle !== "ready") return result(lifecycle === "disposed" ? "disposed" : "not-ready");
-      const { type } = command;
-      const scope = type === "disable-active" ? runtime.getState().activeMatch?.scope : command.scope;
-      if (type === "disable-active" && !scope) return result();
-      if (!["page", "site"].includes(scope)) return result("invalid-input");
-      const key = scope === "page" ? keys.pageKey : keys.siteKey;
-      const area = type.includes("unlocker") ? "unlocker" : "refresh";
-      let next;
-      if (type === "save-refresh") {
-        if (!isValidIntervalMs(command.intervalMs)) return result("invalid-input");
-        next = setRefreshSetting(settings, scope, key, command.intervalMs, clock.now());
-      } else if (type === "save-unlocker") {
-        if (!normalizeUnlockerSetting(command.setting)) return result("invalid-input");
-        next = setUnlockerSetting(settings, scope, key, command.setting, clock.now());
-      } else if (type === "delete-unlocker") {
-        next = deleteUnlockerSetting(settings, scope, key);
-      } else if (type === "delete-refresh" || type === "disable-active") {
-        next = deleteRefreshSetting(settings, scope, key);
-      } else return result("invalid-input");
-      try {
-        await storage.writeSettings(next);
-      } catch (error) {
-        if (lifecycle === "disposed") return result("disposed");
-        return { ...result("storage-failed"), message: String(error?.message || error) };
-      }
-      settings = next;
-      if (lifecycle === "disposed") return result("disposed", true, scope);
-      const code = apply(area);
-      emit("settings", area);
-      return result(code, true, scope);
-    }
-    function dispatch(command) {
-      if (lifecycle !== "ready") return Promise.resolve(result(lifecycle === "disposed" ? "disposed" : "not-ready"));
-      if (command?.type === "toggle-pause") {
-        runtime.togglePause();
-        return Promise.resolve(result());
-      }
-      const captured = JSON.parse(JSON.stringify(command || {}));
-      let started = false;
-      const pending = queue.then(() => {
-        started = true;
-        return write(captured);
-      });
-      queue = pending.catch(() => {
-      });
-      return Promise.race([pending, disposed.then(() => started ? pending : result("disposed"))]);
-    }
-    function dispose() {
-      if (lifecycle === "disposed") return;
-      lifecycle = "disposed";
-      runtime.stop();
-      appliedUnlocker = null;
-      try {
-        unlocker.uninstall();
-      } catch {
-      }
-      finishDisposed();
-    }
-    return { start, dispatch, getState, dispose };
-  }
-
   // src/userscripts/web-page-assistant/web-page-assistant-widget-layout.lib.js
   function createWidgetLayoutRuntime(adapters) {
     const {
@@ -1603,6 +1683,39 @@
     let position = null;
     let suppressExpansion = false;
     let hoverTimer = null;
+    let suppressionTimer = null;
+    let dragState = null;
+    let bindingGeneration = 0;
+    let bindingCleanups = [];
+    let disposed = false;
+    function addListener(target, type, handler) {
+      target.addEventListener(type, handler);
+      bindingCleanups.push(() => target.removeEventListener(type, handler));
+    }
+    function releaseDragCapture() {
+      if (!dragState || !widgetButton) return;
+      try {
+        if (widgetButton.hasPointerCapture(dragState.pointerId)) {
+          widgetButton.releasePointerCapture(dragState.pointerId);
+        }
+      } catch {
+      }
+    }
+    function cleanupBinding() {
+      bindingGeneration += 1;
+      clearTimer(hoverTimer);
+      clearTimer(suppressionTimer);
+      hoverTimer = null;
+      suppressionTimer = null;
+      releaseDragCapture();
+      dragState = null;
+      widget?.classList.remove("is-expanded");
+      widget?.classList.remove("is-dragging");
+      for (const cleanup of bindingCleanups.splice(0)) cleanup();
+      widget = null;
+      widgetButton = null;
+      suppressExpansion = false;
+    }
     function defaultPosition() {
       const viewport = getViewportSize();
       return {
@@ -1675,35 +1788,44 @@
       widget.classList.toggle("is-expanded", isExpanded);
     }
     function installExpansion() {
+      const generation = bindingGeneration;
       if (isCoarsePointer2()) {
-        widgetButton.addEventListener("click", () => {
+        addListener(widgetButton, "click", () => {
+          if (generation !== bindingGeneration) return;
           if (suppressExpansion) return;
           setExpanded(!widget.classList.contains("is-expanded"));
         });
       } else {
-        widget.addEventListener("mouseenter", () => {
+        addListener(widget, "mouseenter", () => {
+          if (generation !== bindingGeneration) return;
           clearTimer(hoverTimer);
           hoverTimer = setTimeout(() => {
+            if (generation !== bindingGeneration) return;
             hoverTimer = null;
             setExpanded(true);
           }, hoverIntentMs);
         });
-        widget.addEventListener("mouseleave", () => {
+        addListener(widget, "mouseleave", () => {
+          if (generation !== bindingGeneration) return;
           clearTimer(hoverTimer);
           hoverTimer = null;
           setExpanded(false);
         });
       }
-      widget.addEventListener("focusin", () => setExpanded(true));
-      widget.addEventListener("focusout", (event) => {
+      addListener(widget, "focusin", () => {
+        if (generation === bindingGeneration) setExpanded(true);
+      });
+      addListener(widget, "focusout", (event) => {
+        if (generation !== bindingGeneration) return;
         if (!event.relatedTarget || !widget.contains(event.relatedTarget)) {
           setExpanded(false);
         }
       });
     }
     function installDrag() {
-      let dragState = null;
-      widgetButton.addEventListener("pointerdown", (event) => {
+      const generation = bindingGeneration;
+      addListener(widgetButton, "pointerdown", (event) => {
+        if (generation !== bindingGeneration) return;
         if (event.button !== 0) return;
         const rect = widget.getBoundingClientRect();
         dragState = {
@@ -1720,7 +1842,8 @@
         } catch {
         }
       });
-      widgetButton.addEventListener("pointermove", (event) => {
+      addListener(widgetButton, "pointermove", (event) => {
+        if (generation !== bindingGeneration) return;
         if (!dragState || dragState.pointerId !== event.pointerId) return;
         const dx = event.clientX - dragState.startX;
         const dy = event.clientY - dragState.startY;
@@ -1736,6 +1859,7 @@
         });
       });
       function finishDrag(event) {
+        if (generation !== bindingGeneration) return;
         if (!dragState || dragState.pointerId !== event.pointerId) return;
         const moved = dragState.moved;
         dragState = null;
@@ -1754,14 +1878,19 @@
             logger.warn(`${scriptName}: failed to persist widget position.`, error);
           });
         }
-        setTimeout(() => {
+        clearTimer(suppressionTimer);
+        suppressionTimer = setTimeout(() => {
+          if (generation !== bindingGeneration) return;
+          suppressionTimer = null;
           suppressExpansion = false;
         }, 0);
       }
-      widgetButton.addEventListener("pointerup", finishDrag);
-      widgetButton.addEventListener("pointercancel", finishDrag);
+      addListener(widgetButton, "pointerup", finishDrag);
+      addListener(widgetButton, "pointercancel", finishDrag);
     }
     function attach(nextWidget, nextWidgetButton, initialPosition) {
+      cleanupBinding();
+      if (disposed) return;
       widget = nextWidget;
       widgetButton = nextWidgetButton;
       if (initialPosition) position = normalizeWidgetPosition(initialPosition);
@@ -1774,6 +1903,11 @@
     function isExpansionSuppressed() {
       return suppressExpansion;
     }
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      cleanupBinding();
+    }
     return {
       attach,
       applyPosition,
@@ -1781,87 +1915,8 @@
       setExpanded,
       clampPosition,
       getPosition,
-      isExpansionSuppressed
-    };
-  }
-
-  // src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.js
-  function createUnlockerRuntime(adapters) {
-    const {
-      hasUnlockerAction: hasUnlockerAction2,
-      rootContainsTarget,
-      getDocumentTarget,
-      getWindowTarget,
-      getStyle,
-      installStyle,
-      removeStyle,
-      rootId
-    } = adapters;
-    const capabilitySpecs = [
-      { option: "allowSelection", label: "选择文本", target: getDocumentTarget, type: "selectstart", handler: stopEvent },
-      { option: "allowCopy", label: "复制/剪切", target: getDocumentTarget, type: "copy", handler: stopEvent },
-      { option: "allowCopy", label: "复制/剪切", target: getDocumentTarget, type: "cut", handler: stopEvent },
-      { option: "allowContextMenu", label: "右键菜单", target: getDocumentTarget, type: "contextmenu", handler: stopEvent },
-      { option: "allowDrag", label: "拖拽", target: getDocumentTarget, type: "dragstart", handler: stopEvent },
-      { option: "suppressBeforeUnload", label: "离开提示", target: getWindowTarget, type: "beforeunload", handler: stopBeforeUnload }
-    ];
-    let cleanupStack = [];
-    function stopEvent(event) {
-      if (rootContainsTarget(event.target)) return;
-      event.stopPropagation();
-    }
-    function stopBeforeUnload(event) {
-      event.stopImmediatePropagation();
-      event.returnValue = void 0;
-      return void 0;
-    }
-    function addListener(target, type, handler) {
-      target.addEventListener(type, handler, true);
-      cleanupStack.push(() => target.removeEventListener(type, handler, true));
-    }
-    function installSelectionStyle(setting) {
-      if (!setting.allowSelection || getStyle()) return;
-      installStyle(`
-      html :not(#${rootId}):not(#${rootId} *) {
-        -webkit-user-select: text !important;
-        user-select: text !important;
-      }
-    `);
-    }
-    function describe(setting, scopeText) {
-      if (!setting?.enabled) return "当前未启用网页限制解除。";
-      const labels = [];
-      const seenOptions = /* @__PURE__ */ new Set();
-      for (const spec of capabilitySpecs) {
-        if (!setting[spec.option] || seenOptions.has(spec.option)) continue;
-        labels.push(spec.label);
-        seenOptions.add(spec.option);
-      }
-      if (!labels.length) return "网页限制解除已保存，但没有启用任何能力。";
-      return `${scopeText}已启用：${labels.join("、")}。`;
-    }
-    return {
-      describe,
-      getCapabilitySpecs() {
-        return capabilitySpecs.map(({ option, label, type }) => ({ option, label, type }));
-      },
-      install(setting) {
-        this.uninstall();
-        if (!hasUnlockerAction2(setting)) return;
-        installSelectionStyle(setting);
-        for (const spec of capabilitySpecs) {
-          if (setting[spec.option]) {
-            addListener(spec.target(), spec.type, spec.handler);
-          }
-        }
-      },
-      uninstall() {
-        for (const cleanup of cleanupStack) {
-          cleanup();
-        }
-        cleanupStack = [];
-        removeStyle();
-      }
+      isExpansionSuppressed,
+      dispose
     };
   }
 
@@ -2032,255 +2087,213 @@ ${root} :focus-visible {
     };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant.entry.js
-  (function() {
-    "use strict";
-    if (window.top !== window.self) return;
-    const SCRIPT_NAME = "Web Page Assistant";
-    const ROOT_ID = "page-auto-refresh-timer-root";
-    const STYLE_ID = `${ROOT_ID}-style`;
-    const TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
-    const DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
-    const UNLOCKER_STYLE_ID = `${ROOT_ID}-unlocker-style`;
-    const STORAGE_KEY = "pageAutoRefreshTimerSettings";
-    const WIDGET_POSITION_KEY = "pageAutoRefreshTimerWidgetPosition";
-    const FALLBACK_STORAGE_KEY = `__${STORAGE_KEY}`;
-    const FALLBACK_WIDGET_POSITION_KEY = `__${WIDGET_POSITION_KEY}`;
-    const MAX_INTERVAL_MS2 = MAX_INTERVAL_MS;
-    const isValidIntervalMs2 = isValidIntervalMs;
-    const hasUnlockerAction2 = hasUnlockerAction;
-    const WIDGET_BUTTON_SIZE = 52;
-    const WIDGET_WIDTH = 154;
-    const WIDGET_HEIGHT = 60;
-    const WIDGET_PANEL_WIDTH = 248;
-    const WIDGET_PANEL_GAP = 8;
-    const WIDGET_SAFE_MARGIN = 12;
-    const DEFAULT_WIDGET_OFFSET = 18;
-    const PRESETS = [
-      { label: "30 秒", ms: 30 * 1e3 },
-      { label: "1 分钟", ms: 60 * 1e3 },
-      { label: "3 分钟", ms: 3 * 60 * 1e3 },
-      { label: "5 分钟", ms: 5 * 60 * 1e3 },
-      { label: "10 分钟", ms: 10 * 60 * 1e3 },
-      { label: "15 分钟", ms: 15 * 60 * 1e3 },
-      { label: "30 分钟", ms: 30 * 60 * 1e3 },
-      { label: "60 分钟", ms: 60 * 60 * 1e3 }
-    ];
-    const currentPageKey = `${location.origin}${location.pathname}${location.search}`;
-    const currentSiteKey = location.hostname;
-    let root;
-    let widget;
-    let widgetButton;
-    let widgetPosition = null;
-    let dialog;
-    let activeDialogTab = "refresh";
-    let countdownNodes = [];
-    let widgetStatusNode = null;
-    let lastWidgetStatusText = "";
-    let dialogReturnFocus = null;
-    let inertedElements = [];
-    let themeCleanup = null;
-    let hasRootListener = false;
-    let webPageAssistantSession;
-    let widgetLayoutRuntime;
-    let unlockerRuntime;
-    let initialStateReady = Promise.resolve();
-    const TOKEN_CSS = buildTokenCss({
+  // src/userscripts/web-page-assistant/web-page-assistant-view.lib.js
+  var SCRIPT_NAME = "Web Page Assistant";
+  var ROOT_ID = "page-auto-refresh-timer-root";
+  var STYLE_ID = `${ROOT_ID}-style`;
+  var TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
+  var DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
+  var FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  var PRESETS = [
+    { label: "30 秒", ms: 30 * 1e3 },
+    { label: "1 分钟", ms: 60 * 1e3 },
+    { label: "3 分钟", ms: 3 * 60 * 1e3 },
+    { label: "5 分钟", ms: 5 * 60 * 1e3 },
+    { label: "10 分钟", ms: 10 * 60 * 1e3 },
+    { label: "15 分钟", ms: 15 * 60 * 1e3 },
+    { label: "30 分钟", ms: 30 * 60 * 1e3 },
+    { label: "60 分钟", ms: 60 * 60 * 1e3 }
+  ];
+  var WRITE_ACTIONS = /* @__PURE__ */ new Set([
+    "save-preset",
+    "save-custom",
+    "delete-page",
+    "delete-site",
+    "save-unlocker",
+    "delete-unlocker-page",
+    "delete-unlocker-site",
+    "disable-active"
+  ]);
+  function formatInterval(ms) {
+    const totalSeconds = Math.round(ms / 1e3);
+    if (totalSeconds < 60) return `${totalSeconds} 秒`;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return seconds ? `${minutes} 分钟 ${seconds} 秒` : `${minutes} 分钟`;
+  }
+  function formatCountdown(ms) {
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1e3));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor(totalSeconds % 3600 / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+  function scopeLabel(scope) {
+    return scope === "page" ? "当前页面" : "整个站点";
+  }
+  function unlockerStatusText(snapshot, scope) {
+    const setting = snapshot.appliedUnlocker?.setting;
+    if (!setting?.enabled) return "当前未启用网页限制解除。";
+    const labels = [
+      ["allowSelection", "选择文本"],
+      ["allowCopy", "复制/剪切"],
+      ["allowContextMenu", "右键菜单"],
+      ["allowDrag", "拖拽"],
+      ["suppressBeforeUnload", "离开提示"]
+    ].filter(([option]) => setting[option]).map(([, label]) => label);
+    if (!labels.length) return "网页限制解除已保存，但没有启用任何能力。";
+    return `${scopeLabel(snapshot.appliedUnlocker?.scope || scope)}已启用：${labels.join("、")}。`;
+  }
+  function createWebPageAssistantView({
+    session,
+    keys,
+    document: documentObject,
+    window: windowObject,
+    positions,
+    ready,
+    clock
+  }) {
+    const timers = {
+      setTimeout: clock?.setTimeout || windowObject.setTimeout.bind(windowObject),
+      clearTimeout: clock?.clearTimeout || windowObject.clearTimeout.bind(windowObject)
+    };
+    const dialogContract = createPageAssistantDialogContract({
+      settingsContract: web_page_assistant_settings_lib_exports,
+      defaultUnlockerSetting,
+      formatInterval,
+      defaultIntervalMs: 5 * 60 * 1e3
+    });
+    const tokenCss = buildTokenCss({
       rootSelector: `#${ROOT_ID}`,
       accent: "oklch(55% 0.10 160)",
       accentDark: "oklch(70% 0.12 160)"
     });
-    const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-    const WRITE_ACTIONS = /* @__PURE__ */ new Set([
-      "save-preset",
-      "save-custom",
-      "delete-page",
-      "delete-site",
-      "save-unlocker",
-      "delete-unlocker-page",
-      "delete-unlocker-site",
-      "disable-active"
-    ]);
-    function isRecord2(value) {
-      return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-    }
-    function normalizeWidgetPosition(value) {
-      if (!isRecord2(value)) return null;
-      const left = Number(value.left);
-      const top = Number(value.top);
-      if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
-      return {
-        left: Math.round(left),
-        top: Math.round(top)
-      };
-    }
-    const storagePort = createWebPageAssistantStoragePort({
-      scriptName: SCRIPT_NAME,
-      settingsContract: web_page_assistant_settings_lib_exports,
-      normalizeWidgetPosition,
-      storageKey: STORAGE_KEY,
-      widgetPositionKey: WIDGET_POSITION_KEY,
-      fallbackStorageKey: FALLBACK_STORAGE_KEY,
-      fallbackWidgetPositionKey: FALLBACK_WIDGET_POSITION_KEY,
-      gmGetValue: typeof GM_getValue === "function" ? GM_getValue : null,
-      gmSetValue: typeof GM_setValue === "function" ? GM_setValue : null,
-      gmRegisterMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
-      gmApi: typeof GM !== "undefined" ? GM : null,
-      localStorageAdapter: localStorage,
-      logger: console
+    let latestSnapshot = session.getState();
+    let root = null;
+    let widget = null;
+    let widgetButton = null;
+    let countdownNodes = [];
+    let widgetStatusNode = null;
+    let lastWidgetStatusText = "";
+    let widgetPosition = positions.get?.() || null;
+    let hasMountedWidget = false;
+    let dialog = null;
+    let activeDialogTab = "refresh";
+    let dialogGeneration = 0;
+    let editRevision = 0;
+    let dialogReturnFocus = null;
+    let themeCleanup = null;
+    let inertObserver = null;
+    let inertOwnership = /* @__PURE__ */ new Map();
+    let initializationError = null;
+    let disposed = false;
+    let openPromise = null;
+    let pendingOpenIntent = null;
+    const pendingSubmissions = /* @__PURE__ */ new Set();
+    const ownedStyleIds = /* @__PURE__ */ new Set();
+    let finishDisposed;
+    const disposedPromise = new Promise((resolve) => {
+      finishDisposed = resolve;
     });
-    function onReady(callback) {
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", callback, { once: true });
-        return;
-      }
-      callback();
-    }
-    function installStyles() {
-      if (!document.getElementById(TOKEN_STYLE_ID)) {
-        const tokenStyle = document.createElement("style");
-        tokenStyle.id = TOKEN_STYLE_ID;
-        tokenStyle.textContent = TOKEN_CSS;
-        document.documentElement.append(tokenStyle);
-      }
-      installAssistantBaseStyles({
-        documentObject: document,
-        rootId: ROOT_ID,
-        styleId: STYLE_ID
-      });
-      installAssistantDialogStyles({
-        documentObject: document,
-        rootId: ROOT_ID,
-        styleId: DIALOG_STYLE_ID
-      });
-    }
-    function ensureRoot() {
-      installStyles();
-      const existing = document.getElementById(ROOT_ID);
-      if (existing) {
-        root = existing;
-      } else {
-        root = document.createElement("div");
-        root.id = ROOT_ID;
-        document.documentElement.append(root);
-      }
-      if (!themeCleanup) {
-        themeCleanup = applyTheme(root);
-      }
-      if (!hasRootListener) {
-        root.addEventListener("click", handleRootClick);
-        root.addEventListener("change", handleRootChange);
-        hasRootListener = true;
-      }
-      return root;
-    }
-    function formatInterval(ms) {
-      const totalSeconds = Math.round(ms / 1e3);
-      if (totalSeconds < 60) return `${totalSeconds} 秒`;
-      const minutes = Math.floor(totalSeconds / 60);
-      const seconds = totalSeconds % 60;
-      return seconds ? `${minutes} 分钟 ${seconds} 秒` : `${minutes} 分钟`;
-    }
-    function formatCountdown(ms) {
-      const totalSeconds = Math.max(0, Math.ceil(ms / 1e3));
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor(totalSeconds % 3600 / 60);
-      const seconds = totalSeconds % 60;
-      if (hours > 0) {
-        return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-      }
-      return `${minutes}:${String(seconds).padStart(2, "0")}`;
-    }
-    function scopeLabel(scope) {
-      return scope === "page" ? "当前页面" : "整个站点";
-    }
-    function getSelectedScope() {
-      return dialogContract.readSelectedScope(dialog);
-    }
-    function setMessage(text, tone = "info") {
-      const messageNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.message));
-      if (!messageNode) return;
-      messageNode.textContent = text;
-      messageNode.dataset.tone = tone;
-    }
-    function currentStatusText() {
-      const activeMatch = webPageAssistantSession.getState().refresh.activeMatch;
-      if (!activeMatch) return "当前未启用自动刷新。";
-      return `${scopeLabel(activeMatch.scope)}已启用，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
-    }
-    function unlockerStatusText() {
-      const activeUnlockerMatch = webPageAssistantSession.getState().appliedUnlocker;
-      const setting = activeUnlockerMatch?.setting;
-      return unlockerRuntime.describe(setting, scopeLabel(activeUnlockerMatch?.scope || getSelectedScope()));
-    }
-    function defaultUnlockerSetting2(overrides = {}) {
-      return defaultUnlockerSetting(overrides);
-    }
-    const dialogContract = createPageAssistantDialogContract({
-      settingsContract: web_page_assistant_settings_lib_exports,
-      defaultUnlockerSetting: defaultUnlockerSetting2,
-      formatInterval,
-      defaultIntervalMs: 5 * 60 * 1e3
-    });
-    function clampNumber(value, min, max) {
-      return Math.min(Math.max(min, value), max);
-    }
-    widgetLayoutRuntime = createWidgetLayoutRuntime({
-      normalizeWidgetPosition,
-      clampNumber,
-      getViewportSize: () => ({
-        width: window.innerWidth,
-        height: window.innerHeight
-      }),
-      persistPosition: (positionToPersist) => storagePort.writeWidgetPosition(positionToPersist),
-      onPositionChange(nextPosition) {
-        widgetPosition = nextPosition;
+    const layout = createWidgetLayoutRuntime({
+      normalizeWidgetPosition: positions.normalize,
+      clampNumber(value, min, max) {
+        return Math.min(Math.max(min, value), max);
       },
-      setTimeout: (handler, delay) => window.setTimeout(handler, delay),
-      clearTimeout: (timer) => window.clearTimeout(timer),
-      isCoarsePointer: () => isCoarsePointer(window),
+      getViewportSize: () => ({ width: windowObject.innerWidth, height: windowObject.innerHeight }),
+      persistPosition: async (position) => positions.write(position),
+      onPositionChange(position) {
+        widgetPosition = position;
+      },
+      setTimeout: timers.setTimeout,
+      clearTimeout: timers.clearTimeout,
+      isCoarsePointer: () => isCoarsePointer(windowObject),
       logger: console,
       scriptName: SCRIPT_NAME,
       constants: {
-        buttonSize: WIDGET_BUTTON_SIZE,
-        widgetWidth: WIDGET_WIDTH,
-        widgetHeight: WIDGET_HEIGHT,
-        panelWidth: WIDGET_PANEL_WIDTH,
-        panelGap: WIDGET_PANEL_GAP,
-        safeMargin: WIDGET_SAFE_MARGIN,
-        defaultOffset: DEFAULT_WIDGET_OFFSET
+        buttonSize: 52,
+        widgetWidth: 154,
+        widgetHeight: 60,
+        panelWidth: 248,
+        panelGap: 8,
+        safeMargin: 12,
+        defaultOffset: 18
       }
     });
+    function currentStatusText(snapshot = latestSnapshot) {
+      const activeMatch = snapshot.refresh.activeMatch;
+      if (!activeMatch) return "当前未启用自动刷新。";
+      return `${scopeLabel(activeMatch.scope)}已启用，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
+    }
+    function widgetStatusText(snapshot = latestSnapshot) {
+      const runtimeState = snapshot.refresh;
+      if (!runtimeState.activeMatch) return "当前未启用自动刷新。";
+      if (runtimeState.isPaused) {
+        const remaining = formatInterval(Math.max(1e3, Math.ceil(runtimeState.remainingMs / 1e3) * 1e3));
+        return `自动刷新已暂停，剩余 ${remaining}。`;
+      }
+      return `${scopeLabel(runtimeState.activeMatch.scope)}自动刷新已启用，每 ${formatInterval(runtimeState.activeMatch.setting.intervalMs)} 刷新一次。`;
+    }
+    function installStyles() {
+      if (!documentObject.getElementById(TOKEN_STYLE_ID)) {
+        const tokenStyle = documentObject.createElement("style");
+        tokenStyle.id = TOKEN_STYLE_ID;
+        tokenStyle.textContent = tokenCss;
+        documentObject.documentElement.append(tokenStyle);
+        ownedStyleIds.add(TOKEN_STYLE_ID);
+      }
+      if (!documentObject.getElementById(STYLE_ID)) ownedStyleIds.add(STYLE_ID);
+      installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID });
+      if (!documentObject.getElementById(DIALOG_STYLE_ID)) ownedStyleIds.add(DIALOG_STYLE_ID);
+      installAssistantDialogStyles({ documentObject, rootId: ROOT_ID, styleId: DIALOG_STYLE_ID });
+    }
+    function ensureRoot() {
+      if (disposed) return null;
+      if (root && root.isConnected !== false) return root;
+      installStyles();
+      root = documentObject.getElementById(ROOT_ID);
+      if (!root) {
+        root = documentObject.createElement("div");
+        root.id = ROOT_ID;
+        documentObject.documentElement.append(root);
+      }
+      themeCleanup ||= applyTheme(root);
+      root.addEventListener("click", handleRootClick);
+      root.addEventListener("change", handleRootChange);
+      root.addEventListener("input", handleRootInput);
+      windowObject.addEventListener("resize", handleResize);
+      return root;
+    }
     function createWidgetViewModel() {
       return {
-        enabled: Boolean(webPageAssistantSession.getState().refresh.activeMatch),
+        enabled: Boolean(latestSnapshot.refresh.activeMatch),
         summary: currentStatusText()
       };
     }
     function renderWidget() {
+      if (disposed || latestSnapshot.lifecycle !== "ready") return;
       ensureRoot();
-      if (widget) {
-        widget.remove();
-        widget = null;
-        widgetButton = null;
-        countdownNodes = [];
-        widgetStatusNode = null;
-      }
-      const renderedWidget = createWidgetElement({
-        documentObject: document,
-        model: createWidgetViewModel()
-      });
-      widget = renderedWidget.widget;
-      widgetButton = renderedWidget.widgetButton;
-      countdownNodes = renderedWidget.countdownNodes;
-      widgetStatusNode = renderedWidget.statusNode;
+      if (!hasMountedWidget) widgetPosition = positions.get?.() || widgetPosition;
+      const returnToWidget = dialogReturnFocus === widgetButton;
+      widget?.remove();
+      const rendered = createWidgetElement({ documentObject, model: createWidgetViewModel() });
+      widget = rendered.widget;
+      widgetButton = rendered.widgetButton;
+      countdownNodes = rendered.countdownNodes;
+      widgetStatusNode = rendered.statusNode;
       lastWidgetStatusText = "";
-      widgetLayoutRuntime.attach(widget, widgetButton, widgetPosition);
+      layout.attach(widget, widgetButton, widgetPosition);
       root.append(widget);
-      widgetLayoutRuntime.applyPosition();
+      layout.applyPosition();
+      hasMountedWidget = true;
+      if (returnToWidget) dialogReturnFocus = widgetButton;
       updatePauseButton();
       updateCountdownText();
       updateWidgetStatusText();
+    }
+    function getSelectedScope() {
+      return dialogContract.readSelectedScope(dialog);
     }
     function createDialogViewModel(message = "", preferredScope = null, preferredTab = null) {
       return dialogContract.createViewModel({
@@ -2288,62 +2301,119 @@ ${root} :focus-visible {
         preferredScope,
         preferredTab,
         activeTab: activeDialogTab,
-        activeRefreshMatch: webPageAssistantSession.getState().refresh.activeMatch,
-        activeUnlockerMatch: webPageAssistantSession.getState().appliedUnlocker,
-        settings: webPageAssistantSession.getState().settings,
-        pageKey: currentPageKey,
-        siteKey: currentSiteKey,
+        activeRefreshMatch: latestSnapshot.refresh.activeMatch,
+        activeUnlockerMatch: latestSnapshot.appliedUnlocker,
+        settings: latestSnapshot.settings,
+        pageKey: keys.pageKey,
+        siteKey: keys.siteKey,
         statusText: currentStatusText(),
-        unlockerStatusText: unlockerStatusText()
+        unlockerStatusText: unlockerStatusText(latestSnapshot, preferredScope || getSelectedScope())
       });
     }
     function captureDialogState() {
       if (!dialog) return null;
       const panel = dialog.querySelector(".part-dialog");
       let focusSelector = null;
-      const active = document.activeElement;
+      const active = documentObject.activeElement;
       if (active && dialog.contains(active)) {
         const roleNode = active.closest?.("[data-part-role]");
         const actionNode = active.closest?.("[data-part-action]");
-        if (roleNode) {
-          focusSelector = dialogContract.roleSelector(roleNode.dataset.partRole);
-        } else if (active.matches?.('input[name="part-scope"]')) {
+        if (roleNode) focusSelector = dialogContract.roleSelector(roleNode.dataset.partRole);
+        else if (active.matches?.('input[name="part-scope"]')) {
           focusSelector = `input[name="part-scope"][value="${active.value}"]`;
         } else if (actionNode) {
           focusSelector = dialogContract.actionSelector(actionNode.dataset.partAction);
           for (const [datasetKey, attribute] of [["partTab", "data-part-tab"], ["intervalMs", "data-interval-ms"]]) {
-            if (actionNode.dataset[datasetKey]) {
-              focusSelector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
-            }
+            if (actionNode.dataset[datasetKey]) focusSelector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
           }
         }
       }
-      return {
-        scrollTop: panel?.scrollTop || 0,
-        focusSelector
-      };
+      return { scrollTop: panel?.scrollTop || 0, focusSelector };
     }
     function restoreDialogState(preserved) {
       if (!preserved || !dialog) return;
       const panel = dialog.querySelector(".part-dialog");
       if (panel && preserved.scrollTop) panel.scrollTop = preserved.scrollTop;
-      if (preserved.focusSelector) {
-        dialog.querySelector(preserved.focusSelector)?.focus?.();
+      if (preserved.focusSelector) dialog.querySelector(preserved.focusSelector)?.focus?.();
+    }
+    function processInertMutations(records) {
+      for (const record of records) {
+        const ownership = inertOwnership.get(record.target);
+        if (ownership) ownership.changed = true;
       }
     }
     function applyBackgroundInert() {
-      if (inertedElements.length) return;
-      for (const child of Array.from(document.body?.children || [])) {
-        if (child === root) continue;
+      if (inertObserver || inertOwnership.size) return;
+      const owned = [];
+      for (const child of Array.from(documentObject.body?.children || [])) {
+        if (child === root || child.hasAttribute("inert")) continue;
         child.setAttribute("inert", "");
-        inertedElements.push(child);
+        inertOwnership.set(child, { changed: false });
+        owned.push(child);
+      }
+      const Observer = windowObject.MutationObserver;
+      if (!Observer || !owned.length) return;
+      inertObserver = new Observer(processInertMutations);
+      for (const element of owned) {
+        inertObserver.observe(element, { attributes: true, attributeFilter: ["inert"], attributeOldValue: true });
       }
     }
     function releaseBackgroundInert() {
-      for (const element of inertedElements) {
-        element.removeAttribute("inert");
+      if (inertObserver) {
+        processInertMutations(inertObserver.takeRecords());
+        inertObserver.disconnect();
+        inertObserver = null;
       }
-      inertedElements = [];
+      for (const [element, ownership] of inertOwnership) {
+        if (!ownership.changed && element.getAttribute("inert") === "") element.removeAttribute("inert");
+      }
+      inertOwnership = /* @__PURE__ */ new Map();
+    }
+    function setMessage(text, tone = "info") {
+      const messageNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.message));
+      if (!messageNode) return;
+      messageNode.textContent = text;
+      messageNode.dataset.tone = tone;
+    }
+    function disableDialogWrites() {
+      if (!dialog) return;
+      for (const action of WRITE_ACTIONS) {
+        for (const node of dialog.querySelectorAll(dialogContract.actionSelector(action))) node.disabled = true;
+      }
+    }
+    function renderDialog({ message = "", tone = "info", scope = null, tab = null } = {}) {
+      if (disposed) return;
+      ensureRoot();
+      const preserved = captureDialogState();
+      if (!dialog) {
+        const active = documentObject.activeElement;
+        dialogReturnFocus = active && root.contains(active) ? active : widgetButton || null;
+        applyBackgroundInert();
+      } else {
+        dialog.remove();
+        dialog = null;
+      }
+      const model = createDialogViewModel(message, scope, tab);
+      activeDialogTab = model.activeTab;
+      dialog = createDialogElement({ documentObject, model });
+      dialogGeneration += 1;
+      editRevision = 0;
+      dialog.addEventListener("keydown", handleDialogKeydown);
+      root.append(dialog);
+      dialogContract.applyModel(dialog, model, PRESETS);
+      restoreDialogState(preserved);
+      setMessage(initializationError || model.message, initializationError ? "error" : tone);
+      if (initializationError) disableDialogWrites();
+    }
+    function closeDialog({ restoreFocus = true } = {}) {
+      if (!dialog) return;
+      dialogGeneration += 1;
+      dialog.remove();
+      dialog = null;
+      releaseBackgroundInert();
+      const returnTarget = dialogReturnFocus;
+      dialogReturnFocus = null;
+      if (restoreFocus && returnTarget?.isConnected !== false) returnTarget?.focus?.();
     }
     function handleDialogKeydown(event) {
       if (!dialog) return;
@@ -2360,7 +2430,7 @@ ${root} :focus-visible {
       if (!focusables.length) return;
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
-      const active = document.activeElement;
+      const active = documentObject.activeElement;
       if (event.shiftKey && (active === first || !panel.contains(active))) {
         event.preventDefault();
         last.focus();
@@ -2369,41 +2439,19 @@ ${root} :focus-visible {
         first.focus();
       }
     }
-    function renderDialog(message = "", preferredScope = null, preferredTab = null) {
-      ensureRoot();
-      const preserved = captureDialogState();
-      if (!dialog) {
-        const active = document.activeElement;
-        dialogReturnFocus = active && root.contains(active) ? active : widgetButton || null;
-        applyBackgroundInert();
-      } else {
-        dialog.remove();
-        dialog = null;
-      }
-      const model = createDialogViewModel(message, preferredScope, preferredTab);
-      activeDialogTab = model.activeTab;
-      dialog = createDialogElement({
-        documentObject: document,
-        model
-      });
-      dialog.addEventListener("keydown", handleDialogKeydown);
-      root.append(dialog);
-      dialogContract.applyModel(dialog, model, PRESETS);
-      restoreDialogState(preserved);
-      setMessage(model.message);
-    }
-    function closeDialog() {
+    function updateDialogStatus() {
       if (!dialog) return;
-      try {
-        dialog.remove();
-        dialog = null;
-      } finally {
-        releaseBackgroundInert();
-        const returnTarget = dialogReturnFocus;
-        dialogReturnFocus = null;
-        if (returnTarget && returnTarget.isConnected !== false) {
-          returnTarget.focus?.();
-        }
+      const model = createDialogViewModel("", getSelectedScope(), activeDialogTab);
+      for (const [role, text] of [
+        [dialogContract.roles.status, model.statusText],
+        [dialogContract.roles.pageKey, model.pageRefreshText],
+        [dialogContract.roles.siteKey, model.siteRefreshText],
+        [dialogContract.roles.unlockerStatus, model.unlockerStatusText],
+        [dialogContract.roles.unlockerPageKey, model.pageUnlockerText],
+        [dialogContract.roles.unlockerSiteKey, model.siteUnlockerText]
+      ]) {
+        const node = dialog.querySelector(dialogContract.roleSelector(role));
+        if (node) node.textContent = text;
       }
     }
     function parseCustomInterval() {
@@ -2412,39 +2460,18 @@ ${root} :focus-visible {
       const amount = Number(valueNode?.value);
       const unit = unitNode?.value === "minutes" ? "minutes" : "seconds";
       const ms = amount * (unit === "minutes" ? 60 * 1e3 : 1e3);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return { error: "请输入大于 0 的刷新时间。" };
-      }
-      if (!isValidIntervalMs2(ms)) {
-        return { error: "自定义刷新时间必须在 1 秒到 60 分钟之间。" };
-      }
+      if (!Number.isFinite(amount) || amount <= 0) return { error: "请输入大于 0 的刷新时间。" };
+      if (!isValidIntervalMs(ms)) return { error: "自定义刷新时间必须在 1 秒到 60 分钟之间。" };
       return { intervalMs: Math.round(ms) };
-    }
-    function readUnlockerFormSetting() {
-      return dialogContract.readUnlockerFormSetting(dialog);
     }
     function updateCountdownText() {
       if (!countdownNodes.length) return;
-      const runtimeState = webPageAssistantSession.getState().refresh;
-      if (!runtimeState.activeMatch) {
-        for (const node of countdownNodes) {
-          node.textContent = "--:--";
-        }
-        return;
-      }
-      const text = formatCountdown(runtimeState.remainingMs);
-      for (const node of countdownNodes) {
-        node.textContent = text;
-      }
+      const text = latestSnapshot.refresh.activeMatch ? formatCountdown(latestSnapshot.refresh.remainingMs) : "--:--";
+      for (const node of countdownNodes) node.textContent = text;
     }
-    function widgetStatusText() {
-      const runtimeState = webPageAssistantSession.getState().refresh;
-      if (!runtimeState.activeMatch) return "当前未启用自动刷新。";
-      if (runtimeState.isPaused) {
-        const remaining = formatInterval(Math.max(1e3, Math.ceil(runtimeState.remainingMs / 1e3) * 1e3));
-        return `自动刷新已暂停，剩余 ${remaining}。`;
-      }
-      return `${scopeLabel(runtimeState.activeMatch.scope)}自动刷新已启用，每 ${formatInterval(runtimeState.activeMatch.setting.intervalMs)} 刷新一次。`;
+    function updatePauseButton() {
+      const pauseButton = widget?.querySelector('[data-part-action="toggle-pause"]');
+      if (pauseButton) pauseButton.textContent = latestSnapshot.refresh.isPaused ? "继续" : "暂停";
     }
     function updateWidgetStatusText() {
       if (!widgetStatusNode) return;
@@ -2453,33 +2480,21 @@ ${root} :focus-visible {
       lastWidgetStatusText = text;
       widgetStatusNode.textContent = text;
     }
-    function updatePauseButton() {
-      const pauseButton = widget?.querySelector('[data-part-action="toggle-pause"]');
-      if (!pauseButton) return;
-      pauseButton.textContent = webPageAssistantSession.getState().refresh.isPaused ? "继续" : "暂停";
+    function operationError(result) {
+      const reasons = {
+        "invalid-input": "设置无效。",
+        "not-ready": "设置尚未读取完成。",
+        disposed: "会话已结束。",
+        "storage-failed": "设置保存失败。",
+        "application-failed": "设置已保存，但应用失败。"
+      };
+      return `${reasons[result.code] || "操作失败。"}${result.message || result.state.applicationError || ""}`;
     }
-    unlockerRuntime = createUnlockerRuntime({
-      hasUnlockerAction: hasUnlockerAction2,
-      rootContainsTarget: (target) => Boolean(root?.contains(target)),
-      getDocumentTarget: () => document,
-      getWindowTarget: () => window,
-      getStyle: () => document.getElementById(UNLOCKER_STYLE_ID),
-      installStyle(cssText) {
-        const style = document.createElement("style");
-        style.id = UNLOCKER_STYLE_ID;
-        style.textContent = cssText;
-        document.documentElement.append(style);
-      },
-      removeStyle() {
-        const style = document.getElementById(UNLOCKER_STYLE_ID);
-        if (style) style.remove();
-      },
-      rootId: ROOT_ID
-    });
     async function dispatchAction(action, node) {
-      if (action === "open-settings") return renderDialog("", null, "refresh");
-      if (action === "switch-tab") return renderDialog("", getSelectedScope(), node.dataset.partTab);
+      if (action === "open-settings") return openSettings({ tab: "refresh" });
+      if (action === "switch-tab") return renderDialog({ scope: getSelectedScope(), tab: node.dataset.partTab });
       if (action === "close-dialog") return closeDialog();
+      if (initializationError) throw new Error(initializationError);
       let scope = getSelectedScope();
       let command = { type: action, scope };
       let tab = "refresh";
@@ -2494,7 +2509,7 @@ ${root} :focus-visible {
         command = { type: "delete-refresh", scope };
         message = `已删除${scopeLabel(scope)}设置。`;
       } else if (action === "save-unlocker") {
-        command.setting = readUnlockerFormSetting();
+        command.setting = dialogContract.readUnlockerFormSetting(dialog);
         tab = "unlocker";
         message = `已保存到${scopeLabel(scope)}。`;
       } else if (action.startsWith("delete-unlocker-")) {
@@ -2503,18 +2518,33 @@ ${root} :focus-visible {
         tab = "unlocker";
         message = `已删除${scopeLabel(scope)}限制解除设置。`;
       }
-      const result = await webPageAssistantSession.dispatch(command);
+      const submission = { generation: dialogGeneration, revision: editRevision, dialog };
+      if (WRITE_ACTIONS.has(action)) pendingSubmissions.add(submission);
+      const result = await session.dispatch(command);
+      pendingSubmissions.delete(submission);
+      latestSnapshot = result.state;
+      const sameDialog = dialog === submission.dialog && dialogGeneration === submission.generation;
+      const sameDraft = sameDialog && editRevision === submission.revision;
       if (!result.ok) {
-        if (result.persisted && dialog) renderDialog("", result.scope || scope, tab);
-        const reasons = { "invalid-input": "设置无效。", "not-ready": "设置尚未读取完成。", disposed: "会话已结束。", "storage-failed": "设置保存失败。", "application-failed": "设置已保存，但应用失败。" };
-        throw new Error(`${reasons[result.code] || "操作失败。"}${result.message || result.state.applicationError || ""}`);
+        const error = operationError(result);
+        if (sameDraft && result.persisted) renderDialog({ message: error, tone: "error", scope: result.scope || scope, tab });
+        else if (sameDialog) {
+          updateDialogStatus();
+          setMessage(`操作失败：${error}`, "error");
+        }
+        throw new Error(error);
       }
-      if (action === "toggle-pause") return;
+      if (action === "toggle-pause") return result;
       if (action === "disable-active") {
         scope = result.scope || scope;
         message = `已停用${scopeLabel(scope)}自动刷新。`;
       }
-      if (dialog) renderDialog(message, scope, tab);
+      if (sameDraft) renderDialog({ message, scope, tab });
+      else if (sameDialog) {
+        updateDialogStatus();
+        setMessage(message);
+      }
+      return result;
     }
     async function handleRootClick(event) {
       const actionNode = event.target?.closest?.("[data-part-action]");
@@ -2525,12 +2555,8 @@ ${root} :focus-visible {
         closeDialog();
         return;
       }
-      if (action === "close-dialog" && dialog && actionNode === dialog) {
-        return;
-      }
-      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && widgetLayoutRuntime.isExpansionSuppressed()) {
-        return;
-      }
+      if (action === "close-dialog" && dialog && actionNode === dialog) return;
+      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && layout.isExpansionSuppressed()) return;
       event.preventDefault();
       event.stopPropagation();
       const isWrite = WRITE_ACTIONS.has(action);
@@ -2542,63 +2568,225 @@ ${root} :focus-visible {
       try {
         await dispatchAction(action, actionNode);
       } catch (error) {
+        if (disposed) return;
         console.warn(`${SCRIPT_NAME}: action failed.`, error);
         if (isWrite && actionNode.isConnected !== false) {
           actionNode.disabled = false;
           actionNode.textContent = pendingLabel;
         }
-        setMessage(`操作失败：${error?.message || error}`, "error");
+        if (dialog && !dialog.querySelector('[data-part-role="message"]')?.textContent) {
+          setMessage(`操作失败：${error?.message || error}`, "error");
+        }
       }
+    }
+    function handleRootInput(event) {
+      if (dialog?.contains(event.target)) editRevision += 1;
     }
     function handleRootChange(event) {
       const target = event.target;
       if (!target?.matches?.('input[name="part-scope"]')) return;
       const selectedScope = getSelectedScope();
-      renderDialog(`将保存到${scopeLabel(selectedScope)}。`, selectedScope, activeDialogTab);
+      renderDialog({ message: `将保存到${scopeLabel(selectedScope)}。`, scope: selectedScope, tab: activeDialogTab });
     }
-    function openSettingsFromMenu() {
-      onReady(() => {
-        initialStateReady.then(() => renderDialog()).catch((error) => {
-          console.warn(`${SCRIPT_NAME}: failed to open settings menu.`, error);
-        });
+    function handleResize() {
+      if (!disposed) layout.applyPosition();
+    }
+    function update(snapshot, change = {}) {
+      latestSnapshot = snapshot;
+      if (disposed) return;
+      if (snapshot.lifecycle === "error") {
+        initializationError = `初始化失败：${snapshot.applicationError || "设置读取失败。"}`;
+        if (dialog) {
+          setMessage(initializationError, "error");
+          disableDialogWrites();
+        }
+        return;
+      }
+      if (snapshot.lifecycle !== "ready") return;
+      initializationError = null;
+      if (change.kind === "lifecycle" || change.kind === "settings" && change.area === "refresh") renderWidget();
+      updatePauseButton();
+      updateCountdownText();
+      updateWidgetStatusText();
+      if (!dialog) return;
+      updateDialogStatus();
+      if (change.kind === "settings" && pendingSubmissions.size === 0 && editRevision === 0) {
+        renderDialog({ scope: getSelectedScope(), tab: activeDialogTab });
+      }
+    }
+    function mergeIntent(next = {}) {
+      pendingOpenIntent = {
+        tab: next.tab ?? pendingOpenIntent?.tab ?? null,
+        scope: next.scope ?? pendingOpenIntent?.scope ?? null
+      };
+    }
+    function openSettings(options = {}) {
+      if (disposed) return Promise.resolve({ ok: false, code: "disposed" });
+      mergeIntent(options);
+      if (openPromise) return openPromise;
+      const opening = (async () => {
+        let startup;
+        try {
+          startup = await Promise.race([
+            Promise.resolve().then(() => ready()),
+            disposedPromise
+          ]);
+        } catch (error) {
+          startup = { ok: false, code: "storage-failed", message: String(error?.message || error), state: session.getState() };
+        }
+        if (disposed || startup?.code === "disposed") return { ok: false, code: "disposed" };
+        if (startup?.state) latestSnapshot = startup.state;
+        if (!startup?.ok && latestSnapshot.lifecycle !== "ready") {
+          initializationError = `初始化失败：${startup?.message || latestSnapshot.applicationError || "设置读取失败。"}`;
+        }
+        const intent = pendingOpenIntent || {};
+        pendingOpenIntent = null;
+        renderDialog({ scope: intent.scope, tab: intent.tab });
+        return initializationError ? { ok: false, code: startup?.code || "initialization-failed" } : { ok: true };
+      })();
+      const wrapped = opening.finally(() => {
+        if (openPromise === wrapped) openPromise = null;
       });
+      openPromise = wrapped;
+      return wrapped;
     }
-    function registerMenu() {
-      storagePort.registerSettingsMenu("网页助手设置", openSettingsFromMenu);
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      finishDisposed({ ok: false, code: "disposed" });
+      pendingOpenIntent = null;
+      pendingSubmissions.clear();
+      closeDialog({ restoreFocus: false });
+      layout.dispose();
+      windowObject.removeEventListener("resize", handleResize);
+      if (root) {
+        root.removeEventListener("click", handleRootClick);
+        root.removeEventListener("change", handleRootChange);
+        root.removeEventListener("input", handleRootInput);
+      }
+      themeCleanup?.();
+      themeCleanup = null;
+      root?.remove();
+      root = null;
+      widget = null;
+      widgetButton = null;
+      countdownNodes = [];
+      widgetStatusNode = null;
+      for (const styleId of ownedStyleIds) documentObject.getElementById(styleId)?.remove();
+      ownedStyleIds.clear();
     }
-    webPageAssistantSession = createWebPageAssistantSession({
-      keys: { pageKey: currentPageKey, siteKey: currentSiteKey },
-      storage: storagePort,
+    return { update, openSettings, dispose };
+  }
+
+  // src/userscripts/web-page-assistant/web-page-assistant.entry.js
+  (function() {
+    "use strict";
+    if (window.top !== window.self) return;
+    const SCRIPT_NAME2 = "Web Page Assistant";
+    const ROOT_ID2 = "page-auto-refresh-timer-root";
+    const UNLOCKER_STYLE_ID = `${ROOT_ID2}-unlocker-style`;
+    const STORAGE_KEY = "pageAutoRefreshTimerSettings";
+    const WIDGET_POSITION_KEY = "pageAutoRefreshTimerWidgetPosition";
+    const keys = {
+      pageKey: `${location.origin}${location.pathname}${location.search}`,
+      siteKey: location.hostname
+    };
+    function normalizeWidgetPosition(value) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+      const left = Number(value.left);
+      const top = Number(value.top);
+      if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+      return { left: Math.round(left), top: Math.round(top) };
+    }
+    function documentReady() {
+      if (document.readyState !== "loading") return Promise.resolve();
+      return new Promise((resolve) => document.addEventListener("DOMContentLoaded", resolve, { once: true }));
+    }
+    const storage = createWebPageAssistantStoragePort({
+      scriptName: SCRIPT_NAME2,
+      settingsContract: web_page_assistant_settings_lib_exports,
+      normalizeWidgetPosition,
+      storageKey: STORAGE_KEY,
+      widgetPositionKey: WIDGET_POSITION_KEY,
+      fallbackStorageKey: `__${STORAGE_KEY}`,
+      fallbackWidgetPositionKey: `__${WIDGET_POSITION_KEY}`,
+      gmGetValue: typeof GM_getValue === "function" ? GM_getValue : null,
+      gmSetValue: typeof GM_setValue === "function" ? GM_setValue : null,
+      gmRegisterMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
+      gmApi: typeof GM !== "undefined" ? GM : null,
+      localStorageAdapter: localStorage,
+      logger: console
+    });
+    const unlocker = createUnlockerRuntime({
+      hasUnlockerAction,
+      rootContainsTarget: (target) => Boolean(document.getElementById(ROOT_ID2)?.contains(target)),
+      getDocumentTarget: () => document,
+      getWindowTarget: () => window,
+      getStyle: () => document.getElementById(UNLOCKER_STYLE_ID),
+      installStyle(cssText) {
+        const style = document.createElement("style");
+        style.id = UNLOCKER_STYLE_ID;
+        style.textContent = cssText;
+        document.documentElement.append(style);
+      },
+      removeStyle() {
+        document.getElementById(UNLOCKER_STYLE_ID)?.remove();
+      },
+      rootId: ROOT_ID2
+    });
+    let widgetPosition = null;
+    const interfaceReady = Promise.all([
+      storage.readWidgetPosition(),
+      documentReady()
+    ]).then(([position]) => {
+      widgetPosition = position;
+    });
+    let view;
+    const session = createWebPageAssistantSession({
+      keys,
+      storage,
       clock: {
         now: () => Date.now(),
         setInterval: (handler, delay) => window.setInterval(handler, delay),
         clearInterval: (timer) => window.clearInterval(timer)
       },
       reload: () => location.reload(),
-      unlocker: unlockerRuntime,
-      async ready() {
-        const [position] = await Promise.all([
-          storagePort.readWidgetPosition(),
-          new Promise((resolve) => onReady(resolve))
-        ]);
-        widgetPosition = position;
-      },
-      onChange(state, { kind, area }) {
-        if (state.lifecycle !== "ready") return;
-        if (kind === "lifecycle" || area === "refresh") renderWidget();
-        updatePauseButton();
-        updateCountdownText();
-        updateWidgetStatusText();
+      unlocker,
+      ready: () => interfaceReady,
+      onChange(snapshot, change) {
+        view?.update(snapshot, change);
       }
     });
-    registerMenu();
-    window.addEventListener("resize", () => widgetLayoutRuntime.applyPosition());
-    window.addEventListener("pagehide", (event) => {
-      if (!event.persisted) webPageAssistantSession.dispose();
+    view = createWebPageAssistantView({
+      session,
+      keys,
+      document,
+      window,
+      positions: {
+        get: () => widgetPosition,
+        normalize: normalizeWidgetPosition,
+        write: (position) => storage.writeWidgetPosition(position)
+      },
+      ready: () => session.start(),
+      clock: {
+        setTimeout: (handler, delay) => window.setTimeout(handler, delay),
+        clearTimeout: (timer) => window.clearTimeout(timer)
+      }
     });
-    initialStateReady = webPageAssistantSession.start();
-    initialStateReady.catch((error) => {
-      console.warn(`${SCRIPT_NAME}: failed to initialize.`, error);
+    storage.registerSettingsMenu("网页助手设置", () => {
+      view.openSettings().catch((error) => {
+        console.warn(`${SCRIPT_NAME2}: failed to open settings menu.`, error);
+      });
+    });
+    window.addEventListener("pagehide", (event) => {
+      if (event.persisted) return;
+      view.dispose();
+      session.dispose();
+    });
+    session.start().then((result) => {
+      if (!result.ok && result.code !== "application-failed") {
+        console.warn(`${SCRIPT_NAME2}: failed to initialize.`, result.state.applicationError || result.code);
+      }
     });
   })();
 })();
