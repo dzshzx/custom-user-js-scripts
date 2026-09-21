@@ -452,34 +452,243 @@
     };
   }
 
+  // src/userscripts/javdb-recommend/javdb-recommend-period-section.lib.js
+  var SITE_IMAGE_HOST = "https://c0.jdbstatic.com";
+  var ICON_PATHS = {
+    star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 1-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'
+  };
+  function appendIcon(document2, parent, name, size) {
+    const svg = document2.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("class", "jdb-ra-icon");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    svg.innerHTML = ICON_PATHS[name];
+    parent.appendChild(svg);
+  }
+  function displayInteger(value, { minimum = 0 } = {}) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= minimum ? String(parsed) : "—";
+  }
+  function displayDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || "").trim());
+    if (!match) return "—";
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? `${match[1]}-${match[2]}-${match[3]}` : "—";
+  }
+  function normalizedReleaseDate(value) {
+    const date = displayDate(value);
+    return date === "—" ? "" : date;
+  }
+  function coverUrl(value) {
+    const source = String(value || "");
+    const match = /\/covers\/.*$/.exec(source);
+    return match ? SITE_IMAGE_HOST + match[0] : source;
+  }
+  function movieSignature(movies) {
+    return JSON.stringify((Array.isArray(movies) ? movies : []).map((movie) => [
+      movie && movie.id,
+      movie && movie.number,
+      movie && movie.title,
+      movie && movie.origin_title,
+      movie && movie.cover_url,
+      movie && movie.score,
+      movie && movie.release_date
+    ]));
+  }
+  function appendCard({ document: document2, grid, baseUrl, movie }) {
+    const item = document2.createElement("div");
+    item.className = "item";
+    item.dataset.jdbRaCard = "1";
+    const number = String(movie && movie.number || "");
+    const title = String(movie && (movie.title || movie.origin_title) || "");
+    item.dataset.q = `${number} ${String(movie && movie.title || "")} ${String(movie && movie.origin_title || "")}`.toLowerCase();
+    const anchor = document2.createElement("a");
+    anchor.className = "box";
+    anchor.href = String(baseUrl || "").replace(/\/$/, "") + "/v/" + encodeURIComponent(String(movie && movie.id || ""));
+    anchor.target = "_blank";
+    anchor.rel = "noopener";
+    anchor.title = title;
+    const cover = document2.createElement("div");
+    cover.className = "cover contain";
+    const image = document2.createElement("img");
+    image.loading = "lazy";
+    image.src = coverUrl(movie && movie.cover_url);
+    image.alt = number;
+    cover.appendChild(image);
+    anchor.appendChild(cover);
+    const titleElement = document2.createElement("div");
+    titleElement.className = "video-title";
+    const strong = document2.createElement("strong");
+    strong.textContent = number;
+    titleElement.appendChild(strong);
+    titleElement.appendChild(document2.createTextNode(title ? ` ${title}` : ""));
+    anchor.appendChild(titleElement);
+    const metaParts = [];
+    if (movie && movie.score) metaParts.push({ kind: "score", value: String(movie.score) });
+    const releaseDate = normalizedReleaseDate(movie && movie.release_date);
+    if (releaseDate) metaParts.push({ kind: "date", value: `发售 ${releaseDate}` });
+    if (metaParts.length) {
+      const meta = document2.createElement("div");
+      meta.className = "meta";
+      metaParts.forEach((part, index) => {
+        if (index) meta.appendChild(document2.createTextNode(" · "));
+        if (part.kind === "score") {
+          const score = document2.createElement("span");
+          score.className = "jdb-ra-score";
+          appendIcon(document2, score, "star", 14);
+          score.appendChild(document2.createTextNode(part.value));
+          meta.appendChild(score);
+        } else {
+          meta.appendChild(document2.createTextNode(part.value));
+        }
+      });
+      anchor.appendChild(meta);
+    }
+    item.appendChild(anchor);
+    grid.appendChild(item);
+  }
+  function appendSkeletons(document2, grid, count) {
+    for (let index = 0; index < count; index += 1) {
+      const skeleton = document2.createElement("div");
+      skeleton.className = "item jdb-ra-skel";
+      skeleton.setAttribute("aria-hidden", "true");
+      const cover = document2.createElement("div");
+      cover.className = "jdb-ra-skel-cover";
+      const line = document2.createElement("div");
+      line.className = "jdb-ra-skel-line";
+      const shortLine = document2.createElement("div");
+      shortLine.className = "jdb-ra-skel-line short";
+      skeleton.append(cover, line, shortLine);
+      grid.appendChild(skeleton);
+    }
+  }
+  function createPeriodSection({ document: document2, baseUrl, period, mode = "browse", loading = false }) {
+    const section = document2.createElement("section");
+    section.className = "jdb-ra-sec";
+    section.dataset.period = String(period && period.period == null ? "" : period && period.period);
+    const heading = document2.createElement("h2");
+    heading.className = "jdb-ra-ph";
+    heading.appendChild(document2.createTextNode(`第 ${displayInteger(period && period.period, { minimum: 1 })} 期`));
+    if (mode !== "search") {
+      const sub = document2.createElement("span");
+      sub.className = "sub";
+      sub.textContent = `${displayDate(period && period.created_at)} · ${displayInteger(period && period.movies_count)} 部`;
+      heading.appendChild(document2.createTextNode(" "));
+      heading.appendChild(sub);
+    }
+    const grid = document2.createElement("div");
+    grid.className = "movie-list";
+    section.append(heading, grid);
+    if (loading) {
+      const requested = Number.parseInt(period && period.movies_count, 10);
+      appendSkeletons(document2, grid, Math.min(Math.max(requested || 4, 3), 6));
+    }
+    let disposed = false;
+    let signature2 = null;
+    let query = "";
+    function filter(nextQuery) {
+      if (disposed) return 0;
+      query = String(nextQuery || "").trim().toLowerCase();
+      let hits = 0;
+      const cards = grid.querySelectorAll(':scope > .item[data-jdb-ra-card="1"]');
+      cards.forEach((card) => {
+        const match = !query || String(card.dataset.q || "").includes(query);
+        if (match) {
+          card.removeAttribute("data-jdb-ra-filtered");
+          hits += 1;
+        } else {
+          card.dataset.jdbRaFiltered = "true";
+        }
+      });
+      if (query && cards.length && hits === 0) section.dataset.jdbRaFiltered = "true";
+      else section.removeAttribute("data-jdb-ra-filtered");
+      return hits;
+    }
+    function update(payload = {}) {
+      if (disposed) return false;
+      section.dataset.degraded = String(Boolean(payload.degraded));
+      if (payload.error) section.dataset.error = String(payload.error.message || payload.error);
+      else section.removeAttribute("data-error");
+      const movies = Array.isArray(payload.movies) ? payload.movies : [];
+      const nextSignature = movieSignature(movies);
+      if (signature2 === nextSignature) {
+        filter(query);
+        return false;
+      }
+      signature2 = nextSignature;
+      grid.replaceChildren();
+      if (!movies.length) {
+        const empty = document2.createElement("div");
+        empty.className = "jdb-ra-empty";
+        empty.textContent = "本期没有影片";
+        grid.appendChild(empty);
+      } else {
+        movies.forEach((movie) => appendCard({ document: document2, grid, baseUrl, movie: movie || {} }));
+      }
+      filter(query);
+      return true;
+    }
+    function onCoverError(event) {
+      const image = event.target;
+      if (!image || image.tagName !== "IMG" || !grid.contains(image)) return;
+      const cover = image.closest(".cover");
+      if (!cover || cover.querySelector(".jdb-ra-cover-ph")) return;
+      image.style.display = "none";
+      const placeholder = document2.createElement("div");
+      placeholder.className = "jdb-ra-cover-ph";
+      placeholder.setAttribute("role", "img");
+      placeholder.setAttribute("aria-label", "封面加载失败");
+      placeholder.title = "封面加载失败";
+      appendIcon(document2, placeholder, "x", 20);
+      cover.appendChild(placeholder);
+    }
+    section.addEventListener("error", onCoverError, true);
+    return {
+      element: section,
+      update,
+      filter,
+      dispose() {
+        if (disposed) return;
+        disposed = true;
+        section.removeEventListener("error", onCoverError, true);
+        section.remove();
+      }
+    };
+  }
+
   // src/userscripts/javdb-recommend/javdb-recommend-view.lib.js
   var BASE = location.origin;
   var ROUTE = "/recommend-archive";
-  var SITE_IMG_HOST = "https://c0.jdbstatic.com";
-  var ICON_PATHS = {
+  var ICON_PATHS2 = {
     "search": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     "chevron-left": '<path d="m15 18-6-6 6-6"/>',
     "chevron-right": '<path d="m9 18 6-6-6-6"/>',
-    "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
-    "star": '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 1-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 1 1.597-1.16z"/>',
-    "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'
+    "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'
   };
   function iconSvg(name, size) {
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="' + size + '" height="' + size + '" class="jdb-ra-icon" aria-hidden="true" focusable="false">' + ICON_PATHS[name] + "</svg>";
-  }
-  function coverUrl(url) {
-    var m = /\/covers\/.*$/.exec(url || "");
-    return m ? SITE_IMG_HOST + m[0] : url || "";
-  }
-  function movieUrl(movie) {
-    return BASE + "/v/" + encodeURIComponent(movie.id);
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="' + size + '" height="' + size + '" class="jdb-ra-icon" aria-hidden="true" focusable="false">' + ICON_PATHS2[name] + "</svg>";
   }
   var periods = [];
   var searching = false;
   var LS_KEY = "javdb_recommend_last_period";
   function bootArchivePage(data) {
     document.title = "佳片推荐 · 历史期数 - JavDB";
-    document.body.className = "";
+    document.body.classList.remove("rails-default-error-page");
+    document.querySelectorAll("body > .rails-default-error-page, body > .dialog, body > .jdb-ra").forEach(function(node) {
+      node.remove();
+    });
     var CSS = [
       "html:not(.jdb-ra-native) body{background:#f5f5f5}",
       '.jdb-ra{max-width:1700px;margin:0 auto;padding:4px 16px 40px;font-family:BlinkMacSystemFont,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;color:#4a4a4a}',
@@ -505,10 +714,11 @@
       "@media (min-width:1500px){.jdb-ra .movie-list{grid-template-columns:repeat(6,minmax(0,1fr))}}",
       // 封面横版完整显示（contain 不裁切），两侧留白融进卡片底色
       ".jdb-ra .movie-list .item{min-width:0;height:100%}",
-      ".jdb-ra .movie-list .item>.box{display:flex!important;flex-direction:column!important;height:100%!important}",
+      '.jdb-ra .movie-list .item:not([data-laosiji-grid-card="1"])>.box{display:flex!important;flex-direction:column!important;height:100%!important}',
       ".jdb-ra .movie-list .item .cover{flex:0 0 auto;background:#fff}",
-      ".jdb-ra .movie-list .item .cover.contain img{object-fit:contain!important}",
+      ".jdb-ra .movie-list .item .cover.contain img:not(.jav-card-image){object-fit:contain!important}",
       ".jdb-ra .movie-list .item .meta{margin-top:auto}",
+      '.jdb-ra [data-jdb-ra-filtered="true"]{display:none!important}',
       ".jdb-ra .jdb-ra-empty{color:#7a7a7a;font-size:13px;padding:12px 0}",
       ".jdb-ra .jdb-ra-sentinel{display:block;margin:14px auto;padding:7px 18px;font-size:13px;color:#4a4a4a;background:#fff;border:1px solid #dbdbdb;border-radius:4px;cursor:pointer}",
       ".jdb-ra .jdb-ra-sentinel[disabled]{cursor:default;color:#7a7a7a}",
@@ -558,7 +768,9 @@
     var styleEl = document.createElement("style");
     styleEl.textContent = CSS;
     document.head.appendChild(styleEl);
-    document.body.innerHTML = '<main class="jdb-ra"><header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span><a class="home" href="/">' + iconSvg("arrow-left", 14) + ' 返回首页</a></header><div class="jdb-ra-bar"><div class="jdb-ra-bar-row jdb-ra-bar-nav"><div class="select is-small"><select id="jdb-ra-select" aria-label="选择期数"></select></div><button type="button" class="button is-small" id="jdb-ra-prev">' + iconSvg("chevron-left", 14) + ' 上一期</button><button type="button" class="button is-small" id="jdb-ra-next">下一期 ' + iconSvg("chevron-right", 14) + '</button><input class="input is-small jdb-ra-jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转"></div><div class="jdb-ra-bar-row jdb-ra-bar-tools"><div class="jdb-ra-scope" role="radiogroup" aria-label="搜索范围"><label><input type="radio" name="jdb-ra-scope" value="loaded" checked> 已加载</label><label><input type="radio" name="jdb-ra-scope" value="all"> 全部期数</label></div><input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="搜索已加载内容" aria-label="搜索关键词"><button type="button" class="button is-small" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button><button type="button" class="button is-small" id="jdb-ra-refresh" title="重新检查期数目录">刷新期数</button><button type="button" class="button is-small" id="jdb-ra-clear" title="清除本脚本的本地缓存">清缓存</button></div></div><div class="jdb-ra-status" id="jdb-ra-status" role="status">加载期数列表中…</div><div class="jdb-ra-results" id="jdb-ra-results" hidden></div><div class="jdb-ra-stream" id="jdb-ra-stream"></div><button type="button" class="jdb-ra-sentinel" id="jdb-ra-sentinel" disabled>加载期数列表中…</button></main>';
+    var rootHost = document.createElement("div");
+    rootHost.innerHTML = '<main class="jdb-ra"><header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span><a class="home" href="/">' + iconSvg("arrow-left", 14) + ' 返回首页</a></header><div class="jdb-ra-bar"><div class="jdb-ra-bar-row jdb-ra-bar-nav"><div class="select is-small"><select id="jdb-ra-select" aria-label="选择期数"></select></div><button type="button" class="button is-small" id="jdb-ra-prev">' + iconSvg("chevron-left", 14) + ' 上一期</button><button type="button" class="button is-small" id="jdb-ra-next">下一期 ' + iconSvg("chevron-right", 14) + '</button><input class="input is-small jdb-ra-jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转"></div><div class="jdb-ra-bar-row jdb-ra-bar-tools"><div class="jdb-ra-scope" role="radiogroup" aria-label="搜索范围"><label><input type="radio" name="jdb-ra-scope" value="loaded" checked> 已加载</label><label><input type="radio" name="jdb-ra-scope" value="all"> 全部期数</label></div><input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="搜索已加载内容" aria-label="搜索关键词"><button type="button" class="button is-small" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button><button type="button" class="button is-small" id="jdb-ra-refresh" title="重新检查期数目录">刷新期数</button><button type="button" class="button is-small" id="jdb-ra-clear" title="清除本脚本的本地缓存">清缓存</button></div></div><div class="jdb-ra-status" id="jdb-ra-status" role="status">加载期数列表中…</div><div class="jdb-ra-results" id="jdb-ra-results" hidden></div><div class="jdb-ra-stream" id="jdb-ra-stream"></div><button type="button" class="jdb-ra-sentinel" id="jdb-ra-sentinel" disabled>加载期数列表中…</button></main>';
+    document.body.appendChild(rootHost.firstElementChild);
     var $ = function(id) {
       return document.getElementById(id);
     };
@@ -567,9 +779,42 @@
     var gridResizeObserver = null;
     var observedGridSource = null;
     var lastCompatibleGridLayout = null;
-    function setImportantStyle(el, name, value) {
-      if (el.style.getPropertyValue(name) === value && el.style.getPropertyPriority(name) === "important") return;
+    var copiedGridStyles = /* @__PURE__ */ new WeakMap();
+    var archiveMutationObserver = null;
+    function enhancedGrid(list) {
+      return list.matches('.javdb-card-grid,[data-laosiji-grid="1"]');
+    }
+    function setCopiedStyle(el, name, value) {
+      var owned = copiedGridStyles.get(el);
+      if (!owned) {
+        owned = {};
+        copiedGridStyles.set(el, owned);
+      }
+      if (!owned[name]) {
+        owned[name] = {
+          previousValue: el.style.getPropertyValue(name),
+          previousPriority: el.style.getPropertyPriority(name)
+        };
+      }
+      if (el.style.getPropertyValue(name) === value && el.style.getPropertyPriority(name) === "important") {
+        owned[name].writtenValue = value;
+        owned[name].writtenPriority = "important";
+        return;
+      }
       el.style.setProperty(name, value, "important");
+      owned[name].writtenValue = value;
+      owned[name].writtenPriority = "important";
+    }
+    function releaseCopiedStyles(el) {
+      var owned = copiedGridStyles.get(el);
+      if (!owned) return;
+      Object.keys(owned).forEach(function(name) {
+        var record = owned[name];
+        if (el.style.getPropertyValue(name) !== record.writtenValue || el.style.getPropertyPriority(name) !== record.writtenPriority) return;
+        if (record.previousValue) el.style.setProperty(name, record.previousValue, record.previousPriority);
+        else el.style.removeProperty(name);
+      });
+      copiedGridStyles.delete(el);
     }
     function countGridTracks(template) {
       var value = String(template || "").trim();
@@ -614,8 +859,17 @@
           lastCompatibleGridLayout = {
             template: "repeat(" + columns + ", minmax(0, 1fr))",
             columnGap: computed.columnGap || ".4rem",
-            rowGap: computed.rowGap || "1rem"
+            rowGap: computed.rowGap || "1rem",
+            columns: String(columns)
           };
+          var image = source.querySelector(".jav-card-image,.cover img");
+          var cover = image && image.closest(".jav-card-cover,.cover");
+          if (image) {
+            var imageStyle = window.getComputedStyle(image);
+            lastCompatibleGridLayout.objectFit = imageStyle.objectFit;
+            lastCompatibleGridLayout.objectPosition = imageStyle.objectPosition;
+          }
+          if (cover) lastCompatibleGridLayout.aspectRatio = window.getComputedStyle(cover).aspectRatio;
         }
       } else if (observedGridSource && !observedGridSource.isConnected) {
         if (gridResizeObserver) gridResizeObserver.disconnect();
@@ -623,10 +877,22 @@
       }
       if (!lastCompatibleGridLayout) return;
       document.querySelectorAll(".jdb-ra .movie-list").forEach(function(list) {
-        if (list === source) return;
-        setImportantStyle(list, "grid-template-columns", lastCompatibleGridLayout.template);
-        setImportantStyle(list, "column-gap", lastCompatibleGridLayout.columnGap);
-        setImportantStyle(list, "row-gap", lastCompatibleGridLayout.rowGap);
+        if (enhancedGrid(list)) {
+          releaseCopiedStyles(list);
+          return;
+        }
+        setCopiedStyle(list, "grid-template-columns", lastCompatibleGridLayout.template);
+        setCopiedStyle(list, "--jav-card-columns", lastCompatibleGridLayout.columns);
+        setCopiedStyle(list, "column-gap", lastCompatibleGridLayout.columnGap);
+        setCopiedStyle(list, "row-gap", lastCompatibleGridLayout.rowGap);
+        list.querySelectorAll('.item:not([data-laosiji-grid-card="1"]) .cover img').forEach(function(image2) {
+          if (lastCompatibleGridLayout.objectFit) setCopiedStyle(image2, "object-fit", lastCompatibleGridLayout.objectFit);
+          if (lastCompatibleGridLayout.objectPosition) setCopiedStyle(image2, "object-position", lastCompatibleGridLayout.objectPosition);
+          var cover2 = image2.closest(".cover");
+          if (cover2 && lastCompatibleGridLayout.aspectRatio && lastCompatibleGridLayout.aspectRatio !== "auto") {
+            setCopiedStyle(cover2, "aspect-ratio", lastCompatibleGridLayout.aspectRatio);
+          }
+        });
       });
     }
     function scheduleArchiveGridSync() {
@@ -635,7 +901,8 @@
       Promise.resolve().then(syncArchiveGridLayout);
     }
     if (typeof window.MutationObserver === "function") {
-      new window.MutationObserver(scheduleArchiveGridSync).observe(document.querySelector(".jdb-ra"), {
+      archiveMutationObserver = new window.MutationObserver(scheduleArchiveGridSync);
+      archiveMutationObserver.observe(document.querySelector(".jdb-ra"), {
         childList: true,
         subtree: true,
         attributes: true,
@@ -643,11 +910,6 @@
       });
     }
     window.addEventListener("resize", scheduleArchiveGridSync, { passive: true });
-    function esc(s) {
-      return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
-        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-      });
-    }
     function setStatus(t) {
       statusEl.textContent = t;
     }
@@ -712,7 +974,9 @@
       periods.forEach(function(p) {
         var o = document.createElement("option");
         o.value = String(p.period);
-        o.textContent = "第 " + p.period + " 期 · " + p.created_at.slice(0, 10) + " · " + p.movies_count + " 部";
+        var date = /^(\d{4}-\d{2}-\d{2})/.exec(String(p.created_at || ""));
+        var count = Number(p.movies_count);
+        o.textContent = "第 " + p.period + " 期 · " + (date ? date[1] : "—") + " · " + (Number.isInteger(count) && count >= 0 ? count : "—") + " 部";
         select.appendChild(o);
       });
     }
@@ -728,67 +992,13 @@
       sentinel.textContent = t;
       sentinel.disabled = !!disabled;
     }
-    function skeletonCardsHtml(count) {
-      var out = "";
-      for (var i = 0; i < count; i += 1) {
-        out += '<div class="item jdb-ra-skel" aria-hidden="true"><div class="jdb-ra-skel-cover"></div><div class="jdb-ra-skel-line"></div><div class="jdb-ra-skel-line short"></div></div>';
-      }
-      return out;
-    }
-    function sectionShell(p) {
-      var sec = document.createElement("section");
-      sec.className = "jdb-ra-sec";
-      sec.dataset.period = String(p.period);
-      var skeletonCount = Math.min(Math.max(parseInt(p.movies_count, 10) || 4, 3), 6);
-      sec.innerHTML = '<h2 class="jdb-ra-ph">第 ' + p.period + ' 期 <span class="sub">' + esc(p.created_at.slice(0, 10)) + " · " + p.movies_count + ' 部</span></h2><div class="movie-list">' + skeletonCardsHtml(skeletonCount) + "</div>";
-      return sec;
-    }
-    function normalizedReleaseDate(value) {
-      var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || "").trim());
-      if (!match) return "";
-      var year = parseInt(match[1], 10);
-      var month = parseInt(match[2], 10);
-      var day = parseInt(match[3], 10);
-      var date = new Date(Date.UTC(year, month - 1, day));
-      return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? match[0] : "";
-    }
-    function cardMetaHtml(movie) {
-      var parts = [];
-      if (movie.score) parts.push('<span class="jdb-ra-score">' + iconSvg("star", 14) + esc(movie.score) + "</span>");
-      var releaseDate = normalizedReleaseDate(movie.release_date);
-      if (releaseDate) parts.push("发售 " + releaseDate);
-      return parts.length ? '<div class="meta">' + parts.join(" · ") + "</div>" : "";
-    }
-    function cardHtml(m) {
-      var title = m.title || m.origin_title || "";
-      return '<div class="item" data-q="' + esc((m.number + " " + (m.title || "") + " " + (m.origin_title || "")).toLowerCase()) + '"><a class="box" href="' + esc(movieUrl(m)) + '" target="_blank" rel="noopener" title="' + esc(title) + '"><div class="cover contain"><img loading="lazy" src="' + esc(coverUrl(m.cover_url)) + '" alt="' + esc(m.number) + '"></div><div class="video-title"><strong>' + esc(m.number) + "</strong> " + esc(title) + "</div>" + cardMetaHtml(m) + "</a></div>";
-    }
-    function onCoverError(img) {
-      var cover = img.closest ? img.closest(".cover") : img.parentNode;
-      if (!cover || cover.querySelector(".jdb-ra-cover-ph")) return;
-      img.style.display = "none";
-      cover.insertAdjacentHTML(
-        "beforeend",
-        '<div class="jdb-ra-cover-ph" role="img" aria-label="封面加载失败" title="封面加载失败">' + iconSvg("x", 20) + "</div>"
-      );
-    }
-    document.querySelector(".jdb-ra").addEventListener("error", function(event) {
-      if (event.target && event.target.tagName === "IMG") onCoverError(event.target);
-    }, true);
     function currentQuery() {
       return $("jdb-ra-search").value.trim().toLowerCase();
     }
     function applyFilter(q) {
       var hits = 0;
-      streamEl.querySelectorAll(".jdb-ra-sec").forEach(function(sec) {
-        var visible = 0;
-        sec.querySelectorAll(".item").forEach(function(item) {
-          var show = !q || item.dataset.q.indexOf(q) !== -1;
-          item.style.display = show ? "" : "none";
-          if (show) visible += 1;
-        });
-        sec.style.display = visible ? "" : "none";
-        hits += visible;
+      Object.keys(loadedSections).forEach(function(period) {
+        hits += loadedSections[period].filter(q);
       });
       return hits;
     }
@@ -802,18 +1012,17 @@
       }
       streamBusy = true;
       var p = periods[streamNext];
-      var sec = sectionShell(p);
-      loadedSections[p.period] = sec;
-      streamEl.appendChild(sec);
+      var section = createPeriodSection({ document, baseUrl: BASE, period: p, mode: "browse", loading: true });
+      loadedSections[p.period] = section;
+      streamEl.appendChild(section.element);
       setSentinel("加载第 " + p.period + " 期…", true);
       var lease = data.acquirePeriod(p.period, { purpose: "navigation" });
       streamLease = lease;
       return lease.promise.then(function(result) {
         var movies = result.movies;
         if (generation !== streamGeneration) return false;
-        sec.dataset.degraded = String(result.degraded);
         if (result.degraded) setStatus("详情更新失败，使用本地缓存");
-        sec.querySelector(".movie-list").innerHTML = movies.map(cardHtml).join("") || '<div class="jdb-ra-empty">本期没有影片</div>';
+        section.update({ movies, degraded: result.degraded });
         streamNext = streamNext + 1;
         streamBusy = false;
         setSentinel("加载更多期数", false);
@@ -826,7 +1035,7 @@
         if (generation !== streamGeneration) return false;
         streamBusy = false;
         delete loadedSections[p.period];
-        sec.remove();
+        section.dispose();
         setSentinel("第 " + p.period + " 期加载失败：" + e.message + "（点击重试）", false);
         return false;
       }).finally(function() {
@@ -857,7 +1066,9 @@
       if (streamLease) streamLease.release();
       var generation = streamGeneration + 1;
       streamGeneration = generation;
-      streamEl.innerHTML = "";
+      Object.keys(loadedSections).forEach(function(period) {
+        loadedSections[period].dispose();
+      });
       loadedSections = {};
       streamNext = index;
       streamBusy = false;
@@ -888,14 +1099,14 @@
       load.then(function() {
         if (navigation !== navigationGeneration) return;
         if (loadedSections[period]) {
-          setStatus(readyText() + (loadedSections[period].dataset.degraded === "true" ? " · 详情更新失败，使用本地缓存" : ""));
+          setStatus(readyText() + (loadedSections[period].element.dataset.degraded === "true" ? " · 详情更新失败，使用本地缓存" : ""));
           scrollToPeriod(period);
         }
       });
     }
     function scrollToPeriod(period) {
-      var sec = loadedSections[period];
-      if (sec) sec.scrollIntoView();
+      var section = loadedSections[period];
+      if (section) section.element.scrollIntoView();
     }
     function stepPeriod(dir) {
       if (!periods.length) return;
@@ -935,9 +1146,14 @@
       streamEl.style.display = "none";
       sentinel.style.display = "none";
     }
+    var resultSections = [];
     function exitResultsMode() {
       resultsEl.hidden = true;
-      resultsEl.innerHTML = "";
+      resultSections.forEach(function(section) {
+        section.dispose();
+      });
+      resultSections = [];
+      resultsEl.replaceChildren();
       streamEl.style.display = "";
       sentinel.style.display = "";
     }
@@ -986,14 +1202,20 @@
     }
     function appendSearchGroup(period, periodIndex, movies) {
       if (!movies.length) return;
-      var sec = document.createElement("section");
-      sec.className = "jdb-ra-sec";
-      sec.dataset.periodIndex = String(periodIndex);
-      sec.innerHTML = '<h2 class="jdb-ra-ph">第 ' + period + ' 期</h2><div class="movie-list">' + movies.map(cardHtml).join("") + "</div>";
+      var section = createPeriodSection({
+        document,
+        baseUrl: BASE,
+        period: { period },
+        mode: "search",
+        loading: false
+      });
+      section.element.dataset.periodIndex = String(periodIndex);
+      section.update({ movies });
       var before = Array.prototype.find.call(resultsEl.querySelectorAll(".jdb-ra-sec"), function(item) {
         return parseInt(item.dataset.periodIndex, 10) > periodIndex;
       });
-      resultsEl.insertBefore(sec, before || null);
+      resultsEl.insertBefore(section.element, before || null);
+      resultSections.push(section);
       scheduleArchiveGridSync();
     }
     function startFullSearch() {
@@ -1011,7 +1233,11 @@
       var btnEl = $("jdb-ra-gsearch");
       btnEl.textContent = "停止";
       enterResultsMode();
-      resultsEl.innerHTML = "";
+      resultSections.forEach(function(section) {
+        section.dispose();
+      });
+      resultSections = [];
+      resultsEl.replaceChildren();
       activeSearch = data.search({ query: q, onUpdate: (update) => {
         if (generation !== searchGeneration) return;
         if (update.group) appendSearchGroup(update.group.period, update.group.index, update.group.movies);
@@ -1022,7 +1248,12 @@
         searching = false;
         btnEl.textContent = "全期搜索";
         setStatus((result.status === "partial" ? "搜索部分完成 · 失败 " + result.failed + " 期 · " : result.status === "cancelled" ? "搜索已停止 · " : "搜索完成 · ") + "命中 " + result.hits + " 部（" + result.hitPeriods + " 期）" + (result.degraded ? " · 使用旧缓存 " + result.degraded + " 期" : ""));
-        if (!result.hits) resultsEl.innerHTML = '<div class="jdb-ra-empty">' + (result.status === "complete" ? "没有找到影片" : "部分期数未完成，当前没有匹配结果") + "</div>";
+        if (!result.hits) {
+          var empty = document.createElement("div");
+          empty.className = "jdb-ra-empty";
+          empty.textContent = result.status === "complete" ? "没有找到影片" : "部分期数未完成，当前没有匹配结果";
+          resultsEl.replaceChildren(empty);
+        }
       });
     }
     $("jdb-ra-gsearch").addEventListener("click", function() {

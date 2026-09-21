@@ -1,19 +1,15 @@
+import { createPeriodSection } from './javdb-recommend-period-section.lib.js';
+
 var BASE = location.origin;
   /* ================= 官网资源约定 ================= */
   var ROUTE = '/recommend-archive';
-  // 接口返回的封面是 App 图床 tp.spfcas.com（网页端常被拦截导致封面不显示）；
-  // 官网页面自身使用 c0.jdbstatic.com，且 /covers/<前缀>/<id>.jpg 路径完全一致，直接换宿主即可。
-  var SITE_IMG_HOST = 'https://c0.jdbstatic.com';
-
   /* 图标 vendored from Lucide (https://lucide.dev), ISC License —— 与
      src/userscripts/shared/shared-icons.lib.js 同源；由构建打包到安装文件。 */
   var ICON_PATHS = {
     'search': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
-    'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
-    'star': '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 1-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 1 1.597-1.16z"/>',
-    'x': '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'
+    'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'
   };
 
   function iconSvg(name, size) {
@@ -22,21 +18,15 @@ var BASE = location.origin;
       'class="jdb-ra-icon" aria-hidden="true" focusable="false">' + ICON_PATHS[name] + '</svg>';
   }
 
-  function coverUrl(url) {
-    var m = /\/covers\/.*$/.exec(url || '');
-    return m ? SITE_IMG_HOST + m[0] : (url || '');
-  }
-
-  function movieUrl(movie) {
-    return BASE + '/v/' + encodeURIComponent(movie.id);
-  }
-
   var periods = [], searching = false;
   var LS_KEY = 'javdb_recommend_last_period';
   export function bootArchivePage(data) {
     document.title = '佳片推荐 · 历史期数 - JavDB';
-    // 官网裸 404 页自带 rails-default-error-page 居中浅底样式，清掉后由本脚本完全接管
-    document.body.className = '';
+    // 只清理可识别的官网 404 内容与本脚本旧根；保留其他脚本先挂载的节点和 body 状态。
+    document.body.classList.remove('rails-default-error-page');
+    document.querySelectorAll('body > .rails-default-error-page, body > .dialog, body > .jdb-ra').forEach(function (node) {
+      node.remove();
+    });
 
     /* ---------- 样式（全部限定在 .jdb-ra 下） ----------
        始终生效：页面结构、工具栏、期区块、栅格列数、封面不裁切；
@@ -67,10 +57,11 @@ var BASE = location.origin;
       '@media (min-width:1500px){.jdb-ra .movie-list{grid-template-columns:repeat(6,minmax(0,1fr))}}',
       // 封面横版完整显示（contain 不裁切），两侧留白融进卡片底色
       '.jdb-ra .movie-list .item{min-width:0;height:100%}',
-      '.jdb-ra .movie-list .item>.box{display:flex!important;flex-direction:column!important;height:100%!important}',
+      '.jdb-ra .movie-list .item:not([data-laosiji-grid-card="1"])>.box{display:flex!important;flex-direction:column!important;height:100%!important}',
       '.jdb-ra .movie-list .item .cover{flex:0 0 auto;background:#fff}',
-      '.jdb-ra .movie-list .item .cover.contain img{object-fit:contain!important}',
+      '.jdb-ra .movie-list .item .cover.contain img:not(.jav-card-image){object-fit:contain!important}',
       '.jdb-ra .movie-list .item .meta{margin-top:auto}',
+      '.jdb-ra [data-jdb-ra-filtered="true"]{display:none!important}',
       '.jdb-ra .jdb-ra-empty{color:#7a7a7a;font-size:13px;padding:12px 0}',
       '.jdb-ra .jdb-ra-sentinel{display:block;margin:14px auto;padding:7px 18px;font-size:13px;color:#4a4a4a;background:#fff;border:1px solid #dbdbdb;border-radius:4px;cursor:pointer}',
       '.jdb-ra .jdb-ra-sentinel[disabled]{cursor:default;color:#7a7a7a}',
@@ -122,7 +113,8 @@ var BASE = location.origin;
     styleEl.textContent = CSS;
     document.head.appendChild(styleEl);
 
-    document.body.innerHTML =
+    var rootHost = document.createElement('div');
+    rootHost.innerHTML =
       '<main class="jdb-ra">' +
       '<header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span>' +
       '<a class="home" href="/">' + iconSvg('arrow-left', 14) + ' 返回首页</a></header>' +
@@ -149,6 +141,7 @@ var BASE = location.origin;
       '<div class="jdb-ra-stream" id="jdb-ra-stream"></div>' +
       '<button type="button" class="jdb-ra-sentinel" id="jdb-ra-sentinel" disabled>加载期数列表中…</button>' +
       '</main>';
+    document.body.appendChild(rootHost.firstElementChild);
 
     var $ = function (id) { return document.getElementById(id); };
     var statusEl = $('jdb-ra-status'), streamEl = $('jdb-ra-stream'),
@@ -162,10 +155,46 @@ var BASE = location.origin;
     var gridResizeObserver = null;
     var observedGridSource = null;
     var lastCompatibleGridLayout = null;
+    var copiedGridStyles = new WeakMap();
+    var archiveMutationObserver = null;
 
-    function setImportantStyle(el, name, value) {
-      if (el.style.getPropertyValue(name) === value && el.style.getPropertyPriority(name) === 'important') return;
+    function enhancedGrid(list) {
+      return list.matches('.javdb-card-grid,[data-laosiji-grid="1"]');
+    }
+
+    function setCopiedStyle(el, name, value) {
+      var owned = copiedGridStyles.get(el);
+      if (!owned) {
+        owned = {};
+        copiedGridStyles.set(el, owned);
+      }
+      if (!owned[name]) {
+        owned[name] = {
+          previousValue: el.style.getPropertyValue(name),
+          previousPriority: el.style.getPropertyPriority(name)
+        };
+      }
+      if (el.style.getPropertyValue(name) === value && el.style.getPropertyPriority(name) === 'important') {
+        owned[name].writtenValue = value;
+        owned[name].writtenPriority = 'important';
+        return;
+      }
       el.style.setProperty(name, value, 'important');
+      owned[name].writtenValue = value;
+      owned[name].writtenPriority = 'important';
+    }
+
+    function releaseCopiedStyles(el) {
+      var owned = copiedGridStyles.get(el);
+      if (!owned) return;
+      Object.keys(owned).forEach(function (name) {
+        var record = owned[name];
+        if (el.style.getPropertyValue(name) !== record.writtenValue ||
+            el.style.getPropertyPriority(name) !== record.writtenPriority) return;
+        if (record.previousValue) el.style.setProperty(name, record.previousValue, record.previousPriority);
+        else el.style.removeProperty(name);
+      });
+      copiedGridStyles.delete(el);
     }
 
     function countGridTracks(template) {
@@ -213,8 +242,17 @@ var BASE = location.origin;
           lastCompatibleGridLayout = {
             template: 'repeat(' + columns + ', minmax(0, 1fr))',
             columnGap: computed.columnGap || '.4rem',
-            rowGap: computed.rowGap || '1rem'
+            rowGap: computed.rowGap || '1rem',
+            columns: String(columns)
           };
+          var image = source.querySelector('.jav-card-image,.cover img');
+          var cover = image && image.closest('.jav-card-cover,.cover');
+          if (image) {
+            var imageStyle = window.getComputedStyle(image);
+            lastCompatibleGridLayout.objectFit = imageStyle.objectFit;
+            lastCompatibleGridLayout.objectPosition = imageStyle.objectPosition;
+          }
+          if (cover) lastCompatibleGridLayout.aspectRatio = window.getComputedStyle(cover).aspectRatio;
         }
       } else if (observedGridSource && !observedGridSource.isConnected) {
         if (gridResizeObserver) gridResizeObserver.disconnect();
@@ -222,10 +260,22 @@ var BASE = location.origin;
       }
       if (!lastCompatibleGridLayout) return;
       document.querySelectorAll('.jdb-ra .movie-list').forEach(function (list) {
-        if (list === source) return;
-        setImportantStyle(list, 'grid-template-columns', lastCompatibleGridLayout.template);
-        setImportantStyle(list, 'column-gap', lastCompatibleGridLayout.columnGap);
-        setImportantStyle(list, 'row-gap', lastCompatibleGridLayout.rowGap);
+        if (enhancedGrid(list)) {
+          releaseCopiedStyles(list);
+          return;
+        }
+        setCopiedStyle(list, 'grid-template-columns', lastCompatibleGridLayout.template);
+        setCopiedStyle(list, '--jav-card-columns', lastCompatibleGridLayout.columns);
+        setCopiedStyle(list, 'column-gap', lastCompatibleGridLayout.columnGap);
+        setCopiedStyle(list, 'row-gap', lastCompatibleGridLayout.rowGap);
+        list.querySelectorAll('.item:not([data-laosiji-grid-card="1"]) .cover img').forEach(function (image) {
+          if (lastCompatibleGridLayout.objectFit) setCopiedStyle(image, 'object-fit', lastCompatibleGridLayout.objectFit);
+          if (lastCompatibleGridLayout.objectPosition) setCopiedStyle(image, 'object-position', lastCompatibleGridLayout.objectPosition);
+          var cover = image.closest('.cover');
+          if (cover && lastCompatibleGridLayout.aspectRatio && lastCompatibleGridLayout.aspectRatio !== 'auto') {
+            setCopiedStyle(cover, 'aspect-ratio', lastCompatibleGridLayout.aspectRatio);
+          }
+        });
       });
     }
 
@@ -236,7 +286,8 @@ var BASE = location.origin;
     }
 
     if (typeof window.MutationObserver === 'function') {
-      new window.MutationObserver(scheduleArchiveGridSync).observe(document.querySelector('.jdb-ra'), {
+      archiveMutationObserver = new window.MutationObserver(scheduleArchiveGridSync);
+      archiveMutationObserver.observe(document.querySelector('.jdb-ra'), {
         childList: true,
         subtree: true,
         attributes: true,
@@ -244,12 +295,6 @@ var BASE = location.origin;
       });
     }
     window.addEventListener('resize', scheduleArchiveGridSync, { passive: true });
-
-    function esc(s) {
-      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-      });
-    }
 
     function setStatus(t) { statusEl.textContent = t; }
     function readyText() { return '共 ' + periods.length + ' 期 · 每周一/四更新 · 滚动加载更多'; }
@@ -324,7 +369,10 @@ var BASE = location.origin;
       periods.forEach(function (p) {
         var o = document.createElement('option');
         o.value = String(p.period);
-        o.textContent = '第 ' + p.period + ' 期 · ' + p.created_at.slice(0, 10) + ' · ' + p.movies_count + ' 部';
+        var date = /^(\d{4}-\d{2}-\d{2})/.exec(String(p.created_at || ''));
+        var count = Number(p.movies_count);
+        o.textContent = '第 ' + p.period + ' 期 · ' + (date ? date[1] : '—') + ' · ' +
+          (Number.isInteger(count) && count >= 0 ? count : '—') + ' 部';
         select.appendChild(o);
       });
     }
@@ -344,92 +392,13 @@ var BASE = location.origin;
       sentinel.disabled = !!disabled;
     }
 
-    // 期区块加载期间渲染与官网卡片同宽高比（padding-top:67%）的灰色占位卡，
-    // 数据到达后整列替换；失败路径会移除整个区块。
-    function skeletonCardsHtml(count) {
-      var out = '';
-      for (var i = 0; i < count; i += 1) {
-        out += '<div class="item jdb-ra-skel" aria-hidden="true">' +
-          '<div class="jdb-ra-skel-cover"></div>' +
-          '<div class="jdb-ra-skel-line"></div>' +
-          '<div class="jdb-ra-skel-line short"></div>' +
-          '</div>';
-      }
-      return out;
-    }
-
-    function sectionShell(p) {
-      var sec = document.createElement('section');
-      sec.className = 'jdb-ra-sec';
-      sec.dataset.period = String(p.period);
-      var skeletonCount = Math.min(Math.max(parseInt(p.movies_count, 10) || 4, 3), 6);
-      sec.innerHTML =
-        '<h2 class="jdb-ra-ph">第 ' + p.period + ' 期 <span class="sub">' +
-        esc(p.created_at.slice(0, 10)) + ' · ' + p.movies_count + ' 部</span></h2>' +
-        '<div class="movie-list">' + skeletonCardsHtml(skeletonCount) + '</div>';
-      return sec;
-    }
-
-    // 卡片用官网原生 movie-list 标记，点击直达官网影片详情页 /v/<id>；
-    // cover 加 contain：横版封面完整显示不裁切
-    function normalizedReleaseDate(value) {
-      var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
-      if (!match) return '';
-      var year = parseInt(match[1], 10);
-      var month = parseInt(match[2], 10);
-      var day = parseInt(match[3], 10);
-      var date = new Date(Date.UTC(year, month - 1, day));
-      return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-        ? match[0]
-        : '';
-    }
-
-    function cardMetaHtml(movie) {
-      var parts = [];
-      if (movie.score) parts.push('<span class="jdb-ra-score">' + iconSvg('star', 14) + esc(movie.score) + '</span>');
-      var releaseDate = normalizedReleaseDate(movie.release_date);
-      if (releaseDate) parts.push('发售 ' + releaseDate);
-      return parts.length ? '<div class="meta">' + parts.join(' · ') + '</div>' : '';
-    }
-
-    function cardHtml(m) {
-      var title = m.title || m.origin_title || '';
-      return '<div class="item" data-q="' + esc((m.number + ' ' + (m.title || '') + ' ' + (m.origin_title || '')).toLowerCase()) + '">' +
-        '<a class="box" href="' + esc(movieUrl(m)) + '" target="_blank" rel="noopener" title="' + esc(title) + '">' +
-        '<div class="cover contain"><img loading="lazy" src="' + esc(coverUrl(m.cover_url)) + '" alt="' + esc(m.number) + '"></div>' +
-        '<div class="video-title"><strong>' + esc(m.number) + '</strong> ' + esc(title) + '</div>' +
-        cardMetaHtml(m) +
-        '</a></div>';
-    }
-
-    // 封面加载失败：隐藏破图，补一个同位占位盒（error 不冒泡，走捕获委托）
-    function onCoverError(img) {
-      var cover = img.closest ? img.closest('.cover') : img.parentNode;
-      if (!cover || cover.querySelector('.jdb-ra-cover-ph')) return;
-      img.style.display = 'none';
-      cover.insertAdjacentHTML('beforeend',
-        '<div class="jdb-ra-cover-ph" role="img" aria-label="封面加载失败" title="封面加载失败">' +
-        iconSvg('x', 20) + '</div>');
-    }
-
-    document.querySelector('.jdb-ra').addEventListener('error', function (event) {
-      if (event.target && event.target.tagName === 'IMG') onCoverError(event.target);
-    }, true);
-
     function currentQuery() { return $('jdb-ra-search').value.trim().toLowerCase(); }
 
     // 已加载内容的即时过滤：隐藏不匹配的卡片与空区块
     function applyFilter(q) {
       var hits = 0;
-      streamEl.querySelectorAll('.jdb-ra-sec').forEach(function (sec) {
-        var visible = 0;
-        sec.querySelectorAll('.item').forEach(function (item) {
-          var show = !q || item.dataset.q.indexOf(q) !== -1;
-          item.style.display = show ? '' : 'none';
-          if (show) visible += 1;
-        });
-        sec.style.display = visible ? '' : 'none';
-        hits += visible;
+      Object.keys(loadedSections).forEach(function (period) {
+        hits += loadedSections[period].filter(q);
       });
       return hits;
     }
@@ -444,19 +413,17 @@ var BASE = location.origin;
       }
       streamBusy = true;
       var p = periods[streamNext];
-      var sec = sectionShell(p);
-      loadedSections[p.period] = sec;
-      streamEl.appendChild(sec);
+      var section = createPeriodSection({ document: document, baseUrl: BASE, period: p, mode: 'browse', loading: true });
+      loadedSections[p.period] = section;
+      streamEl.appendChild(section.element);
       setSentinel('加载第 ' + p.period + ' 期…', true);
       var lease = data.acquirePeriod(p.period, { purpose: 'navigation' });
       streamLease = lease;
       return lease.promise.then(function (result) {
         var movies = result.movies;
         if (generation !== streamGeneration) return false;
-        sec.dataset.degraded = String(result.degraded);
         if (result.degraded) setStatus('详情更新失败，使用本地缓存');
-        sec.querySelector('.movie-list').innerHTML =
-          movies.map(cardHtml).join('') || '<div class="jdb-ra-empty">本期没有影片</div>';
+        section.update({ movies: movies, degraded: result.degraded });
         streamNext = streamNext + 1;
         streamBusy = false;
         setSentinel('加载更多期数', false);
@@ -469,7 +436,7 @@ var BASE = location.origin;
         if (generation !== streamGeneration) return false;
         streamBusy = false;
         delete loadedSections[p.period];
-        sec.remove();
+        section.dispose();
         setSentinel('第 ' + p.period + ' 期加载失败：' + e.message + '（点击重试）', false);
         return false;
       }).finally(function () {
@@ -498,7 +465,7 @@ var BASE = location.origin;
       if (streamLease) streamLease.release();
       var generation = streamGeneration + 1;
       streamGeneration = generation;
-      streamEl.innerHTML = '';
+      Object.keys(loadedSections).forEach(function (period) { loadedSections[period].dispose(); });
       loadedSections = {};
       streamNext = index;
       streamBusy = false;
@@ -522,15 +489,15 @@ var BASE = location.origin;
       load.then(function () {
         if (navigation !== navigationGeneration) return;
         if (loadedSections[period]) {
-          setStatus(readyText() + (loadedSections[period].dataset.degraded === 'true' ? ' · 详情更新失败，使用本地缓存' : ''));
+          setStatus(readyText() + (loadedSections[period].element.dataset.degraded === 'true' ? ' · 详情更新失败，使用本地缓存' : ''));
           scrollToPeriod(period);
         }
       });
     }
 
     function scrollToPeriod(period) {
-      var sec = loadedSections[period];
-      if (sec) sec.scrollIntoView();
+      var section = loadedSections[period];
+      if (section) section.element.scrollIntoView();
     }
 
     // periods 为降序（最新在前）：dir=1 → 更早一期；dir=-1 → 更新一期
@@ -565,9 +532,13 @@ var BASE = location.origin;
       sentinel.style.display = 'none';
     }
 
+    var resultSections = [];
+
     function exitResultsMode() {
       resultsEl.hidden = true;
-      resultsEl.innerHTML = '';
+      resultSections.forEach(function (section) { section.dispose(); });
+      resultSections = [];
+      resultsEl.replaceChildren();
       streamEl.style.display = '';
       sentinel.style.display = '';
     }
@@ -624,15 +595,20 @@ var BASE = location.origin;
 
     function appendSearchGroup(period, periodIndex, movies) {
       if (!movies.length) return;
-      var sec = document.createElement('section');
-      sec.className = 'jdb-ra-sec';
-      sec.dataset.periodIndex = String(periodIndex);
-      sec.innerHTML = '<h2 class="jdb-ra-ph">第 ' + period + ' 期</h2>' +
-        '<div class="movie-list">' + movies.map(cardHtml).join('') + '</div>';
+      var section = createPeriodSection({
+        document: document,
+        baseUrl: BASE,
+        period: { period: period },
+        mode: 'search',
+        loading: false
+      });
+      section.element.dataset.periodIndex = String(periodIndex);
+      section.update({ movies: movies });
       var before = Array.prototype.find.call(resultsEl.querySelectorAll('.jdb-ra-sec'), function (item) {
         return parseInt(item.dataset.periodIndex, 10) > periodIndex;
       });
-      resultsEl.insertBefore(sec, before || null);
+      resultsEl.insertBefore(section.element, before || null);
+      resultSections.push(section);
       scheduleArchiveGridSync();
     }
 
@@ -645,7 +621,9 @@ var BASE = location.origin;
       var btnEl = $('jdb-ra-gsearch');
       btnEl.textContent = '停止';
       enterResultsMode();
-      resultsEl.innerHTML = '';
+      resultSections.forEach(function (section) { section.dispose(); });
+      resultSections = [];
+      resultsEl.replaceChildren();
       activeSearch = data.search({ query: q, onUpdate: update => {
         if (generation !== searchGeneration) return;
         if (update.group) appendSearchGroup(update.group.period, update.group.index, update.group.movies);
@@ -659,8 +637,12 @@ var BASE = location.origin;
           result.status === 'cancelled' ? '搜索已停止 · ' : '搜索完成 · ') +
           '命中 ' + result.hits + ' 部（' + result.hitPeriods + ' 期）' +
           (result.degraded ? ' · 使用旧缓存 ' + result.degraded + ' 期' : ''));
-        if (!result.hits) resultsEl.innerHTML = '<div class="jdb-ra-empty">' +
-          (result.status === 'complete' ? '没有找到影片' : '部分期数未完成，当前没有匹配结果') + '</div>';
+        if (!result.hits) {
+          var empty = document.createElement('div');
+          empty.className = 'jdb-ra-empty';
+          empty.textContent = result.status === 'complete' ? '没有找到影片' : '部分期数未完成，当前没有匹配结果';
+          resultsEl.replaceChildren(empty);
+        }
       });
     }
 

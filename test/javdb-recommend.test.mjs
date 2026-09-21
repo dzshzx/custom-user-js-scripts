@@ -177,7 +177,7 @@ test('standalone archive page adopts site chrome and streams native-style cards'
   search.dispatchEvent(new window.Event('input', { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 400)); // 300ms 防抖
   const visible = [...doc.querySelectorAll('.jdb-ra-stream .item')]
-    .filter((item) => item.style.display !== 'none');
+    .filter((item) => item.dataset.jdbRaFiltered !== 'true');
   assert.equal(visible.length, 2);
   assert.match(doc.getElementById('jdb-ra-status').textContent, /命中 2 部/);
   await window.happyDOM.close();
@@ -204,6 +204,34 @@ test('release-date metadata omits invalid dates without hiding independent score
   const cards = window.document.querySelectorAll('.jdb-ra-sec .item');
   assert.equal(cards[0].querySelector('.meta').textContent, '4.22');
   assert.equal(cards[1].querySelector('.meta'), null);
+  await window.happyDOM.close();
+});
+
+test('the actual bundle renders damaged period metadata as text and preserves third-party body nodes', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  const thirdPartyNode = window.document.createElement('aside');
+  thirdPartyNode.id = 'third-party-state';
+  window.document.body.appendChild(thirdPartyNode);
+  const damaged = {
+    success: 1,
+    data: {
+      periods: [{
+        period: 2,
+        movies_count: '<img src=x>',
+        views_count: 0,
+        created_at: '<strong>today</strong>',
+      }],
+    },
+  };
+  await runScript(window, async (url) => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    return { ok: true, json: async () => url.includes('recommend_periods') ? damaged : DETAIL };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+
+  const document = window.document;
+  assert.equal(document.getElementById('third-party-state'), thirdPartyNode);
+  assert.equal(document.querySelector('.jdb-ra-ph').textContent, '第 2 期 — · — 部');
+  assert.equal(document.querySelector('.jdb-ra-ph em, .jdb-ra-ph img, .jdb-ra-ph strong'), null);
   await window.happyDOM.close();
 });
 
@@ -246,6 +274,45 @@ test('later period grids follow the column setting applied to the first grid by 
   for (const grid of grids) {
     assert.equal(grid.style.getPropertyValue('grid-template-columns'), 'repeat(4, minmax(0, 1fr))');
   }
+  await window.happyDOM.close();
+});
+
+test('layout copying leaves enhanced grids independent and releases only owned inline values on takeover', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  let ioCallback = null;
+  class FakeIO {
+    constructor(callback) { ioCallback = callback; }
+    observe() {}
+    disconnect() {}
+  }
+  await runScript(window, async (url) => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    return { ok: true, json: async () => url.includes('recommend_periods') ? PERIODS : DETAIL };
+  }, { IntersectionObserver: FakeIO });
+
+  const first = window.document.querySelector('.movie-list');
+  first.classList.add('javdb-card-grid');
+  first.dataset.laosijiGrid = '1';
+  first.style.setProperty('grid-template-columns', 'repeat(6, minmax(0, 1fr))', 'important');
+  first.style.setProperty('column-gap', '12px', 'important');
+  first.style.setProperty('row-gap', '16px', 'important');
+  const sourceImage = first.querySelector('img');
+  sourceImage.style.setProperty('object-fit', 'cover', 'important');
+
+  ioCallback([{ isIntersecting: true }]);
+  for (let index = 0; index < 20; index += 1) await new Promise(resolve => setTimeout(resolve, 0));
+  const second = window.document.querySelectorAll('.movie-list')[1];
+  assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
+  assert.equal(second.querySelector('img').style.getPropertyValue('object-fit'), 'cover');
+
+  second.style.setProperty('column-gap', '23px', 'important');
+  second.classList.add('javdb-card-grid');
+  second.dataset.laosijiGrid = '1';
+  second.style.setProperty('grid-template-columns', 'repeat(3, minmax(0, 1fr))', 'important');
+  for (let index = 0; index < 10; index += 1) await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(3, minmax(0, 1fr))');
+  assert.equal(second.style.getPropertyValue('column-gap'), '23px');
+  assert.equal(first.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
   await window.happyDOM.close();
 });
 
