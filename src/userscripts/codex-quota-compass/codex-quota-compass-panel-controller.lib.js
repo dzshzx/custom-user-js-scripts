@@ -201,7 +201,6 @@ function createQuotaPanelController({ application, document, window, storage, t,
     if (!disposed && sequence === foreground) shell.setStatus(t(status), tone);
   }
   function settleRefresh(outcome) {
-    if (disposed) return;
     try {
       const returned = onRefreshSettled(outcome);
       if (returned?.then) void returned.catch(() => {});
@@ -215,11 +214,12 @@ function createQuotaPanelController({ application, document, window, storage, t,
         stage: error?.stage || (type === 'export-archive' ? 'export' : type === 'import-archive' ? 'import' : type),
       };
       if (!disposed) {
-        if (type === 'refresh') { presentation = 'error'; presentationError = outcome.error; commitPresentation(); settleRefresh(outcome); }
+        if (type === 'refresh') { presentation = 'error'; presentationError = outcome.error; commitPresentation(); }
         const noticeKey = type === 'refresh' ? 'runFailed' : type === 'import-archive' ? 'importFailed' : type === 'export-archive' ? 'exportFailed' : 'remoteSyncFailed';
         notice(t(noticeKey, { error: outcome.error }), 'error');
         shell.setStatus(t('statusFailed'), 'error');
       }
+      if (type === 'refresh') settleRefresh(outcome);
       return outcome;
     }).finally(() => { if (inFlight.get(type) === operation) inFlight.delete(type); });
     inFlight.set(type, operation);
@@ -247,8 +247,8 @@ function createQuotaPanelController({ application, document, window, storage, t,
           if (outcome.status === 'partial') notice(t('saveArchiveFailed', { error: outcome.error }), 'error');
         }
         commitPresentation();
-        settleRefresh(outcome);
       }
+      settleRefresh(outcome);
       return outcome;
     });
   }
@@ -300,9 +300,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
   }
   function importArchive() {
     return once('import-archive', async () => {
-      let picked;
-      try { picked = await files.chooseText({ signal: abortFiles.signal }); }
-      catch (error) { return { status: 'error', completed: [], stage: error?.stage || 'select', error: error?.message || String(error) }; }
+      const picked = await files.chooseText({ signal: abortFiles.signal });
       if (disposed || picked?.status === 'cancelled' || picked == null) return { status: 'skipped', reason: disposed ? 'disposed' : 'cancelled', completed: [] };
       let imported;
       try { imported = JSON.parse(picked.text); }
@@ -321,6 +319,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
   function exportArchive() {
     return once('export-archive', async () => {
       const exported = await application.exportArchive();
+      if (disposed) return { status: 'skipped', reason: 'disposed', completed: ['export'] };
       try { await files.downloadText(EXPORT_NAME, JSON.stringify(exported, null, 2)); }
       catch (error) { const outcome = { status: 'error', completed: ['export'], stage: 'download', error: error?.message || String(error) }; notice(t('exportFailed', { error: outcome.error }), 'error'); return outcome; }
       if (!disposed) notice(t('exportDone', { count: exported.snapshotCount }), 'success');
@@ -340,6 +339,11 @@ function createQuotaPanelController({ application, document, window, storage, t,
   }
   function rerenderActive(nextView) {
     if (disposed || !content || !viewModel) return;
+    if ((!nextView || nextView === activePanelView) && protectedForm()) {
+      deferred = true;
+      safeStatus();
+      return;
+    }
     if (nextView && nextView !== activePanelView) {
       dirty = false;
       deferred = false;

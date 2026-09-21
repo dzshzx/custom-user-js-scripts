@@ -5865,7 +5865,6 @@ ${root} :focus-visible {
       if (!disposed && sequence === foreground) shell.setStatus(t(status), tone);
     }
     function settleRefresh(outcome) {
-      if (disposed) return;
       try {
         const returned = onRefreshSettled(outcome);
         if (returned?.then) void returned.catch(() => {
@@ -5887,12 +5886,12 @@ ${root} :focus-visible {
             presentation = "error";
             presentationError = outcome.error;
             commitPresentation();
-            settleRefresh(outcome);
           }
           const noticeKey = type === "refresh" ? "runFailed" : type === "import-archive" ? "importFailed" : type === "export-archive" ? "exportFailed" : "remoteSyncFailed";
           notice(t(noticeKey, { error: outcome.error }), "error");
           shell.setStatus(t("statusFailed"), "error");
         }
+        if (type === "refresh") settleRefresh(outcome);
         return outcome;
       }).finally(() => {
         if (inFlight.get(type) === operation) inFlight.delete(type);
@@ -5922,8 +5921,8 @@ ${root} :focus-visible {
             if (outcome.status === "partial") notice(t("saveArchiveFailed", { error: outcome.error }), "error");
           }
           commitPresentation();
-          settleRefresh(outcome);
         }
+        settleRefresh(outcome);
         return outcome;
       });
     }
@@ -5973,12 +5972,7 @@ ${root} :focus-visible {
     }
     function importArchive() {
       return once("import-archive", async () => {
-        let picked;
-        try {
-          picked = await files.chooseText({ signal: abortFiles.signal });
-        } catch (error) {
-          return { status: "error", completed: [], stage: error?.stage || "select", error: error?.message || String(error) };
-        }
+        const picked = await files.chooseText({ signal: abortFiles.signal });
         if (disposed || picked?.status === "cancelled" || picked == null) return { status: "skipped", reason: disposed ? "disposed" : "cancelled", completed: [] };
         let imported;
         try {
@@ -6002,6 +5996,7 @@ ${root} :focus-visible {
     function exportArchive() {
       return once("export-archive", async () => {
         const exported = await application.exportArchive();
+        if (disposed) return { status: "skipped", reason: "disposed", completed: ["export"] };
         try {
           await files.downloadText(EXPORT_NAME, JSON.stringify(exported, null, 2));
         } catch (error) {
@@ -6026,6 +6021,11 @@ ${root} :focus-visible {
     }
     function rerenderActive(nextView) {
       if (disposed || !content || !viewModel) return;
+      if ((!nextView || nextView === activePanelView) && protectedForm()) {
+        deferred = true;
+        safeStatus();
+        return;
+      }
       if (nextView && nextView !== activePanelView) {
         dirty = false;
         deferred = false;

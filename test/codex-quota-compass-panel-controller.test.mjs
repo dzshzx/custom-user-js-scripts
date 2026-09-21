@@ -40,7 +40,7 @@ function fixture(options = {}) {
     sync: options.sync || (async () => ({ status: 'ok', completed: ['sync'] })),
     configureSync: options.configureSync || (async () => ({ status: 'ok', completed: ['settings'] })),
     importArchive: async (value) => { imports++; return options.importArchive ? options.importArchive(value) : { status: 'ok', completed: ['persistence', 'projection'], report: { added: 1, skipped: 0, invalid: 0 } }; },
-    exportArchive: async () => ({ snapshotCount: 0 }),
+    exportArchive: options.exportArchive || (async () => ({ snapshotCount: 0 })),
   };
   const panel = createQuotaPanelController({
     application, document: window.document, window, storage: window.localStorage, t,
@@ -89,6 +89,37 @@ test('controller preserves dirty sync input through loading and calculation fail
   } finally { f.close(); }
 });
 
+test('archive persistence and remote sync failures preserve an unfocused dirty form', { skip: domSkip }, async () => {
+  for (const operation of ['refresh', 'sync']) {
+    const f = fixture({
+      run: async () => ({ status: 'partial', completed: ['calculation'], error: 'save failed' }),
+      sync: async () => ({ status: 'error', completed: [], error: 'sync failed' }),
+    });
+    try {
+      const token = await openArchive(f);
+      edit(f, token, 'dirty draft');
+      token.blur();
+      assert.equal((await f.panel.dispatch(operation)).status, operation === 'refresh' ? 'partial' : 'error');
+      f.update({ errors: { sync: 'background failed' } });
+      assert.equal(f.window.document.querySelector('[data-field="token"]'), token);
+      assert.equal(token.value, 'dirty draft');
+    } finally { f.close(); }
+  }
+});
+
+test('re-entering the active archive tab does not replace a dirty form', { skip: domSkip }, async () => {
+  const f = fixture();
+  try {
+    const token = await openArchive(f);
+    edit(f, token, 'dirty draft');
+    token.blur();
+    f.update({ syncStatus: { enabled: true, hasToken: true, gistId: 'updated' } });
+    f.window.document.querySelector('[data-view="archive"]').click();
+    assert.equal(f.window.document.querySelector('[data-field="token"]'), token);
+    assert.equal(token.value, 'dirty draft');
+  } finally { f.close(); }
+});
+
 test('successful settings stage clears only the submitted generation and revision', { skip: domSkip }, async () => {
   const pending = deferred();
   const f = fixture({ configureSync: () => pending.promise });
@@ -107,6 +138,26 @@ test('successful settings stage clears only the submitted generation and revisio
     f.window.document.querySelector('[data-view="archive"]').click();
     token = f.window.document.querySelector('[data-field="token"]');
     assert.notEqual(token.value, 'submitted');
+  } finally { f.close(); }
+});
+
+test('an old settings completion cannot clear a newly opened form', { skip: domSkip }, async () => {
+  const pending = deferred();
+  const f = fixture({ configureSync: () => pending.promise });
+  try {
+    const oldToken = await openArchive(f);
+    edit(f, oldToken, 'submitted');
+    const save = f.panel.dispatch('save-remote-sync');
+    await tick();
+    f.window.document.querySelector('[data-view="details"]').click();
+    f.window.document.querySelector('[data-view="archive"]').click();
+    const newToken = f.window.document.querySelector('[data-field="token"]');
+    assert.notEqual(newToken, oldToken);
+    edit(f, newToken, 'new form draft');
+    pending.resolve({ status: 'ok', completed: ['settings'] });
+    assert.equal((await save).status, 'ok');
+    assert.equal(f.window.document.querySelector('[data-field="token"]'), newToken);
+    assert.equal(newToken.value, 'new form draft');
   } finally { f.close(); }
 });
 
@@ -152,6 +203,18 @@ test('cancelled import does not parse or import; concurrent export downloads onc
   } finally { f.close(); }
 });
 
+test('file selection failure returns its stage and emits one error notice', { skip: domSkip }, async () => {
+  const f = fixture({ chooseText: async () => { throw Object.assign(Error('read failed'), { stage: 'read' }); } });
+  try {
+    const outcome = await f.panel.dispatch('import-archive');
+    assert.equal(outcome.status, 'error');
+    assert.equal(outcome.stage, 'read');
+    assert.equal(f.window.document.querySelectorAll('.wk-toast').length, 1);
+    assert.match(f.window.document.querySelector('.wk-toast').textContent, /read failed/);
+    assert.equal(f.imports(), 0);
+  } finally { f.close(); }
+});
+
 test('committed import with projection failure stays partial', { skip: domSkip }, async () => {
   const f = fixture({
     chooseText: async () => ({ status: 'selected', text: '{}' }),
@@ -177,7 +240,22 @@ test('disposed picker cannot resume an import', { skip: domSkip }, async () => {
   f.close();
 });
 
-test('dispose prevents late presentation and refresh callback', { skip: domSkip }, async () => {
+test('dispose after export preparation prevents a late DOM download', { skip: domSkip }, async () => {
+  const waiting = deferred();
+  const f = fixture({ exportArchive: () => waiting.promise });
+  const operation = f.panel.dispatch('export-archive');
+  await tick();
+  f.panel.dispose();
+  waiting.resolve({ snapshotCount: 1 });
+  const outcome = await operation;
+  assert.equal(outcome.status, 'skipped');
+  assert.equal(outcome.reason, 'disposed');
+  assert.deepEqual(outcome.completed, ['export']);
+  assert.equal(f.downloads(), 0);
+  f.close();
+});
+
+test('dispose prevents late presentation but still reports the business refresh settlement', { skip: domSkip }, async () => {
   const pending = deferred();
   const f = fixture({ run: () => pending.promise });
   const operation = f.panel.dispatch('refresh');
@@ -185,7 +263,7 @@ test('dispose prevents late presentation and refresh callback', { skip: domSkip 
   f.panel.dispose();
   pending.resolve({ status: 'ok', completed: ['calculation'], result: result() });
   assert.equal((await operation).status, 'ok');
-  assert.deepEqual(f.settled, []);
+  assert.deepEqual(f.settled, ['ok']);
   assert.equal((await f.panel.dispatch('sync')).reason, 'disposed');
   f.close();
 });
