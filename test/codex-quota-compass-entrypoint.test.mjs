@@ -94,7 +94,7 @@ test('bundled entry resumes calculation after bfcache pagehide/pageshow and disp
     }
     transition('pagehide', false);
     assert.equal(unsubscribeCount(), 1, 'the persisted pagehide must not consume the final cleanup listener');
-    window.document.querySelector('[data-action="refresh"]').click();
+    assert.equal(window.document.querySelector('[data-action="refresh"]'), null);
     await tick();
     await tick();
     assert.equal(snapshots(), 3);

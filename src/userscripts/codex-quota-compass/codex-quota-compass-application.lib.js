@@ -157,7 +157,7 @@ function createQuotaApplication({
       state.errors.persistence = null;
       changedLocally();
       const refreshed = await refresh();
-      return { status: refreshed ? 'ok' : 'partial', completed: ['persistence', ...(refreshed ? ['projection'] : [])], report: imported.report };
+      return { status: refreshed ? 'ok' : 'partial', completed: ['persistence', ...(refreshed ? ['projection'] : [])], report: imported.report, ...(refreshed ? {} : { error: state.errors.projection }) };
     } catch (error) {
       state.errors.persistence = errorMessage(error);
       notify();
@@ -173,7 +173,13 @@ function createQuotaApplication({
       if (!decision.syncAfter) clearTimer();
       state.errors.settings = null;
       notify();
-      return decision.syncAfter ? sync() : { status: 'ok', completed: ['settings'] };
+      if (!decision.syncAfter) return { status: 'ok', completed: ['settings'] };
+      const synced = await sync();
+      return {
+        ...synced,
+        status: synced.status === 'ok' ? 'ok' : 'partial',
+        completed: ['settings', ...(synced.completed || [])],
+      };
     } catch {
       state.errors.settings = 'GitHub Gist settings could not be saved.';
       notify();

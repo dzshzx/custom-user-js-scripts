@@ -36,7 +36,7 @@ Gist 同步要求当前 userscript manager 提供 GM storage。本地 `Snapshot 
 
 ## 本地操作与失败恢复
 
-`codex-quota-compass-application.lib.js` 统一管理计算、归档、同步和面板派生状态。Entry 处理面板与文件交互；Archive Store、Cost Ledger 和 Remote Sync 保留独立职责。
+`codex-quota-compass-application.lib.js` 统一管理计算、归档、同步和面板派生状态。`codex-quota-compass-panel-controller.lib.js` 是面板展示、交互、文件选择和一次性反馈的唯一 owner；Entry 只组装生产 adapter、菜单和页面生命周期。Archive Store、Cost Ledger 和 Remote Sync 保留独立职责。
 
 - 同一页面的并发刷新共享完整的「计算 → 保存一次快照 → 刷新统计」操作；运行标记直到整个操作结束才释放。
 - Archive Store 的读取、镜像迁移、保存和导入使用同一个 FIFO。网络等待不会占用本地归档队列；拉取后的远端内容合入当时最新本地归档。
@@ -46,6 +46,8 @@ Gist 同步要求当前 userscript manager 提供 GM storage。本地 `Snapshot 
 - 计算失败保留最近成功结果；计算成功但保存失败仍显示结果，并报告部分成功。两条存储读取路径都失败时不继续覆盖写入。GM 写入成功但镜像失败时显示主存储成功及镜像降级。
 - 本地导入已完成而远端更新失败时，最新本地统计仍然可用。网络异常造成远端写入结果未知时，停止自动重发，并在 GM 设置的既有错误字段中保留提示；刷新页面也不会自动重发。核对 Gist 后可手动同步。
 - 正在编辑或尚未提交的同步表单保留输入与焦点，后台状态照常更新。token 只在表单和 GM 设置中使用，不进入 Application 状态、日志、页面存储或导出。
+- 面板用表单 generation 与编辑 revision 关联异步保存结果。保存期间继续输入或切换后重新打开时，旧结果不会清除新草稿；设置已保存而远端同步失败时，结果明确保留 `settings` 完成阶段。
+- 菜单和页面按钮进入同一 dispatch 流程；同类型在途操作只执行一次。文件选择取消不触发导入，页面销毁会清理选择器、读取器和临时下载 URL，业务完成后也不会再更新界面。
 - 页面销毁取消防抖任务并解除存储订阅；已经发出的请求可能完成。本流程保证限定于同一页面实例，跨标签页和跨设备仍使用存储通知与归档合并。
 
 Application 操作结果使用 `ok / partial / skipped / error`，并列出已完成阶段；状态分别保存计算、持久化、同步、派生视图和设置错误。存储键、归档 schema、v1/v2 导入兼容性和导出文件名保持不变。

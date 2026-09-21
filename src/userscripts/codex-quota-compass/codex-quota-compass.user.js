@@ -179,6 +179,7 @@
       remoteSyncFailed: "Gist 同步失败：{error}",
       exportDone: "导出完成：{count} 条记录。",
       importDone: "导入完成：新增 {added} 条，跳过 {skipped} 条，无效 {invalid} 条。",
+      importPartial: "归档已导入，但读取更新后的统计失败：{error}",
       syncPortUnavailable: "同步功能暂不可用。",
       exportFailed: "导出失败：{error}",
       importFailed: "导入失败：{error}",
@@ -330,6 +331,7 @@
       remoteSyncFailed: "Gist sync failed: {error}",
       exportDone: "Export complete: {count} snapshots.",
       importDone: "Import complete: {added} added, {skipped} skipped, {invalid} invalid.",
+      importPartial: "Archive imported, but the updated statistics could not be read: {error}",
       syncPortUnavailable: "Snapshot sync port is unavailable.",
       exportFailed: "Export failed: {error}",
       importFailed: "Import failed: {error}",
@@ -936,430 +938,6 @@
     return { run };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-view-model.lib.js
-  function normalizePanelSyncStatus(syncStatus, storageBackend) {
-    const source = syncStatus || storageBackend || { id: "pending", label: "pending" };
-    const backendId = source.backendId || source.id || "pending";
-    const backendLabel = source.backendLabel || source.label || backendId;
-    return {
-      backendId,
-      backendLabel,
-      crossDeviceCapable: Boolean(source.crossDeviceCapable),
-      localOnly: Boolean(source.localOnly),
-      reason: source.reason || ""
-    };
-  }
-  function normalizeRemoteSyncStatus(remoteSyncStatus) {
-    const source = remoteSyncStatus && typeof remoteSyncStatus === "object" ? remoteSyncStatus : {};
-    return {
-      enabled: Boolean(source.enabled),
-      configured: Boolean(source.configured),
-      endpoint: typeof source.endpoint === "string" ? source.endpoint : "",
-      gistId: typeof source.gistId === "string" ? source.gistId : "",
-      hasToken: Boolean(source.hasToken),
-      lastSyncedAt: typeof source.lastSyncedAt === "string" ? source.lastSyncedAt : "",
-      lastError: typeof source.lastError === "string" ? source.lastError : ""
-    };
-  }
-  function createSyncBanner(syncStatus, remoteSyncStatus) {
-    if (remoteSyncStatus.enabled && remoteSyncStatus.configured) {
-      if (remoteSyncStatus.lastError) {
-        return {
-          tone: "warning",
-          titleKey: "remoteSyncErrorTitle",
-          detailKey: "remoteSyncErrorDetail",
-          backendLabel: syncStatus.backendLabel,
-          endpoint: remoteSyncStatus.endpoint,
-          lastSyncedAt: remoteSyncStatus.lastSyncedAt,
-          lastError: remoteSyncStatus.lastError
-        };
-      }
-      return {
-        tone: "success",
-        titleKey: "remoteSyncEnabledTitle",
-        detailKey: "remoteSyncEnabledDetail",
-        backendLabel: syncStatus.backendLabel,
-        endpoint: remoteSyncStatus.endpoint,
-        lastSyncedAt: remoteSyncStatus.lastSyncedAt
-      };
-    }
-    if (remoteSyncStatus.enabled) {
-      return {
-        tone: "warning",
-        titleKey: "remoteSyncMissingTitle",
-        detailKey: "remoteSyncMissingDetail",
-        backendLabel: syncStatus.backendLabel,
-        endpoint: remoteSyncStatus.endpoint
-      };
-    }
-    if (syncStatus.backendId === "gm") {
-      return {
-        tone: "warning",
-        titleKey: "syncBannerGmTitle",
-        detailKey: "syncBannerGmDetail",
-        backendLabel: syncStatus.backendLabel
-      };
-    }
-    if (syncStatus.localOnly) {
-      return {
-        tone: "warning",
-        titleKey: "syncBannerLocalTitle",
-        detailKey: "syncBannerLocalDetail",
-        backendLabel: syncStatus.backendLabel
-      };
-    }
-    return {
-      tone: "muted",
-      titleKey: "syncBannerPendingTitle",
-      detailKey: "syncBannerPendingDetail",
-      backendLabel: syncStatus.backendLabel
-    };
-  }
-  function createTransferActions() {
-    return [
-      { action: "export-archive", labelKey: "archiveExportAction" },
-      { action: "import-archive", labelKey: "archiveImportAction" }
-    ];
-  }
-  function dataColumn(key, options = {}) {
-    return {
-      key,
-      label: options.label || key,
-      labelKey: options.labelKey || "",
-      priority: options.priority || "secondary",
-      truncate: Boolean(options.truncate),
-      wrap: Boolean(options.wrap),
-      compact: options.compact !== false
-    };
-  }
-  function dataView(id, titleKey, rows, columns, options = {}) {
-    return {
-      type: "dataView",
-      id,
-      titleKey,
-      rows: Array.isArray(rows) ? rows : [],
-      columns,
-      emptyKey: options.emptyKey || "tableNoData",
-      compactOnMobile: options.compactOnMobile !== false,
-      limit: options.limit
-    };
-  }
-  function createDetailsSections({
-    weekly,
-    sinceReset,
-    month,
-    rolling,
-    windows,
-    modelSummaries,
-    resetCredits,
-    detailMetrics
-  }) {
-    return [
-      { type: "metrics", titleKey: "sectionKeyMetrics", metrics: detailMetrics },
-      dataView("details-weekly-estimate", "sectionWeeklyEstimate", [weekly], [
-        dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
-        dataColumn("剩余比例小数", { labelKey: "columnRemainingRatio", priority: "secondary" }),
-        dataColumn("包含重置日_已用折算USD", { labelKey: "columnIncludedResetUsd", priority: "primary" }),
-        dataColumn("反推周总USD_包含重置日", { labelKey: "columnIncludedResetTotalUsd", priority: "primary" }),
-        dataColumn("剩余USD_包含重置日口径", { labelKey: "columnIncludedResetRemainingUsd", priority: "primary" }),
-        dataColumn("包含重置日_已用Credits", { labelKey: "columnIncludedResetUsedCredits", priority: "secondary" }),
-        dataColumn("剩余Credits_包含重置日口径", { labelKey: "columnIncludedResetRemainingCredits", priority: "secondary" }),
-        dataColumn("排除重置日_已用折算USD", { labelKey: "columnExcludedResetUsedUsd", priority: "secondary" }),
-        dataColumn("剩余USD_排除重置日口径", { labelKey: "columnExcludedResetRemainingUsd", priority: "secondary" }),
-        dataColumn("排除重置日_已用Credits", { labelKey: "columnExcludedResetUsedCredits", priority: "debug" }),
-        dataColumn("剩余Credits_排除重置日口径", { labelKey: "columnExcludedResetRemainingCredits", priority: "debug" }),
-        dataColumn("误差说明", { labelKey: "columnErrorNote", priority: "debug", wrap: true })
-      ]),
-      dataView("details-range-summary", "sectionRangeSummary", [sinceReset, month, rolling], [
-        dataColumn("范围", { labelKey: "columnRange", priority: "primary", wrap: true }),
-        dataColumn("累计折算USD", { labelKey: "columnTotalUsd", priority: "primary" }),
-        dataColumn("累计Credits", { labelKey: "columnTotalCredits", priority: "primary" }),
-        dataColumn("返回日期桶数", { labelKey: "columnBucketCount", priority: "secondary" }),
-        dataColumn("累计Token", { labelKey: "columnTotalTokens", priority: "debug" }),
-        dataColumn("累计线程数", { labelKey: "columnTotalThreads", priority: "debug" }),
-        dataColumn("累计轮数", { labelKey: "columnTotalTurns", priority: "debug" })
-      ]),
-      dataView("details-windows", "sectionWindows", windows, [
-        dataColumn("名称", { labelKey: "columnName", priority: "primary", wrap: true }),
-        dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
-        dataColumn("窗口天数", { labelKey: "columnWindowDays", priority: "secondary" }),
-        dataColumn("本轮开始_本地", { labelKey: "columnWindowStartLocal", priority: "secondary", truncate: true }),
-        dataColumn("下次重置_本地", { labelKey: "columnNextResetLocal", priority: "secondary", truncate: true }),
-        dataColumn("距离重置小时", { labelKey: "columnHoursToReset", priority: "primary" })
-      ]),
-      dataView("details-model-summary", "sectionModelSummary", modelSummaries, [
-        dataColumn("模型", { labelKey: "columnModel", priority: "primary", wrap: true }),
-        dataColumn("速度", { labelKey: "columnSpeed", priority: "secondary" }),
-        dataColumn("占比百分比", { labelKey: "columnSharePercent", priority: "primary" }),
-        dataColumn("Credits", { labelKey: "columnCredits", priority: "secondary" })
-      ]),
-      dataView("details-reset-credits", "sectionResetCredits", resetCredits?.明细, [
-        dataColumn("标题", { labelKey: "columnTitle", priority: "primary", wrap: true }),
-        dataColumn("状态", { labelKey: "columnStatus", priority: "secondary" }),
-        dataColumn("过期时间_本地", { labelKey: "columnExpiresLocal", priority: "primary", truncate: true })
-      ], { emptyKey: "resetCreditsEmpty" })
-    ];
-  }
-  function createPanelViews({
-    weekly,
-    sinceReset,
-    month,
-    rolling,
-    windows,
-    modelSummaries,
-    resetCredits,
-    transfer,
-    detailMetrics
-  }) {
-    const tabs = [
-      { id: "details", labelKey: "tabDetails" },
-      { id: "stats", labelKey: "tabStats" },
-      { id: "archive", labelKey: "tabArchiveWorkspace" }
-    ];
-    return {
-      tabs,
-      views: {
-        stats: {
-          id: "stats",
-          labelKey: "tabStats",
-          kind: "stats"
-        },
-        details: {
-          id: "details",
-          labelKey: "tabDetails",
-          kind: "sections",
-          sections: createDetailsSections({
-            weekly,
-            sinceReset,
-            month,
-            rolling,
-            windows,
-            modelSummaries,
-            resetCredits,
-            detailMetrics
-          })
-        },
-        archive: {
-          id: "archive",
-          labelKey: "tabArchiveWorkspace",
-          kind: "archiveWorkspace",
-          actionIds: transfer.actions.map((action) => action.action),
-          sections: [
-            { type: "syncForm" },
-            { type: "archiveSummary" },
-            { type: "note", noteKey: transfer.noteKey },
-            { type: "actions", actions: transfer.actions }
-          ]
-        }
-      }
-    };
-  }
-  function mapDailyRow(row) {
-    return { date: row?.date, credits: row?.credits || 0, usd: row?.usd || 0 };
-  }
-  function mapBucket(bucket) {
-    if (!bucket) return null;
-    return {
-      from: bucket.from,
-      to: bucket.to,
-      month: bucket.month,
-      credits: bucket.totalCredits || 0,
-      usd: bucket.totalUsd || 0
-    };
-  }
-  function buildCostViewModel(ledgerCost) {
-    if (!ledgerCost) return null;
-    const allDays = (ledgerCost.daily?.days || []).map(mapDailyRow);
-    const today = ledgerCost.daily?.inProgress ? mapDailyRow(ledgerCost.daily.inProgress) : null;
-    const allTime = ledgerCost.allTime || {};
-    return {
-      cycleStartDate: ledgerCost.cycleStartDate || null,
-      today,
-      day: {
-        rows: allDays.slice(0, 30),
-        today
-      },
-      week: {
-        current: mapBucket(ledgerCost.weekly?.current),
-        blocks: (ledgerCost.weekly?.blocks || []).map(mapBucket)
-      },
-      month: {
-        current: mapBucket(ledgerCost.monthly?.current),
-        rows: (ledgerCost.monthly?.months || []).map(mapBucket)
-      },
-      all: {
-        totalCredits: allTime.totalCredits || 0,
-        totalUsd: allTime.totalUsd || 0,
-        coverDays: allTime.coverDays || 0,
-        fromDate: allTime.fromDate || null,
-        toDate: allTime.toDate || null,
-        rows: allDays
-      },
-      allDays
-    };
-  }
-  function createHeroMetric({ weekly, mainSevenDayWindow }) {
-    return {
-      id: "remainingUsdIncludingReset",
-      type: "credit",
-      labelKey: "metricRemainingUsdIncludingReset",
-      label: "剩余 USD · 含重置日",
-      usd: weekly.剩余USD_包含重置日口径,
-      resetHours: mainSevenDayWindow?.距离重置小时
-    };
-  }
-  function createSecondaryMetrics({ weekly }) {
-    return [
-      {
-        id: "remainingUsdExcludingReset",
-        type: "credit",
-        labelKey: "metricRemainingUsdExcludingReset",
-        label: "剩余 USD · 排除重置日",
-        usd: weekly.剩余USD_排除重置日口径
-      },
-      {
-        id: "sevenDayUsedPercent",
-        type: "value",
-        labelKey: "metricSevenDayUsedPercent",
-        label: "7 天已用",
-        value: weekly.已用百分比 !== void 0 ? `${weekly.已用百分比}%` : "-"
-      }
-    ];
-  }
-  function createDetailMetrics({ weekly, sinceReset, month, resetCredits }) {
-    const metrics = [
-      {
-        id: "weeklyTotalIncludingReset",
-        type: "credit",
-        labelKey: "metricWeeklyTotalIncludingReset",
-        label: "周总额度 · 含重置日",
-        usd: weekly.反推周总USD_包含重置日
-      },
-      {
-        id: "weeklyTotalExcludingReset",
-        type: "credit",
-        labelKey: "metricWeeklyTotalExcludingReset",
-        label: "周总额度 · 排除重置日",
-        usd: weekly.反推周总USD_排除重置日
-      },
-      {
-        id: "sinceResetTotal",
-        type: "credit",
-        labelKey: "metricSinceResetTotal",
-        label: "上次重置至今",
-        usd: sinceReset.累计折算USD
-      },
-      {
-        id: "monthTotal",
-        type: "credit",
-        labelKey: "metricMonthTotal",
-        label: "本月累计",
-        usd: month.累计折算USD
-      }
-    ];
-    if (resetCredits) {
-      metrics.push({
-        id: "resetCreditsAvailable",
-        type: "value",
-        labelKey: "metricResetCredits",
-        label: "重置券 可用/适用",
-        value: `${resetCredits.可用张数 ?? "-"} / ${resetCredits.当前适用张数 ?? "-"}`
-      });
-    }
-    return metrics;
-  }
-  function createQuotaPanelViewModel({
-    result,
-    ledgerCost,
-    archiveSummary,
-    importReport,
-    storageBackend,
-    syncStatus,
-    remoteSyncStatus
-  }) {
-    const snapshotAccess = createQuotaSnapshotAccess(result);
-    const rollingKey = snapshotAccess.rollingKey;
-    const weekly = snapshotAccess.sinceReset.weeklyEstimate;
-    const sinceReset = snapshotAccess.sinceReset.summary;
-    const month = snapshotAccess.monthToDate.summary;
-    const rolling = snapshotAccess.rolling.summary;
-    const mainSevenDayWindow = snapshotAccess.mainSevenDayWindow;
-    const recentSnapshots = Array.isArray(archiveSummary?.recentSnapshots) ? archiveSummary.recentSnapshots.slice(0, 5).map((row) => ({
-      capturedAt: row?.capturedAt || "-",
-      snapshotId: row?.snapshotId || "legacy",
-      monthlyCredits: row?.monthlyCredits,
-      weeklyUsedPercent: row?.weeklyUsedPercent
-    })) : [];
-    const normalizedSyncStatus = normalizePanelSyncStatus(syncStatus, storageBackend);
-    const normalizedRemoteSyncStatus = normalizeRemoteSyncStatus(remoteSyncStatus);
-    const archiveHealth = {
-      isLoaded: Boolean(archiveSummary),
-      snapshotCount: archiveSummary?.snapshotCount || 0,
-      hasSnapshots: Boolean((archiveSummary?.snapshotCount || 0) > 0),
-      earliestCapturedAt: archiveSummary?.earliestCapturedAt || null,
-      latestCapturedAt: archiveSummary?.latestCapturedAt || null,
-      storageBackendLabel: normalizedSyncStatus.backendLabel,
-      importReport
-    };
-    const transfer = {
-      noteKey: "transferNote",
-      syncStatus: normalizedSyncStatus,
-      remoteSyncStatus: normalizedRemoteSyncStatus,
-      actions: createTransferActions()
-    };
-    const detailMetrics = createDetailMetrics({
-      weekly,
-      sinceReset,
-      month,
-      resetCredits: snapshotAccess.resetCredits
-    });
-    const panelViews = createPanelViews({
-      weekly,
-      sinceReset,
-      month,
-      rolling,
-      windows: snapshotAccess.windows,
-      modelSummaries: snapshotAccess.rolling.modelSummaries,
-      resetCredits: snapshotAccess.resetCredits,
-      transfer,
-      detailMetrics
-    });
-    return {
-      rollingKey,
-      weekly,
-      sinceReset,
-      month,
-      rolling,
-      syncStatus: normalizedSyncStatus,
-      remoteSyncStatus: normalizedRemoteSyncStatus,
-      syncBanner: createSyncBanner(normalizedSyncStatus, normalizedRemoteSyncStatus),
-      archiveHealth,
-      transfer,
-      tabs: panelViews.tabs,
-      views: panelViews.views,
-      heroMetric: createHeroMetric({
-        weekly,
-        mainSevenDayWindow
-      }),
-      secondaryMetrics: createSecondaryMetrics({ weekly }),
-      detailMetrics,
-      rollingRows: snapshotAccess.rolling.dailyRows,
-      sinceResetRows: snapshotAccess.sinceReset.dailyRows,
-      sinceResetClients: snapshotAccess.sinceReset.clientSummaries,
-      mainSevenDayWindow,
-      cost: buildCostViewModel(ledgerCost),
-      archive: {
-        isLoaded: Boolean(archiveSummary),
-        snapshotCount: archiveSummary?.snapshotCount || 0,
-        earliestCapturedAt: archiveSummary?.earliestCapturedAt || null,
-        latestCapturedAt: archiveSummary?.latestCapturedAt || null,
-        recentSnapshots,
-        storageBackend,
-        importReport
-      }
-    };
-  }
-
   // src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js
   function createDefaultQuotaRuntimeConfig(overrides = {}) {
     return {
@@ -1483,2377 +1061,6 @@ ${text.slice(0, 800)}`);
       }).run();
     }
     return { run };
-  }
-
-  // src/userscripts/shared/shared-icons.lib.js
-  var ICON_CONTENT = {
-    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
-    "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
-    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1-1-1.73l-.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15-.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
-    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-    "chevron-left": '<path d="m15 18-6-6 6-6"/>',
-    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
-    "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
-    star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
-    check: '<path d="M20 6 9 17l-5-5"/>',
-    "alert-triangle": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
-    loader: '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>'
-  };
-  var ICON_NAMES = Object.keys(ICON_CONTENT);
-  function toPositiveNumber(value, name) {
-    const number = Number(value);
-    if (!Number.isFinite(number) || number <= 0) {
-      throw new Error(`shared-icons: ${name} must be a positive number, got ${JSON.stringify(value)}`);
-    }
-    return number;
-  }
-  function iconSvg(name, { size = 16, strokeWidth = 2 } = {}) {
-    const content = ICON_CONTENT[name];
-    if (!content) {
-      throw new Error(`shared-icons: unknown icon "${name}". Available: ${ICON_NAMES.join(", ")}`);
-    }
-    const resolvedSize = toPositiveNumber(size, "size");
-    const resolvedStrokeWidth = toPositiveNumber(strokeWidth, "strokeWidth");
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${resolvedStrokeWidth}" stroke-linecap="round" stroke-linejoin="round" width="${resolvedSize}" height="${resolvedSize}" class="wk-icon wk-icon-${name}" aria-hidden="true" focusable="false">${content}</svg>`;
-  }
-
-  // src/userscripts/shared/shared-tokens.lib.js
-  var SAFE_COLOR_PATTERN = /^[#a-zA-Z0-9(),.\s%/+-]+$/;
-  var UNSAFE_SELECTOR_CHARS = /[{};<@\\]/;
-  var COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
-  function assertSafeColor(value, name) {
-    const color = String(value ?? "").trim();
-    if (!color || !SAFE_COLOR_PATTERN.test(color)) {
-      throw new Error(`shared-tokens: invalid ${name} color ${JSON.stringify(value)}`);
-    }
-    return color;
-  }
-  function assertSafeSelector(value) {
-    const selector = String(value ?? "").trim();
-    if (!selector || UNSAFE_SELECTOR_CHARS.test(selector)) {
-      throw new Error(`shared-tokens: invalid rootSelector ${JSON.stringify(value)}`);
-    }
-    return selector;
-  }
-  function buildTokenCss({ rootSelector, accent, accentDark } = {}) {
-    const root = assertSafeSelector(rootSelector);
-    const lightAccent = assertSafeColor(accent, "accent");
-    const darkAccent = accentDark == null ? lightAccent : assertSafeColor(accentDark, "accentDark");
-    return `
-${root} {
-  --wk-surface: oklch(99.2% 0.002 250);
-  --wk-surface-muted: oklch(96.8% 0.003 250);
-  --wk-surface-sunken: oklch(97.8% 0.003 250);
-  --wk-text: oklch(23% 0.012 250);
-  --wk-text-muted: oklch(47% 0.012 250);
-  --wk-border: oklch(24% 0.012 250 / 0.10);
-  --wk-border-strong: oklch(24% 0.012 250 / 0.16);
-  --wk-danger: oklch(52% 0.19 27);
-  --wk-warning: oklch(55% 0.13 75);
-  --wk-accent: ${lightAccent};
-  --wk-shadow-panel: 0 24px 80px oklch(20% 0.02 250 / 0.22);
-  --wk-shadow-pop: 0 8px 28px oklch(20% 0.02 250 / 0.14);
-  --wk-fs-sm: 12px;
-  --wk-fs-md: 13px;
-  --wk-fs-lg: 15px;
-  --wk-fs-xl: 20px;
-  --wk-fs-hero: 28px;
-  --wk-radius-ctl: 8px;
-  --wk-radius-panel: 12px;
-  --wk-radius-pill: 999px;
-  color-scheme: light dark;
-}
-
-${root}[data-wk-theme="dark"] {
-  --wk-surface: oklch(25% 0.012 250);
-  --wk-surface-muted: oklch(21% 0.010 250);
-  --wk-surface-sunken: oklch(23% 0.011 250);
-  --wk-text: oklch(93% 0.008 250);
-  --wk-text-muted: oklch(74% 0.010 250);
-  --wk-border: oklch(95% 0.01 250 / 0.12);
-  --wk-border-strong: oklch(95% 0.01 250 / 0.18);
-  --wk-danger: oklch(68% 0.18 27);
-  --wk-warning: oklch(75% 0.13 80);
-  --wk-accent: ${darkAccent};
-  --wk-shadow-panel: 0 24px 80px oklch(10% 0.01 250 / 0.50);
-  --wk-shadow-pop: 0 8px 28px oklch(10% 0.01 250 / 0.35);
-}
-
-${root} *,
-${root} *::before,
-${root} *::after {
-  box-sizing: border-box;
-}
-
-${root} button,
-${root} input,
-${root} select,
-${root} textarea {
-  font: inherit;
-  color: inherit;
-}
-
-${root} :focus-visible {
-  outline: 2px solid var(--wk-accent);
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ${root} *,
-  ${root} *::before,
-  ${root} *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-`.trim();
-  }
-  function systemPrefersDark() {
-    try {
-      const matchMedia = globalThis.window?.matchMedia;
-      if (typeof matchMedia === "function") {
-        return Boolean(matchMedia.call(globalThis.window, COLOR_SCHEME_QUERY).matches);
-      }
-    } catch {
-    }
-    return false;
-  }
-  function resolveTheme(detectHost) {
-    if (typeof detectHost === "function") {
-      try {
-        const detected = detectHost();
-        if (detected === "light" || detected === "dark") return detected;
-      } catch {
-      }
-    }
-    return systemPrefersDark() ? "dark" : "light";
-  }
-  function applyTheme(root, { detectHost, observeHost = false } = {}) {
-    if (!root) {
-      throw new Error("shared-tokens: applyTheme requires a root element.");
-    }
-    const apply = () => {
-      root.dataset.wkTheme = resolveTheme(detectHost);
-    };
-    apply();
-    let media = null;
-    const onChange = () => apply();
-    try {
-      const matchMedia = globalThis.window?.matchMedia;
-      if (typeof matchMedia === "function") {
-        media = matchMedia.call(globalThis.window, COLOR_SCHEME_QUERY);
-        if (typeof media?.addEventListener === "function") {
-          media.addEventListener("change", onChange);
-        } else if (typeof media?.addListener === "function") {
-          media.addListener(onChange);
-        } else {
-          media = null;
-        }
-      }
-    } catch {
-      media = null;
-    }
-    let observer = null;
-    if (observeHost) {
-      try {
-        const documentObject = root.ownerDocument ?? globalThis.document;
-        const windowObject = documentObject?.defaultView ?? globalThis.window;
-        const MutationObserverImpl = windowObject?.MutationObserver ?? globalThis.MutationObserver;
-        const hostElement = documentObject?.documentElement;
-        if (typeof MutationObserverImpl === "function" && hostElement && hostElement !== root) {
-          observer = new MutationObserverImpl(onChange);
-          observer.observe(hostElement, { attributes: true, attributeFilter: ["class", "style"] });
-        }
-      } catch {
-        observer = null;
-      }
-    }
-    return () => {
-      if (observer) {
-        observer.disconnect();
-        observer = null;
-      }
-      if (!media) return;
-      if (typeof media.removeEventListener === "function") {
-        media.removeEventListener("change", onChange);
-      } else if (typeof media.removeListener === "function") {
-        media.removeListener(onChange);
-      }
-      media = null;
-    };
-  }
-
-  // src/userscripts/shared/shared-widget-shell.lib.js
-  var BUTTON_SAFE_MARGIN = 12;
-  var DOCK_THRESHOLD = 32;
-  var DOCK_OFFSET = 8;
-  var PANEL_SAFE_MARGIN = 12;
-  var PANEL_GAP = 8;
-  var DRAG_THRESHOLD_PX = 4;
-  var FALLBACK_BUTTON_SIZE = 44;
-  var PANEL_ANIMATION_MS = 200;
-  var PANEL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
-  var FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-  function isDockSide(value) {
-    return value === "left" || value === "right";
-  }
-  function appendClasses(el, classes) {
-    const list = String(classes ?? "").split(/\s+/).filter(Boolean);
-    if (list.length) el.classList.add(...list);
-  }
-  function eventContainsNode(event, node) {
-    if (!node) return false;
-    const path = event.composedPath?.();
-    return Array.isArray(path) ? path.includes(node) : node.contains(event.target);
-  }
-  var WIDGET_SHELL_CSS = `
-.wk-widget-button {
-  position: fixed;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 8px 16px;
-  border: 1px solid var(--wk-border-strong);
-  border-radius: var(--wk-radius-pill);
-  background: var(--wk-surface);
-  color: var(--wk-text);
-  box-shadow: var(--wk-shadow-pop);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: var(--wk-fs-md);
-  line-height: 1.3;
-  cursor: pointer;
-  user-select: none;
-  touch-action: none;
-  transition: opacity 160ms ease, transform 160ms ease;
-}
-
-.wk-widget-button.is-dragging {
-  cursor: grabbing;
-  transition: none;
-}
-
-.wk-widget-button[data-wk-docked="left"],
-.wk-widget-button[data-wk-docked="right"] {
-  opacity: 0.55;
-  transform: scale(0.72);
-}
-
-.wk-widget-button[data-wk-docked="left"] {
-  transform-origin: left center;
-}
-
-.wk-widget-button[data-wk-docked="right"] {
-  transform-origin: right center;
-}
-
-.wk-widget-button[data-wk-docked]:hover,
-.wk-widget-button[data-wk-docked]:focus-visible {
-  opacity: 1;
-  transform: none;
-}
-
-.wk-widget-panel {
-  position: fixed;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--wk-border);
-  border-radius: var(--wk-radius-panel);
-  background: var(--wk-surface);
-  color: var(--wk-text);
-  box-shadow: var(--wk-shadow-panel);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: var(--wk-fs-md);
-  line-height: 1.45;
-  opacity: 0;
-  transform: scale(0.92);
-  pointer-events: none;
-  transition:
-    opacity ${PANEL_ANIMATION_MS}ms ${PANEL_EASING},
-    transform ${PANEL_ANIMATION_MS}ms ${PANEL_EASING};
-}
-
-.wk-widget-panel[hidden] {
-  display: none;
-}
-
-.wk-widget-panel.is-open {
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
-}
-
-.wk-widget-header {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--wk-border);
-}
-
-.wk-widget-body {
-  flex: 1;
-  overflow: auto;
-  padding: 12px 16px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wk-widget-button,
-  .wk-widget-panel {
-    transition: none;
-  }
-}
-`.trim();
-  function createWidgetShell({
-    root,
-    buttonId,
-    buttonAriaLabel,
-    buttonContent,
-    buttonClass,
-    panelClass,
-    panelWidth = 560,
-    panelMaxHeight = 760,
-    storage,
-    positionKey,
-    defaultPosition = { top: 76, right: 24 },
-    dock = true,
-    onOpen,
-    onClose,
-    renderPanelHeader: renderPanelHeader2,
-    renderPanelBody
-  } = {}) {
-    if (!root?.append) {
-      throw new Error("shared-widget-shell: createWidgetShell requires a root element.");
-    }
-    const documentObject = root.ownerDocument ?? globalThis.document;
-    if (!documentObject?.createElement) {
-      throw new Error("shared-widget-shell: root must expose ownerDocument.");
-    }
-    const windowObject = documentObject.defaultView ?? globalThis.window ?? globalThis;
-    const scheduleTimeout = typeof windowObject.setTimeout === "function" ? windowObject.setTimeout.bind(windowObject) : (callback, ms) => setTimeout(callback, ms);
-    const cancelTimeout = typeof windowObject.clearTimeout === "function" ? windowObject.clearTimeout.bind(windowObject) : (timer) => clearTimeout(timer);
-    const requestFrame = typeof windowObject.requestAnimationFrame === "function" ? windowObject.requestAnimationFrame.bind(windowObject) : (callback) => scheduleTimeout(callback, 16);
-    const buttonEl = documentObject.createElement("button");
-    buttonEl.type = "button";
-    if (buttonId) buttonEl.id = buttonId;
-    buttonEl.className = "wk-widget-button";
-    appendClasses(buttonEl, buttonClass);
-    if (buttonAriaLabel) buttonEl.setAttribute("aria-label", buttonAriaLabel);
-    buttonEl.setAttribute("aria-expanded", "false");
-    if (buttonContent != null) {
-      if (typeof buttonContent === "string") {
-        buttonEl.innerHTML = buttonContent;
-      } else {
-        buttonEl.append(buttonContent);
-      }
-    }
-    const panelEl = documentObject.createElement("div");
-    panelEl.className = "wk-widget-panel";
-    appendClasses(panelEl, panelClass);
-    if (buttonId) panelEl.id = `${buttonId}-panel`;
-    panelEl.hidden = true;
-    const headerEl = documentObject.createElement("div");
-    headerEl.className = "wk-widget-header";
-    const bodyEl = documentObject.createElement("div");
-    bodyEl.className = "wk-widget-body";
-    panelEl.append(headerEl, bodyEl);
-    renderPanelHeader2?.(headerEl);
-    renderPanelBody?.(bodyEl);
-    root.append(buttonEl, panelEl);
-    let position = { left: 0, top: 0, dockSide: null };
-    let isOpenState = false;
-    let suppressNextClick = false;
-    let closeTimer = null;
-    function measureButton() {
-      const rect = buttonEl.getBoundingClientRect?.();
-      return {
-        width: rect?.width || buttonEl.offsetWidth || FALLBACK_BUTTON_SIZE,
-        height: rect?.height || buttonEl.offsetHeight || FALLBACK_BUTTON_SIZE
-      };
-    }
-    function clampPosition(left, top) {
-      const { width, height } = measureButton();
-      const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
-      const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
-      return {
-        left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
-        top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop)
-      };
-    }
-    function dockedPosition(dockSide, top) {
-      const { width } = measureButton();
-      const clamped = clampPosition(0, top);
-      return {
-        left: dockSide === "right" ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
-        top: clamped.top
-      };
-    }
-    function detectDockSide(left) {
-      const { width } = measureButton();
-      if (left <= DOCK_THRESHOLD) return "left";
-      if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return "right";
-      return null;
-    }
-    function resolveDefaultPosition() {
-      const { width } = measureButton();
-      const top = Number.isFinite(defaultPosition?.top) ? defaultPosition.top : 76;
-      const right = Number.isFinite(defaultPosition?.right) ? defaultPosition.right : 24;
-      return clampPosition(windowObject.innerWidth - right - width, top);
-    }
-    function applyPosition(next) {
-      const dockSide = dock && isDockSide(next?.dockSide) ? next.dockSide : null;
-      const resolved = dockSide ? dockedPosition(dockSide, next?.top ?? position.top) : clampPosition(next?.left ?? position.left, next?.top ?? position.top);
-      position = { ...resolved, dockSide };
-      if (dockSide) {
-        buttonEl.dataset.wkDocked = dockSide;
-      } else {
-        delete buttonEl.dataset.wkDocked;
-      }
-      buttonEl.style.top = `${Math.round(resolved.top)}px`;
-      if (dockSide === "right") {
-        buttonEl.style.left = "auto";
-        buttonEl.style.right = `${DOCK_OFFSET}px`;
-      } else {
-        buttonEl.style.left = `${Math.round(resolved.left)}px`;
-        buttonEl.style.right = "auto";
-      }
-      return position;
-    }
-    async function persistPosition() {
-      if (!storage?.set || !positionKey) return;
-      const value = { left: Math.round(position.left), top: Math.round(position.top) };
-      if (position.dockSide) value.dockSide = position.dockSide;
-      try {
-        await storage.set(positionKey, JSON.stringify(value));
-      } catch {
-      }
-    }
-    async function restorePosition() {
-      if (!storage?.get || !positionKey) return;
-      try {
-        const raw = await storage.get(positionKey);
-        const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-        if (parsed && Number.isFinite(parsed.left) && Number.isFinite(parsed.top)) {
-          applyPosition({
-            left: parsed.left,
-            top: parsed.top,
-            dockSide: isDockSide(parsed.dockSide) ? parsed.dockSide : null
-          });
-          if (isOpenState) positionPanel();
-        }
-      } catch {
-      }
-    }
-    function positionPanel() {
-      const safe = PANEL_SAFE_MARGIN;
-      const { width: buttonWidth, height: buttonHeight } = measureButton();
-      const width = Math.min(panelWidth, windowObject.innerWidth - safe * 2);
-      const maxHeight = Math.min(panelMaxHeight, windowObject.innerHeight - safe * 2);
-      const height = Math.min(maxHeight, panelEl.offsetHeight || maxHeight);
-      const maxLeft = Math.max(safe, windowObject.innerWidth - width - safe);
-      const left = Math.min(Math.max(safe, position.left + buttonWidth - width), maxLeft);
-      const belowTop = position.top + buttonHeight + PANEL_GAP;
-      const aboveTop = position.top - height - PANEL_GAP;
-      const fitsBelow = belowTop + height <= windowObject.innerHeight - safe;
-      const maxTop = Math.max(safe, windowObject.innerHeight - height - safe);
-      const top = fitsBelow ? Math.min(belowTop, maxTop) : Math.min(Math.max(safe, aboveTop), maxTop);
-      panelEl.style.left = `${Math.round(left)}px`;
-      panelEl.style.top = `${Math.round(top)}px`;
-      panelEl.style.width = `${Math.round(width)}px`;
-      panelEl.style.maxHeight = `${Math.round(maxHeight)}px`;
-      const originX = Math.min(Math.max(position.left + buttonWidth / 2 - left, 24), width - 24);
-      const originY = Math.min(Math.max(position.top + buttonHeight / 2 - top, 24), height - 24);
-      panelEl.style.transformOrigin = `${Math.round(originX)}px ${Math.round(originY)}px`;
-      panelEl.dataset.wkPlacement = fitsBelow ? "below" : "above";
-    }
-    function syncExpanded() {
-      buttonEl.setAttribute("aria-expanded", isOpenState ? "true" : "false");
-    }
-    function open() {
-      if (isOpenState) return;
-      isOpenState = true;
-      cancelTimeout(closeTimer);
-      panelEl.hidden = false;
-      panelEl.classList.remove("is-open");
-      positionPanel();
-      buttonEl.classList.add("is-active");
-      syncExpanded();
-      requestFrame(() => {
-        if (isOpenState) panelEl.classList.add("is-open");
-      });
-      const focusTarget = panelEl.querySelector(FOCUSABLE_SELECTOR);
-      focusTarget?.focus?.();
-      onOpen?.();
-    }
-    function close() {
-      if (!isOpenState) return;
-      isOpenState = false;
-      panelEl.classList.remove("is-open");
-      buttonEl.classList.remove("is-active");
-      syncExpanded();
-      if (panelEl.contains(documentObject.activeElement)) {
-        buttonEl.focus?.();
-      }
-      closeTimer = scheduleTimeout(() => {
-        if (!isOpenState) panelEl.hidden = true;
-      }, PANEL_ANIMATION_MS);
-      onClose?.();
-    }
-    function toggle() {
-      if (isOpenState) {
-        close();
-      } else {
-        open();
-      }
-    }
-    function installDrag() {
-      let dragState = null;
-      buttonEl.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
-        dragState = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          startLeft: position.left,
-          startTop: position.top,
-          moved: false
-        };
-        buttonEl.classList.add("is-dragging");
-        try {
-          buttonEl.setPointerCapture?.(event.pointerId);
-        } catch {
-        }
-      });
-      buttonEl.addEventListener("pointermove", (event) => {
-        if (!dragState || dragState.pointerId !== event.pointerId) return;
-        const dx = event.clientX - dragState.startX;
-        const dy = event.clientY - dragState.startY;
-        if (Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;
-        if (!dragState.moved) return;
-        applyPosition({
-          left: dragState.startLeft + dx,
-          top: dragState.startTop + dy,
-          dockSide: null
-        });
-        if (isOpenState) positionPanel();
-      });
-      function finishDrag(event) {
-        if (!dragState || dragState.pointerId !== event.pointerId) return;
-        const moved = dragState.moved;
-        dragState = null;
-        buttonEl.classList.remove("is-dragging");
-        try {
-          if (buttonEl.hasPointerCapture?.(event.pointerId)) {
-            buttonEl.releasePointerCapture(event.pointerId);
-          }
-        } catch {
-        }
-        if (!moved) return;
-        const dockSide = dock ? detectDockSide(position.left) : null;
-        applyPosition({ ...position, dockSide });
-        persistPosition();
-        if (isOpenState) positionPanel();
-        suppressNextClick = true;
-        scheduleTimeout(() => {
-          suppressNextClick = false;
-        }, 0);
-      }
-      buttonEl.addEventListener("pointerup", finishDrag);
-      buttonEl.addEventListener("pointercancel", finishDrag);
-    }
-    function onDocumentPointerDown(event) {
-      if (!isOpenState) return;
-      if (eventContainsNode(event, panelEl) || eventContainsNode(event, buttonEl)) return;
-      close();
-    }
-    function onDocumentKeydown(event) {
-      if (!isOpenState) return;
-      if (event.key === "Escape") close();
-    }
-    function onWindowResize() {
-      applyPosition(position);
-      if (isOpenState) positionPanel();
-    }
-    buttonEl.addEventListener("click", () => {
-      if (suppressNextClick) {
-        suppressNextClick = false;
-        return;
-      }
-      toggle();
-    });
-    documentObject.addEventListener("pointerdown", onDocumentPointerDown, true);
-    documentObject.addEventListener("keydown", onDocumentKeydown);
-    windowObject.addEventListener?.("resize", onWindowResize);
-    applyPosition(resolveDefaultPosition());
-    installDrag();
-    restorePosition();
-    function destroy() {
-      cancelTimeout(closeTimer);
-      isOpenState = false;
-      syncExpanded();
-      documentObject.removeEventListener("pointerdown", onDocumentPointerDown, true);
-      documentObject.removeEventListener("keydown", onDocumentKeydown);
-      windowObject.removeEventListener?.("resize", onWindowResize);
-      buttonEl.remove();
-      panelEl.remove();
-    }
-    function reposition() {
-      if (isOpenState) positionPanel();
-    }
-    return {
-      cssText: WIDGET_SHELL_CSS,
-      buttonEl,
-      panelEl,
-      open,
-      close,
-      toggle,
-      reposition,
-      isOpen: () => isOpenState,
-      destroy
-    };
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js
-  var BUTTON_FULL_WIDTH = 168;
-  var BUTTON_HEIGHT = 42;
-  function createShellStyles(rootId) {
-    return `
-    #${rootId} {
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      --cqc-primary: var(--wk-accent);
-      --cqc-primary-strong: #0f766e;
-      --cqc-primary-soft: rgba(16, 163, 127, 0.12);
-      --cqc-primary-border: rgba(16, 163, 127, 0.55);
-      --cqc-primary-ring: rgba(16, 163, 127, 0.18);
-      --cqc-surface: var(--wk-surface);
-      --cqc-surface-muted: var(--wk-surface-muted);
-      --cqc-surface-sunken: var(--wk-surface-sunken);
-      --cqc-text: var(--wk-text);
-      --cqc-text-muted: var(--wk-text-muted);
-      --cqc-border: var(--wk-border);
-      --cqc-border-strong: var(--wk-border-strong);
-      --cqc-row-hover: rgba(16, 163, 127, 0.06);
-      --cqc-danger: var(--wk-danger);
-      --cqc-warning: var(--wk-warning);
-      --cqc-warning-surface: rgba(245, 158, 11, 0.1);
-      --cqc-warning-border: rgba(245, 158, 11, 0.32);
-      --cqc-shadow-panel: var(--wk-shadow-panel);
-      --cqc-shadow-button: var(--wk-shadow-pop);
-      --cqc-button-bg: var(--wk-surface);
-      --cqc-button-bg-docked: var(--wk-surface);
-      --cqc-button-bg-docked-active: var(--wk-surface);
-      position: fixed;
-      inset: 0;
-      z-index: 2147483647;
-      pointer-events: none;
-    }
-
-    #${rootId}[data-wk-theme="dark"] {
-      --cqc-primary-strong: #34d399;
-      --cqc-primary-soft: rgba(25, 195, 125, 0.2);
-      --cqc-primary-border: rgba(25, 195, 125, 0.5);
-      --cqc-primary-ring: rgba(25, 195, 125, 0.22);
-      --cqc-row-hover: rgba(25, 195, 125, 0.14);
-      --cqc-warning-surface: rgba(245, 158, 11, 0.16);
-      --cqc-warning-border: rgba(245, 158, 11, 0.3);
-    }
-
-    /* Widget kit overrides: keep the 168x42 pill that shrinks to a dot-only
-       button when docked at a screen edge. */
-    #${rootId} .cqc-button {
-      width: ${BUTTON_FULL_WIDTH}px;
-      min-width: ${BUTTON_HEIGHT}px;
-      height: ${BUTTON_HEIGHT}px;
-      min-height: ${BUTTON_HEIGHT}px;
-      justify-content: flex-start;
-      gap: 8px;
-      padding: 0 14px;
-      border-color: var(--cqc-border-strong);
-      background: var(--cqc-button-bg);
-      box-shadow: var(--cqc-shadow-button);
-      overflow: hidden;
-      pointer-events: auto;
-      transition:
-        width 160ms ease,
-        gap 160ms ease,
-        padding 160ms ease,
-        opacity 160ms ease,
-        background-color 160ms ease,
-        border-color 160ms ease,
-        box-shadow 160ms ease;
-    }
-
-    #${rootId} .cqc-button:active,
-    #${rootId} .cqc-button.is-dragging {
-      cursor: grabbing;
-    }
-
-    #${rootId} .cqc-button.is-active {
-      border-color: var(--cqc-primary-border);
-      box-shadow: 0 10px 32px var(--cqc-primary-ring);
-    }
-
-    #${rootId} .cqc-button[data-wk-docked] {
-      width: ${BUTTON_HEIGHT}px;
-      gap: 0;
-      padding: 0;
-      justify-content: center;
-      background: var(--cqc-button-bg-docked);
-      opacity: 0.72;
-      transform: none;
-    }
-
-    #${rootId} .cqc-button[data-wk-docked]:hover,
-    #${rootId} .cqc-button[data-wk-docked]:focus-visible,
-    #${rootId} .cqc-button[data-wk-docked].is-active,
-    #${rootId} .cqc-button[data-wk-docked].is-dragging {
-      width: ${BUTTON_FULL_WIDTH}px;
-      gap: 8px;
-      padding: 0 14px;
-      justify-content: flex-start;
-      background: var(--cqc-button-bg-docked-active);
-      opacity: 1;
-      transform: none;
-    }
-
-    #${rootId} .cqc-button[data-wk-docked] .cqc-button-text {
-      max-width: 0;
-      opacity: 0;
-      transform: translateX(-4px);
-    }
-
-    #${rootId} .cqc-button[data-wk-docked]:hover .cqc-button-text,
-    #${rootId} .cqc-button[data-wk-docked]:focus-visible .cqc-button-text,
-    #${rootId} .cqc-button[data-wk-docked].is-active .cqc-button-text,
-    #${rootId} .cqc-button[data-wk-docked].is-dragging .cqc-button-text {
-      max-width: 116px;
-      opacity: 1;
-      transform: translateX(0);
-    }
-
-    #${rootId} .cqc-button-text {
-      display: grid;
-      gap: 1px;
-      text-align: left;
-      line-height: 1.1;
-      max-width: 116px;
-      overflow: hidden;
-      transition:
-        max-width 160ms ease,
-        opacity 140ms ease,
-        transform 160ms ease;
-    }
-
-    #${rootId} .cqc-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--cqc-primary);
-      box-shadow: 0 0 0 4px var(--cqc-primary-ring);
-      flex: 0 0 auto;
-    }
-
-    #${rootId} .cqc-button-title {
-      font-size: 13px;
-      font-weight: 650;
-    }
-
-    #${rootId} .cqc-status {
-      color: var(--cqc-text-muted);
-      font-size: 11px;
-    }
-
-    #${rootId} .cqc-status[data-tone="loading"] { color: var(--cqc-primary-strong); }
-    #${rootId} .cqc-status[data-tone="success"] { color: var(--cqc-primary); }
-    #${rootId} .cqc-status[data-tone="error"] { color: var(--cqc-danger); }
-
-    #${rootId} .cqc-panel {
-      border-color: var(--cqc-border-strong);
-    }
-
-    #${rootId} .cqc-panel-header {
-      justify-content: space-between;
-      min-height: 48px;
-      padding: 12px 14px;
-      background: var(--cqc-surface-muted);
-    }
-
-    #${rootId} .cqc-panel-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-      font-size: 14px;
-      font-weight: 650;
-    }
-
-    #${rootId} .cqc-panel-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    #${rootId} .cqc-icon-button,
-    #${rootId} .cqc-refresh {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      border: 1px solid var(--cqc-border-strong);
-      border-radius: 8px;
-      background: var(--cqc-surface);
-      color: var(--cqc-text);
-      min-height: 32px;
-      padding: 0 10px;
-      font-size: 13px;
-      cursor: pointer;
-    }
-
-    #${rootId} .cqc-icon-button {
-      width: 32px;
-      height: 32px;
-      min-height: 32px;
-      padding: 0;
-    }
-
-    #${rootId} .cqc-refresh:hover,
-    #${rootId} .cqc-icon-button:hover {
-      background: var(--cqc-surface-muted);
-      border-color: var(--cqc-primary-border);
-    }
-
-    #${rootId} .cqc-content {
-      container-type: inline-size;
-      padding: 14px;
-    }
-  `;
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js
-  var DEFAULT_BUTTON_POSITION = { top: 76, right: 24 };
-  function escapeHtml(value) {
-    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-  }
-  function detectHostTheme(documentObject = globalThis.document) {
-    const host = documentObject?.documentElement;
-    if (!host) return null;
-    const className = typeof host.className === "string" ? host.className : "";
-    if (/(^|\s)dark(\s|$)/.test(className)) return "dark";
-    const inlineScheme = String(host.style?.colorScheme || "").toLowerCase();
-    if (inlineScheme.includes("dark")) return "dark";
-    if (/(^|\s)light(\s|$)/.test(className) || inlineScheme.includes("light")) return "light";
-    return null;
-  }
-  function createButtonContentMarkup(labels = {}) {
-    return `
-    <span class="cqc-dot" aria-hidden="true"></span>
-    <span class="cqc-button-text">
-      <span class="cqc-button-title">${escapeHtml(labels.buttonTitle || "")}</span>
-      <span class="cqc-status" data-tone="idle">${escapeHtml(labels.statusIdle || "")}</span>
-    </span>
-  `;
-  }
-  function renderPanelHeader(headerEl, labels = {}) {
-    headerEl.classList.add("cqc-panel-header");
-    headerEl.innerHTML = `
-    <div class="cqc-panel-title">
-      <span class="cqc-dot" aria-hidden="true"></span>
-      <span>${escapeHtml(labels.panelTitle || "")}</span>
-    </div>
-    <div class="cqc-panel-actions">
-      <button type="button" class="cqc-refresh" data-action="refresh">${iconSvg("refresh-cw", { size: 14 })}<span>${escapeHtml(labels.actionRefresh || "")}</span></button>
-      <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || "Close")}">${iconSvg("x", { size: 16 })}</button>
-    </div>
-  `;
-  }
-  function createFloatingPanelShell({
-    rootId,
-    labels = {},
-    positionKey = `${rootId}:buttonPosition`,
-    tokenCss = "",
-    detectHost = detectHostTheme,
-    document: documentObject = globalThis.document,
-    window: windowObject = globalThis,
-    storage = globalThis.localStorage,
-    onAction = () => {
-    },
-    onOpen,
-    onClose
-  } = {}) {
-    if (!rootId) {
-      throw new Error("Floating panel shell requires rootId.");
-    }
-    if (!documentObject?.createElement || !documentObject?.documentElement) {
-      throw new Error("Floating panel shell requires a document adapter.");
-    }
-    if (!windowObject) {
-      throw new Error("Floating panel shell requires a window adapter.");
-    }
-    let root = null;
-    let shell = null;
-    let statusNode = null;
-    let contentNode = null;
-    let themeCleanup = null;
-    function refs() {
-      return { root, button: shell?.buttonEl || null, panel: shell?.panelEl || null, statusNode, contentNode };
-    }
-    function setStatus(text, tone = "idle") {
-      if (!statusNode) return;
-      statusNode.textContent = text;
-      statusNode.dataset.tone = tone;
-    }
-    function installShellStyles() {
-      if (documentObject.getElementById(`${rootId}-shell-style`)) return;
-      const style = documentObject.createElement("style");
-      style.id = `${rootId}-shell-style`;
-      style.textContent = [tokenCss, shell.cssText, createShellStyles(rootId)].filter(Boolean).join("\n\n");
-      documentObject.head.append(style);
-    }
-    function requestFrame(callback) {
-      if (typeof windowObject.requestAnimationFrame === "function") {
-        windowObject.requestAnimationFrame(callback);
-      } else {
-        windowObject.setTimeout(callback, 16);
-      }
-    }
-    function mount() {
-      if (documentObject.getElementById(rootId)) return null;
-      root = documentObject.createElement("div");
-      root.id = rootId;
-      documentObject.documentElement.append(root);
-      themeCleanup = applyTheme(root, { detectHost: () => detectHost(documentObject), observeHost: true });
-      shell = createWidgetShell({
-        root,
-        buttonAriaLabel: labels.buttonAriaOpen,
-        buttonContent: createButtonContentMarkup(labels),
-        buttonClass: "cqc-button",
-        panelClass: "cqc-panel",
-        panelWidth: 560,
-        panelMaxHeight: 760,
-        storage: storage?.getItem ? {
-          get: (key) => storage.getItem(key),
-          set: (key, value) => storage.setItem(key, value)
-        } : storage,
-        positionKey,
-        defaultPosition: DEFAULT_BUTTON_POSITION,
-        dock: true,
-        onOpen,
-        onClose,
-        renderPanelHeader: (headerEl) => renderPanelHeader(headerEl, labels),
-        renderPanelBody: (bodyEl) => {
-          bodyEl.classList.add("cqc-content");
-        }
-      });
-      installShellStyles();
-      shell.buttonEl.dataset.action = "toggle";
-      statusNode = shell.buttonEl.querySelector(".cqc-status");
-      contentNode = shell.panelEl.querySelector(".cqc-content");
-      root.addEventListener("click", (event) => {
-        const actionNode = event.target?.closest?.("[data-action]");
-        const action = actionNode?.dataset?.action;
-        if (!action) return;
-        onAction(action, event, actionNode);
-      });
-      setStatus(labels.statusIdle || "", "idle");
-      return api;
-    }
-    function positionPanelNearButton() {
-      shell?.reposition();
-    }
-    function schedulePanelResize() {
-      if (!shell?.isOpen()) return;
-      requestFrame(() => {
-        if (shell?.isOpen()) shell.reposition();
-      });
-    }
-    function destroy() {
-      themeCleanup?.();
-      themeCleanup = null;
-      shell?.destroy();
-      shell = null;
-      root?.remove?.();
-      root = null;
-      statusNode = null;
-      contentNode = null;
-    }
-    const api = {
-      mount,
-      refs,
-      setStatus,
-      openPanel: () => shell?.open(),
-      closePanel: () => shell?.close(),
-      positionPanelNearButton,
-      schedulePanelResize,
-      isOpen: () => Boolean(shell?.isOpen()),
-      destroy
-    };
-    return api;
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js
-  var LIB_NAME = "CodexQuotaCompassPanelStatsStylesLib";
-  function createQuotaPanelStatsStyles(rootId) {
-    if (!rootId) {
-      throw new Error(`${LIB_NAME}.createQuotaPanelStatsStyles requires rootId.`);
-    }
-    const scope = `#${rootId}`;
-    return `
-      ${scope} {
-        --cqc-stats-space-tight: 4px;
-        --cqc-stats-space-control: 8px;
-        --cqc-stats-space-section: 12px;
-        --cqc-stats-radius-control: 8px;
-        --cqc-stats-radius-section: 10px;
-        --cqc-stats-radius-pill: 999px;
-        --cqc-stats-font-control: 12px;
-        --cqc-stats-font-meta: 11px;
-        --cqc-stats-font-value: 13px;
-        --cqc-stats-motion-duration: 160ms;
-      }
-
-      ${scope} .cqc-stats-chart {
-        display: flex;
-        align-items: flex-end;
-        gap: 2px;
-        height: 48px;
-        margin: 0 0 var(--cqc-stats-space-section);
-        padding: 6px 8px;
-        border-radius: var(--cqc-stats-radius-control);
-        background: var(--cqc-surface-sunken);
-      }
-
-      ${scope} .cqc-stats-chart-bar {
-        flex: 1 1 0;
-        min-width: 2px;
-        border-radius: 2px 2px 1px 1px;
-        background: var(--cqc-primary);
-      }
-
-      ${scope} .cqc-stats-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--cqc-stats-space-tight);
-        margin: 0 0 var(--cqc-stats-space-section);
-      }
-
-      ${scope} .cqc-stats-tab {
-        border: 1px solid var(--cqc-border);
-        background: transparent;
-        color: var(--cqc-text-muted);
-        border-radius: var(--cqc-stats-radius-pill);
-        padding: var(--cqc-stats-space-tight) var(--cqc-stats-space-section);
-        font-size: var(--cqc-stats-font-control);
-        font-weight: 600;
-        cursor: pointer;
-        transition:
-          background-color var(--cqc-stats-motion-duration) ease,
-          color var(--cqc-stats-motion-duration) ease,
-          border-color var(--cqc-stats-motion-duration) ease;
-      }
-
-      ${scope} .cqc-stats-tab:hover {
-        color: var(--cqc-text);
-      }
-
-      ${scope} .cqc-stats-tab.is-active {
-        background: var(--cqc-surface);
-        border-color: var(--cqc-border-strong);
-        color: var(--cqc-primary-strong);
-      }
-
-      ${scope} .cqc-stats-live {
-        margin: 0 0 var(--cqc-stats-space-section);
-      }
-
-      ${scope} .cqc-stats-estimate {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: var(--cqc-stats-space-control);
-        margin: 0 0 var(--cqc-stats-space-control);
-        padding: var(--cqc-stats-space-control) var(--cqc-stats-space-section);
-        border: 1px dashed var(--cqc-border-strong);
-        border-radius: var(--cqc-stats-radius-section);
-        font-size: var(--cqc-stats-font-control);
-        color: var(--cqc-text);
-      }
-
-      ${scope} .cqc-stats-estimate-tag {
-        font-size: var(--cqc-stats-font-meta);
-        font-weight: 600;
-        color: var(--cqc-text-muted);
-        border: 1px solid var(--cqc-border);
-        border-radius: var(--cqc-stats-radius-pill);
-        padding: 0 var(--cqc-stats-space-tight);
-      }
-
-      ${scope} .cqc-stats-estimate-figure {
-        margin-left: auto;
-        font-weight: 600;
-      }
-
-      ${scope} .cqc-stats-list {
-        display: grid;
-        gap: var(--cqc-stats-space-tight);
-      }
-
-      ${scope} .cqc-stats-row {
-        display: flex;
-        align-items: baseline;
-        gap: var(--cqc-stats-space-section);
-        width: 100%;
-        text-align: left;
-        border: 1px solid var(--cqc-border);
-        background: var(--cqc-surface);
-        color: var(--cqc-text);
-        border-radius: var(--cqc-stats-radius-control);
-        padding: var(--cqc-stats-space-control) var(--cqc-stats-space-section);
-        font-size: var(--cqc-stats-font-control);
-        cursor: pointer;
-        transition:
-          border-color var(--cqc-stats-motion-duration) ease,
-          background-color var(--cqc-stats-motion-duration) ease;
-      }
-
-      ${scope} .cqc-stats-row:hover {
-        border-color: var(--cqc-border-strong);
-      }
-
-      ${scope} .cqc-stats-row-label {
-        font-weight: 600;
-      }
-
-      ${scope} .cqc-stats-row-usd {
-        margin-left: auto;
-        font-weight: 600;
-      }
-
-      ${scope} .cqc-stats-row-credits {
-        color: var(--cqc-text-muted);
-      }
-
-      ${scope} .cqc-stats-back {
-        border: 1px solid var(--cqc-border);
-        background: transparent;
-        color: var(--cqc-text-muted);
-        border-radius: var(--cqc-stats-radius-control);
-        padding: var(--cqc-stats-space-tight) var(--cqc-stats-space-section);
-        font-size: var(--cqc-stats-font-control);
-        font-weight: 600;
-        cursor: pointer;
-        margin: 0 0 var(--cqc-stats-space-control);
-        transition:
-          border-color var(--cqc-stats-motion-duration) ease,
-          color var(--cqc-stats-motion-duration) ease;
-      }
-
-      ${scope} .cqc-stats-back:hover {
-        color: var(--cqc-text);
-        border-color: var(--cqc-border-strong);
-      }
-
-      ${scope} .cqc-stats-tab:focus-visible,
-      ${scope} .cqc-stats-row:focus-visible,
-      ${scope} .cqc-stats-back:focus-visible {
-        outline: 2px solid var(--cqc-primary);
-        outline-offset: 2px;
-      }
-
-      ${scope} .cqc-stats-drill-title {
-        font-size: var(--cqc-stats-font-control);
-        font-weight: 600;
-        color: var(--cqc-text);
-        margin: 0 0 var(--cqc-stats-space-control);
-      }
-
-      ${scope} .cqc-stats-all-total {
-        font-size: var(--cqc-stats-font-value);
-        font-weight: 700;
-        color: var(--cqc-primary-strong);
-        margin: 0 0 var(--cqc-stats-space-tight);
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        ${scope} .cqc-stats-tab,
-        ${scope} .cqc-stats-row,
-        ${scope} .cqc-stats-back {
-          transition: none !important;
-        }
-      }
-    `;
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js
-  function createQuotaPanelRendererStyles(rootId = "codex-quota-compass-root") {
-    return `
-      ${createQuotaPanelStatsStyles(rootId)}
-
-      .cqc-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin: 14px 0;
-        padding: 3px;
-        border-radius: 10px;
-        background: var(--cqc-surface-sunken);
-        border: 1px solid var(--cqc-border);
-      }
-
-      .cqc-tab {
-        flex: 1 1 auto;
-        border: 1px solid transparent;
-        background: transparent;
-        color: var(--cqc-text-muted);
-        border-radius: 8px;
-        padding: 6px 10px;
-        font-size: 12px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
-      }
-
-      .cqc-tab:hover {
-        color: var(--cqc-text);
-      }
-
-      .cqc-tab.is-active {
-        background: var(--cqc-surface);
-        border-color: var(--cqc-border-strong);
-        color: var(--cqc-primary-strong);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-      }
-
-      .cqc-transfer-note {
-        margin-top: 8px;
-        color: var(--cqc-text-muted);
-        font-size: 12px;
-        line-height: 1.45;
-      }
-
-      .cqc-sync-banner {
-        display: grid;
-        gap: 4px;
-        margin: 0 0 12px;
-        padding: 10px 12px;
-        border: 1px solid var(--cqc-border);
-        border-left: 3px solid var(--cqc-border-strong);
-        border-radius: 10px;
-        background: var(--cqc-surface-sunken);
-        color: var(--cqc-text-muted);
-        font-size: 12px;
-        line-height: 1.45;
-      }
-
-      .cqc-sync-banner strong {
-        color: var(--cqc-text);
-        font-size: 13px;
-      }
-
-      .cqc-sync-banner[data-tone="success"] {
-        border-left-color: var(--cqc-primary);
-        background: var(--cqc-primary-soft);
-        color: var(--cqc-primary-strong);
-      }
-
-      .cqc-sync-banner[data-tone="success"] strong {
-        color: var(--cqc-primary-strong);
-      }
-
-      .cqc-sync-banner[data-tone="warning"] {
-        border-left-color: var(--cqc-warning);
-        background: var(--cqc-warning-surface);
-        color: var(--cqc-warning);
-      }
-
-      .cqc-sync-banner[data-tone="warning"] strong {
-        color: var(--cqc-warning);
-      }
-
-      .cqc-sync-form {
-        display: grid;
-        gap: 10px;
-        margin: 0 0 14px;
-        padding: 14px;
-        border: 1px solid var(--cqc-border);
-        border-radius: 10px;
-        background: var(--cqc-surface);
-      }
-
-      .cqc-sync-form-title {
-        font-size: 13px;
-        font-weight: 650;
-        color: var(--cqc-text);
-      }
-
-      .cqc-sync-form-status {
-        font-size: 12px;
-        line-height: 1.4;
-        color: var(--cqc-text-muted);
-      }
-
-      .cqc-sync-form-status[data-tone="error"] {
-        color: var(--cqc-danger);
-      }
-
-      .cqc-sync-field {
-        display: grid;
-        gap: 4px;
-      }
-
-      .cqc-sync-field-label {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 8px;
-        color: var(--cqc-text-muted);
-        font-size: 12px;
-        font-weight: 600;
-      }
-
-      .cqc-sync-field-hint {
-        color: var(--cqc-text-muted);
-        font-size: 11px;
-        font-weight: 400;
-      }
-
-      .cqc-sync-form input[type="text"],
-      .cqc-sync-form input[type="password"] {
-        width: 100%;
-        border: 1px solid var(--cqc-border-strong);
-        border-radius: 8px;
-        padding: 8px 10px;
-        font: inherit;
-        font-size: 13px;
-        color: var(--cqc-text);
-        background: var(--cqc-surface-sunken);
-      }
-
-      .cqc-sync-form input::placeholder {
-        color: var(--cqc-text-muted);
-        opacity: 0.7;
-      }
-
-      .cqc-sync-toggle {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: var(--cqc-text);
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-
-      .cqc-sync-toggle input {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--cqc-primary);
-      }
-
-      .cqc-sync-form-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 2px;
-      }
-
-      .cqc-sync-form-actions button {
-        border: 1px solid var(--cqc-border-strong);
-        border-radius: 8px;
-        background: var(--cqc-surface);
-        color: var(--cqc-text);
-        padding: 7px 12px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background-color 140ms ease, border-color 140ms ease;
-      }
-
-      .cqc-sync-form-actions button:hover {
-        border-color: var(--cqc-primary-border);
-      }
-
-      .cqc-sync-form-actions button[data-variant="primary"] {
-        background: var(--cqc-primary);
-        border-color: var(--cqc-primary);
-        color: #ffffff;
-      }
-
-      .cqc-sync-form-actions button[data-variant="primary"]:hover {
-        background: var(--cqc-primary-strong);
-        border-color: var(--cqc-primary-strong);
-      }
-
-      .cqc-sync-form-actions button[data-variant="danger"] {
-        color: var(--cqc-danger);
-      }
-
-      .cqc-sync-form-actions button[data-variant="danger"]:hover {
-        border-color: var(--cqc-danger);
-      }
-
-      .cqc-metrics {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-        margin: 0 0 12px;
-      }
-
-      .cqc-hero,
-      .cqc-metric,
-      .cqc-section {
-        border: 1px solid var(--cqc-border);
-        border-radius: 10px;
-        background: var(--cqc-surface);
-      }
-
-      .cqc-hero {
-        margin: 0 0 10px;
-        padding: 14px 16px;
-      }
-
-      .cqc-hero-label {
-        color: var(--cqc-text-muted);
-        font-size: 12px;
-        line-height: 1.3;
-      }
-
-      .cqc-hero-value {
-        margin: 6px 0 2px;
-        font-size: var(--wk-fs-hero, 28px);
-        font-weight: 650;
-        line-height: 1.15;
-        letter-spacing: -0.01em;
-        overflow-wrap: anywhere;
-      }
-
-      .cqc-hero-sub {
-        margin-top: 4px;
-        color: var(--cqc-text-muted);
-        font-size: 12px;
-        line-height: 1.3;
-      }
-
-      .cqc-metrics-secondary .cqc-metric {
-        padding: 8px 12px;
-      }
-
-      .cqc-metrics-secondary .cqc-metric-value {
-        margin: 3px 0 1px;
-        font-size: 15px;
-      }
-
-      .cqc-metric {
-        min-width: 0;
-        padding: 11px 12px;
-      }
-
-      .cqc-metric-label,
-      .cqc-metric-hint {
-        color: var(--cqc-text-muted);
-        font-size: 12px;
-        line-height: 1.3;
-      }
-
-      .cqc-metric-value {
-        margin: 5px 0 2px;
-        font-size: 17px;
-        font-weight: 650;
-        line-height: 1.2;
-        letter-spacing: -0.01em;
-        overflow-wrap: anywhere;
-      }
-
-      .cqc-detail-footnote {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 10px;
-        justify-content: center;
-        margin: 10px 0 2px;
-      }
-
-      .cqc-detail-footnote button {
-        border: 0;
-        background: transparent;
-        color: var(--cqc-primary-strong);
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
-        padding: 6px 8px;
-      }
-
-      .cqc-detail-footnote button:hover {
-        text-decoration: underline;
-      }
-
-      .cqc-section {
-        margin-top: 12px;
-        overflow: hidden;
-      }
-
-      .cqc-section h3 {
-        margin: 0;
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--cqc-border);
-        background: var(--cqc-surface-muted);
-        font-size: 14px;
-        line-height: 1.3;
-      }
-
-      .cqc-table-wrap {
-        overflow: auto;
-      }
-
-      .cqc-table-wrap table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-      }
-
-      .cqc-table-wrap th,
-      .cqc-table-wrap td {
-        border-bottom: 1px solid var(--cqc-border);
-        padding: 9px 10px;
-        text-align: left;
-        vertical-align: top;
-        white-space: nowrap;
-      }
-
-      .cqc-table-wrap td.is-wrappable {
-        white-space: normal;
-        overflow-wrap: anywhere;
-      }
-
-      .cqc-table-wrap td.is-truncated {
-        max-width: 180px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .cqc-table-wrap td.is-debug,
-      .cqc-table-wrap th.is-debug {
-        color: var(--cqc-text-muted);
-      }
-
-      .cqc-compact-list {
-        display: none;
-      }
-
-      .cqc-compact-row {
-        display: grid;
-        gap: 8px;
-        margin: 0;
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--cqc-border);
-      }
-
-      .cqc-compact-row:last-child {
-        border-bottom: 0;
-      }
-
-      .cqc-compact-field {
-        display: grid;
-        grid-template-columns: minmax(92px, 38%) minmax(0, 1fr);
-        gap: 8px;
-        align-items: start;
-      }
-
-      .cqc-compact-field dt,
-      .cqc-compact-field dd {
-        margin: 0;
-        min-width: 0;
-        font-size: 12px;
-        line-height: 1.35;
-      }
-
-      .cqc-compact-field dt {
-        color: var(--cqc-text-muted);
-        font-weight: 650;
-      }
-
-      .cqc-compact-value {
-        color: var(--cqc-text);
-        overflow-wrap: anywhere;
-      }
-
-      .cqc-compact-value.is-truncated {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-
-      .cqc-table-wrap tbody tr:hover {
-        background: var(--cqc-row-hover);
-      }
-
-      .cqc-table-wrap th {
-        color: var(--cqc-text-muted);
-        background: var(--cqc-surface);
-        font-weight: 650;
-        position: sticky;
-        top: 0;
-      }
-
-      .cqc-table-note,
-      .cqc-empty {
-        color: var(--cqc-text-muted);
-        font-size: 12px;
-        padding: 10px 12px;
-      }
-
-      .cqc-table-expand {
-        border: 0;
-        background: transparent;
-        color: var(--cqc-primary-strong);
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 0;
-      }
-
-      .cqc-table-expand:hover {
-        text-decoration: underline;
-      }
-
-      .cqc-loading,
-      .cqc-error {
-        display: flex;
-        gap: 12px;
-        align-items: flex-start;
-        padding: 18px;
-        border: 1px solid var(--cqc-border);
-        border-radius: 10px;
-        background: var(--cqc-surface-muted);
-      }
-
-      .cqc-loading span,
-      .cqc-error p {
-        display: block;
-        margin: 4px 0 0;
-        color: var(--cqc-text-muted);
-        font-size: 13px;
-        line-height: 1.45;
-        white-space: pre-wrap;
-      }
-
-      .cqc-error {
-        display: block;
-        border-color: rgba(217, 45, 32, 0.24);
-      }
-
-      .cqc-spinner {
-        width: 18px;
-        height: 18px;
-        border: 2px solid var(--cqc-primary-ring);
-        border-top-color: var(--cqc-primary);
-        border-radius: 50%;
-        animation: cqc-spin 0.8s linear infinite;
-        flex: 0 0 auto;
-      }
-
-      @keyframes cqc-spin {
-        to { transform: rotate(360deg); }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .cqc-spinner {
-          transition: none !important;
-          animation: none !important;
-        }
-
-        .cqc-tab,
-        .cqc-sync-form-actions button {
-          transition: none !important;
-        }
-      }
-
-      @container (max-width: 720px) {
-        .cqc-metrics {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .cqc-data-view[data-compact="true"] .cqc-data-table {
-          display: none;
-        }
-
-        .cqc-data-view[data-compact="true"] .cqc-compact-list {
-          display: block;
-        }
-      }
-
-      @media (max-width: 720px) {
-        .cqc-metrics {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .cqc-data-view[data-compact="true"] .cqc-data-table {
-          display: none;
-        }
-
-        .cqc-data-view[data-compact="true"] .cqc-compact-list {
-          display: block;
-        }
-      }
-    `;
-  }
-  function installQuotaPanelRendererStyles(documentObject, rootId) {
-    if (!documentObject?.createElement || !documentObject?.head) {
-      throw new Error("Quota panel renderer requires a document adapter.");
-    }
-    if (!rootId) {
-      throw new Error("Quota panel renderer requires rootId.");
-    }
-    if (documentObject.getElementById(`${rootId}-style`)) return;
-    const style = documentObject.createElement("style");
-    style.id = `${rootId}-style`;
-    style.textContent = createQuotaPanelRendererStyles(rootId);
-    documentObject.head.append(style);
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js
-  var LIB_NAME2 = "CodexQuotaCompassPanelStatsLib";
-  var PERIODS = ["day", "week", "month", "all"];
-  function round(value) {
-    return Math.round(Number(value || 0));
-  }
-  function usd(value) {
-    return Number(value || 0).toFixed(2);
-  }
-  function normalizePeriod(period) {
-    return PERIODS.includes(period) ? period : "day";
-  }
-  function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
-    const { t, sectionHtml, tableHtml, escapeHtml: escapeHtml3 } = helpers;
-    if (typeof t !== "function" || typeof sectionHtml !== "function" || typeof tableHtml !== "function" || typeof escapeHtml3 !== "function") {
-      throw new Error(`${LIB_NAME2}.buildStatsView requires t/sectionHtml/tableHtml/escapeHtml helpers.`);
-    }
-    const activePeriod = normalizePeriod(period);
-    function emptyHtml() {
-      return `<div class="cqc-empty">${escapeHtml3(t("statsEmpty"))}</div>`;
-    }
-    function periodTabsHtml() {
-      const items = [
-        ["day", "statsPeriodDay"],
-        ["week", "statsPeriodWeek"],
-        ["month", "statsPeriodMonth"],
-        ["all", "statsPeriodAll"]
-      ];
-      return `
-      <div class="cqc-stats-tabs" role="group" aria-label="${escapeHtml3(t("tabStats"))}">
-        ${items.map(([id, key]) => `
-          <button
-            type="button"
-            class="cqc-stats-tab${activePeriod === id ? " is-active" : ""}"
-            data-action="switch-stats-period"
-            data-period="${escapeHtml3(id)}"
-            aria-pressed="${activePeriod === id ? "true" : "false"}"
-          >${escapeHtml3(t(key))}</button>
-        `).join("")}
-      </div>
-    `;
-    }
-    function rollingLiveHtml() {
-      if (!rolling) return "";
-      const usdValue = usd(rolling["累计折算USD"]);
-      const creditsValue = round(rolling["累计Credits"]);
-      return `<div class="cqc-stats-live cqc-table-note">${escapeHtml3(t("statsRollingLive"))}: $${escapeHtml3(usdValue)} · ${escapeHtml3(String(creditsValue))} Credits</div>`;
-    }
-    function chartHtml() {
-      const days = (cost.allDays || []).slice(-30);
-      if (!days.length) return "";
-      const max = Math.max(...days.map((row) => Number(row.usd) || 0));
-      if (!(max > 0)) return "";
-      const bars = days.map((row) => {
-        const percent = Math.max(2, Math.round((Number(row.usd) || 0) / max * 100));
-        return `<span class="cqc-stats-chart-bar" style="height: ${percent}%"></span>`;
-      }).join("");
-      return `<div class="cqc-stats-chart" aria-hidden="true">${bars}</div>`;
-    }
-    function dailyTableHtml(rows) {
-      const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
-        date: row.date,
-        credits: round(row.credits),
-        usd: usd(row.usd)
-      }));
-      return mapped.length ? tableHtml(mapped, {
-        columns: [
-          { key: "date", labelKey: "statsColumnDate", priority: "primary" },
-          { key: "credits", labelKey: "statsColumnCredits" },
-          { key: "usd", labelKey: "statsColumnUsd" }
-        ],
-        limit: mapped.length
-      }) : emptyHtml();
-    }
-    function estimateLineHtml(label, range, creditsValue, usdValue) {
-      return `
-      <div class="cqc-stats-estimate">
-        <span class="cqc-stats-estimate-label">${escapeHtml3(label)}</span>
-        <span class="cqc-stats-estimate-tag">${escapeHtml3(t("statsEstimate"))}</span>
-        <span class="cqc-stats-estimate-range">${escapeHtml3(range)}</span>
-        <span class="cqc-stats-estimate-figure">$${escapeHtml3(usd(usdValue))} · ${escapeHtml3(String(round(creditsValue)))} Credits</span>
-      </div>
-    `;
-    }
-    function drillableListHtml(items) {
-      if (!items.length) return emptyHtml();
-      return `
-      <div class="cqc-stats-list">
-        ${items.map((item) => `
-          <button
-            type="button"
-            class="cqc-stats-row"
-            data-action="stats-drill"
-            data-from="${escapeHtml3(item.from)}"
-            data-to="${escapeHtml3(item.to)}"
-            data-label="${escapeHtml3(item.label)}"
-          >
-            <span class="cqc-stats-row-label">${escapeHtml3(item.label)}</span>
-            <span class="cqc-stats-row-usd">$${escapeHtml3(usd(item.usd))}</span>
-            <span class="cqc-stats-row-credits">${escapeHtml3(String(round(item.credits)))} Credits</span>
-          </button>
-        `).join("")}
-      </div>
-    `;
-    }
-    function dayBody() {
-      const day = cost.day || {};
-      const today = day.today ? estimateLineHtml(t("costTodayLabel"), day.today.date, day.today.credits, day.today.usd) : "";
-      return sectionHtml(t("statsPeriodDay"), today + dailyTableHtml(day.rows));
-    }
-    function weekBody() {
-      const week = cost.week || {};
-      const current = week.current ? estimateLineHtml(t("statsPeriodWeek"), `${week.current.from} ~ ${week.current.to}`, week.current.credits, week.current.usd) : "";
-      const list = drillableListHtml((week.blocks || []).map((block) => ({
-        from: block.from,
-        to: block.to,
-        label: `${block.from} ~ ${block.to}`,
-        usd: block.usd,
-        credits: block.credits
-      })));
-      return sectionHtml(t("statsPeriodWeek"), current + list);
-    }
-    function monthBody() {
-      const month = cost.month || {};
-      const current = month.current ? estimateLineHtml(t("statsPeriodMonth"), month.current.month, month.current.credits, month.current.usd) : "";
-      const list = drillableListHtml((month.rows || []).map((row) => ({
-        from: row.from,
-        to: row.to,
-        label: row.month,
-        usd: row.usd,
-        credits: row.credits
-      })));
-      return sectionHtml(t("statsPeriodMonth"), current + list);
-    }
-    function allBody() {
-      const all = cost.all || {};
-      const header = `
-      <div class="cqc-stats-all-total">${escapeHtml3(t("statsAllTotal"))}: $${escapeHtml3(usd(all.totalUsd))} · ${escapeHtml3(String(round(all.totalCredits)))} Credits</div>
-      <div class="cqc-table-note">${escapeHtml3(t("statsCoverDays", { days: all.coverDays || 0 }))} · ${escapeHtml3(all.fromDate || "-")} ~ ${escapeHtml3(all.toDate || "-")}</div>
-    `;
-      return sectionHtml(t("statsPeriodAll"), header + dailyTableHtml(all.rows));
-    }
-    function drillBody() {
-      const rows = (cost.allDays || []).filter((row) => row.date >= drill.from && row.date <= drill.to);
-      const back = `<button type="button" class="cqc-stats-back" data-action="stats-drill-back">${escapeHtml3(t("statsDrillBack"))}</button>`;
-      const title = `<div class="cqc-stats-drill-title">${escapeHtml3(drill.label || `${drill.from} ~ ${drill.to}`)}</div>`;
-      return `<div class="cqc-stats-drill">${back}${title}${dailyTableHtml(rows)}</div>`;
-    }
-    if (!cost) {
-      return periodTabsHtml() + emptyHtml();
-    }
-    if (drill && drill.from && drill.to) {
-      return periodTabsHtml() + drillBody();
-    }
-    let body;
-    if (activePeriod === "week") body = weekBody();
-    else if (activePeriod === "month") body = monthBody();
-    else if (activePeriod === "all") body = allBody();
-    else body = dayBody();
-    return periodTabsHtml() + chartHtml() + rollingLiveHtml() + body;
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js
-  function escapeHtml2(value) {
-    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-  }
-  function formatValue(value) {
-    if (value === null || value === void 0 || value === "") return "-";
-    if (typeof value === "number") return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(void 0, { maximumFractionDigits: 6 });
-    return String(value);
-  }
-  function safeRows(rows, limit = 12) {
-    return Array.isArray(rows) ? rows.slice(0, limit) : [];
-  }
-  function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
-    if (typeof t !== "function") {
-      throw new Error("Quota panel renderer requires a translator function.");
-    }
-    const formatLocalTimestamp = typeof formatTimestamp === "function" ? formatTimestamp : (value) => {
-      const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
-    };
-    function displayTimestamp(value) {
-      if (!value || value === "-") return "-";
-      return formatLocalTimestamp(value);
-    }
-    function normalizeDataColumns(rows, columns) {
-      if (Array.isArray(columns) && columns.length) {
-        return columns.map((column) => typeof column === "string" ? { key: column, label: column, priority: "secondary", compact: true } : {
-          key: column.key || column.label || "",
-          label: column.label || column.key || "",
-          labelKey: column.labelKey || "",
-          priority: column.priority || "secondary",
-          truncate: Boolean(column.truncate),
-          wrap: Boolean(column.wrap),
-          compact: column.compact !== false
-        }).filter((column) => column.key);
-      }
-      return [...new Set(rows.flatMap((row) => Object.keys(row || {})))].map((key) => ({ key, label: key, priority: "secondary", compact: true }));
-    }
-    function columnLabel(column) {
-      return column.labelKey ? t(column.labelKey) : column.label;
-    }
-    function dataCellHtml(row, column) {
-      const value = formatValue(row?.[column.key]);
-      const classes = [
-        column.truncate ? "is-truncated" : "",
-        column.wrap ? "is-wrappable" : "",
-        column.priority ? `is-${column.priority}` : ""
-      ].filter(Boolean).join(" ");
-      const title = column.truncate ? ` title="${escapeHtml2(value)}"` : "";
-      return `<td class="${escapeHtml2(classes)}"${title}>${escapeHtml2(value)}</td>`;
-    }
-    function compactValueHtml(row, column) {
-      const value = formatValue(row?.[column.key]);
-      const classes = [
-        "cqc-compact-value",
-        column.truncate ? "is-truncated" : "",
-        column.wrap ? "is-wrappable" : ""
-      ].filter(Boolean).join(" ");
-      const title = column.truncate ? ` title="${escapeHtml2(value)}"` : "";
-      return `
-      <div class="cqc-compact-field">
-        <dt>${escapeHtml2(columnLabel(column))}</dt>
-        <dd class="${escapeHtml2(classes)}"${title}>${escapeHtml2(value)}</dd>
-      </div>
-    `;
-    }
-    function dataViewHtml(view = {}, state = {}) {
-      const rows = Array.isArray(view.rows) ? view.rows : [];
-      const limit = view.limit ?? 12;
-      const expandable = rows.length > limit;
-      const expanded = expandable && Boolean(state.expandedViews?.has?.(view.id));
-      const visibleRows = expanded ? rows : safeRows(rows, limit);
-      const columns = normalizeDataColumns(visibleRows, view.columns);
-      if (!visibleRows.length || !columns.length) {
-        return `<div class="cqc-empty">${escapeHtml2(t(view.emptyKey || "tableNoData"))}</div>`;
-      }
-      const head = columns.map((column) => `<th>${escapeHtml2(columnLabel(column))}</th>`).join("");
-      const body = visibleRows.map((row) => `<tr>${columns.map((column) => dataCellHtml(row, column)).join("")}</tr>`).join("");
-      const compactColumns = columns.filter((column) => column.compact && column.priority !== "debug");
-      const compact = visibleRows.map((row) => `
-        <dl class="cqc-compact-row">
-          ${compactColumns.map((column) => compactValueHtml(row, column)).join("")}
-        </dl>
-      `).join("");
-      const toggle = expandable ? `<div class="cqc-table-note"><button type="button" class="cqc-table-expand" data-action="toggle-rows" data-view-id="${escapeHtml2(view.id || "")}" data-expanded="${expanded ? "true" : "false"}">${escapeHtml2(expanded ? t("tableShowLess") : t("tableShowAll", { total: rows.length }))}</button></div>` : "";
-      return `
-      <div class="cqc-data-view" data-view-id="${escapeHtml2(view.id || "")}" data-compact="${view.compactOnMobile === false ? "false" : "true"}">
-        <div class="cqc-table-wrap cqc-data-table">
-          <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-        </div>
-        <div class="cqc-compact-list">${compact}</div>
-      </div>
-      ${toggle}
-    `;
-    }
-    function tableHtml(rows, options = {}) {
-      return dataViewHtml({
-        id: options.id || "",
-        rows,
-        columns: options.columns,
-        limit: options.limit,
-        compactOnMobile: options.compactOnMobile
-      });
-    }
-    function metricHtml(label, value, hint = "") {
-      return `
-      <div class="cqc-metric">
-        <div class="cqc-metric-label">${escapeHtml2(label)}</div>
-        <div class="cqc-metric-value">${escapeHtml2(formatValue(value))}</div>
-        ${hint ? `<div class="cqc-metric-hint">${escapeHtml2(hint)}</div>` : ""}
-      </div>
-    `;
-    }
-    function formatMetricDecimal(value) {
-      const numericValue = Number(value);
-      if (!Number.isFinite(numericValue)) return "-";
-      return numericValue.toLocaleString(void 0, {
-        minimumFractionDigits: 1,
-        maximumFractionDigits: 1
-      });
-    }
-    function usdMetricValue(value) {
-      return value === null || value === void 0 || value === "" ? "-" : `$${formatMetricDecimal(value)}`;
-    }
-    function formatHoursDuration(hours) {
-      const numericHours = Number(hours);
-      if (!Number.isFinite(numericHours)) return "-";
-      const totalMinutes = Math.max(0, Math.round(numericHours * 60));
-      const days = Math.floor(totalMinutes / (24 * 60));
-      const remainingHours = Math.floor(totalMinutes % (24 * 60) / 60);
-      const minutes = totalMinutes % 60;
-      if (days > 0) return t("durationDaysHours", { days, hours: remainingHours });
-      if (remainingHours > 0) return t("durationHoursMinutes", { hours: remainingHours, minutes });
-      return t("durationMinutes", { minutes });
-    }
-    function creditMetricHtml(label, usd2) {
-      return metricHtml(label, usdMetricValue(usd2));
-    }
-    function resetMetricHtml(hours) {
-      return metricHtml(t("resetCountdown"), formatHoursDuration(hours));
-    }
-    function primaryMetricHtml(metric) {
-      const label = metric?.labelKey ? t(metric.labelKey) : metric?.label || "-";
-      if (metric?.type === "credit") {
-        return creditMetricHtml(label, metric.usd);
-      }
-      if (metric?.type === "reset") {
-        return resetMetricHtml(metric.hours);
-      }
-      return metricHtml(label, metric?.value);
-    }
-    function heroHtml(metric) {
-      if (!metric) return "";
-      const label = metric.labelKey ? t(metric.labelKey) : metric.label || "-";
-      const value = metric.type === "credit" ? usdMetricValue(metric.usd) : formatValue(metric.value);
-      const hours = Number(metric.resetHours);
-      const subline = Number.isFinite(hours) ? `<div class="cqc-hero-sub">${escapeHtml2(t("heroResetSubline", { duration: formatHoursDuration(hours) }))}</div>` : "";
-      return `
-      <section class="cqc-hero">
-        <div class="cqc-hero-label">${escapeHtml2(label)}</div>
-        <div class="cqc-hero-value">${escapeHtml2(value)}</div>
-        ${subline}
-      </section>
-    `;
-    }
-    function secondaryMetricsHtml(metrics) {
-      const list = Array.isArray(metrics) ? metrics : [];
-      if (!list.length) return "";
-      return `<div class="cqc-metrics cqc-metrics-secondary">${list.map(primaryMetricHtml).join("")}</div>`;
-    }
-    function detailMetricsHtml(metrics) {
-      const list = Array.isArray(metrics) ? metrics : [];
-      if (!list.length) return "";
-      return `<div class="cqc-metrics">${list.map(primaryMetricHtml).join("")}</div>`;
-    }
-    function syncBannerHtml(banner) {
-      if (!banner) return "";
-      const variables = {
-        backend: banner.backendLabel || "-",
-        endpoint: banner.endpoint || "-",
-        lastSyncedAt: banner.lastSyncedAt || "-",
-        error: banner.lastError || "-"
-      };
-      return `
-      <div class="cqc-sync-banner" data-tone="${escapeHtml2(banner.tone || "muted")}">
-        <strong>${escapeHtml2(t(banner.titleKey, variables))}</strong>
-        <span>${escapeHtml2(t(banner.detailKey, variables))}</span>
-      </div>
-    `;
-    }
-    function syncFormHtml(status = {}) {
-      const enabled = Boolean(status.enabled);
-      const hasToken = Boolean(status.hasToken);
-      const configured = Boolean(status.configured);
-      const gistId = status.gistId || "";
-      const lastSyncedAt = status.lastSyncedAt || "";
-      const lastError = status.lastError || "";
-      const statusLine = lastError ? `<div class="cqc-sync-form-status" data-tone="error">${escapeHtml2(t("remoteSyncStatusError", { error: lastError }))}</div>` : `<div class="cqc-sync-form-status" data-tone="muted">${escapeHtml2(lastSyncedAt ? t("remoteSyncLastSynced", { lastSyncedAt: formatLocalTimestamp(lastSyncedAt) }) : t("remoteSyncNeverSynced"))}</div>`;
-      const syncNowButton = enabled && configured ? `<button type="button" data-action="sync-remote">${escapeHtml2(t("remoteSyncNowAction"))}</button>` : "";
-      return `
-      <div class="cqc-sync-form" data-sync-form>
-        <div class="cqc-sync-form-title">${escapeHtml2(t("remoteSyncFormTitle"))}</div>
-        <div class="cqc-sync-field">
-          <span class="cqc-sync-field-label">
-            ${escapeHtml2(t("remoteSyncTokenLabel"))}
-            <span class="cqc-sync-field-hint">${escapeHtml2(hasToken ? t("remoteSyncTokenSavedHint") : t("remoteSyncTokenFieldHint"))}</span>
-          </span>
-          <input type="password" data-field="token" autocomplete="new-password" spellcheck="false" placeholder="${escapeHtml2(hasToken ? t("remoteSyncTokenPlaceholderSet") : t("remoteSyncTokenPlaceholderNew"))}">
-        </div>
-        <div class="cqc-sync-field">
-          <span class="cqc-sync-field-label">
-            ${escapeHtml2(t("remoteSyncGistIdLabel"))}
-            <span class="cqc-sync-field-hint">${escapeHtml2(t("remoteSyncGistIdFieldHint"))}</span>
-          </span>
-          <input type="text" data-field="gistId" spellcheck="false" value="${escapeHtml2(gistId)}" placeholder="${escapeHtml2(t("remoteSyncGistIdPlaceholder"))}">
-        </div>
-        <label class="cqc-sync-toggle">
-          <input type="checkbox" data-field="enabled"${enabled ? " checked" : ""}>
-          ${escapeHtml2(t("remoteSyncEnableLabel"))}
-        </label>
-        ${statusLine}
-        <div class="cqc-sync-form-actions">
-          <button type="button" data-action="save-remote-sync" data-variant="primary">${escapeHtml2(t("remoteSyncSaveAction"))}</button>
-          ${syncNowButton}
-        </div>
-      </div>
-    `;
-    }
-    function sectionHtml(title, body) {
-      return `
-      <section class="cqc-section">
-        <h3>${escapeHtml2(title)}</h3>
-        ${body}
-      </section>
-    `;
-    }
-    function detailActionsHtml(actions) {
-      return `
-      <div class="cqc-detail-footnote">
-        ${actions.map((item) => `
-          <button type="button" data-action="${escapeHtml2(item.action)}">${escapeHtml2(item.label)}</button>
-        `).join("")}
-      </div>
-    `;
-    }
-    function archiveSummaryHtml(model = {}, state) {
-      if (!model.isLoaded) {
-        return `<div class="cqc-empty">${escapeHtml2(t("archiveEmpty"))}</div>`;
-      }
-      const overviewColumns = [
-        t("archiveSnapshotCount"),
-        t("archiveEarliestCapturedAt"),
-        t("archiveLatestCapturedAt"),
-        t("archiveStorageBackend")
-      ];
-      const recentColumns = [
-        t("archiveCapturedAt"),
-        t("archiveSnapshotId"),
-        t("archiveMonthlyCredits"),
-        t("archiveWeeklyUsedPercent")
-      ];
-      const overview = dataViewHtml({
-        id: "archive-overview",
-        rows: [
-          {
-            [overviewColumns[0]]: model.snapshotCount,
-            [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
-            [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
-            [overviewColumns[3]]: model.storageBackend?.label || "-"
-          }
-        ],
-        columns: overviewColumns.map((column) => ({
-          key: column,
-          label: column,
-          priority: column === t("archiveSnapshotCount") ? "primary" : "secondary",
-          truncate: column !== t("archiveSnapshotCount")
-        })),
-        limit: 1
-      }, state);
-      const recentSnapshots = safeRows(model.recentSnapshots || [], 5);
-      const recent = recentSnapshots.length ? dataViewHtml({
-        id: "archive-recent",
-        rows: recentSnapshots.map((row) => ({
-          [recentColumns[0]]: displayTimestamp(row.capturedAt),
-          [recentColumns[1]]: row.snapshotId,
-          [recentColumns[2]]: row.monthlyCredits,
-          [recentColumns[3]]: row.weeklyUsedPercent
-        })),
-        columns: recentColumns.map((column) => ({
-          key: column,
-          label: column,
-          priority: column === t("archiveSnapshotId") ? "primary" : "secondary",
-          truncate: column === t("archiveSnapshotId") || column === t("archiveCapturedAt")
-        }))
-      }, state) : `<div class="cqc-empty">${escapeHtml2(t("archiveNoSnapshot"))}</div>`;
-      const importReport = model.importReport ? `<div class="cqc-table-note">${escapeHtml2(t("archiveLatestImport", { added: model.importReport.added, skipped: model.importReport.skipped, invalid: model.importReport.invalid }))}</div>` : "";
-      return `${overview}${importReport}${recent}`;
-    }
-    function archiveTransferActionsHtml() {
-      return detailActionsHtml([
-        { action: "export-archive", label: t("archiveExportAction") },
-        { action: "import-archive", label: t("archiveImportAction") }
-      ]);
-    }
-    function panelTabsHtml(model, activePanelView) {
-      const tabs = Array.isArray(model?.tabs) && model.tabs.length ? model.tabs : [
-        { id: "details", labelKey: "tabDetails" },
-        { id: "stats", labelKey: "tabStats" },
-        { id: "archive", labelKey: "tabArchiveWorkspace" }
-      ];
-      return `
-      <div class="cqc-tabs">
-        ${tabs.map((tab) => `
-          <button
-            type="button"
-            class="cqc-tab${activePanelView === tab.id ? " is-active" : ""}"
-            data-action="switch-view"
-            data-view="${escapeHtml2(tab.id)}"
-          >${escapeHtml2(tab.labelKey ? t(tab.labelKey) : tab.label)}</button>
-        `).join("")}
-      </div>
-    `;
-    }
-    function sectionFromModelHtml(section, viewModel, state) {
-      if (!section) return "";
-      if (section.type === "metrics") {
-        return detailMetricsHtml(section.metrics);
-      }
-      if (section.type === "dataView") {
-        return sectionHtml(t(section.titleKey), dataViewHtml(section, state));
-      }
-      if (section.type === "syncBanner") {
-        return syncBannerHtml(viewModel?.syncBanner);
-      }
-      if (section.type === "syncForm") {
-        return syncFormHtml(viewModel?.remoteSyncStatus);
-      }
-      if (section.type === "archiveSummary") {
-        return sectionHtml(t("sectionArchiveOverview"), archiveSummaryHtml(viewModel?.archive, state));
-      }
-      if (section.type === "note") {
-        return `<div class="cqc-transfer-note">${escapeHtml2(t(section.noteKey || "transferNote"))}</div>`;
-      }
-      if (section.type === "actions") {
-        const actions = Array.isArray(section.actions) ? section.actions.map((item) => ({
-          action: item.action,
-          label: item.labelKey ? t(item.labelKey) : item.label
-        })) : [];
-        return actions.length ? detailActionsHtml(actions) : "";
-      }
-      return "";
-    }
-    function sectionsViewHtml(view, viewModel, state) {
-      return (view?.sections || []).map((section) => sectionFromModelHtml(section, viewModel, state)).join("");
-    }
-    function statsViewHtml(model, state = {}) {
-      return buildStatsView(
-        {
-          cost: model?.cost,
-          rolling: model?.rolling,
-          period: state.statsPeriod,
-          drill: state.statsDrill
-        },
-        { t, sectionHtml, tableHtml, escapeHtml: escapeHtml2 }
-      );
-    }
-    function archiveViewHtml(model, state) {
-      const view = model?.views?.archive;
-      if (view) return sectionsViewHtml(view, model, state);
-      return `
-      ${syncBannerHtml(model?.syncBanner)}
-      ${sectionHtml(t("sectionArchiveOverview"), archiveSummaryHtml(model?.archive, state))}
-      <div class="cqc-transfer-note">${escapeHtml2(t("transferNote"))}</div>
-      ${archiveTransferActionsHtml()}
-    `;
-    }
-    function activeViewHtml(viewModel, activePanelView, state = {}) {
-      const view = viewModel?.views?.[activePanelView] || viewModel?.views?.details;
-      if (view?.kind === "archiveWorkspace") {
-        return archiveViewHtml(viewModel, state);
-      }
-      if (view?.kind === "stats") {
-        return statsViewHtml(viewModel, state);
-      }
-      if (view?.kind === "sections") {
-        return sectionsViewHtml(view, viewModel, state);
-      }
-      return sectionsViewHtml(viewModel?.views?.details, viewModel, state);
-    }
-    function normalizeActivePanelView(viewModel, requestedPanelView) {
-      const tabs = Array.isArray(viewModel?.tabs) ? viewModel.tabs : [];
-      if (tabs.length && !tabs.some((tab) => tab.id === requestedPanelView)) {
-        return tabs[0].id;
-      }
-      return requestedPanelView || "details";
-    }
-    function renderResult(viewModel, state = {}) {
-      const activePanelView = normalizeActivePanelView(viewModel, state.activePanelView);
-      const viewBody = activeViewHtml(viewModel, activePanelView, state);
-      return {
-        activePanelView,
-        html: `
-        ${heroHtml(viewModel?.heroMetric)}
-        ${secondaryMetricsHtml(viewModel?.secondaryMetrics)}
-        ${panelTabsHtml(viewModel, activePanelView)}
-        <div class="cqc-details">
-          ${viewBody}
-        </div>
-      `
-      };
-    }
-    function renderActiveView(viewModel, state = {}) {
-      const activePanelView = normalizeActivePanelView(viewModel, state.activePanelView);
-      return {
-        activePanelView,
-        html: activeViewHtml(viewModel, activePanelView, state)
-      };
-    }
-    function renderLoading() {
-      return `
-      <div class="cqc-loading">
-        <div class="cqc-spinner"></div>
-        <div>
-          <strong>${escapeHtml2(t("loadingTitle"))}</strong>
-          <span>${escapeHtml2(t("loadingHint"))}</span>
-        </div>
-      </div>
-    `;
-    }
-    function renderError(error) {
-      return `
-      <div class="cqc-error">
-        <strong>${escapeHtml2(t("errorTitle"))}</strong>
-        <p>${escapeHtml2(error?.message || error || t("errorUnknown"))}</p>
-        <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml2(t("actionRetry"))}</button>
-      </div>
-    `;
-    }
-    function installStyles(documentObject, rootId) {
-      installQuotaPanelRendererStyles(documentObject, rootId);
-    }
-    return {
-      renderResult,
-      renderActiveView,
-      renderLoading,
-      renderError,
-      installStyles
-    };
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js
-  function applyActiveView(contentNode, rendered = {}) {
-    const activePanelView = rendered.activePanelView;
-    if (!contentNode) return activePanelView;
-    const detailsNode = contentNode.querySelector(".cqc-details");
-    if (detailsNode) {
-      detailsNode.innerHTML = rendered.html || "";
-    }
-    contentNode.querySelectorAll(".cqc-tab").forEach((tab) => {
-      tab.classList.toggle("is-active", tab.dataset.view === activePanelView);
-    });
-    return activePanelView;
-  }
-  function readSyncFormValues(contentNode) {
-    const form = contentNode?.querySelector?.("[data-sync-form]");
-    if (!form) return null;
-    return {
-      token: form.querySelector('[data-field="token"]')?.value || "",
-      gistId: form.querySelector('[data-field="gistId"]')?.value || "",
-      enabled: Boolean(form.querySelector('[data-field="enabled"]')?.checked)
-    };
-  }
-  function isSyncFormEditing(contentNode, activeElement) {
-    if (!activeElement || !contentNode?.contains?.(activeElement)) return false;
-    if (!activeElement.closest?.("[data-sync-form]")) return false;
-    return activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA";
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js
@@ -5385,7 +2592,7 @@ ${root} :focus-visible {
         state.errors.persistence = null;
         changedLocally();
         const refreshed = await refresh();
-        return { status: refreshed ? "ok" : "partial", completed: ["persistence", ...refreshed ? ["projection"] : []], report: imported.report };
+        return { status: refreshed ? "ok" : "partial", completed: ["persistence", ...refreshed ? ["projection"] : []], report: imported.report, ...refreshed ? {} : { error: state.errors.projection } };
       } catch (error) {
         state.errors.persistence = errorMessage(error);
         notify();
@@ -5401,7 +2608,13 @@ ${root} :focus-visible {
         if (!decision.syncAfter) clearTimer();
         state.errors.settings = null;
         notify();
-        return decision.syncAfter ? sync() : { status: "ok", completed: ["settings"] };
+        if (!decision.syncAfter) return { status: "ok", completed: ["settings"] };
+        const synced = await sync();
+        return {
+          ...synced,
+          status: synced.status === "ok" ? "ok" : "partial",
+          completed: ["settings", ...synced.completed || []]
+        };
       } catch {
         state.errors.settings = "GitHub Gist settings could not be saved.";
         notify();
@@ -5436,6 +2649,2801 @@ ${root} :focus-visible {
       unsubscribe();
     }
     return { start, run, importArchive, exportArchive: () => archiveStore.buildExportDocument(), configureSync, sync, getState, dispose };
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-view-model.lib.js
+  function normalizePanelSyncStatus(syncStatus, storageBackend) {
+    const source = syncStatus || storageBackend || { id: "pending", label: "pending" };
+    const backendId = source.backendId || source.id || "pending";
+    const backendLabel = source.backendLabel || source.label || backendId;
+    return {
+      backendId,
+      backendLabel,
+      crossDeviceCapable: Boolean(source.crossDeviceCapable),
+      localOnly: Boolean(source.localOnly),
+      reason: source.reason || ""
+    };
+  }
+  function normalizeRemoteSyncStatus(remoteSyncStatus) {
+    const source = remoteSyncStatus && typeof remoteSyncStatus === "object" ? remoteSyncStatus : {};
+    return {
+      enabled: Boolean(source.enabled),
+      configured: Boolean(source.configured),
+      endpoint: typeof source.endpoint === "string" ? source.endpoint : "",
+      gistId: typeof source.gistId === "string" ? source.gistId : "",
+      hasToken: Boolean(source.hasToken),
+      lastSyncedAt: typeof source.lastSyncedAt === "string" ? source.lastSyncedAt : "",
+      lastError: typeof source.lastError === "string" ? source.lastError : ""
+    };
+  }
+  function createSyncBanner(syncStatus, remoteSyncStatus) {
+    if (remoteSyncStatus.enabled && remoteSyncStatus.configured) {
+      if (remoteSyncStatus.lastError) {
+        return {
+          tone: "warning",
+          titleKey: "remoteSyncErrorTitle",
+          detailKey: "remoteSyncErrorDetail",
+          backendLabel: syncStatus.backendLabel,
+          endpoint: remoteSyncStatus.endpoint,
+          lastSyncedAt: remoteSyncStatus.lastSyncedAt,
+          lastError: remoteSyncStatus.lastError
+        };
+      }
+      return {
+        tone: "success",
+        titleKey: "remoteSyncEnabledTitle",
+        detailKey: "remoteSyncEnabledDetail",
+        backendLabel: syncStatus.backendLabel,
+        endpoint: remoteSyncStatus.endpoint,
+        lastSyncedAt: remoteSyncStatus.lastSyncedAt
+      };
+    }
+    if (remoteSyncStatus.enabled) {
+      return {
+        tone: "warning",
+        titleKey: "remoteSyncMissingTitle",
+        detailKey: "remoteSyncMissingDetail",
+        backendLabel: syncStatus.backendLabel,
+        endpoint: remoteSyncStatus.endpoint
+      };
+    }
+    if (syncStatus.backendId === "gm") {
+      return {
+        tone: "warning",
+        titleKey: "syncBannerGmTitle",
+        detailKey: "syncBannerGmDetail",
+        backendLabel: syncStatus.backendLabel
+      };
+    }
+    if (syncStatus.localOnly) {
+      return {
+        tone: "warning",
+        titleKey: "syncBannerLocalTitle",
+        detailKey: "syncBannerLocalDetail",
+        backendLabel: syncStatus.backendLabel
+      };
+    }
+    return {
+      tone: "muted",
+      titleKey: "syncBannerPendingTitle",
+      detailKey: "syncBannerPendingDetail",
+      backendLabel: syncStatus.backendLabel
+    };
+  }
+  function createTransferActions() {
+    return [
+      { action: "export-archive", labelKey: "archiveExportAction" },
+      { action: "import-archive", labelKey: "archiveImportAction" }
+    ];
+  }
+  function dataColumn(key, options = {}) {
+    return {
+      key,
+      label: options.label || key,
+      labelKey: options.labelKey || "",
+      priority: options.priority || "secondary",
+      truncate: Boolean(options.truncate),
+      wrap: Boolean(options.wrap),
+      compact: options.compact !== false
+    };
+  }
+  function dataView(id, titleKey, rows, columns, options = {}) {
+    return {
+      type: "dataView",
+      id,
+      titleKey,
+      rows: Array.isArray(rows) ? rows : [],
+      columns,
+      emptyKey: options.emptyKey || "tableNoData",
+      compactOnMobile: options.compactOnMobile !== false,
+      limit: options.limit
+    };
+  }
+  function createDetailsSections({
+    weekly,
+    sinceReset,
+    month,
+    rolling,
+    windows,
+    modelSummaries,
+    resetCredits,
+    detailMetrics
+  }) {
+    return [
+      { type: "metrics", titleKey: "sectionKeyMetrics", metrics: detailMetrics },
+      dataView("details-weekly-estimate", "sectionWeeklyEstimate", [weekly], [
+        dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
+        dataColumn("剩余比例小数", { labelKey: "columnRemainingRatio", priority: "secondary" }),
+        dataColumn("包含重置日_已用折算USD", { labelKey: "columnIncludedResetUsd", priority: "primary" }),
+        dataColumn("反推周总USD_包含重置日", { labelKey: "columnIncludedResetTotalUsd", priority: "primary" }),
+        dataColumn("剩余USD_包含重置日口径", { labelKey: "columnIncludedResetRemainingUsd", priority: "primary" }),
+        dataColumn("包含重置日_已用Credits", { labelKey: "columnIncludedResetUsedCredits", priority: "secondary" }),
+        dataColumn("剩余Credits_包含重置日口径", { labelKey: "columnIncludedResetRemainingCredits", priority: "secondary" }),
+        dataColumn("排除重置日_已用折算USD", { labelKey: "columnExcludedResetUsedUsd", priority: "secondary" }),
+        dataColumn("剩余USD_排除重置日口径", { labelKey: "columnExcludedResetRemainingUsd", priority: "secondary" }),
+        dataColumn("排除重置日_已用Credits", { labelKey: "columnExcludedResetUsedCredits", priority: "debug" }),
+        dataColumn("剩余Credits_排除重置日口径", { labelKey: "columnExcludedResetRemainingCredits", priority: "debug" }),
+        dataColumn("误差说明", { labelKey: "columnErrorNote", priority: "debug", wrap: true })
+      ]),
+      dataView("details-range-summary", "sectionRangeSummary", [sinceReset, month, rolling], [
+        dataColumn("范围", { labelKey: "columnRange", priority: "primary", wrap: true }),
+        dataColumn("累计折算USD", { labelKey: "columnTotalUsd", priority: "primary" }),
+        dataColumn("累计Credits", { labelKey: "columnTotalCredits", priority: "primary" }),
+        dataColumn("返回日期桶数", { labelKey: "columnBucketCount", priority: "secondary" }),
+        dataColumn("累计Token", { labelKey: "columnTotalTokens", priority: "debug" }),
+        dataColumn("累计线程数", { labelKey: "columnTotalThreads", priority: "debug" }),
+        dataColumn("累计轮数", { labelKey: "columnTotalTurns", priority: "debug" })
+      ]),
+      dataView("details-windows", "sectionWindows", windows, [
+        dataColumn("名称", { labelKey: "columnName", priority: "primary", wrap: true }),
+        dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
+        dataColumn("窗口天数", { labelKey: "columnWindowDays", priority: "secondary" }),
+        dataColumn("本轮开始_本地", { labelKey: "columnWindowStartLocal", priority: "secondary", truncate: true }),
+        dataColumn("下次重置_本地", { labelKey: "columnNextResetLocal", priority: "secondary", truncate: true }),
+        dataColumn("距离重置小时", { labelKey: "columnHoursToReset", priority: "primary" })
+      ]),
+      dataView("details-model-summary", "sectionModelSummary", modelSummaries, [
+        dataColumn("模型", { labelKey: "columnModel", priority: "primary", wrap: true }),
+        dataColumn("速度", { labelKey: "columnSpeed", priority: "secondary" }),
+        dataColumn("占比百分比", { labelKey: "columnSharePercent", priority: "primary" }),
+        dataColumn("Credits", { labelKey: "columnCredits", priority: "secondary" })
+      ]),
+      dataView("details-reset-credits", "sectionResetCredits", resetCredits?.明细, [
+        dataColumn("标题", { labelKey: "columnTitle", priority: "primary", wrap: true }),
+        dataColumn("状态", { labelKey: "columnStatus", priority: "secondary" }),
+        dataColumn("过期时间_本地", { labelKey: "columnExpiresLocal", priority: "primary", truncate: true })
+      ], { emptyKey: "resetCreditsEmpty" })
+    ];
+  }
+  function createPanelViews({
+    weekly,
+    sinceReset,
+    month,
+    rolling,
+    windows,
+    modelSummaries,
+    resetCredits,
+    transfer,
+    detailMetrics
+  }) {
+    const tabs = [
+      { id: "details", labelKey: "tabDetails" },
+      { id: "stats", labelKey: "tabStats" },
+      { id: "archive", labelKey: "tabArchiveWorkspace" }
+    ];
+    return {
+      tabs,
+      views: {
+        stats: {
+          id: "stats",
+          labelKey: "tabStats",
+          kind: "stats"
+        },
+        details: {
+          id: "details",
+          labelKey: "tabDetails",
+          kind: "sections",
+          sections: createDetailsSections({
+            weekly,
+            sinceReset,
+            month,
+            rolling,
+            windows,
+            modelSummaries,
+            resetCredits,
+            detailMetrics
+          })
+        },
+        archive: {
+          id: "archive",
+          labelKey: "tabArchiveWorkspace",
+          kind: "archiveWorkspace",
+          actionIds: transfer.actions.map((action) => action.action),
+          sections: [
+            { type: "syncForm" },
+            { type: "archiveSummary" },
+            { type: "note", noteKey: transfer.noteKey },
+            { type: "actions", actions: transfer.actions }
+          ]
+        }
+      }
+    };
+  }
+  function mapDailyRow(row) {
+    return { date: row?.date, credits: row?.credits || 0, usd: row?.usd || 0 };
+  }
+  function mapBucket(bucket) {
+    if (!bucket) return null;
+    return {
+      from: bucket.from,
+      to: bucket.to,
+      month: bucket.month,
+      credits: bucket.totalCredits || 0,
+      usd: bucket.totalUsd || 0
+    };
+  }
+  function buildCostViewModel(ledgerCost) {
+    if (!ledgerCost) return null;
+    const allDays = (ledgerCost.daily?.days || []).map(mapDailyRow);
+    const today = ledgerCost.daily?.inProgress ? mapDailyRow(ledgerCost.daily.inProgress) : null;
+    const allTime = ledgerCost.allTime || {};
+    return {
+      cycleStartDate: ledgerCost.cycleStartDate || null,
+      today,
+      day: {
+        rows: allDays.slice(0, 30),
+        today
+      },
+      week: {
+        current: mapBucket(ledgerCost.weekly?.current),
+        blocks: (ledgerCost.weekly?.blocks || []).map(mapBucket)
+      },
+      month: {
+        current: mapBucket(ledgerCost.monthly?.current),
+        rows: (ledgerCost.monthly?.months || []).map(mapBucket)
+      },
+      all: {
+        totalCredits: allTime.totalCredits || 0,
+        totalUsd: allTime.totalUsd || 0,
+        coverDays: allTime.coverDays || 0,
+        fromDate: allTime.fromDate || null,
+        toDate: allTime.toDate || null,
+        rows: allDays
+      },
+      allDays
+    };
+  }
+  function createHeroMetric({ weekly, mainSevenDayWindow }) {
+    return {
+      id: "remainingUsdIncludingReset",
+      type: "credit",
+      labelKey: "metricRemainingUsdIncludingReset",
+      label: "剩余 USD · 含重置日",
+      usd: weekly.剩余USD_包含重置日口径,
+      resetHours: mainSevenDayWindow?.距离重置小时
+    };
+  }
+  function createSecondaryMetrics({ weekly }) {
+    return [
+      {
+        id: "remainingUsdExcludingReset",
+        type: "credit",
+        labelKey: "metricRemainingUsdExcludingReset",
+        label: "剩余 USD · 排除重置日",
+        usd: weekly.剩余USD_排除重置日口径
+      },
+      {
+        id: "sevenDayUsedPercent",
+        type: "value",
+        labelKey: "metricSevenDayUsedPercent",
+        label: "7 天已用",
+        value: weekly.已用百分比 !== void 0 ? `${weekly.已用百分比}%` : "-"
+      }
+    ];
+  }
+  function createDetailMetrics({ weekly, sinceReset, month, resetCredits }) {
+    const metrics = [
+      {
+        id: "weeklyTotalIncludingReset",
+        type: "credit",
+        labelKey: "metricWeeklyTotalIncludingReset",
+        label: "周总额度 · 含重置日",
+        usd: weekly.反推周总USD_包含重置日
+      },
+      {
+        id: "weeklyTotalExcludingReset",
+        type: "credit",
+        labelKey: "metricWeeklyTotalExcludingReset",
+        label: "周总额度 · 排除重置日",
+        usd: weekly.反推周总USD_排除重置日
+      },
+      {
+        id: "sinceResetTotal",
+        type: "credit",
+        labelKey: "metricSinceResetTotal",
+        label: "上次重置至今",
+        usd: sinceReset.累计折算USD
+      },
+      {
+        id: "monthTotal",
+        type: "credit",
+        labelKey: "metricMonthTotal",
+        label: "本月累计",
+        usd: month.累计折算USD
+      }
+    ];
+    if (resetCredits) {
+      metrics.push({
+        id: "resetCreditsAvailable",
+        type: "value",
+        labelKey: "metricResetCredits",
+        label: "重置券 可用/适用",
+        value: `${resetCredits.可用张数 ?? "-"} / ${resetCredits.当前适用张数 ?? "-"}`
+      });
+    }
+    return metrics;
+  }
+  function createQuotaPanelViewModel({
+    result,
+    ledgerCost,
+    archiveSummary,
+    importReport,
+    storageBackend,
+    syncStatus,
+    remoteSyncStatus
+  }) {
+    const snapshotAccess = createQuotaSnapshotAccess(result);
+    const rollingKey = snapshotAccess.rollingKey;
+    const weekly = snapshotAccess.sinceReset.weeklyEstimate;
+    const sinceReset = snapshotAccess.sinceReset.summary;
+    const month = snapshotAccess.monthToDate.summary;
+    const rolling = snapshotAccess.rolling.summary;
+    const mainSevenDayWindow = snapshotAccess.mainSevenDayWindow;
+    const recentSnapshots = Array.isArray(archiveSummary?.recentSnapshots) ? archiveSummary.recentSnapshots.slice(0, 5).map((row) => ({
+      capturedAt: row?.capturedAt || "-",
+      snapshotId: row?.snapshotId || "legacy",
+      monthlyCredits: row?.monthlyCredits,
+      weeklyUsedPercent: row?.weeklyUsedPercent
+    })) : [];
+    const normalizedSyncStatus = normalizePanelSyncStatus(syncStatus, storageBackend);
+    const normalizedRemoteSyncStatus = normalizeRemoteSyncStatus(remoteSyncStatus);
+    const archiveHealth = {
+      isLoaded: Boolean(archiveSummary),
+      snapshotCount: archiveSummary?.snapshotCount || 0,
+      hasSnapshots: Boolean((archiveSummary?.snapshotCount || 0) > 0),
+      earliestCapturedAt: archiveSummary?.earliestCapturedAt || null,
+      latestCapturedAt: archiveSummary?.latestCapturedAt || null,
+      storageBackendLabel: normalizedSyncStatus.backendLabel,
+      importReport
+    };
+    const transfer = {
+      noteKey: "transferNote",
+      syncStatus: normalizedSyncStatus,
+      remoteSyncStatus: normalizedRemoteSyncStatus,
+      actions: createTransferActions()
+    };
+    const detailMetrics = createDetailMetrics({
+      weekly,
+      sinceReset,
+      month,
+      resetCredits: snapshotAccess.resetCredits
+    });
+    const panelViews = createPanelViews({
+      weekly,
+      sinceReset,
+      month,
+      rolling,
+      windows: snapshotAccess.windows,
+      modelSummaries: snapshotAccess.rolling.modelSummaries,
+      resetCredits: snapshotAccess.resetCredits,
+      transfer,
+      detailMetrics
+    });
+    return {
+      rollingKey,
+      weekly,
+      sinceReset,
+      month,
+      rolling,
+      syncStatus: normalizedSyncStatus,
+      remoteSyncStatus: normalizedRemoteSyncStatus,
+      syncBanner: createSyncBanner(normalizedSyncStatus, normalizedRemoteSyncStatus),
+      archiveHealth,
+      transfer,
+      tabs: panelViews.tabs,
+      views: panelViews.views,
+      heroMetric: createHeroMetric({
+        weekly,
+        mainSevenDayWindow
+      }),
+      secondaryMetrics: createSecondaryMetrics({ weekly }),
+      detailMetrics,
+      rollingRows: snapshotAccess.rolling.dailyRows,
+      sinceResetRows: snapshotAccess.sinceReset.dailyRows,
+      sinceResetClients: snapshotAccess.sinceReset.clientSummaries,
+      mainSevenDayWindow,
+      cost: buildCostViewModel(ledgerCost),
+      archive: {
+        isLoaded: Boolean(archiveSummary),
+        snapshotCount: archiveSummary?.snapshotCount || 0,
+        earliestCapturedAt: archiveSummary?.earliestCapturedAt || null,
+        latestCapturedAt: archiveSummary?.latestCapturedAt || null,
+        recentSnapshots,
+        storageBackend,
+        importReport
+      }
+    };
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js
+  var LIB_NAME = "CodexQuotaCompassPanelStatsStylesLib";
+  function createQuotaPanelStatsStyles(rootId) {
+    if (!rootId) {
+      throw new Error(`${LIB_NAME}.createQuotaPanelStatsStyles requires rootId.`);
+    }
+    const scope = `#${rootId}`;
+    return `
+      ${scope} {
+        --cqc-stats-space-tight: 4px;
+        --cqc-stats-space-control: 8px;
+        --cqc-stats-space-section: 12px;
+        --cqc-stats-radius-control: 8px;
+        --cqc-stats-radius-section: 10px;
+        --cqc-stats-radius-pill: 999px;
+        --cqc-stats-font-control: 12px;
+        --cqc-stats-font-meta: 11px;
+        --cqc-stats-font-value: 13px;
+        --cqc-stats-motion-duration: 160ms;
+      }
+
+      ${scope} .cqc-stats-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 48px;
+        margin: 0 0 var(--cqc-stats-space-section);
+        padding: 6px 8px;
+        border-radius: var(--cqc-stats-radius-control);
+        background: var(--cqc-surface-sunken);
+      }
+
+      ${scope} .cqc-stats-chart-bar {
+        flex: 1 1 0;
+        min-width: 2px;
+        border-radius: 2px 2px 1px 1px;
+        background: var(--cqc-primary);
+      }
+
+      ${scope} .cqc-stats-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--cqc-stats-space-tight);
+        margin: 0 0 var(--cqc-stats-space-section);
+      }
+
+      ${scope} .cqc-stats-tab {
+        border: 1px solid var(--cqc-border);
+        background: transparent;
+        color: var(--cqc-text-muted);
+        border-radius: var(--cqc-stats-radius-pill);
+        padding: var(--cqc-stats-space-tight) var(--cqc-stats-space-section);
+        font-size: var(--cqc-stats-font-control);
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background-color var(--cqc-stats-motion-duration) ease,
+          color var(--cqc-stats-motion-duration) ease,
+          border-color var(--cqc-stats-motion-duration) ease;
+      }
+
+      ${scope} .cqc-stats-tab:hover {
+        color: var(--cqc-text);
+      }
+
+      ${scope} .cqc-stats-tab.is-active {
+        background: var(--cqc-surface);
+        border-color: var(--cqc-border-strong);
+        color: var(--cqc-primary-strong);
+      }
+
+      ${scope} .cqc-stats-live {
+        margin: 0 0 var(--cqc-stats-space-section);
+      }
+
+      ${scope} .cqc-stats-estimate {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--cqc-stats-space-control);
+        margin: 0 0 var(--cqc-stats-space-control);
+        padding: var(--cqc-stats-space-control) var(--cqc-stats-space-section);
+        border: 1px dashed var(--cqc-border-strong);
+        border-radius: var(--cqc-stats-radius-section);
+        font-size: var(--cqc-stats-font-control);
+        color: var(--cqc-text);
+      }
+
+      ${scope} .cqc-stats-estimate-tag {
+        font-size: var(--cqc-stats-font-meta);
+        font-weight: 600;
+        color: var(--cqc-text-muted);
+        border: 1px solid var(--cqc-border);
+        border-radius: var(--cqc-stats-radius-pill);
+        padding: 0 var(--cqc-stats-space-tight);
+      }
+
+      ${scope} .cqc-stats-estimate-figure {
+        margin-left: auto;
+        font-weight: 600;
+      }
+
+      ${scope} .cqc-stats-list {
+        display: grid;
+        gap: var(--cqc-stats-space-tight);
+      }
+
+      ${scope} .cqc-stats-row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--cqc-stats-space-section);
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--cqc-border);
+        background: var(--cqc-surface);
+        color: var(--cqc-text);
+        border-radius: var(--cqc-stats-radius-control);
+        padding: var(--cqc-stats-space-control) var(--cqc-stats-space-section);
+        font-size: var(--cqc-stats-font-control);
+        cursor: pointer;
+        transition:
+          border-color var(--cqc-stats-motion-duration) ease,
+          background-color var(--cqc-stats-motion-duration) ease;
+      }
+
+      ${scope} .cqc-stats-row:hover {
+        border-color: var(--cqc-border-strong);
+      }
+
+      ${scope} .cqc-stats-row-label {
+        font-weight: 600;
+      }
+
+      ${scope} .cqc-stats-row-usd {
+        margin-left: auto;
+        font-weight: 600;
+      }
+
+      ${scope} .cqc-stats-row-credits {
+        color: var(--cqc-text-muted);
+      }
+
+      ${scope} .cqc-stats-back {
+        border: 1px solid var(--cqc-border);
+        background: transparent;
+        color: var(--cqc-text-muted);
+        border-radius: var(--cqc-stats-radius-control);
+        padding: var(--cqc-stats-space-tight) var(--cqc-stats-space-section);
+        font-size: var(--cqc-stats-font-control);
+        font-weight: 600;
+        cursor: pointer;
+        margin: 0 0 var(--cqc-stats-space-control);
+        transition:
+          border-color var(--cqc-stats-motion-duration) ease,
+          color var(--cqc-stats-motion-duration) ease;
+      }
+
+      ${scope} .cqc-stats-back:hover {
+        color: var(--cqc-text);
+        border-color: var(--cqc-border-strong);
+      }
+
+      ${scope} .cqc-stats-tab:focus-visible,
+      ${scope} .cqc-stats-row:focus-visible,
+      ${scope} .cqc-stats-back:focus-visible {
+        outline: 2px solid var(--cqc-primary);
+        outline-offset: 2px;
+      }
+
+      ${scope} .cqc-stats-drill-title {
+        font-size: var(--cqc-stats-font-control);
+        font-weight: 600;
+        color: var(--cqc-text);
+        margin: 0 0 var(--cqc-stats-space-control);
+      }
+
+      ${scope} .cqc-stats-all-total {
+        font-size: var(--cqc-stats-font-value);
+        font-weight: 700;
+        color: var(--cqc-primary-strong);
+        margin: 0 0 var(--cqc-stats-space-tight);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        ${scope} .cqc-stats-tab,
+        ${scope} .cqc-stats-row,
+        ${scope} .cqc-stats-back {
+          transition: none !important;
+        }
+      }
+    `;
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js
+  function createQuotaPanelRendererStyles(rootId = "codex-quota-compass-root") {
+    return `
+      ${createQuotaPanelStatsStyles(rootId)}
+
+      .cqc-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 14px 0;
+        padding: 3px;
+        border-radius: 10px;
+        background: var(--cqc-surface-sunken);
+        border: 1px solid var(--cqc-border);
+      }
+
+      .cqc-tab {
+        flex: 1 1 auto;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--cqc-text-muted);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+      }
+
+      .cqc-tab:hover {
+        color: var(--cqc-text);
+      }
+
+      .cqc-tab.is-active {
+        background: var(--cqc-surface);
+        border-color: var(--cqc-border-strong);
+        color: var(--cqc-primary-strong);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+
+      .cqc-transfer-note {
+        margin-top: 8px;
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .cqc-sync-banner {
+        display: grid;
+        gap: 4px;
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--cqc-border);
+        border-left: 3px solid var(--cqc-border-strong);
+        border-radius: 10px;
+        background: var(--cqc-surface-sunken);
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .cqc-sync-banner strong {
+        color: var(--cqc-text);
+        font-size: 13px;
+      }
+
+      .cqc-sync-banner[data-tone="success"] {
+        border-left-color: var(--cqc-primary);
+        background: var(--cqc-primary-soft);
+        color: var(--cqc-primary-strong);
+      }
+
+      .cqc-sync-banner[data-tone="success"] strong {
+        color: var(--cqc-primary-strong);
+      }
+
+      .cqc-sync-banner[data-tone="warning"] {
+        border-left-color: var(--cqc-warning);
+        background: var(--cqc-warning-surface);
+        color: var(--cqc-warning);
+      }
+
+      .cqc-sync-banner[data-tone="warning"] strong {
+        color: var(--cqc-warning);
+      }
+
+      .cqc-sync-form {
+        display: grid;
+        gap: 10px;
+        margin: 0 0 14px;
+        padding: 14px;
+        border: 1px solid var(--cqc-border);
+        border-radius: 10px;
+        background: var(--cqc-surface);
+      }
+
+      .cqc-sync-form-title {
+        font-size: 13px;
+        font-weight: 650;
+        color: var(--cqc-text);
+      }
+
+      .cqc-sync-form-status {
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--cqc-text-muted);
+      }
+
+      .cqc-sync-form-status[data-tone="error"] {
+        color: var(--cqc-danger);
+      }
+
+      .cqc-sync-field {
+        display: grid;
+        gap: 4px;
+      }
+
+      .cqc-sync-field-label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .cqc-sync-field-hint {
+        color: var(--cqc-text-muted);
+        font-size: 11px;
+        font-weight: 400;
+      }
+
+      .cqc-sync-form input[type="text"],
+      .cqc-sync-form input[type="password"] {
+        width: 100%;
+        border: 1px solid var(--cqc-border-strong);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--cqc-text);
+        background: var(--cqc-surface-sunken);
+      }
+
+      .cqc-sync-form input::placeholder {
+        color: var(--cqc-text-muted);
+        opacity: 0.7;
+      }
+
+      .cqc-sync-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--cqc-text);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .cqc-sync-toggle input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--cqc-primary);
+      }
+
+      .cqc-sync-form-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 2px;
+      }
+
+      .cqc-sync-form-actions button {
+        border: 1px solid var(--cqc-border-strong);
+        border-radius: 8px;
+        background: var(--cqc-surface);
+        color: var(--cqc-text);
+        padding: 7px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 140ms ease, border-color 140ms ease;
+      }
+
+      .cqc-sync-form-actions button:hover {
+        border-color: var(--cqc-primary-border);
+      }
+
+      .cqc-sync-form-actions button[data-variant="primary"] {
+        background: var(--cqc-primary);
+        border-color: var(--cqc-primary);
+        color: #ffffff;
+      }
+
+      .cqc-sync-form-actions button[data-variant="primary"]:hover {
+        background: var(--cqc-primary-strong);
+        border-color: var(--cqc-primary-strong);
+      }
+
+      .cqc-sync-form-actions button[data-variant="danger"] {
+        color: var(--cqc-danger);
+      }
+
+      .cqc-sync-form-actions button[data-variant="danger"]:hover {
+        border-color: var(--cqc-danger);
+      }
+
+      .cqc-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin: 0 0 12px;
+      }
+
+      .cqc-hero,
+      .cqc-metric,
+      .cqc-section {
+        border: 1px solid var(--cqc-border);
+        border-radius: 10px;
+        background: var(--cqc-surface);
+      }
+
+      .cqc-hero {
+        margin: 0 0 10px;
+        padding: 14px 16px;
+      }
+
+      .cqc-hero-label {
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .cqc-hero-value {
+        margin: 6px 0 2px;
+        font-size: var(--wk-fs-hero, 28px);
+        font-weight: 650;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+
+      .cqc-hero-sub {
+        margin-top: 4px;
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .cqc-metrics-secondary .cqc-metric {
+        padding: 8px 12px;
+      }
+
+      .cqc-metrics-secondary .cqc-metric-value {
+        margin: 3px 0 1px;
+        font-size: 15px;
+      }
+
+      .cqc-metric {
+        min-width: 0;
+        padding: 11px 12px;
+      }
+
+      .cqc-metric-label,
+      .cqc-metric-hint {
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .cqc-metric-value {
+        margin: 5px 0 2px;
+        font-size: 17px;
+        font-weight: 650;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+
+      .cqc-detail-footnote {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        justify-content: center;
+        margin: 10px 0 2px;
+      }
+
+      .cqc-detail-footnote button {
+        border: 0;
+        background: transparent;
+        color: var(--cqc-primary-strong);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 6px 8px;
+      }
+
+      .cqc-detail-footnote button:hover {
+        text-decoration: underline;
+      }
+
+      .cqc-section {
+        margin-top: 12px;
+        overflow: hidden;
+      }
+
+      .cqc-section h3 {
+        margin: 0;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--cqc-border);
+        background: var(--cqc-surface-muted);
+        font-size: 14px;
+        line-height: 1.3;
+      }
+
+      .cqc-table-wrap {
+        overflow: auto;
+      }
+
+      .cqc-table-wrap table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      .cqc-table-wrap th,
+      .cqc-table-wrap td {
+        border-bottom: 1px solid var(--cqc-border);
+        padding: 9px 10px;
+        text-align: left;
+        vertical-align: top;
+        white-space: nowrap;
+      }
+
+      .cqc-table-wrap td.is-wrappable {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .cqc-table-wrap td.is-truncated {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .cqc-table-wrap td.is-debug,
+      .cqc-table-wrap th.is-debug {
+        color: var(--cqc-text-muted);
+      }
+
+      .cqc-compact-list {
+        display: none;
+      }
+
+      .cqc-compact-row {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--cqc-border);
+      }
+
+      .cqc-compact-row:last-child {
+        border-bottom: 0;
+      }
+
+      .cqc-compact-field {
+        display: grid;
+        grid-template-columns: minmax(92px, 38%) minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+      }
+
+      .cqc-compact-field dt,
+      .cqc-compact-field dd {
+        margin: 0;
+        min-width: 0;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .cqc-compact-field dt {
+        color: var(--cqc-text-muted);
+        font-weight: 650;
+      }
+
+      .cqc-compact-value {
+        color: var(--cqc-text);
+        overflow-wrap: anywhere;
+      }
+
+      .cqc-compact-value.is-truncated {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .cqc-table-wrap tbody tr:hover {
+        background: var(--cqc-row-hover);
+      }
+
+      .cqc-table-wrap th {
+        color: var(--cqc-text-muted);
+        background: var(--cqc-surface);
+        font-weight: 650;
+        position: sticky;
+        top: 0;
+      }
+
+      .cqc-table-note,
+      .cqc-empty {
+        color: var(--cqc-text-muted);
+        font-size: 12px;
+        padding: 10px 12px;
+      }
+
+      .cqc-table-expand {
+        border: 0;
+        background: transparent;
+        color: var(--cqc-primary-strong);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 0;
+      }
+
+      .cqc-table-expand:hover {
+        text-decoration: underline;
+      }
+
+      .cqc-loading,
+      .cqc-error {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 18px;
+        border: 1px solid var(--cqc-border);
+        border-radius: 10px;
+        background: var(--cqc-surface-muted);
+      }
+
+      .cqc-loading span,
+      .cqc-error p {
+        display: block;
+        margin: 4px 0 0;
+        color: var(--cqc-text-muted);
+        font-size: 13px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+
+      .cqc-error {
+        display: block;
+        border-color: rgba(217, 45, 32, 0.24);
+      }
+
+      .cqc-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid var(--cqc-primary-ring);
+        border-top-color: var(--cqc-primary);
+        border-radius: 50%;
+        animation: cqc-spin 0.8s linear infinite;
+        flex: 0 0 auto;
+      }
+
+      @keyframes cqc-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .cqc-spinner {
+          transition: none !important;
+          animation: none !important;
+        }
+
+        .cqc-tab,
+        .cqc-sync-form-actions button {
+          transition: none !important;
+        }
+      }
+
+      @container (max-width: 720px) {
+        .cqc-metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .cqc-data-view[data-compact="true"] .cqc-data-table {
+          display: none;
+        }
+
+        .cqc-data-view[data-compact="true"] .cqc-compact-list {
+          display: block;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .cqc-metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .cqc-data-view[data-compact="true"] .cqc-data-table {
+          display: none;
+        }
+
+        .cqc-data-view[data-compact="true"] .cqc-compact-list {
+          display: block;
+        }
+      }
+    `;
+  }
+  function installQuotaPanelRendererStyles(documentObject, rootId) {
+    if (!documentObject?.createElement || !documentObject?.head) {
+      throw new Error("Quota panel renderer requires a document adapter.");
+    }
+    if (!rootId) {
+      throw new Error("Quota panel renderer requires rootId.");
+    }
+    if (documentObject.getElementById(`${rootId}-style`)) return;
+    const style = documentObject.createElement("style");
+    style.id = `${rootId}-style`;
+    style.textContent = createQuotaPanelRendererStyles(rootId);
+    documentObject.head.append(style);
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js
+  var LIB_NAME2 = "CodexQuotaCompassPanelStatsLib";
+  var PERIODS = ["day", "week", "month", "all"];
+  function round(value) {
+    return Math.round(Number(value || 0));
+  }
+  function usd(value) {
+    return Number(value || 0).toFixed(2);
+  }
+  function normalizePeriod(period) {
+    return PERIODS.includes(period) ? period : "day";
+  }
+  function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
+    const { t, sectionHtml, tableHtml, escapeHtml: escapeHtml3 } = helpers;
+    if (typeof t !== "function" || typeof sectionHtml !== "function" || typeof tableHtml !== "function" || typeof escapeHtml3 !== "function") {
+      throw new Error(`${LIB_NAME2}.buildStatsView requires t/sectionHtml/tableHtml/escapeHtml helpers.`);
+    }
+    const activePeriod = normalizePeriod(period);
+    function emptyHtml() {
+      return `<div class="cqc-empty">${escapeHtml3(t("statsEmpty"))}</div>`;
+    }
+    function periodTabsHtml() {
+      const items = [
+        ["day", "statsPeriodDay"],
+        ["week", "statsPeriodWeek"],
+        ["month", "statsPeriodMonth"],
+        ["all", "statsPeriodAll"]
+      ];
+      return `
+      <div class="cqc-stats-tabs" role="group" aria-label="${escapeHtml3(t("tabStats"))}">
+        ${items.map(([id, key]) => `
+          <button
+            type="button"
+            class="cqc-stats-tab${activePeriod === id ? " is-active" : ""}"
+            data-action="switch-stats-period"
+            data-period="${escapeHtml3(id)}"
+            aria-pressed="${activePeriod === id ? "true" : "false"}"
+          >${escapeHtml3(t(key))}</button>
+        `).join("")}
+      </div>
+    `;
+    }
+    function rollingLiveHtml() {
+      if (!rolling) return "";
+      const usdValue = usd(rolling["累计折算USD"]);
+      const creditsValue = round(rolling["累计Credits"]);
+      return `<div class="cqc-stats-live cqc-table-note">${escapeHtml3(t("statsRollingLive"))}: $${escapeHtml3(usdValue)} · ${escapeHtml3(String(creditsValue))} Credits</div>`;
+    }
+    function chartHtml() {
+      const days = (cost.allDays || []).slice(-30);
+      if (!days.length) return "";
+      const max = Math.max(...days.map((row) => Number(row.usd) || 0));
+      if (!(max > 0)) return "";
+      const bars = days.map((row) => {
+        const percent = Math.max(2, Math.round((Number(row.usd) || 0) / max * 100));
+        return `<span class="cqc-stats-chart-bar" style="height: ${percent}%"></span>`;
+      }).join("");
+      return `<div class="cqc-stats-chart" aria-hidden="true">${bars}</div>`;
+    }
+    function dailyTableHtml(rows) {
+      const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
+        date: row.date,
+        credits: round(row.credits),
+        usd: usd(row.usd)
+      }));
+      return mapped.length ? tableHtml(mapped, {
+        columns: [
+          { key: "date", labelKey: "statsColumnDate", priority: "primary" },
+          { key: "credits", labelKey: "statsColumnCredits" },
+          { key: "usd", labelKey: "statsColumnUsd" }
+        ],
+        limit: mapped.length
+      }) : emptyHtml();
+    }
+    function estimateLineHtml(label, range, creditsValue, usdValue) {
+      return `
+      <div class="cqc-stats-estimate">
+        <span class="cqc-stats-estimate-label">${escapeHtml3(label)}</span>
+        <span class="cqc-stats-estimate-tag">${escapeHtml3(t("statsEstimate"))}</span>
+        <span class="cqc-stats-estimate-range">${escapeHtml3(range)}</span>
+        <span class="cqc-stats-estimate-figure">$${escapeHtml3(usd(usdValue))} · ${escapeHtml3(String(round(creditsValue)))} Credits</span>
+      </div>
+    `;
+    }
+    function drillableListHtml(items) {
+      if (!items.length) return emptyHtml();
+      return `
+      <div class="cqc-stats-list">
+        ${items.map((item) => `
+          <button
+            type="button"
+            class="cqc-stats-row"
+            data-action="stats-drill"
+            data-from="${escapeHtml3(item.from)}"
+            data-to="${escapeHtml3(item.to)}"
+            data-label="${escapeHtml3(item.label)}"
+          >
+            <span class="cqc-stats-row-label">${escapeHtml3(item.label)}</span>
+            <span class="cqc-stats-row-usd">$${escapeHtml3(usd(item.usd))}</span>
+            <span class="cqc-stats-row-credits">${escapeHtml3(String(round(item.credits)))} Credits</span>
+          </button>
+        `).join("")}
+      </div>
+    `;
+    }
+    function dayBody() {
+      const day = cost.day || {};
+      const today = day.today ? estimateLineHtml(t("costTodayLabel"), day.today.date, day.today.credits, day.today.usd) : "";
+      return sectionHtml(t("statsPeriodDay"), today + dailyTableHtml(day.rows));
+    }
+    function weekBody() {
+      const week = cost.week || {};
+      const current = week.current ? estimateLineHtml(t("statsPeriodWeek"), `${week.current.from} ~ ${week.current.to}`, week.current.credits, week.current.usd) : "";
+      const list = drillableListHtml((week.blocks || []).map((block) => ({
+        from: block.from,
+        to: block.to,
+        label: `${block.from} ~ ${block.to}`,
+        usd: block.usd,
+        credits: block.credits
+      })));
+      return sectionHtml(t("statsPeriodWeek"), current + list);
+    }
+    function monthBody() {
+      const month = cost.month || {};
+      const current = month.current ? estimateLineHtml(t("statsPeriodMonth"), month.current.month, month.current.credits, month.current.usd) : "";
+      const list = drillableListHtml((month.rows || []).map((row) => ({
+        from: row.from,
+        to: row.to,
+        label: row.month,
+        usd: row.usd,
+        credits: row.credits
+      })));
+      return sectionHtml(t("statsPeriodMonth"), current + list);
+    }
+    function allBody() {
+      const all = cost.all || {};
+      const header = `
+      <div class="cqc-stats-all-total">${escapeHtml3(t("statsAllTotal"))}: $${escapeHtml3(usd(all.totalUsd))} · ${escapeHtml3(String(round(all.totalCredits)))} Credits</div>
+      <div class="cqc-table-note">${escapeHtml3(t("statsCoverDays", { days: all.coverDays || 0 }))} · ${escapeHtml3(all.fromDate || "-")} ~ ${escapeHtml3(all.toDate || "-")}</div>
+    `;
+      return sectionHtml(t("statsPeriodAll"), header + dailyTableHtml(all.rows));
+    }
+    function drillBody() {
+      const rows = (cost.allDays || []).filter((row) => row.date >= drill.from && row.date <= drill.to);
+      const back = `<button type="button" class="cqc-stats-back" data-action="stats-drill-back">${escapeHtml3(t("statsDrillBack"))}</button>`;
+      const title = `<div class="cqc-stats-drill-title">${escapeHtml3(drill.label || `${drill.from} ~ ${drill.to}`)}</div>`;
+      return `<div class="cqc-stats-drill">${back}${title}${dailyTableHtml(rows)}</div>`;
+    }
+    if (!cost) {
+      return periodTabsHtml() + emptyHtml();
+    }
+    if (drill && drill.from && drill.to) {
+      return periodTabsHtml() + drillBody();
+    }
+    let body;
+    if (activePeriod === "week") body = weekBody();
+    else if (activePeriod === "month") body = monthBody();
+    else if (activePeriod === "all") body = allBody();
+    else body = dayBody();
+    return periodTabsHtml() + chartHtml() + rollingLiveHtml() + body;
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js
+  function escapeHtml(value) {
+    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+  function formatValue(value) {
+    if (value === null || value === void 0 || value === "") return "-";
+    if (typeof value === "number") return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(void 0, { maximumFractionDigits: 6 });
+    return String(value);
+  }
+  function safeRows(rows, limit = 12) {
+    return Array.isArray(rows) ? rows.slice(0, limit) : [];
+  }
+  function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
+    if (typeof t !== "function") {
+      throw new Error("Quota panel renderer requires a translator function.");
+    }
+    const formatLocalTimestamp = typeof formatTimestamp === "function" ? formatTimestamp : (value) => {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+    };
+    function displayTimestamp(value) {
+      if (!value || value === "-") return "-";
+      return formatLocalTimestamp(value);
+    }
+    function normalizeDataColumns(rows, columns) {
+      if (Array.isArray(columns) && columns.length) {
+        return columns.map((column) => typeof column === "string" ? { key: column, label: column, priority: "secondary", compact: true } : {
+          key: column.key || column.label || "",
+          label: column.label || column.key || "",
+          labelKey: column.labelKey || "",
+          priority: column.priority || "secondary",
+          truncate: Boolean(column.truncate),
+          wrap: Boolean(column.wrap),
+          compact: column.compact !== false
+        }).filter((column) => column.key);
+      }
+      return [...new Set(rows.flatMap((row) => Object.keys(row || {})))].map((key) => ({ key, label: key, priority: "secondary", compact: true }));
+    }
+    function columnLabel(column) {
+      return column.labelKey ? t(column.labelKey) : column.label;
+    }
+    function dataCellHtml(row, column) {
+      const value = formatValue(row?.[column.key]);
+      const classes = [
+        column.truncate ? "is-truncated" : "",
+        column.wrap ? "is-wrappable" : "",
+        column.priority ? `is-${column.priority}` : ""
+      ].filter(Boolean).join(" ");
+      const title = column.truncate ? ` title="${escapeHtml(value)}"` : "";
+      return `<td class="${escapeHtml(classes)}"${title}>${escapeHtml(value)}</td>`;
+    }
+    function compactValueHtml(row, column) {
+      const value = formatValue(row?.[column.key]);
+      const classes = [
+        "cqc-compact-value",
+        column.truncate ? "is-truncated" : "",
+        column.wrap ? "is-wrappable" : ""
+      ].filter(Boolean).join(" ");
+      const title = column.truncate ? ` title="${escapeHtml(value)}"` : "";
+      return `
+      <div class="cqc-compact-field">
+        <dt>${escapeHtml(columnLabel(column))}</dt>
+        <dd class="${escapeHtml(classes)}"${title}>${escapeHtml(value)}</dd>
+      </div>
+    `;
+    }
+    function dataViewHtml(view = {}, state = {}) {
+      const rows = Array.isArray(view.rows) ? view.rows : [];
+      const limit = view.limit ?? 12;
+      const expandable = rows.length > limit;
+      const expanded = expandable && Boolean(state.expandedViews?.has?.(view.id));
+      const visibleRows = expanded ? rows : safeRows(rows, limit);
+      const columns = normalizeDataColumns(visibleRows, view.columns);
+      if (!visibleRows.length || !columns.length) {
+        return `<div class="cqc-empty">${escapeHtml(t(view.emptyKey || "tableNoData"))}</div>`;
+      }
+      const head = columns.map((column) => `<th>${escapeHtml(columnLabel(column))}</th>`).join("");
+      const body = visibleRows.map((row) => `<tr>${columns.map((column) => dataCellHtml(row, column)).join("")}</tr>`).join("");
+      const compactColumns = columns.filter((column) => column.compact && column.priority !== "debug");
+      const compact = visibleRows.map((row) => `
+        <dl class="cqc-compact-row">
+          ${compactColumns.map((column) => compactValueHtml(row, column)).join("")}
+        </dl>
+      `).join("");
+      const toggle = expandable ? `<div class="cqc-table-note"><button type="button" class="cqc-table-expand" data-action="toggle-rows" data-view-id="${escapeHtml(view.id || "")}" data-expanded="${expanded ? "true" : "false"}">${escapeHtml(expanded ? t("tableShowLess") : t("tableShowAll", { total: rows.length }))}</button></div>` : "";
+      return `
+      <div class="cqc-data-view" data-view-id="${escapeHtml(view.id || "")}" data-compact="${view.compactOnMobile === false ? "false" : "true"}">
+        <div class="cqc-table-wrap cqc-data-table">
+          <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+        </div>
+        <div class="cqc-compact-list">${compact}</div>
+      </div>
+      ${toggle}
+    `;
+    }
+    function tableHtml(rows, options = {}) {
+      return dataViewHtml({
+        id: options.id || "",
+        rows,
+        columns: options.columns,
+        limit: options.limit,
+        compactOnMobile: options.compactOnMobile
+      });
+    }
+    function metricHtml(label, value, hint = "") {
+      return `
+      <div class="cqc-metric">
+        <div class="cqc-metric-label">${escapeHtml(label)}</div>
+        <div class="cqc-metric-value">${escapeHtml(formatValue(value))}</div>
+        ${hint ? `<div class="cqc-metric-hint">${escapeHtml(hint)}</div>` : ""}
+      </div>
+    `;
+    }
+    function formatMetricDecimal(value) {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) return "-";
+      return numericValue.toLocaleString(void 0, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      });
+    }
+    function usdMetricValue(value) {
+      return value === null || value === void 0 || value === "" ? "-" : `$${formatMetricDecimal(value)}`;
+    }
+    function formatHoursDuration(hours) {
+      const numericHours = Number(hours);
+      if (!Number.isFinite(numericHours)) return "-";
+      const totalMinutes = Math.max(0, Math.round(numericHours * 60));
+      const days = Math.floor(totalMinutes / (24 * 60));
+      const remainingHours = Math.floor(totalMinutes % (24 * 60) / 60);
+      const minutes = totalMinutes % 60;
+      if (days > 0) return t("durationDaysHours", { days, hours: remainingHours });
+      if (remainingHours > 0) return t("durationHoursMinutes", { hours: remainingHours, minutes });
+      return t("durationMinutes", { minutes });
+    }
+    function creditMetricHtml(label, usd2) {
+      return metricHtml(label, usdMetricValue(usd2));
+    }
+    function resetMetricHtml(hours) {
+      return metricHtml(t("resetCountdown"), formatHoursDuration(hours));
+    }
+    function primaryMetricHtml(metric) {
+      const label = metric?.labelKey ? t(metric.labelKey) : metric?.label || "-";
+      if (metric?.type === "credit") {
+        return creditMetricHtml(label, metric.usd);
+      }
+      if (metric?.type === "reset") {
+        return resetMetricHtml(metric.hours);
+      }
+      return metricHtml(label, metric?.value);
+    }
+    function heroHtml(metric) {
+      if (!metric) return "";
+      const label = metric.labelKey ? t(metric.labelKey) : metric.label || "-";
+      const value = metric.type === "credit" ? usdMetricValue(metric.usd) : formatValue(metric.value);
+      const hours = Number(metric.resetHours);
+      const subline = Number.isFinite(hours) ? `<div class="cqc-hero-sub">${escapeHtml(t("heroResetSubline", { duration: formatHoursDuration(hours) }))}</div>` : "";
+      return `
+      <section class="cqc-hero">
+        <div class="cqc-hero-label">${escapeHtml(label)}</div>
+        <div class="cqc-hero-value">${escapeHtml(value)}</div>
+        ${subline}
+      </section>
+    `;
+    }
+    function secondaryMetricsHtml(metrics) {
+      const list = Array.isArray(metrics) ? metrics : [];
+      if (!list.length) return "";
+      return `<div class="cqc-metrics cqc-metrics-secondary">${list.map(primaryMetricHtml).join("")}</div>`;
+    }
+    function detailMetricsHtml(metrics) {
+      const list = Array.isArray(metrics) ? metrics : [];
+      if (!list.length) return "";
+      return `<div class="cqc-metrics">${list.map(primaryMetricHtml).join("")}</div>`;
+    }
+    function syncBannerHtml(banner) {
+      if (!banner) return "";
+      const variables = {
+        backend: banner.backendLabel || "-",
+        endpoint: banner.endpoint || "-",
+        lastSyncedAt: banner.lastSyncedAt || "-",
+        error: banner.lastError || "-"
+      };
+      return `
+      <div class="cqc-sync-banner" data-tone="${escapeHtml(banner.tone || "muted")}">
+        <strong>${escapeHtml(t(banner.titleKey, variables))}</strong>
+        <span>${escapeHtml(t(banner.detailKey, variables))}</span>
+      </div>
+    `;
+    }
+    function syncFormHtml(status = {}) {
+      const enabled = Boolean(status.enabled);
+      const hasToken = Boolean(status.hasToken);
+      const configured = Boolean(status.configured);
+      const gistId = status.gistId || "";
+      const lastSyncedAt = status.lastSyncedAt || "";
+      const lastError = status.lastError || "";
+      const statusLine = lastError ? `<div class="cqc-sync-form-status" data-tone="error">${escapeHtml(t("remoteSyncStatusError", { error: lastError }))}</div>` : `<div class="cqc-sync-form-status" data-tone="muted">${escapeHtml(lastSyncedAt ? t("remoteSyncLastSynced", { lastSyncedAt: formatLocalTimestamp(lastSyncedAt) }) : t("remoteSyncNeverSynced"))}</div>`;
+      const syncNowButton = enabled && configured ? `<button type="button" data-action="sync-remote">${escapeHtml(t("remoteSyncNowAction"))}</button>` : "";
+      return `
+      <div class="cqc-sync-form" data-sync-form>
+        <div class="cqc-sync-form-title">${escapeHtml(t("remoteSyncFormTitle"))}</div>
+        <div class="cqc-sync-field">
+          <span class="cqc-sync-field-label">
+            ${escapeHtml(t("remoteSyncTokenLabel"))}
+            <span class="cqc-sync-field-hint">${escapeHtml(hasToken ? t("remoteSyncTokenSavedHint") : t("remoteSyncTokenFieldHint"))}</span>
+          </span>
+          <input type="password" data-field="token" autocomplete="new-password" spellcheck="false" placeholder="${escapeHtml(hasToken ? t("remoteSyncTokenPlaceholderSet") : t("remoteSyncTokenPlaceholderNew"))}">
+        </div>
+        <div class="cqc-sync-field">
+          <span class="cqc-sync-field-label">
+            ${escapeHtml(t("remoteSyncGistIdLabel"))}
+            <span class="cqc-sync-field-hint">${escapeHtml(t("remoteSyncGistIdFieldHint"))}</span>
+          </span>
+          <input type="text" data-field="gistId" spellcheck="false" value="${escapeHtml(gistId)}" placeholder="${escapeHtml(t("remoteSyncGistIdPlaceholder"))}">
+        </div>
+        <label class="cqc-sync-toggle">
+          <input type="checkbox" data-field="enabled"${enabled ? " checked" : ""}>
+          ${escapeHtml(t("remoteSyncEnableLabel"))}
+        </label>
+        ${statusLine}
+        <div class="cqc-sync-form-actions">
+          <button type="button" data-action="save-remote-sync" data-variant="primary">${escapeHtml(t("remoteSyncSaveAction"))}</button>
+          ${syncNowButton}
+        </div>
+      </div>
+    `;
+    }
+    function sectionHtml(title, body) {
+      return `
+      <section class="cqc-section">
+        <h3>${escapeHtml(title)}</h3>
+        ${body}
+      </section>
+    `;
+    }
+    function detailActionsHtml(actions) {
+      return `
+      <div class="cqc-detail-footnote">
+        ${actions.map((item) => `
+          <button type="button" data-action="${escapeHtml(item.action)}">${escapeHtml(item.label)}</button>
+        `).join("")}
+      </div>
+    `;
+    }
+    function archiveSummaryHtml(model = {}, state) {
+      if (!model.isLoaded) {
+        return `<div class="cqc-empty">${escapeHtml(t("archiveEmpty"))}</div>`;
+      }
+      const overviewColumns = [
+        t("archiveSnapshotCount"),
+        t("archiveEarliestCapturedAt"),
+        t("archiveLatestCapturedAt"),
+        t("archiveStorageBackend")
+      ];
+      const recentColumns = [
+        t("archiveCapturedAt"),
+        t("archiveSnapshotId"),
+        t("archiveMonthlyCredits"),
+        t("archiveWeeklyUsedPercent")
+      ];
+      const overview = dataViewHtml({
+        id: "archive-overview",
+        rows: [
+          {
+            [overviewColumns[0]]: model.snapshotCount,
+            [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
+            [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
+            [overviewColumns[3]]: model.storageBackend?.label || "-"
+          }
+        ],
+        columns: overviewColumns.map((column) => ({
+          key: column,
+          label: column,
+          priority: column === t("archiveSnapshotCount") ? "primary" : "secondary",
+          truncate: column !== t("archiveSnapshotCount")
+        })),
+        limit: 1
+      }, state);
+      const recentSnapshots = safeRows(model.recentSnapshots || [], 5);
+      const recent = recentSnapshots.length ? dataViewHtml({
+        id: "archive-recent",
+        rows: recentSnapshots.map((row) => ({
+          [recentColumns[0]]: displayTimestamp(row.capturedAt),
+          [recentColumns[1]]: row.snapshotId,
+          [recentColumns[2]]: row.monthlyCredits,
+          [recentColumns[3]]: row.weeklyUsedPercent
+        })),
+        columns: recentColumns.map((column) => ({
+          key: column,
+          label: column,
+          priority: column === t("archiveSnapshotId") ? "primary" : "secondary",
+          truncate: column === t("archiveSnapshotId") || column === t("archiveCapturedAt")
+        }))
+      }, state) : `<div class="cqc-empty">${escapeHtml(t("archiveNoSnapshot"))}</div>`;
+      const importReport = model.importReport ? `<div class="cqc-table-note">${escapeHtml(t("archiveLatestImport", { added: model.importReport.added, skipped: model.importReport.skipped, invalid: model.importReport.invalid }))}</div>` : "";
+      return `${overview}${importReport}${recent}`;
+    }
+    function archiveTransferActionsHtml() {
+      return detailActionsHtml([
+        { action: "export-archive", label: t("archiveExportAction") },
+        { action: "import-archive", label: t("archiveImportAction") }
+      ]);
+    }
+    function panelTabsHtml(model, activePanelView) {
+      const tabs = Array.isArray(model?.tabs) && model.tabs.length ? model.tabs : [
+        { id: "details", labelKey: "tabDetails" },
+        { id: "stats", labelKey: "tabStats" },
+        { id: "archive", labelKey: "tabArchiveWorkspace" }
+      ];
+      return `
+      <div class="cqc-tabs">
+        ${tabs.map((tab) => `
+          <button
+            type="button"
+            class="cqc-tab${activePanelView === tab.id ? " is-active" : ""}"
+            data-action="switch-view"
+            data-view="${escapeHtml(tab.id)}"
+          >${escapeHtml(tab.labelKey ? t(tab.labelKey) : tab.label)}</button>
+        `).join("")}
+      </div>
+    `;
+    }
+    function sectionFromModelHtml(section, viewModel, state) {
+      if (!section) return "";
+      if (section.type === "metrics") {
+        return detailMetricsHtml(section.metrics);
+      }
+      if (section.type === "dataView") {
+        return sectionHtml(t(section.titleKey), dataViewHtml(section, state));
+      }
+      if (section.type === "syncBanner") {
+        return syncBannerHtml(viewModel?.syncBanner);
+      }
+      if (section.type === "syncForm") {
+        return syncFormHtml(viewModel?.remoteSyncStatus);
+      }
+      if (section.type === "archiveSummary") {
+        return sectionHtml(t("sectionArchiveOverview"), archiveSummaryHtml(viewModel?.archive, state));
+      }
+      if (section.type === "note") {
+        return `<div class="cqc-transfer-note">${escapeHtml(t(section.noteKey || "transferNote"))}</div>`;
+      }
+      if (section.type === "actions") {
+        const actions = Array.isArray(section.actions) ? section.actions.map((item) => ({
+          action: item.action,
+          label: item.labelKey ? t(item.labelKey) : item.label
+        })) : [];
+        return actions.length ? detailActionsHtml(actions) : "";
+      }
+      return "";
+    }
+    function sectionsViewHtml(view, viewModel, state) {
+      return (view?.sections || []).map((section) => sectionFromModelHtml(section, viewModel, state)).join("");
+    }
+    function statsViewHtml(model, state = {}) {
+      return buildStatsView(
+        {
+          cost: model?.cost,
+          rolling: model?.rolling,
+          period: state.statsPeriod,
+          drill: state.statsDrill
+        },
+        { t, sectionHtml, tableHtml, escapeHtml }
+      );
+    }
+    function archiveViewHtml(model, state) {
+      const view = model?.views?.archive;
+      if (view) return sectionsViewHtml(view, model, state);
+      return `
+      ${syncBannerHtml(model?.syncBanner)}
+      ${sectionHtml(t("sectionArchiveOverview"), archiveSummaryHtml(model?.archive, state))}
+      <div class="cqc-transfer-note">${escapeHtml(t("transferNote"))}</div>
+      ${archiveTransferActionsHtml()}
+    `;
+    }
+    function activeViewHtml(viewModel, activePanelView, state = {}) {
+      const view = viewModel?.views?.[activePanelView] || viewModel?.views?.details;
+      if (view?.kind === "archiveWorkspace") {
+        return archiveViewHtml(viewModel, state);
+      }
+      if (view?.kind === "stats") {
+        return statsViewHtml(viewModel, state);
+      }
+      if (view?.kind === "sections") {
+        return sectionsViewHtml(view, viewModel, state);
+      }
+      return sectionsViewHtml(viewModel?.views?.details, viewModel, state);
+    }
+    function normalizeActivePanelView(viewModel, requestedPanelView) {
+      const tabs = Array.isArray(viewModel?.tabs) ? viewModel.tabs : [];
+      if (tabs.length && !tabs.some((tab) => tab.id === requestedPanelView)) {
+        return tabs[0].id;
+      }
+      return requestedPanelView || "details";
+    }
+    function renderResult(viewModel, state = {}) {
+      const activePanelView = normalizeActivePanelView(viewModel, state.activePanelView);
+      const viewBody = activeViewHtml(viewModel, activePanelView, state);
+      return {
+        activePanelView,
+        html: `
+        ${heroHtml(viewModel?.heroMetric)}
+        ${secondaryMetricsHtml(viewModel?.secondaryMetrics)}
+        ${panelTabsHtml(viewModel, activePanelView)}
+        <div class="cqc-details">
+          ${viewBody}
+        </div>
+      `
+      };
+    }
+    function renderActiveView(viewModel, state = {}) {
+      const activePanelView = normalizeActivePanelView(viewModel, state.activePanelView);
+      return {
+        activePanelView,
+        html: activeViewHtml(viewModel, activePanelView, state)
+      };
+    }
+    function renderLoading() {
+      return `
+      <div class="cqc-loading">
+        <div class="cqc-spinner"></div>
+        <div>
+          <strong>${escapeHtml(t("loadingTitle"))}</strong>
+          <span>${escapeHtml(t("loadingHint"))}</span>
+        </div>
+      </div>
+    `;
+    }
+    function renderError(error) {
+      return `
+      <div class="cqc-error">
+        <strong>${escapeHtml(t("errorTitle"))}</strong>
+        <p>${escapeHtml(error?.message || error || t("errorUnknown"))}</p>
+        <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml(t("actionRetry"))}</button>
+      </div>
+    `;
+    }
+    function installStyles(documentObject, rootId) {
+      installQuotaPanelRendererStyles(documentObject, rootId);
+    }
+    return {
+      renderResult,
+      renderActiveView,
+      renderLoading,
+      renderError,
+      installStyles
+    };
+  }
+
+  // src/userscripts/shared/shared-icons.lib.js
+  var ICON_CONTENT = {
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1-1-1.73l-.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15-.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    "chevron-left": '<path d="m15 18-6-6 6-6"/>',
+    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    "alert-triangle": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    loader: '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>'
+  };
+  var ICON_NAMES = Object.keys(ICON_CONTENT);
+  function toPositiveNumber(value, name) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) {
+      throw new Error(`shared-icons: ${name} must be a positive number, got ${JSON.stringify(value)}`);
+    }
+    return number;
+  }
+  function iconSvg(name, { size = 16, strokeWidth = 2 } = {}) {
+    const content = ICON_CONTENT[name];
+    if (!content) {
+      throw new Error(`shared-icons: unknown icon "${name}". Available: ${ICON_NAMES.join(", ")}`);
+    }
+    const resolvedSize = toPositiveNumber(size, "size");
+    const resolvedStrokeWidth = toPositiveNumber(strokeWidth, "strokeWidth");
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${resolvedStrokeWidth}" stroke-linecap="round" stroke-linejoin="round" width="${resolvedSize}" height="${resolvedSize}" class="wk-icon wk-icon-${name}" aria-hidden="true" focusable="false">${content}</svg>`;
+  }
+
+  // src/userscripts/shared/shared-tokens.lib.js
+  var SAFE_COLOR_PATTERN = /^[#a-zA-Z0-9(),.\s%/+-]+$/;
+  var UNSAFE_SELECTOR_CHARS = /[{};<@\\]/;
+  var COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
+  function assertSafeColor(value, name) {
+    const color = String(value ?? "").trim();
+    if (!color || !SAFE_COLOR_PATTERN.test(color)) {
+      throw new Error(`shared-tokens: invalid ${name} color ${JSON.stringify(value)}`);
+    }
+    return color;
+  }
+  function assertSafeSelector(value) {
+    const selector = String(value ?? "").trim();
+    if (!selector || UNSAFE_SELECTOR_CHARS.test(selector)) {
+      throw new Error(`shared-tokens: invalid rootSelector ${JSON.stringify(value)}`);
+    }
+    return selector;
+  }
+  function buildTokenCss({ rootSelector, accent, accentDark } = {}) {
+    const root = assertSafeSelector(rootSelector);
+    const lightAccent = assertSafeColor(accent, "accent");
+    const darkAccent = accentDark == null ? lightAccent : assertSafeColor(accentDark, "accentDark");
+    return `
+${root} {
+  --wk-surface: oklch(99.2% 0.002 250);
+  --wk-surface-muted: oklch(96.8% 0.003 250);
+  --wk-surface-sunken: oklch(97.8% 0.003 250);
+  --wk-text: oklch(23% 0.012 250);
+  --wk-text-muted: oklch(47% 0.012 250);
+  --wk-border: oklch(24% 0.012 250 / 0.10);
+  --wk-border-strong: oklch(24% 0.012 250 / 0.16);
+  --wk-danger: oklch(52% 0.19 27);
+  --wk-warning: oklch(55% 0.13 75);
+  --wk-accent: ${lightAccent};
+  --wk-shadow-panel: 0 24px 80px oklch(20% 0.02 250 / 0.22);
+  --wk-shadow-pop: 0 8px 28px oklch(20% 0.02 250 / 0.14);
+  --wk-fs-sm: 12px;
+  --wk-fs-md: 13px;
+  --wk-fs-lg: 15px;
+  --wk-fs-xl: 20px;
+  --wk-fs-hero: 28px;
+  --wk-radius-ctl: 8px;
+  --wk-radius-panel: 12px;
+  --wk-radius-pill: 999px;
+  color-scheme: light dark;
+}
+
+${root}[data-wk-theme="dark"] {
+  --wk-surface: oklch(25% 0.012 250);
+  --wk-surface-muted: oklch(21% 0.010 250);
+  --wk-surface-sunken: oklch(23% 0.011 250);
+  --wk-text: oklch(93% 0.008 250);
+  --wk-text-muted: oklch(74% 0.010 250);
+  --wk-border: oklch(95% 0.01 250 / 0.12);
+  --wk-border-strong: oklch(95% 0.01 250 / 0.18);
+  --wk-danger: oklch(68% 0.18 27);
+  --wk-warning: oklch(75% 0.13 80);
+  --wk-accent: ${darkAccent};
+  --wk-shadow-panel: 0 24px 80px oklch(10% 0.01 250 / 0.50);
+  --wk-shadow-pop: 0 8px 28px oklch(10% 0.01 250 / 0.35);
+}
+
+${root} *,
+${root} *::before,
+${root} *::after {
+  box-sizing: border-box;
+}
+
+${root} button,
+${root} input,
+${root} select,
+${root} textarea {
+  font: inherit;
+  color: inherit;
+}
+
+${root} :focus-visible {
+  outline: 2px solid var(--wk-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ${root} *,
+  ${root} *::before,
+  ${root} *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+`.trim();
+  }
+  function systemPrefersDark() {
+    try {
+      const matchMedia = globalThis.window?.matchMedia;
+      if (typeof matchMedia === "function") {
+        return Boolean(matchMedia.call(globalThis.window, COLOR_SCHEME_QUERY).matches);
+      }
+    } catch {
+    }
+    return false;
+  }
+  function resolveTheme(detectHost) {
+    if (typeof detectHost === "function") {
+      try {
+        const detected = detectHost();
+        if (detected === "light" || detected === "dark") return detected;
+      } catch {
+      }
+    }
+    return systemPrefersDark() ? "dark" : "light";
+  }
+  function applyTheme(root, { detectHost, observeHost = false } = {}) {
+    if (!root) {
+      throw new Error("shared-tokens: applyTheme requires a root element.");
+    }
+    const apply = () => {
+      root.dataset.wkTheme = resolveTheme(detectHost);
+    };
+    apply();
+    let media = null;
+    const onChange = () => apply();
+    try {
+      const matchMedia = globalThis.window?.matchMedia;
+      if (typeof matchMedia === "function") {
+        media = matchMedia.call(globalThis.window, COLOR_SCHEME_QUERY);
+        if (typeof media?.addEventListener === "function") {
+          media.addEventListener("change", onChange);
+        } else if (typeof media?.addListener === "function") {
+          media.addListener(onChange);
+        } else {
+          media = null;
+        }
+      }
+    } catch {
+      media = null;
+    }
+    let observer = null;
+    if (observeHost) {
+      try {
+        const documentObject = root.ownerDocument ?? globalThis.document;
+        const windowObject = documentObject?.defaultView ?? globalThis.window;
+        const MutationObserverImpl = windowObject?.MutationObserver ?? globalThis.MutationObserver;
+        const hostElement = documentObject?.documentElement;
+        if (typeof MutationObserverImpl === "function" && hostElement && hostElement !== root) {
+          observer = new MutationObserverImpl(onChange);
+          observer.observe(hostElement, { attributes: true, attributeFilter: ["class", "style"] });
+        }
+      } catch {
+        observer = null;
+      }
+    }
+    return () => {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      if (!media) return;
+      if (typeof media.removeEventListener === "function") {
+        media.removeEventListener("change", onChange);
+      } else if (typeof media.removeListener === "function") {
+        media.removeListener(onChange);
+      }
+      media = null;
+    };
+  }
+
+  // src/userscripts/shared/shared-widget-shell.lib.js
+  var BUTTON_SAFE_MARGIN = 12;
+  var DOCK_THRESHOLD = 32;
+  var DOCK_OFFSET = 8;
+  var PANEL_SAFE_MARGIN = 12;
+  var PANEL_GAP = 8;
+  var DRAG_THRESHOLD_PX = 4;
+  var FALLBACK_BUTTON_SIZE = 44;
+  var PANEL_ANIMATION_MS = 200;
+  var PANEL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+  var FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  function isDockSide(value) {
+    return value === "left" || value === "right";
+  }
+  function appendClasses(el, classes) {
+    const list = String(classes ?? "").split(/\s+/).filter(Boolean);
+    if (list.length) el.classList.add(...list);
+  }
+  function eventContainsNode(event, node) {
+    if (!node) return false;
+    const path = event.composedPath?.();
+    return Array.isArray(path) ? path.includes(node) : node.contains(event.target);
+  }
+  var WIDGET_SHELL_CSS = `
+.wk-widget-button {
+  position: fixed;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--wk-border-strong);
+  border-radius: var(--wk-radius-pill);
+  background: var(--wk-surface);
+  color: var(--wk-text);
+  box-shadow: var(--wk-shadow-pop);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--wk-fs-md);
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.wk-widget-button.is-dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.wk-widget-button[data-wk-docked="left"],
+.wk-widget-button[data-wk-docked="right"] {
+  opacity: 0.55;
+  transform: scale(0.72);
+}
+
+.wk-widget-button[data-wk-docked="left"] {
+  transform-origin: left center;
+}
+
+.wk-widget-button[data-wk-docked="right"] {
+  transform-origin: right center;
+}
+
+.wk-widget-button[data-wk-docked]:hover,
+.wk-widget-button[data-wk-docked]:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.wk-widget-panel {
+  position: fixed;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--wk-border);
+  border-radius: var(--wk-radius-panel);
+  background: var(--wk-surface);
+  color: var(--wk-text);
+  box-shadow: var(--wk-shadow-panel);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--wk-fs-md);
+  line-height: 1.45;
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+  transition:
+    opacity ${PANEL_ANIMATION_MS}ms ${PANEL_EASING},
+    transform ${PANEL_ANIMATION_MS}ms ${PANEL_EASING};
+}
+
+.wk-widget-panel[hidden] {
+  display: none;
+}
+
+.wk-widget-panel.is-open {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.wk-widget-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--wk-border);
+}
+
+.wk-widget-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-widget-button,
+  .wk-widget-panel {
+    transition: none;
+  }
+}
+`.trim();
+  function createWidgetShell({
+    root,
+    buttonId,
+    buttonAriaLabel,
+    buttonContent,
+    buttonClass,
+    panelClass,
+    panelWidth = 560,
+    panelMaxHeight = 760,
+    storage,
+    positionKey,
+    defaultPosition = { top: 76, right: 24 },
+    dock = true,
+    onOpen,
+    onClose,
+    renderPanelHeader: renderPanelHeader2,
+    renderPanelBody
+  } = {}) {
+    if (!root?.append) {
+      throw new Error("shared-widget-shell: createWidgetShell requires a root element.");
+    }
+    const documentObject = root.ownerDocument ?? globalThis.document;
+    if (!documentObject?.createElement) {
+      throw new Error("shared-widget-shell: root must expose ownerDocument.");
+    }
+    const windowObject = documentObject.defaultView ?? globalThis.window ?? globalThis;
+    const scheduleTimeout = typeof windowObject.setTimeout === "function" ? windowObject.setTimeout.bind(windowObject) : (callback, ms) => setTimeout(callback, ms);
+    const cancelTimeout = typeof windowObject.clearTimeout === "function" ? windowObject.clearTimeout.bind(windowObject) : (timer) => clearTimeout(timer);
+    const requestFrame = typeof windowObject.requestAnimationFrame === "function" ? windowObject.requestAnimationFrame.bind(windowObject) : (callback) => scheduleTimeout(callback, 16);
+    const buttonEl = documentObject.createElement("button");
+    buttonEl.type = "button";
+    if (buttonId) buttonEl.id = buttonId;
+    buttonEl.className = "wk-widget-button";
+    appendClasses(buttonEl, buttonClass);
+    if (buttonAriaLabel) buttonEl.setAttribute("aria-label", buttonAriaLabel);
+    buttonEl.setAttribute("aria-expanded", "false");
+    if (buttonContent != null) {
+      if (typeof buttonContent === "string") {
+        buttonEl.innerHTML = buttonContent;
+      } else {
+        buttonEl.append(buttonContent);
+      }
+    }
+    const panelEl = documentObject.createElement("div");
+    panelEl.className = "wk-widget-panel";
+    appendClasses(panelEl, panelClass);
+    if (buttonId) panelEl.id = `${buttonId}-panel`;
+    panelEl.hidden = true;
+    const headerEl = documentObject.createElement("div");
+    headerEl.className = "wk-widget-header";
+    const bodyEl = documentObject.createElement("div");
+    bodyEl.className = "wk-widget-body";
+    panelEl.append(headerEl, bodyEl);
+    renderPanelHeader2?.(headerEl);
+    renderPanelBody?.(bodyEl);
+    root.append(buttonEl, panelEl);
+    let position = { left: 0, top: 0, dockSide: null };
+    let isOpenState = false;
+    let suppressNextClick = false;
+    let closeTimer = null;
+    function measureButton() {
+      const rect = buttonEl.getBoundingClientRect?.();
+      return {
+        width: rect?.width || buttonEl.offsetWidth || FALLBACK_BUTTON_SIZE,
+        height: rect?.height || buttonEl.offsetHeight || FALLBACK_BUTTON_SIZE
+      };
+    }
+    function clampPosition(left, top) {
+      const { width, height } = measureButton();
+      const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
+      const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
+      return {
+        left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
+        top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop)
+      };
+    }
+    function dockedPosition(dockSide, top) {
+      const { width } = measureButton();
+      const clamped = clampPosition(0, top);
+      return {
+        left: dockSide === "right" ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
+        top: clamped.top
+      };
+    }
+    function detectDockSide(left) {
+      const { width } = measureButton();
+      if (left <= DOCK_THRESHOLD) return "left";
+      if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return "right";
+      return null;
+    }
+    function resolveDefaultPosition() {
+      const { width } = measureButton();
+      const top = Number.isFinite(defaultPosition?.top) ? defaultPosition.top : 76;
+      const right = Number.isFinite(defaultPosition?.right) ? defaultPosition.right : 24;
+      return clampPosition(windowObject.innerWidth - right - width, top);
+    }
+    function applyPosition(next) {
+      const dockSide = dock && isDockSide(next?.dockSide) ? next.dockSide : null;
+      const resolved = dockSide ? dockedPosition(dockSide, next?.top ?? position.top) : clampPosition(next?.left ?? position.left, next?.top ?? position.top);
+      position = { ...resolved, dockSide };
+      if (dockSide) {
+        buttonEl.dataset.wkDocked = dockSide;
+      } else {
+        delete buttonEl.dataset.wkDocked;
+      }
+      buttonEl.style.top = `${Math.round(resolved.top)}px`;
+      if (dockSide === "right") {
+        buttonEl.style.left = "auto";
+        buttonEl.style.right = `${DOCK_OFFSET}px`;
+      } else {
+        buttonEl.style.left = `${Math.round(resolved.left)}px`;
+        buttonEl.style.right = "auto";
+      }
+      return position;
+    }
+    async function persistPosition() {
+      if (!storage?.set || !positionKey) return;
+      const value = { left: Math.round(position.left), top: Math.round(position.top) };
+      if (position.dockSide) value.dockSide = position.dockSide;
+      try {
+        await storage.set(positionKey, JSON.stringify(value));
+      } catch {
+      }
+    }
+    async function restorePosition() {
+      if (!storage?.get || !positionKey) return;
+      try {
+        const raw = await storage.get(positionKey);
+        const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (parsed && Number.isFinite(parsed.left) && Number.isFinite(parsed.top)) {
+          applyPosition({
+            left: parsed.left,
+            top: parsed.top,
+            dockSide: isDockSide(parsed.dockSide) ? parsed.dockSide : null
+          });
+          if (isOpenState) positionPanel();
+        }
+      } catch {
+      }
+    }
+    function positionPanel() {
+      const safe = PANEL_SAFE_MARGIN;
+      const { width: buttonWidth, height: buttonHeight } = measureButton();
+      const width = Math.min(panelWidth, windowObject.innerWidth - safe * 2);
+      const maxHeight = Math.min(panelMaxHeight, windowObject.innerHeight - safe * 2);
+      const height = Math.min(maxHeight, panelEl.offsetHeight || maxHeight);
+      const maxLeft = Math.max(safe, windowObject.innerWidth - width - safe);
+      const left = Math.min(Math.max(safe, position.left + buttonWidth - width), maxLeft);
+      const belowTop = position.top + buttonHeight + PANEL_GAP;
+      const aboveTop = position.top - height - PANEL_GAP;
+      const fitsBelow = belowTop + height <= windowObject.innerHeight - safe;
+      const maxTop = Math.max(safe, windowObject.innerHeight - height - safe);
+      const top = fitsBelow ? Math.min(belowTop, maxTop) : Math.min(Math.max(safe, aboveTop), maxTop);
+      panelEl.style.left = `${Math.round(left)}px`;
+      panelEl.style.top = `${Math.round(top)}px`;
+      panelEl.style.width = `${Math.round(width)}px`;
+      panelEl.style.maxHeight = `${Math.round(maxHeight)}px`;
+      const originX = Math.min(Math.max(position.left + buttonWidth / 2 - left, 24), width - 24);
+      const originY = Math.min(Math.max(position.top + buttonHeight / 2 - top, 24), height - 24);
+      panelEl.style.transformOrigin = `${Math.round(originX)}px ${Math.round(originY)}px`;
+      panelEl.dataset.wkPlacement = fitsBelow ? "below" : "above";
+    }
+    function syncExpanded() {
+      buttonEl.setAttribute("aria-expanded", isOpenState ? "true" : "false");
+    }
+    function open() {
+      if (isOpenState) return;
+      isOpenState = true;
+      cancelTimeout(closeTimer);
+      panelEl.hidden = false;
+      panelEl.classList.remove("is-open");
+      positionPanel();
+      buttonEl.classList.add("is-active");
+      syncExpanded();
+      requestFrame(() => {
+        if (isOpenState) panelEl.classList.add("is-open");
+      });
+      const focusTarget = panelEl.querySelector(FOCUSABLE_SELECTOR);
+      focusTarget?.focus?.();
+      onOpen?.();
+    }
+    function close() {
+      if (!isOpenState) return;
+      isOpenState = false;
+      panelEl.classList.remove("is-open");
+      buttonEl.classList.remove("is-active");
+      syncExpanded();
+      if (panelEl.contains(documentObject.activeElement)) {
+        buttonEl.focus?.();
+      }
+      closeTimer = scheduleTimeout(() => {
+        if (!isOpenState) panelEl.hidden = true;
+      }, PANEL_ANIMATION_MS);
+      onClose?.();
+    }
+    function toggle() {
+      if (isOpenState) {
+        close();
+      } else {
+        open();
+      }
+    }
+    function installDrag() {
+      let dragState = null;
+      buttonEl.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        dragState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          startLeft: position.left,
+          startTop: position.top,
+          moved: false
+        };
+        buttonEl.classList.add("is-dragging");
+        try {
+          buttonEl.setPointerCapture?.(event.pointerId);
+        } catch {
+        }
+      });
+      buttonEl.addEventListener("pointermove", (event) => {
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+        const dx = event.clientX - dragState.startX;
+        const dy = event.clientY - dragState.startY;
+        if (Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;
+        if (!dragState.moved) return;
+        applyPosition({
+          left: dragState.startLeft + dx,
+          top: dragState.startTop + dy,
+          dockSide: null
+        });
+        if (isOpenState) positionPanel();
+      });
+      function finishDrag(event) {
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+        const moved = dragState.moved;
+        dragState = null;
+        buttonEl.classList.remove("is-dragging");
+        try {
+          if (buttonEl.hasPointerCapture?.(event.pointerId)) {
+            buttonEl.releasePointerCapture(event.pointerId);
+          }
+        } catch {
+        }
+        if (!moved) return;
+        const dockSide = dock ? detectDockSide(position.left) : null;
+        applyPosition({ ...position, dockSide });
+        persistPosition();
+        if (isOpenState) positionPanel();
+        suppressNextClick = true;
+        scheduleTimeout(() => {
+          suppressNextClick = false;
+        }, 0);
+      }
+      buttonEl.addEventListener("pointerup", finishDrag);
+      buttonEl.addEventListener("pointercancel", finishDrag);
+    }
+    function onDocumentPointerDown(event) {
+      if (!isOpenState) return;
+      if (eventContainsNode(event, panelEl) || eventContainsNode(event, buttonEl)) return;
+      close();
+    }
+    function onDocumentKeydown(event) {
+      if (!isOpenState) return;
+      if (event.key === "Escape") close();
+    }
+    function onWindowResize() {
+      applyPosition(position);
+      if (isOpenState) positionPanel();
+    }
+    buttonEl.addEventListener("click", () => {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      toggle();
+    });
+    documentObject.addEventListener("pointerdown", onDocumentPointerDown, true);
+    documentObject.addEventListener("keydown", onDocumentKeydown);
+    windowObject.addEventListener?.("resize", onWindowResize);
+    applyPosition(resolveDefaultPosition());
+    installDrag();
+    restorePosition();
+    function destroy() {
+      cancelTimeout(closeTimer);
+      isOpenState = false;
+      syncExpanded();
+      documentObject.removeEventListener("pointerdown", onDocumentPointerDown, true);
+      documentObject.removeEventListener("keydown", onDocumentKeydown);
+      windowObject.removeEventListener?.("resize", onWindowResize);
+      buttonEl.remove();
+      panelEl.remove();
+    }
+    function reposition() {
+      if (isOpenState) positionPanel();
+    }
+    return {
+      cssText: WIDGET_SHELL_CSS,
+      buttonEl,
+      panelEl,
+      open,
+      close,
+      toggle,
+      reposition,
+      isOpen: () => isOpenState,
+      destroy
+    };
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js
+  var BUTTON_FULL_WIDTH = 168;
+  var BUTTON_HEIGHT = 42;
+  function createShellStyles(rootId) {
+    return `
+    #${rootId} {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --cqc-primary: var(--wk-accent);
+      --cqc-primary-strong: #0f766e;
+      --cqc-primary-soft: rgba(16, 163, 127, 0.12);
+      --cqc-primary-border: rgba(16, 163, 127, 0.55);
+      --cqc-primary-ring: rgba(16, 163, 127, 0.18);
+      --cqc-surface: var(--wk-surface);
+      --cqc-surface-muted: var(--wk-surface-muted);
+      --cqc-surface-sunken: var(--wk-surface-sunken);
+      --cqc-text: var(--wk-text);
+      --cqc-text-muted: var(--wk-text-muted);
+      --cqc-border: var(--wk-border);
+      --cqc-border-strong: var(--wk-border-strong);
+      --cqc-row-hover: rgba(16, 163, 127, 0.06);
+      --cqc-danger: var(--wk-danger);
+      --cqc-warning: var(--wk-warning);
+      --cqc-warning-surface: rgba(245, 158, 11, 0.1);
+      --cqc-warning-border: rgba(245, 158, 11, 0.32);
+      --cqc-shadow-panel: var(--wk-shadow-panel);
+      --cqc-shadow-button: var(--wk-shadow-pop);
+      --cqc-button-bg: var(--wk-surface);
+      --cqc-button-bg-docked: var(--wk-surface);
+      --cqc-button-bg-docked-active: var(--wk-surface);
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      pointer-events: none;
+    }
+
+    #${rootId}[data-wk-theme="dark"] {
+      --cqc-primary-strong: #34d399;
+      --cqc-primary-soft: rgba(25, 195, 125, 0.2);
+      --cqc-primary-border: rgba(25, 195, 125, 0.5);
+      --cqc-primary-ring: rgba(25, 195, 125, 0.22);
+      --cqc-row-hover: rgba(25, 195, 125, 0.14);
+      --cqc-warning-surface: rgba(245, 158, 11, 0.16);
+      --cqc-warning-border: rgba(245, 158, 11, 0.3);
+    }
+
+    /* Widget kit overrides: keep the 168x42 pill that shrinks to a dot-only
+       button when docked at a screen edge. */
+    #${rootId} .cqc-button {
+      width: ${BUTTON_FULL_WIDTH}px;
+      min-width: ${BUTTON_HEIGHT}px;
+      height: ${BUTTON_HEIGHT}px;
+      min-height: ${BUTTON_HEIGHT}px;
+      justify-content: flex-start;
+      gap: 8px;
+      padding: 0 14px;
+      border-color: var(--cqc-border-strong);
+      background: var(--cqc-button-bg);
+      box-shadow: var(--cqc-shadow-button);
+      overflow: hidden;
+      pointer-events: auto;
+      transition:
+        width 160ms ease,
+        gap 160ms ease,
+        padding 160ms ease,
+        opacity 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+    }
+
+    #${rootId} .cqc-button:active,
+    #${rootId} .cqc-button.is-dragging {
+      cursor: grabbing;
+    }
+
+    #${rootId} .cqc-button.is-active {
+      border-color: var(--cqc-primary-border);
+      box-shadow: 0 10px 32px var(--cqc-primary-ring);
+    }
+
+    #${rootId} .cqc-button[data-wk-docked] {
+      width: ${BUTTON_HEIGHT}px;
+      gap: 0;
+      padding: 0;
+      justify-content: center;
+      background: var(--cqc-button-bg-docked);
+      opacity: 0.72;
+      transform: none;
+    }
+
+    #${rootId} .cqc-button[data-wk-docked]:hover,
+    #${rootId} .cqc-button[data-wk-docked]:focus-visible,
+    #${rootId} .cqc-button[data-wk-docked].is-active,
+    #${rootId} .cqc-button[data-wk-docked].is-dragging {
+      width: ${BUTTON_FULL_WIDTH}px;
+      gap: 8px;
+      padding: 0 14px;
+      justify-content: flex-start;
+      background: var(--cqc-button-bg-docked-active);
+      opacity: 1;
+      transform: none;
+    }
+
+    #${rootId} .cqc-button[data-wk-docked] .cqc-button-text {
+      max-width: 0;
+      opacity: 0;
+      transform: translateX(-4px);
+    }
+
+    #${rootId} .cqc-button[data-wk-docked]:hover .cqc-button-text,
+    #${rootId} .cqc-button[data-wk-docked]:focus-visible .cqc-button-text,
+    #${rootId} .cqc-button[data-wk-docked].is-active .cqc-button-text,
+    #${rootId} .cqc-button[data-wk-docked].is-dragging .cqc-button-text {
+      max-width: 116px;
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    #${rootId} .cqc-button-text {
+      display: grid;
+      gap: 1px;
+      text-align: left;
+      line-height: 1.1;
+      max-width: 116px;
+      overflow: hidden;
+      transition:
+        max-width 160ms ease,
+        opacity 140ms ease,
+        transform 160ms ease;
+    }
+
+    #${rootId} .cqc-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--cqc-primary);
+      box-shadow: 0 0 0 4px var(--cqc-primary-ring);
+      flex: 0 0 auto;
+    }
+
+    #${rootId} .cqc-button-title {
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    #${rootId} .cqc-status {
+      color: var(--cqc-text-muted);
+      font-size: 11px;
+    }
+
+    #${rootId} .cqc-status[data-tone="loading"] { color: var(--cqc-primary-strong); }
+    #${rootId} .cqc-status[data-tone="success"] { color: var(--cqc-primary); }
+    #${rootId} .cqc-status[data-tone="error"] { color: var(--cqc-danger); }
+
+    #${rootId} .cqc-panel {
+      border-color: var(--cqc-border-strong);
+    }
+
+    #${rootId} .cqc-panel-header {
+      justify-content: space-between;
+      min-height: 48px;
+      padding: 12px 14px;
+      background: var(--cqc-surface-muted);
+    }
+
+    #${rootId} .cqc-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    #${rootId} .cqc-panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #${rootId} .cqc-icon-button,
+    #${rootId} .cqc-refresh {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: 1px solid var(--cqc-border-strong);
+      border-radius: 8px;
+      background: var(--cqc-surface);
+      color: var(--cqc-text);
+      min-height: 32px;
+      padding: 0 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #${rootId} .cqc-icon-button {
+      width: 32px;
+      height: 32px;
+      min-height: 32px;
+      padding: 0;
+    }
+
+    #${rootId} .cqc-refresh:hover,
+    #${rootId} .cqc-icon-button:hover {
+      background: var(--cqc-surface-muted);
+      border-color: var(--cqc-primary-border);
+    }
+
+    #${rootId} .cqc-content {
+      container-type: inline-size;
+      padding: 14px;
+    }
+  `;
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js
+  var DEFAULT_BUTTON_POSITION = { top: 76, right: 24 };
+  function escapeHtml2(value) {
+    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+  function detectHostTheme(documentObject = globalThis.document) {
+    const host = documentObject?.documentElement;
+    if (!host) return null;
+    const className = typeof host.className === "string" ? host.className : "";
+    if (/(^|\s)dark(\s|$)/.test(className)) return "dark";
+    const inlineScheme = String(host.style?.colorScheme || "").toLowerCase();
+    if (inlineScheme.includes("dark")) return "dark";
+    if (/(^|\s)light(\s|$)/.test(className) || inlineScheme.includes("light")) return "light";
+    return null;
+  }
+  function createButtonContentMarkup(labels = {}) {
+    return `
+    <span class="cqc-dot" aria-hidden="true"></span>
+    <span class="cqc-button-text">
+      <span class="cqc-button-title">${escapeHtml2(labels.buttonTitle || "")}</span>
+      <span class="cqc-status" data-tone="idle">${escapeHtml2(labels.statusIdle || "")}</span>
+    </span>
+  `;
+  }
+  function renderPanelHeader(headerEl, labels = {}) {
+    headerEl.classList.add("cqc-panel-header");
+    headerEl.innerHTML = `
+    <div class="cqc-panel-title">
+      <span class="cqc-dot" aria-hidden="true"></span>
+      <span>${escapeHtml2(labels.panelTitle || "")}</span>
+    </div>
+    <div class="cqc-panel-actions">
+      <button type="button" class="cqc-refresh" data-action="refresh">${iconSvg("refresh-cw", { size: 14 })}<span>${escapeHtml2(labels.actionRefresh || "")}</span></button>
+      <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml2(labels.closeAria || "Close")}">${iconSvg("x", { size: 16 })}</button>
+    </div>
+  `;
+  }
+  function createFloatingPanelShell({
+    rootId,
+    labels = {},
+    positionKey = `${rootId}:buttonPosition`,
+    tokenCss = "",
+    detectHost = detectHostTheme,
+    document: documentObject = globalThis.document,
+    window: windowObject = globalThis,
+    storage = globalThis.localStorage,
+    onAction = () => {
+    },
+    onOpen,
+    onClose
+  } = {}) {
+    if (!rootId) {
+      throw new Error("Floating panel shell requires rootId.");
+    }
+    if (!documentObject?.createElement || !documentObject?.documentElement) {
+      throw new Error("Floating panel shell requires a document adapter.");
+    }
+    if (!windowObject) {
+      throw new Error("Floating panel shell requires a window adapter.");
+    }
+    let root = null;
+    let shell = null;
+    let statusNode = null;
+    let contentNode = null;
+    let themeCleanup = null;
+    function refs() {
+      return { root, button: shell?.buttonEl || null, panel: shell?.panelEl || null, statusNode, contentNode };
+    }
+    function setStatus(text, tone = "idle") {
+      if (!statusNode) return;
+      statusNode.textContent = text;
+      statusNode.dataset.tone = tone;
+    }
+    function installShellStyles() {
+      if (documentObject.getElementById(`${rootId}-shell-style`)) return;
+      const style = documentObject.createElement("style");
+      style.id = `${rootId}-shell-style`;
+      style.textContent = [tokenCss, shell.cssText, createShellStyles(rootId)].filter(Boolean).join("\n\n");
+      documentObject.head.append(style);
+    }
+    function requestFrame(callback) {
+      if (typeof windowObject.requestAnimationFrame === "function") {
+        windowObject.requestAnimationFrame(callback);
+      } else {
+        windowObject.setTimeout(callback, 16);
+      }
+    }
+    function mount() {
+      if (documentObject.getElementById(rootId)) return null;
+      root = documentObject.createElement("div");
+      root.id = rootId;
+      documentObject.documentElement.append(root);
+      themeCleanup = applyTheme(root, { detectHost: () => detectHost(documentObject), observeHost: true });
+      shell = createWidgetShell({
+        root,
+        buttonAriaLabel: labels.buttonAriaOpen,
+        buttonContent: createButtonContentMarkup(labels),
+        buttonClass: "cqc-button",
+        panelClass: "cqc-panel",
+        panelWidth: 560,
+        panelMaxHeight: 760,
+        storage: storage?.getItem ? {
+          get: (key) => storage.getItem(key),
+          set: (key, value) => storage.setItem(key, value)
+        } : storage,
+        positionKey,
+        defaultPosition: DEFAULT_BUTTON_POSITION,
+        dock: true,
+        onOpen,
+        onClose,
+        renderPanelHeader: (headerEl) => renderPanelHeader(headerEl, labels),
+        renderPanelBody: (bodyEl) => {
+          bodyEl.classList.add("cqc-content");
+        }
+      });
+      installShellStyles();
+      shell.buttonEl.dataset.action = "toggle";
+      statusNode = shell.buttonEl.querySelector(".cqc-status");
+      contentNode = shell.panelEl.querySelector(".cqc-content");
+      root.addEventListener("click", (event) => {
+        const actionNode = event.target?.closest?.("[data-action]");
+        const action = actionNode?.dataset?.action;
+        if (!action) return;
+        onAction(action, event, actionNode);
+      });
+      setStatus(labels.statusIdle || "", "idle");
+      return api;
+    }
+    function positionPanelNearButton() {
+      shell?.reposition();
+    }
+    function schedulePanelResize() {
+      if (!shell?.isOpen()) return;
+      requestFrame(() => {
+        if (shell?.isOpen()) shell.reposition();
+      });
+    }
+    function destroy() {
+      themeCleanup?.();
+      themeCleanup = null;
+      shell?.destroy();
+      shell = null;
+      root?.remove?.();
+      root = null;
+      statusNode = null;
+      contentNode = null;
+    }
+    const api = {
+      mount,
+      refs,
+      setStatus,
+      openPanel: () => shell?.open(),
+      closePanel: () => shell?.close(),
+      positionPanelNearButton,
+      schedulePanelResize,
+      isOpen: () => Boolean(shell?.isOpen()),
+      destroy
+    };
+    return api;
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js
+  function applyActiveView(contentNode, rendered = {}) {
+    const activePanelView = rendered.activePanelView;
+    if (!contentNode) return activePanelView;
+    const detailsNode = contentNode.querySelector(".cqc-details");
+    if (detailsNode) {
+      detailsNode.innerHTML = rendered.html || "";
+    }
+    contentNode.querySelectorAll(".cqc-tab").forEach((tab) => {
+      tab.classList.toggle("is-active", tab.dataset.view === activePanelView);
+    });
+    return activePanelView;
+  }
+  function readSyncFormValues(contentNode) {
+    const form = contentNode?.querySelector?.("[data-sync-form]");
+    if (!form) return null;
+    return {
+      token: form.querySelector('[data-field="token"]')?.value || "",
+      gistId: form.querySelector('[data-field="gistId"]')?.value || "",
+      enabled: Boolean(form.querySelector('[data-field="enabled"]')?.checked)
+    };
+  }
+  function isSyncFormEditing(contentNode, activeElement) {
+    if (!activeElement || !contentNode?.contains?.(activeElement)) return false;
+    if (!activeElement.closest?.("[data-sync-form]")) return false;
+    return activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA";
   }
 
   // src/userscripts/shared/shared-toast.lib.js
@@ -5643,6 +5651,478 @@ ${root} :focus-visible {
     };
   }
 
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.js
+  var ROOT_ID = "codex-quota-compass-root";
+  var EXPORT_NAME = "codex-quota-compass-snapshot-archive.v1.json";
+  function createSnapshotSyncStatus(backendInfo) {
+    const backendId = backendInfo?.backendId || backendInfo?.id || "unavailable";
+    const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
+    const localOnly = backendId === "gm" || backendId === "localStorage";
+    const reason = backendId === "gm" ? "Userscript manager storage is local to this manager profile; use GitHub Gist sync for cross-device Snapshot Archive sync." : backendId === "localStorage" ? "localStorage is browser-local and will not sync personal usage history across devices." : backendId === "pending" ? "Snapshot Archive storage has not been loaded yet." : "Snapshot Archive storage is unavailable.";
+    return { backendId, backendLabel, crossDeviceCapable: false, localOnly, reason };
+  }
+  function createBrowserQuotaFiles({ document: document2, window: window2, t }) {
+    const activeUrls = /* @__PURE__ */ new Set();
+    const activePickers = /* @__PURE__ */ new Set();
+    function chooseText({ signal } = {}) {
+      return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+          resolve({ status: "cancelled" });
+          return;
+        }
+        const input = document2.createElement("input");
+        input.type = "file";
+        input.accept = "application/json,.json";
+        input.style.display = "none";
+        document2.body.append(input);
+        let reader;
+        let settled = false;
+        let pickerActive = true;
+        let focusTimer;
+        function finish(value, error) {
+          if (settled) return;
+          settled = true;
+          input.removeEventListener("change", changed);
+          input.removeEventListener("cancel", cancelled);
+          signal?.removeEventListener("abort", aborted);
+          window2.removeEventListener("focus", focused);
+          if (focusTimer != null) window2.clearTimeout(focusTimer);
+          if (reader?.readyState === 1) reader.abort();
+          input.remove();
+          activePickers.delete(aborted);
+          if (error) reject(error);
+          else resolve(value);
+        }
+        function aborted() {
+          finish({ status: "cancelled" });
+        }
+        function cancelled() {
+          finish({ status: "cancelled" });
+        }
+        function focused() {
+          if (pickerActive) focusTimer = window2.setTimeout(() => {
+            if (!settled && !input.files?.length) cancelled();
+          }, 250);
+        }
+        function changed() {
+          pickerActive = false;
+          const file = input.files?.[0];
+          if (!file) {
+            cancelled();
+            return;
+          }
+          reader = new window2.FileReader();
+          reader.onerror = () => finish(null, Object.assign(new Error(t("importReadFailed")), { stage: "read" }));
+          reader.onload = () => finish({ status: "selected", text: String(reader.result || "") });
+          try {
+            reader.readAsText(file, "utf-8");
+          } catch (error) {
+            finish(null, Object.assign(error, { stage: "read" }));
+          }
+        }
+        input.addEventListener("change", changed);
+        input.addEventListener("cancel", cancelled);
+        signal?.addEventListener("abort", aborted, { once: true });
+        activePickers.add(aborted);
+        window2.addEventListener("focus", focused);
+        try {
+          input.click();
+        } catch (error) {
+          finish(null, Object.assign(error, { stage: "select" }));
+        }
+      });
+    }
+    function downloadText(filename, content) {
+      const url = window2.URL.createObjectURL(new window2.Blob([content], { type: "application/json;charset=utf-8" }));
+      activeUrls.add(url);
+      const anchor = document2.createElement("a");
+      try {
+        anchor.href = url;
+        anchor.download = filename;
+        document2.body.append(anchor);
+        anchor.click();
+      } finally {
+        anchor.remove();
+        window2.setTimeout(() => {
+          if (activeUrls.delete(url)) window2.URL.revokeObjectURL(url);
+        }, 0);
+      }
+    }
+    function dispose() {
+      for (const abort of [...activePickers]) abort();
+      for (const url of activeUrls) window2.URL.revokeObjectURL(url);
+      activeUrls.clear();
+    }
+    return { chooseText, downloadText, dispose };
+  }
+  function createQuotaPanelController({ application, document: document2, window: window2, storage, t, files, onRefreshSettled = () => {
+  } }) {
+    let disposed = false;
+    let snapshot = null;
+    let activePanelView = "details";
+    let activeStatsPeriod = "day";
+    let statsDrill = null;
+    let viewModel = null;
+    let dirty = false;
+    let deferred = false;
+    let formGeneration = 0;
+    let editRevision = 0;
+    let foreground = 0;
+    let presentation = "snapshot";
+    let presentationError = null;
+    const expandedViews = /* @__PURE__ */ new Set();
+    const inFlight = /* @__PURE__ */ new Map();
+    const abortFiles = new AbortController();
+    const renderer = createQuotaPanelRenderer({ t });
+    renderer.installStyles(document2, ROOT_ID);
+    const shell = createFloatingPanelShell({
+      rootId: ROOT_ID,
+      labels: {
+        panelTitle: t("panelTitle"),
+        buttonTitle: t("buttonTitle"),
+        buttonAriaOpen: t("buttonAriaOpen"),
+        statusIdle: t("statusIdle"),
+        actionRefresh: t("actionRefresh"),
+        closeAria: t("closeAria")
+      },
+      tokenCss: buildTokenCss({ rootSelector: `#${ROOT_ID}`, accent: "#10a37f", accentDark: "#19c37d" }),
+      positionKey: "codexQuotaCompassButtonPosition",
+      document: document2,
+      window: window2,
+      storage,
+      onAction: handleAction,
+      onOpen: () => {
+        if (!snapshot?.result || snapshot?.calculationError) void dispatch({ type: "refresh", open: true });
+        else {
+          presentation = "snapshot";
+          commitPresentation();
+          shell.setStatus(t("statusCached"), "success");
+        }
+      }
+    });
+    const mounted = shell.mount();
+    const refs = mounted?.refs();
+    const content = refs?.contentNode;
+    const toaster = refs ? createToaster({ root: refs.root }) : null;
+    if (toaster && !document2.getElementById(`${ROOT_ID}-toast-style`)) {
+      const style = document2.createElement("style");
+      style.id = `${ROOT_ID}-toast-style`;
+      style.textContent = toaster.cssText;
+      document2.head.append(style);
+    }
+    function protectedForm() {
+      return dirty || isSyncFormEditing(content, document2.activeElement);
+    }
+    function renderState(overrides = {}) {
+      return { activePanelView, statsPeriod: activeStatsPeriod, statsDrill, expandedViews, ...overrides };
+    }
+    function createViewModel() {
+      if (!snapshot?.result) return null;
+      const backend = snapshot.storageBackend;
+      return createQuotaPanelViewModel({
+        result: snapshot.result,
+        ledgerCost: snapshot.ledgerCost,
+        archiveSummary: snapshot.archiveSummary,
+        importReport: snapshot.importReport,
+        storageBackend: backend,
+        syncStatus: createSnapshotSyncStatus(backend),
+        remoteSyncStatus: snapshot.syncStatus
+      });
+    }
+    function safeStatus() {
+      const status = snapshot?.syncStatus || {};
+      const node = content?.querySelector(".cqc-sync-form-status");
+      if (!node) return;
+      const error = snapshot?.errors?.sync || status.lastError;
+      node.textContent = error ? t("remoteSyncStatusError", { error }) : status.lastSyncedAt ? t("remoteSyncLastSynced", { lastSyncedAt: new Date(status.lastSyncedAt).toLocaleString() }) : t("remoteSyncNeverSynced");
+      node.dataset.tone = error ? "error" : "muted";
+    }
+    function commitPresentation() {
+      if (disposed || !content) return;
+      if (protectedForm()) {
+        deferred = true;
+        safeStatus();
+        return;
+      }
+      deferred = false;
+      const next = presentation === "loading" ? renderer.renderLoading() : presentation === "error" ? renderer.renderError(presentationError) : (viewModel = createViewModel()) ? renderer.renderResult(viewModel, renderState()).html : "";
+      if (content.innerHTML !== next) {
+        content.innerHTML = next;
+        formGeneration++;
+      }
+      shell.schedulePanelResize();
+    }
+    function update(nextSnapshot) {
+      if (disposed) return;
+      snapshot = nextSnapshot;
+      if (presentation === "snapshot") commitPresentation();
+      else if (protectedForm()) safeStatus();
+    }
+    function notice(message, tone = "info") {
+      if (!disposed) toaster?.show({ message, tone });
+    }
+    function foregroundStatus(sequence, status, tone) {
+      if (!disposed && sequence === foreground) shell.setStatus(t(status), tone);
+    }
+    function settleRefresh(outcome) {
+      if (disposed) return;
+      try {
+        const returned = onRefreshSettled(outcome);
+        if (returned?.then) void returned.catch(() => {
+        });
+      } catch {
+      }
+    }
+    function once(type, perform) {
+      if (inFlight.has(type)) return inFlight.get(type);
+      const operation = Promise.resolve().then(perform).catch((error) => {
+        const outcome = {
+          status: "error",
+          completed: [],
+          error: error?.message || String(error),
+          stage: error?.stage || (type === "export-archive" ? "export" : type === "import-archive" ? "import" : type)
+        };
+        if (!disposed) {
+          if (type === "refresh") {
+            presentation = "error";
+            presentationError = outcome.error;
+            commitPresentation();
+            settleRefresh(outcome);
+          }
+          const noticeKey = type === "refresh" ? "runFailed" : type === "import-archive" ? "importFailed" : type === "export-archive" ? "exportFailed" : "remoteSyncFailed";
+          notice(t(noticeKey, { error: outcome.error }), "error");
+          shell.setStatus(t("statusFailed"), "error");
+        }
+        return outcome;
+      }).finally(() => {
+        if (inFlight.get(type) === operation) inFlight.delete(type);
+      });
+      inFlight.set(type, operation);
+      return operation;
+    }
+    function startRefresh({ open: open2 = true } = {}) {
+      return once("refresh", async () => {
+        const sequence = ++foreground;
+        presentation = "loading";
+        commitPresentation();
+        foregroundStatus(sequence, "statusLoading", "loading");
+        const running = application.run();
+        if (open2 && !shell.isOpen()) shell.openPanel();
+        else if (open2) shell.positionPanelNearButton();
+        const outcome = await running;
+        if (!disposed) {
+          if (outcome.status === "error" || outcome.status === "skipped") {
+            presentation = "error";
+            presentationError = outcome.error || t("alreadyRunning");
+            foregroundStatus(sequence, "statusFailed", "error");
+            if (outcome.status === "error") notice(t("runFailed", { error: outcome.error }), "error");
+          } else {
+            presentation = "snapshot";
+            foregroundStatus(sequence, outcome.status === "partial" ? "statusFailed" : "statusUpdated", outcome.status === "partial" ? "error" : "success");
+            if (outcome.status === "partial") notice(t("saveArchiveFailed", { error: outcome.error }), "error");
+          }
+          commitPresentation();
+          settleRefresh(outcome);
+        }
+        return outcome;
+      });
+    }
+    function open(view) {
+      if (view && ["details", "stats", "archive"].includes(view)) activePanelView = view;
+      if (!snapshot?.result || snapshot?.calculationError) return startRefresh({ open: true });
+      presentation = "snapshot";
+      commitPresentation();
+      if (!shell.isOpen()) shell.openPanel();
+      else shell.positionPanelNearButton();
+      return Promise.resolve({ status: "ok", completed: ["open"] });
+    }
+    function sync() {
+      return once("sync", async () => {
+        const sequence = ++foreground;
+        foregroundStatus(sequence, "statusLoading", "loading");
+        const outcome = await application.sync();
+        if (!disposed) {
+          if (outcome.status === "error" || outcome.status === "partial") notice(t("remoteSyncFailed", { error: outcome.error }), "error");
+          else if (outcome.status === "skipped") notice(t("remoteSyncSkipped", { status: outcome.reason }), "info");
+          foregroundStatus(sequence, outcome.status === "error" || outcome.status === "partial" ? "statusFailed" : "statusUpdated", outcome.status === "error" || outcome.status === "partial" ? "error" : "success");
+        }
+        return outcome;
+      });
+    }
+    function saveSettings() {
+      return once("save-remote-sync", async () => {
+        const values = readSyncFormValues(content);
+        if (!values) return { status: "skipped", reason: "form-unavailable", completed: [] };
+        const generation = formGeneration;
+        const revision = editRevision;
+        const sequence = ++foreground;
+        const outcome = await application.configureSync(values);
+        if (disposed) return outcome;
+        if (outcome.completed?.includes("settings") && generation === formGeneration && revision === editRevision) {
+          dirty = false;
+          const token = content?.querySelector('[data-field="token"]');
+          if (token) token.value = "";
+          presentation = "snapshot";
+          commitPresentation();
+        }
+        if (outcome.reason === "token-required") notice(t("remoteSyncTokenRequired"), "error");
+        else if (outcome.status === "error" || outcome.status === "partial") notice(t("remoteSyncFailed", { error: outcome.error || outcome.reason }), "error");
+        foregroundStatus(sequence, outcome.status === "ok" ? "statusUpdated" : "statusFailed", outcome.status === "ok" ? "success" : "error");
+        return outcome;
+      });
+    }
+    function importArchive() {
+      return once("import-archive", async () => {
+        let picked;
+        try {
+          picked = await files.chooseText({ signal: abortFiles.signal });
+        } catch (error) {
+          return { status: "error", completed: [], stage: error?.stage || "select", error: error?.message || String(error) };
+        }
+        if (disposed || picked?.status === "cancelled" || picked == null) return { status: "skipped", reason: disposed ? "disposed" : "cancelled", completed: [] };
+        let imported;
+        try {
+          imported = JSON.parse(picked.text);
+        } catch (error) {
+          const outcome2 = { status: "error", completed: ["select"], stage: "parse", error: error.message };
+          notice(t("importFailed", { error: outcome2.error }), "error");
+          return outcome2;
+        }
+        const outcome = await application.importArchive(imported);
+        if (!disposed) {
+          if (outcome.status === "ok") notice(t("importDone", outcome.report), "success");
+          else if (outcome.status === "partial") notice(t("importPartial", { error: outcome.error }), "error");
+          else if (outcome.status === "error") notice(t("importFailed", { error: outcome.error }), "error");
+          presentation = "snapshot";
+          commitPresentation();
+        }
+        return { ...outcome, completed: ["select", "parse", ...outcome.completed || []] };
+      });
+    }
+    function exportArchive() {
+      return once("export-archive", async () => {
+        const exported = await application.exportArchive();
+        try {
+          await files.downloadText(EXPORT_NAME, JSON.stringify(exported, null, 2));
+        } catch (error) {
+          const outcome = { status: "error", completed: ["export"], stage: "download", error: error?.message || String(error) };
+          notice(t("exportFailed", { error: outcome.error }), "error");
+          return outcome;
+        }
+        if (!disposed) notice(t("exportDone", { count: exported.snapshotCount }), "success");
+        return { status: "ok", completed: ["export", "download"], count: exported.snapshotCount };
+      });
+    }
+    function dispatch(command) {
+      if (disposed) return Promise.resolve({ status: "skipped", reason: "disposed", completed: [] });
+      const type = typeof command === "string" ? command : command?.type;
+      if (type === "open") return open(command?.view);
+      if (type === "refresh") return startRefresh({ open: command?.open !== false });
+      if (type === "sync") return sync();
+      if (type === "save-remote-sync") return saveSettings();
+      if (type === "import-archive") return importArchive();
+      if (type === "export-archive") return exportArchive();
+      return Promise.resolve({ status: "skipped", reason: "unknown-command", completed: [] });
+    }
+    function rerenderActive(nextView) {
+      if (disposed || !content || !viewModel) return;
+      if (nextView && nextView !== activePanelView) {
+        dirty = false;
+        deferred = false;
+        formGeneration++;
+        statsDrill = null;
+        activePanelView = nextView;
+      }
+      if (deferred) {
+        presentation = "snapshot";
+        commitPresentation();
+      }
+      viewModel = createViewModel() || viewModel;
+      const rendered = renderer.renderActiveView(viewModel, renderState());
+      activePanelView = applyActiveView(content, rendered);
+      formGeneration++;
+      shell.schedulePanelResize();
+    }
+    function handleAction(action, event) {
+      if (disposed || action === "toggle") return;
+      if (action === "close") {
+        shell.closePanel();
+        return;
+      }
+      if (action === "refresh") {
+        void dispatch({ type: "refresh" });
+        return;
+      }
+      if (action === "sync-remote") {
+        void dispatch({ type: "sync" });
+        return;
+      }
+      if (action === "save-remote-sync") {
+        void dispatch({ type: "save-remote-sync" });
+        return;
+      }
+      if (action === "import-archive" || action === "export-archive") {
+        void dispatch({ type: action });
+        return;
+      }
+      const target = event.target;
+      if (action === "switch-view") {
+        rerenderActive(target.closest("[data-view]")?.dataset.view);
+        return;
+      }
+      if (action === "toggle-rows") {
+        const id = target.closest("[data-view-id]")?.dataset.viewId;
+        if (id) {
+          if (expandedViews.has(id)) expandedViews.delete(id);
+          else expandedViews.add(id);
+          rerenderActive();
+        }
+      }
+      if (action === "switch-stats-period") {
+        activeStatsPeriod = target.closest("[data-period]")?.dataset.period || activeStatsPeriod;
+        statsDrill = null;
+        rerenderActive();
+      }
+      if (action === "stats-drill") {
+        const node = target.closest("[data-from]");
+        if (node?.dataset.from && node?.dataset.to) {
+          statsDrill = { from: node.dataset.from, to: node.dataset.to, label: node.dataset.label || `${node.dataset.from} ~ ${node.dataset.to}` };
+          rerenderActive();
+        }
+      }
+      if (action === "stats-drill-back") {
+        statsDrill = null;
+        rerenderActive();
+      }
+    }
+    function edited(event) {
+      if (event.target?.closest?.("[data-sync-form]")) {
+        dirty = true;
+        editRevision++;
+      }
+    }
+    function focusEnded() {
+      window2.queueMicrotask(() => {
+        if (deferred && !protectedForm()) commitPresentation();
+      });
+    }
+    content?.addEventListener("input", edited);
+    content?.addEventListener("change", edited);
+    content?.addEventListener("focusout", focusEnded);
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      abortFiles.abort();
+      files.dispose?.();
+      content?.removeEventListener("input", edited);
+      content?.removeEventListener("change", edited);
+      content?.removeEventListener("focusout", focusEnded);
+      toaster?.destroy?.();
+      shell.destroy();
+    }
+    return { update, dispatch, dispose };
+  }
+
   // src/userscripts/codex-quota-compass/codex-quota-compass.entry.js
   (function() {
     "use strict";
@@ -5650,31 +6130,8 @@ ${root} :focus-visible {
     const DEBUG_KEY = "__codexQuotaCompassDebug";
     const LAST_RESULT_KEY = "__codexQuotaCompassLastResult";
     const RUNNING_KEY = "__codexQuotaCompassRunning";
-    const ROOT_ID = "codex-quota-compass-root";
     const SCRIPT_VERSION = "0.5.3";
-    const BUTTON_POSITION_KEY = "codexQuotaCompassButtonPosition";
-    let statusNode;
-    let contentNode;
-    let activePanelView = "details";
-    let activeStatsPeriod = "day";
-    let statsDrill = null;
-    let latestError;
-    let latestResult = null;
-    let latestLedgerCost = null;
-    let latestPanelViewModel = null;
-    let latestArchiveSummary = null;
-    let latestRemoteSyncStatus = null;
-    let latestImportReport = null;
-    let pendingRunPromise = null;
-    let floatingPanelShell = null;
-    let toaster = null;
-    let syncFormDirty = false;
-    let deferredPanelRefresh = false;
-    const expandedViews = /* @__PURE__ */ new Set();
     const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
-    const panelRenderer = createQuotaPanelRenderer({
-      t
-    });
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,
       normalizeArchive: normalizeSnapshotArchive,
@@ -5685,21 +6142,18 @@ ${root} :focus-visible {
       write: archiveStoragePort.write,
       scriptVersion: SCRIPT_VERSION
     });
-    function createSnapshotSyncStatus(backendInfo) {
-      const backendId = backendInfo?.backendId || backendInfo?.id || "unavailable";
-      const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
-      const localOnly = backendId === "gm" || backendId === "localStorage";
-      const reason = (() => {
-        if (backendId === "gm") return "Userscript manager storage is local to this manager profile; use GitHub Gist sync for cross-device Snapshot Archive sync.";
-        if (backendId === "localStorage") return "localStorage is browser-local and will not sync personal usage history across devices.";
-        if (backendId === "pending") return "Snapshot Archive storage has not been loaded yet.";
-        return "Snapshot Archive storage is unavailable.";
-      })();
-      return { backendId, backendLabel, crossDeviceCapable: false, localOnly, reason };
-    }
     const remoteSyncClient = createRemoteSyncClient({ archiveStore });
+    let panel;
     const application = createQuotaApplication({
-      runtime: { run: runCompass },
+      runtime: { run: () => createQuotaRuntime({
+        config: createDefaultQuotaRuntimeConfig({ DEBUG: window[DEBUG_KEY] === true }),
+        coreLib: codex_quota_compass_core_lib_exports,
+        fetchImpl: fetch.bind(globalThis),
+        location: globalThis.location,
+        now: () => Date.now(),
+        formatLocalTime: (ms) => new Date(ms).toLocaleString(),
+        getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || "未知"
+      }).run() },
       archiveStore,
       remoteSync: remoteSyncClient,
       archiveChanges: archiveStoragePort,
@@ -5713,468 +6167,55 @@ ${root} :focus-visible {
           window[RUNNING_KEY] = false;
         }
       },
-      onChange(state) {
-        latestResult = state.result;
-        latestError = state.calculationError;
-        latestArchiveSummary = state.archiveSummary;
-        latestLedgerCost = state.ledgerCost;
-        latestImportReport = state.importReport;
-        latestRemoteSyncStatus = state.syncStatus;
-        refreshCurrentPanel();
-      }
+      onChange: (snapshot) => panel?.update(snapshot)
     });
-    function isUsagePage() {
-      return location.hostname === "chatgpt.com" && location.pathname === "/codex/cloud/settings/analytics" && location.hash === "#usage";
-    }
-    function isDebugEnabled() {
-      return window[DEBUG_KEY] === true;
-    }
-    function refreshCurrentPanel() {
-      if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) {
-        deferredPanelRefresh = true;
-        return;
-      }
-      deferredPanelRefresh = false;
-      if (latestResult && !latestError) {
-        renderResult(latestResult);
-      }
-    }
-    function setStatus(text, tone = "idle") {
-      floatingPanelShell?.setStatus(text, tone);
-    }
-    function showToast(message, tone = "info") {
-      if (!toaster) {
-        console.info(`[${SCRIPT_NAME}] ${message}`);
-        return;
-      }
-      toaster.show({ message, tone });
-    }
-    function openPanel() {
-      floatingPanelShell?.openPanel();
-    }
-    function closePanel() {
-      floatingPanelShell?.closePanel();
-    }
-    function positionPanelNearButton() {
-      floatingPanelShell?.positionPanelNearButton();
-    }
-    function schedulePanelResize() {
-      floatingPanelShell?.schedulePanelResize();
-    }
-    function isPanelCurrentlyOpen() {
-      return Boolean(floatingPanelShell?.isOpen());
-    }
-    function renderResult(result) {
-      if (!contentNode) return;
-      if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) {
-        deferredPanelRefresh = true;
-        return;
-      }
-      const viewModel = createQuotaPanelViewModel({
-        result,
-        ledgerCost: latestLedgerCost,
-        archiveSummary: latestArchiveSummary,
-        importReport: latestImportReport,
-        storageBackend: archiveStoragePort.getBackendInfo(),
-        syncStatus: createSnapshotSyncStatus(archiveStoragePort.getBackendInfo()),
-        remoteSyncStatus: latestRemoteSyncStatus
-      });
-      latestPanelViewModel = viewModel;
-      const rendered = panelRenderer.renderResult(viewModel, panelRenderState());
-      activePanelView = rendered.activePanelView;
-      contentNode.innerHTML = rendered.html;
-      schedulePanelResize();
-    }
-    function panelRenderState(overrides = {}) {
-      return {
-        activePanelView,
-        statsPeriod: activeStatsPeriod,
-        statsDrill,
-        expandedViews,
-        ...overrides
-      };
-    }
-    function switchPanelView(nextView) {
-      if (!contentNode || !latestPanelViewModel) return;
-      syncFormDirty = false;
-      if (deferredPanelRefresh) refreshCurrentPanel();
-      statsDrill = null;
-      const rendered = panelRenderer.renderActiveView(latestPanelViewModel, panelRenderState({ activePanelView: nextView }));
-      activePanelView = applyActiveView(contentNode, rendered);
-      schedulePanelResize();
-    }
-    function rerenderActiveView() {
-      if (!contentNode || !latestPanelViewModel) return;
-      const rendered = panelRenderer.renderActiveView(latestPanelViewModel, panelRenderState());
-      activePanelView = applyActiveView(contentNode, rendered);
-      schedulePanelResize();
-    }
-    function renderLoading() {
-      if (!contentNode) return;
-      if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) return;
-      contentNode.innerHTML = panelRenderer.renderLoading();
-      schedulePanelResize();
-    }
-    function renderError(error) {
-      if (!contentNode) return;
-      latestError = error;
-      contentNode.innerHTML = panelRenderer.renderError(error);
-      schedulePanelResize();
-    }
-    async function runAndRender() {
-      setStatus(t("statusLoading"), "loading");
-      renderLoading();
-      const runPromise = runAndReport({ silentAlert: true });
-      if (isPanelCurrentlyOpen()) {
-        positionPanelNearButton();
-      } else {
-        openPanel();
-      }
-      try {
-        const result = await runPromise;
-        renderResult(result);
-        const state = application.getState();
-        const failure = state.errors.persistence || state.errors.projection;
-        if (failure) showToast(t("saveArchiveFailed", { error: failure }), "error");
-        setStatus(t(failure ? "statusFailed" : "statusUpdated"), failure ? "error" : "success");
-        return result;
-      } catch (error) {
-        renderError(error);
-        setStatus(t("statusFailed"), "error");
-        throw error;
-      }
-    }
-    function handlePanelOpen() {
-      if (latestResult && !latestError) {
-        renderResult(latestResult);
-        setStatus(t("statusCached"), "success");
-      } else if (!pendingRunPromise) {
-        runAndRender().catch(() => {
-        });
-      }
-    }
-    async function syncRemoteArchive(options = {}) {
-      if (!options.silent) setStatus(t("statusLoading"), "loading");
-      const outcome = await application.sync();
-      if (outcome.status === "error" || outcome.status === "partial") {
-        throw new Error(outcome.error || "GitHub Gist sync failed.");
-      }
-      if (outcome.status === "skipped" && !options.silent) {
-        showToast(t("remoteSyncSkipped", { status: outcome.reason }), "info");
-      }
-      if (!options.silent) setStatus(t("statusUpdated"), "success");
-      return outcome;
-    }
-    async function saveRemoteSyncFromForm() {
-      const formValues = readSyncFormValues(contentNode);
-      if (!formValues) return null;
-      const outcome = await application.configureSync(formValues);
-      if (outcome.reason === "token-required") {
-        setStatus(t("statusFailed"), "error");
-        showToast(t("remoteSyncTokenRequired"), "error");
-        return null;
-      }
-      if (outcome.status === "error" || outcome.status === "partial") throw new Error(outcome.error);
-      syncFormDirty = false;
-      refreshCurrentPanel();
-      setStatus(t("statusUpdated"), "success");
-      return latestRemoteSyncStatus;
-    }
-    function openSyncSettings() {
-      activePanelView = "archive";
-      if (latestResult && !latestError) {
-        renderResult(latestResult);
-        if (!isPanelCurrentlyOpen()) openPanel();
-      } else {
-        runAndRender().catch(() => {
-        });
-      }
-    }
-    function handleShellAction(action, event) {
-      if (action === "toggle") {
-        return;
-      }
-      if (action === "close") {
-        closePanel();
-        return;
-      }
-      if (action === "refresh") {
-        runAndRender().catch(() => {
-        });
-        return;
-      }
-      if (action === "toggle-rows") {
-        const viewId = event.target?.closest?.("[data-view-id]")?.dataset?.viewId;
-        if (viewId) {
-          if (expandedViews.has(viewId)) {
-            expandedViews.delete(viewId);
-          } else {
-            expandedViews.add(viewId);
-          }
-          rerenderActiveView();
-        }
-        return;
-      }
-      if (action === "switch-view" && latestResult) {
-        const nextView = event.target?.closest?.("[data-view]")?.dataset?.view;
-        if (nextView) {
-          switchPanelView(nextView);
-        }
-        return;
-      }
-      if (action === "switch-stats-period" && latestPanelViewModel) {
-        const nextPeriod = event.target?.closest?.("[data-period]")?.dataset?.period;
-        if (nextPeriod) {
-          activeStatsPeriod = nextPeriod;
-          statsDrill = null;
-          rerenderActiveView();
-        }
-        return;
-      }
-      if (action === "stats-drill" && latestPanelViewModel) {
-        const node = event.target?.closest?.("[data-from]");
-        const from = node?.dataset?.from;
-        const to = node?.dataset?.to;
-        if (from && to) {
-          statsDrill = { from, to, label: node?.dataset?.label || `${from} ~ ${to}` };
-          rerenderActiveView();
-        }
-        return;
-      }
-      if (action === "stats-drill-back" && latestPanelViewModel) {
-        statsDrill = null;
-        rerenderActiveView();
-        return;
-      }
-      if (action === "export-archive") {
-        exportSnapshotArchive().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-          showToast(t("exportFailed", { error: error?.message || error }), "error");
-        });
-        return;
-      }
-      if (action === "import-archive") {
-        importSnapshotArchive().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
-          showToast(t("importFailed", { error: error?.message || error }), "error");
-        });
-        return;
-      }
-      if (action === "save-remote-sync") {
-        saveRemoteSyncFromForm().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Save remote sync failed.`, error);
-          showToast(t("remoteSyncFailed", { error: error?.message || error }), "error");
-          setStatus(t("statusFailed"), "error");
-        });
-        return;
-      }
-      if (action === "sync-remote") {
-        syncRemoteArchive().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Remote sync failed.`, error);
-          showToast(t("remoteSyncFailed", { error: error?.message || error }), "error");
-          setStatus(t("statusFailed"), "error");
-        });
-        return;
-      }
-    }
-    function createUi() {
-      panelRenderer.installStyles(document, ROOT_ID);
-      floatingPanelShell = createFloatingPanelShell({
-        rootId: ROOT_ID,
-        labels: {
-          panelTitle: t("panelTitle"),
-          buttonTitle: t("buttonTitle"),
-          buttonAriaOpen: t("buttonAriaOpen"),
-          statusIdle: t("statusIdle"),
-          actionRefresh: t("actionRefresh"),
-          closeAria: t("closeAria")
-        },
-        tokenCss: buildTokenCss({
-          rootSelector: `#${ROOT_ID}`,
-          accent: "#10a37f",
-          accentDark: "#19c37d"
-        }),
-        positionKey: BUTTON_POSITION_KEY,
-        onAction: handleShellAction,
-        onOpen: handlePanelOpen,
-        document,
-        window,
-        storage: localStorage
-      });
-      const mountedShell = floatingPanelShell.mount();
-      if (!mountedShell) return;
-      const refs = mountedShell.refs();
-      statusNode = refs.statusNode;
-      contentNode = refs.contentNode;
-      contentNode.addEventListener("input", (event) => {
-        if (event.target.closest?.("[data-sync-form]")) syncFormDirty = true;
-      });
-      contentNode.addEventListener("change", (event) => {
-        if (event.target.closest?.("[data-sync-form]")) syncFormDirty = true;
-      });
-      contentNode.addEventListener("focusout", () => {
-        queueMicrotask(() => {
-          if (deferredPanelRefresh) refreshCurrentPanel();
-        });
-      });
-      toaster = createToaster({ root: refs.root });
-      if (!document.getElementById(`${ROOT_ID}-toast-style`)) {
-        const style = document.createElement("style");
-        style.id = `${ROOT_ID}-toast-style`;
-        style.textContent = toaster.cssText;
-        document.head.append(style);
-      }
-    }
-    async function runCompass() {
-      return createQuotaRuntime({
-        config: createDefaultQuotaRuntimeConfig({
-          DEBUG: isDebugEnabled()
-        }),
-        coreLib: codex_quota_compass_core_lib_exports,
-        fetchImpl: fetch.bind(globalThis),
-        location: globalThis.location,
-        now: () => Date.now(),
-        formatLocalTime: (ms) => new Date(ms).toLocaleString(),
-        getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || "未知"
-      }).run();
-    }
-    async function runAndReport(options = {}) {
-      try {
-        pendingRunPromise = application.run();
-        const outcome = await pendingRunPromise;
+    panel = createQuotaPanelController({
+      application,
+      document,
+      window,
+      storage: localStorage,
+      t,
+      files: createBrowserQuotaFiles({ document, window, t }),
+      onRefreshSettled(outcome) {
         if (outcome.status === "error" || outcome.status === "skipped") {
-          throw new Error(outcome.error || t("alreadyRunning"));
-        }
-        const result = outcome.result;
-        if (outcome.status === "partial" && !options.silentAlert) {
-          showToast(t("saveArchiveFailed", { error: outcome.error }), "error");
-        }
-        if (isDebugEnabled()) {
-          window[LAST_RESULT_KEY] = result;
-          console.log(
-            `[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`,
-            result
-          );
+          console.error(`[${SCRIPT_NAME}] Failed.`, outcome.error || outcome.reason);
+        } else if (window[DEBUG_KEY] === true) {
+          window[LAST_RESULT_KEY] = outcome.result;
+          console.log(`[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`, outcome.result);
         } else {
           console.info(`[${SCRIPT_NAME}] Finished.`);
         }
-        return result;
-      } catch (error) {
-        console.error(`[${SCRIPT_NAME}] Failed.`, error);
-        latestError = error;
-        if (!options.silentAlert) {
-          showToast(t("runFailed", { error: error?.message || error }), "error");
-        }
-        throw error;
-      } finally {
-        pendingRunPromise = null;
       }
-    }
-    function downloadTextFile(filename, text) {
-      const blob = new Blob([text], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    }
-    async function exportSnapshotArchive() {
-      if (!archiveStore) {
-        throw new Error(t("syncPortUnavailable"));
-      }
-      const exportDocument = await application.exportArchive();
-      downloadTextFile(
-        "codex-quota-compass-snapshot-archive.v1.json",
-        JSON.stringify(exportDocument, null, 2)
-      );
-      refreshCurrentPanel();
-      showToast(t("exportDone", { count: exportDocument.snapshotCount }), "success");
-    }
-    function chooseImportFileText() {
-      return new Promise((resolve, reject) => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "application/json,.json";
-        input.style.display = "none";
-        document.body.appendChild(input);
-        input.addEventListener("change", () => {
-          const file = input.files?.[0];
-          if (!file) {
-            input.remove();
-            reject(new Error(t("importNoFile")));
-            return;
-          }
-          const reader = new FileReader();
-          reader.onerror = () => {
-            input.remove();
-            reject(new Error(t("importReadFailed")));
-          };
-          reader.onload = () => {
-            input.remove();
-            resolve(String(reader.result || ""));
-          };
-          reader.readAsText(file, "utf-8");
-        }, { once: true });
-        input.click();
-      });
-    }
-    async function importSnapshotArchive() {
-      if (!archiveStore) {
-        throw new Error(t("syncPortUnavailable"));
-      }
-      const fileText = await chooseImportFileText();
-      const importDocument = JSON.parse(fileText);
-      const imported = await application.importArchive(importDocument);
-      if (imported.status === "error" || imported.status === "skipped") throw new Error(imported.error || imported.reason);
-      refreshCurrentPanel();
-      showToast(t("importDone", {
-        added: imported.report.added,
-        skipped: imported.report.skipped,
-        invalid: imported.report.invalid
-      }), "success");
-    }
-    createUi();
-    void application.start();
-    window.addEventListener("pagehide", (event) => {
-      if (!event.persisted) application.dispose();
     });
+    panel.update(application.getState());
     if (typeof GM_registerMenuCommand === "function") {
       GM_registerMenuCommand(t("menuRun"), () => {
-        runAndRender().catch(() => {
-        });
+        void panel.dispatch({ type: "refresh", open: true });
       });
       GM_registerMenuCommand(t("menuRemoteConfigure"), () => {
-        openSyncSettings();
+        void panel.dispatch({ type: "open", view: "archive" });
       });
       GM_registerMenuCommand(t("menuRemoteSync"), () => {
-        syncRemoteArchive().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Remote sync failed.`, error);
-          showToast(t("remoteSyncFailed", { error: error?.message || error }), "error");
-          setStatus(t("statusFailed"), "error");
-        });
+        void panel.dispatch({ type: "sync" });
       });
       GM_registerMenuCommand(t("menuExport"), () => {
-        exportSnapshotArchive().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Export Snapshot Archive failed.`, error);
-          showToast(t("exportFailed", { error: error?.message || error }), "error");
-        });
+        void panel.dispatch({ type: "export-archive" });
       });
       GM_registerMenuCommand(t("menuImport"), () => {
-        importSnapshotArchive().catch((error) => {
-          console.error(`[${SCRIPT_NAME}] Import Snapshot Archive failed.`, error);
-          showToast(t("importFailed", { error: error?.message || error }), "error");
-        });
+        void panel.dispatch({ type: "import-archive" });
       });
     }
-    if (isUsagePage()) {
+    void application.start();
+    window.addEventListener("pagehide", (event) => {
+      if (!event.persisted) {
+        panel.dispose();
+        application.dispose();
+      }
+    });
+    if (location.hostname === "chatgpt.com" && location.pathname === "/codex/cloud/settings/analytics" && location.hash === "#usage") {
       console.info(`[${SCRIPT_NAME}] Ready. Click the floating button to calculate usage.`);
     } else {
-      console.info(
-        `[${SCRIPT_NAME}] Open https://chatgpt.com/codex/cloud/settings/analytics#usage or use the floating button / Tampermonkey menu to run.`
-      );
+      console.info(`[${SCRIPT_NAME}] Open https://chatgpt.com/codex/cloud/settings/analytics#usage or use the floating button / Tampermonkey menu to run.`);
     }
   })();
 })();

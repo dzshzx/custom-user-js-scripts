@@ -337,6 +337,32 @@ test('derived-view failure reports the completed persistence phase separately', 
   assert.equal(f.app.getState().errors.projection, 'projection read');
 });
 
+test('import projection failure retains the committed import stage and error', async () => {
+  let reads = 0;
+  const f = fixture({ read: async () => { if (++reads > 2) throw Error('projection read'); return null; } });
+  await f.app.start();
+  const outcome = await f.app.importArchive(document(archive('2026-09-01')));
+  assert.equal(outcome.status, 'partial');
+  assert.deepEqual(outcome.completed, ['persistence']);
+  assert.equal(outcome.error, 'projection read');
+  assert.equal(f.writes(), 1);
+});
+
+test('settings saved before remote failure is reported as a partial completion', async () => {
+  let configured = 0;
+  const f = fixture({ remoteSync: {
+    getStatus: async () => ({ enabled: false, configured: false, hasToken: false }),
+    configure: async () => { configured++; return { enabled: true, configured: true, hasToken: true }; },
+    syncNow: async () => { throw Error('remote failed'); },
+  } });
+  const outcome = await f.app.configureSync({ enabled: true, token: 'test-token', gistId: '' });
+  assert.equal(configured, 1);
+  assert.equal(outcome.status, 'partial');
+  assert.deepEqual(outcome.completed, ['settings']);
+  assert.equal(outcome.error, 'remote failed');
+  assert.equal(JSON.stringify(outcome).includes('test-token'), false);
+});
+
 test('startup waits for the newest projection after synchronous GM migration notifications', async () => {
   for (const failLatestRead of [false, true]) {
     let gm = null;
