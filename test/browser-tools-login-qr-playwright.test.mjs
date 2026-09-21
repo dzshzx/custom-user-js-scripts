@@ -1,18 +1,25 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
 import { createPlaywrightLoginBrowser } from '../scripts/browser-tools/login-qr-playwright.mjs'
 import { parseArgs } from '../scripts/browser-tools/login-qr.mjs'
+import { resolvePlaywrightImport } from '../scripts/browser-tools/playwright-loader.mjs'
 
-function fakePlaywright({ onStorageState, canvasError = false } = {}) {
+function fakePlaywright({
+  onStorageState,
+  onDocumentSnapshot,
+  onQrVisible,
+  canvasError = false,
+} = {}) {
   const pageEvents = new EventEmitter()
   const mainFrame = {}
   let documentObject = { url: 'https://login.example.test/qr', bodyText: 'Scan', qrVisible: true }
   let closed = false
+  let storageStateCalls = 0
 
   const page = {
     on: pageEvents.on.bind(pageEvents),
@@ -25,6 +32,7 @@ function fakePlaywright({ onStorageState, canvasError = false } = {}) {
       return {
         async evaluate(callback, argument) {
           if (callback.name === 'readDocumentSnapshot') {
+            await onDocumentSnapshot?.()
             if (captured.bodyText === null) return { bodyMissing: true }
             return { currentUrl: captured.url, bodyText: captured.bodyText }
           }
@@ -38,7 +46,10 @@ function fakePlaywright({ onStorageState, canvasError = false } = {}) {
         first() {
           return {
             async waitFor() {},
-            async isVisible() { return documentObject.qrVisible },
+            async isVisible() {
+              await onQrVisible?.({ page })
+              return documentObject.qrVisible
+            },
             async getAttribute() { return '/qr_img?qr=synthetic-secret' },
             async boundingBox() { return { width: 240.4, height: 239.6 } },
             async evaluate() {
@@ -63,6 +74,7 @@ function fakePlaywright({ onStorageState, canvasError = false } = {}) {
   const context = {
     pages: () => [page],
     async storageState({ path: statePath }) {
+      storageStateCalls += 1
       await writeFile(statePath, '{"cookies":[]}', 'utf8')
       await onStorageState?.({ page, statePath })
     },
@@ -72,6 +84,7 @@ function fakePlaywright({ onStorageState, canvasError = false } = {}) {
   return {
     page,
     context,
+    get storageStateCalls() { return storageStateCalls },
     module: {
       chromium: {
         async launchPersistentContext() { return context },
@@ -105,6 +118,51 @@ test('same-URL reload invalidates the prior document observation token', async (
 
   fake.page.emitReload({ url: snapshot.currentUrl, bodyText: 'Home', qrVisible: false })
   assert.equal(await session.validateObservation(snapshot.observationId), false)
+  await session.close()
+})
+
+test('a later-started observation supersedes an older in-flight read', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-observation-order-'))
+  let readCount = 0
+  let releaseFirst
+  let firstStarted
+  const firstGate = new Promise((resolve) => { releaseFirst = resolve })
+  const started = new Promise((resolve) => { firstStarted = resolve })
+  const fake = fakePlaywright({
+    onDocumentSnapshot: async () => {
+      readCount += 1
+      if (readCount === 1) {
+        firstStarted()
+        await firstGate
+      }
+    },
+  })
+  const { session } = await openSession(root, fake)
+
+  const olderRead = session.readSnapshot()
+  await started
+  const newer = await session.readSnapshot()
+  releaseFirst()
+  const older = await olderRead
+
+  assert.equal(newer.kind, 'readable')
+  assert.deepEqual(older, { kind: 'unreadable', reason: 'DOCUMENT_CHANGED' })
+  assert.equal(await session.validateObservation(newer.observationId), true)
+  await session.close()
+})
+
+test('closing during an observation prevents the late read from becoming current', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-close-observation-'))
+  const fake = fakePlaywright({
+    onQrVisible: async ({ page }) => page.closeForTest(),
+  })
+  const { session } = await openSession(root, fake)
+
+  assert.deepEqual(
+    await session.readSnapshot(),
+    { kind: 'unreadable', reason: 'DOCUMENT_CHANGED' },
+  )
+  assert.equal(await session.validateObservation('observation-1'), false)
   await session.close()
 })
 
@@ -165,6 +223,67 @@ test('state is staged as mode 0600 and observation change preserves the old targ
   await session.close()
 })
 
+test('state export checks the original deadline before export, after export, and before rename', async () => {
+  const makeClock = (start = 0) => {
+    let now = start
+    return { now: () => now, advance: (ms) => { now += ms } }
+  }
+
+  {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-expired-before-export-'))
+    const fake = fakePlaywright()
+    const { session } = await openSession(root, fake)
+    const snapshot = await session.readSnapshot()
+    const clock = makeClock(10)
+    assert.deepEqual(
+      await session.saveState({ observationId: snapshot.observationId, deadline: 10, clock }),
+      { committed: false, reason: 'DEADLINE_EXPIRED' },
+    )
+    assert.equal(fake.storageStateCalls, 0)
+    await session.close()
+  }
+
+  {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-expired-after-export-'))
+    const clock = makeClock()
+    const fake = fakePlaywright({ onStorageState: async () => clock.advance(11) })
+    const { options, session } = await openSession(root, fake)
+    await writeFile(options.statePath, 'old-state', { mode: 0o600 })
+    const snapshot = await session.readSnapshot()
+    assert.deepEqual(
+      await session.saveState({ observationId: snapshot.observationId, deadline: 10, clock }),
+      { committed: false, reason: 'DEADLINE_EXPIRED' },
+    )
+    assert.equal(await readFile(options.statePath, 'utf8'), 'old-state')
+    await session.close()
+  }
+
+  {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-expired-before-rename-'))
+    const clock = makeClock()
+    const fake = fakePlaywright()
+    let renames = 0
+    const { options, session } = await openSession(root, fake, {
+      fileSystem: {
+        async chmod(filePath, mode) {
+          await chmod(filePath, mode)
+          clock.advance(11)
+        },
+        async rename() { renames += 1 },
+      },
+    })
+    await writeFile(options.statePath, 'old-state', { mode: 0o600 })
+    const snapshot = await session.readSnapshot()
+    assert.deepEqual(
+      await session.saveState({ observationId: snapshot.observationId, deadline: 10, clock }),
+      { committed: false, reason: 'DEADLINE_EXPIRED' },
+    )
+    assert.equal(renames, 0)
+    assert.equal(await readFile(options.statePath, 'utf8'), 'old-state')
+    await session.close()
+  }
+})
+
 test('rename is the commit point and an abort after it starts waits for its outcome', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-rename-'))
   const fake = fakePlaywright()
@@ -172,10 +291,13 @@ test('rename is the commit point and an abort after it starts waits for its outc
   let renameStarted
   const started = new Promise((resolve) => { renameStarted = resolve })
   const release = new Promise((resolve) => { releaseRename = resolve })
+  let now = 0
+  const clock = { now: () => now }
   const { options, session } = await openSession(root, fake, {
     fileSystem: {
       async rename(from, to) {
         renameStarted()
+        now = 11
         await release
         const fs = await import('node:fs/promises')
         await fs.rename(from, to)
@@ -184,7 +306,12 @@ test('rename is the commit point and an abort after it starts waits for its outc
   })
   const controller = new AbortController()
 
-  const saving = session.saveState({ observationId: null, signal: controller.signal })
+  const saving = session.saveState({
+    observationId: null,
+    signal: controller.signal,
+    deadline: 10,
+    clock,
+  })
   await started
   controller.abort(new Error('cancelled after rename'))
   let settled = false
@@ -296,4 +423,94 @@ test('adapter cleans a partially opened context before reporting open failure', 
     (error) => error?.cleanup?.status === 'closed',
   )
   assert.equal(closes, 1)
+})
+
+async function findCachedChromium() {
+  const cacheRoot = path.join(os.homedir(), '.cache', 'ms-playwright')
+  let entries
+  try {
+    entries = await readdir(cacheRoot, { withFileTypes: true })
+  } catch {
+    return ''
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('chromium-')) continue
+    const executable = path.join(cacheRoot, entry.name, 'chrome-linux64', 'chrome')
+    try {
+      await access(executable)
+      return executable
+    } catch {
+      // Continue looking for another isolated browser revision.
+    }
+  }
+  return ''
+}
+
+test('real Playwright fixture observes one document and commits private state', async (t) => {
+  const executablePath = await findCachedChromium()
+  if (!executablePath) {
+    t.skip('No isolated Playwright Chromium executable is cached.')
+    return
+  }
+  let playwright
+  try {
+    playwright = await resolvePlaywrightImport()
+  } catch {
+    t.skip('Playwright is not available in the current user cache.')
+    return
+  }
+
+  const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-real-browser-'))
+  let context
+  const browser = createPlaywrightLoginBrowser({
+    loadPlaywright: async () => ({
+      chromium: {
+        async launchPersistentContext(profileDir, launchOptions) {
+          context = await playwright.chromium.launchPersistentContext(profileDir, {
+            ...launchOptions,
+            executablePath,
+          })
+          return context
+        },
+      },
+    }),
+  })
+  const markup = '<!doctype html><body>Pending login<img id="qr" width="64" height="64" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22%3E%3Crect width=%2264%22 height=%2264%22 fill=%22black%22/%3E%3C/svg%3E"></body>'
+  const options = {
+    ...parseArgs(['--wait-after-nav-ms', '0', '--use-shell-proxy']),
+    url: `data:text/html,${markup}`,
+    qrSelector: '#qr',
+    profileDir: path.join(root, 'profile'),
+    qrPath: path.join(root, 'qr.png'),
+    statePath: path.join(root, 'state.json'),
+  }
+  const session = await browser.open(options)
+  try {
+    await session.navigate()
+    const qr = await session.exportQr()
+    assert.equal(qr.written, true)
+    assert.ok((await stat(options.qrPath)).size > 0)
+
+    const snapshot = await session.readSnapshot()
+    assert.equal(snapshot.kind, 'readable')
+    assert.equal(snapshot.bodyText.includes('Pending login'), true)
+    assert.equal(snapshot.qrVisible, true)
+    assert.equal(await session.validateObservation(snapshot.observationId), true)
+
+    const clock = { now: () => Date.now() }
+    assert.deepEqual(
+      await session.saveState({
+        observationId: snapshot.observationId,
+        deadline: clock.now() + 10_000,
+        clock,
+      }),
+      { committed: true },
+    )
+    assert.equal((await stat(options.statePath)).mode & 0o777, 0o600)
+
+    await context.pages()[0].reload({ waitUntil: 'domcontentloaded' })
+    assert.equal(await session.validateObservation(snapshot.observationId), false)
+  } finally {
+    await session.close()
+  }
 })

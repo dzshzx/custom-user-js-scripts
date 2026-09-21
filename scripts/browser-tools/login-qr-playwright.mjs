@@ -59,6 +59,7 @@ async function reserveTemporaryStatePath(statePath, fileSystem, makeId) {
 
 function createSession({ context, page, options, fileSystem, makeId }) {
   let navigationRevision = 0
+  let observationGeneration = 0
   let observationSequence = 0
   let currentObservation = null
   let closed = false
@@ -71,6 +72,7 @@ function createSession({ context, page, options, fileSystem, makeId }) {
   }
   const invalidateDocument = () => {
     navigationRevision += 1
+    observationGeneration += 1
     disposeObservation()
   }
   const onFrameNavigated = (frame) => {
@@ -182,6 +184,8 @@ function createSession({ context, page, options, fileSystem, makeId }) {
       throwIfAborted(signal)
       if (closed || page.isClosed()) throw codedError('PAGE_CLOSED')
       disposeObservation()
+      observationGeneration += 1
+      const generation = observationGeneration
       const revision = navigationRevision
       let documentHandle
       try {
@@ -222,16 +226,18 @@ function createSession({ context, page, options, fileSystem, makeId }) {
       }
       let sameDocument = false
       try {
-        sameDocument = revision === navigationRevision && await documentHandle.evaluate(
-          function isSameDocument(documentObject, expectedUrl) {
-            return documentObject === document && documentObject.location.href === expectedUrl
-          },
-          documentSnapshot.currentUrl,
-        )
+        sameDocument = generation === observationGeneration &&
+          revision === navigationRevision &&
+          await documentHandle.evaluate(
+            function isSameDocument(documentObject, expectedUrl) {
+              return documentObject === document && documentObject.location.href === expectedUrl
+            },
+            documentSnapshot.currentUrl,
+          )
       } catch {
         sameDocument = false
       }
-      if (!sameDocument) {
+      if (!sameDocument || closed || page.isClosed() || generation !== observationGeneration) {
         await documentHandle.dispose().catch(() => {})
         return { kind: 'unreadable', reason: 'DOCUMENT_CHANGED' }
       }
@@ -256,8 +262,21 @@ function createSession({ context, page, options, fileSystem, makeId }) {
 
     validateObservation,
 
-    async saveState({ observationId, signal } = {}) {
+    async saveState({ observationId, signal, deadline = null, clock = null } = {}) {
       throwIfAborted(signal)
+
+      const invalidCommitReason = async () => {
+        throwIfAborted(signal)
+        if (deadline !== null && clock.now() >= deadline) return 'DEADLINE_EXPIRED'
+        if (observationId !== null && !(await validateObservation(observationId))) {
+          return 'OBSERVATION_CHANGED'
+        }
+        if (deadline !== null && clock.now() >= deadline) return 'DEADLINE_EXPIRED'
+        return null
+      }
+
+      const initialReason = await invalidCommitReason()
+      if (initialReason) return { committed: false, reason: initialReason }
       await ensureParentDirectory(options.statePath, fileSystem)
       await validateStateTarget(options.statePath, fileSystem)
       const temporaryPath = await reserveTemporaryStatePath(options.statePath, fileSystem, makeId)
@@ -267,15 +286,19 @@ function createSession({ context, page, options, fileSystem, makeId }) {
 
       try {
         await context.storageState({ path: temporaryPath })
-        await fileSystem.chmod(temporaryPath, 0o600)
-        throwIfAborted(signal)
-        if (observationId !== null && !(await validateObservation(observationId))) {
-          outcome = { committed: false, reason: 'OBSERVATION_CHANGED' }
+        const afterExportReason = await invalidCommitReason()
+        if (afterExportReason) {
+          outcome = { committed: false, reason: afterExportReason }
         } else {
-          throwIfAborted(signal)
-          await fileSystem.rename(temporaryPath, options.statePath)
-          committed = true
-          outcome = { committed: true }
+          await fileSystem.chmod(temporaryPath, 0o600)
+          const beforeRenameReason = await invalidCommitReason()
+          if (beforeRenameReason) {
+            outcome = { committed: false, reason: beforeRenameReason }
+          } else {
+            await fileSystem.rename(temporaryPath, options.statePath)
+            committed = true
+            outcome = { committed: true }
+          }
         }
       } catch (error) {
         primaryError = error

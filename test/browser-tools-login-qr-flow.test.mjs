@@ -8,6 +8,7 @@ function makeClock(start = 0) {
   let now = start
   return {
     now: () => now,
+    advance: (ms) => { now += ms },
     async sleep(ms, { signal } = {}) {
       if (signal?.aborted) throw signal.reason
       await new Promise((resolve) => setImmediate(resolve))
@@ -86,6 +87,22 @@ test('automatic capture saves only from a complete, still-current observation', 
   ])
 })
 
+test('automatic deadline starts when QR export completes, before event delivery', async () => {
+  const clock = makeClock()
+  const harness = makeHarness({ observations: [] })
+  const result = await runLoginCapture(options({ loginTimeoutMs: 3000 }), {
+    browser: harness.browser,
+    clock,
+    confirm: async () => ({ confirmed: true }),
+    onEvent: async (event) => {
+      if (event.type === 'qr-ready') clock.advance(3000)
+    },
+  })
+
+  assert.equal(result.status, 'timeout')
+  assert.equal(harness.calls.includes('read'), false)
+})
+
 test('unreadable body or QR observations never become empty successful snapshots', async () => {
   for (const reason of ['BODY_UNREADABLE', 'QR_UNREADABLE', 'BODY_MISSING']) {
     const harness = makeHarness({
@@ -156,6 +173,33 @@ test('state export that detects a changed observation retries within the origina
 
   assert.equal(result.status, 'saved')
   assert.equal(saves, 2)
+})
+
+test('deadline expiry reported by state export becomes the original timeout', async () => {
+  let saveInput
+  const harness = makeHarness({
+    observations: [{
+      kind: 'readable', currentUrl: 'https://mi.feishu.cn/file/example', bodyText: 'Home',
+      qrVisible: false, observationId: 'before-slow-export',
+    }],
+    saveState: async (input) => {
+      saveInput = input
+      return { committed: false, reason: 'DEADLINE_EXPIRED' }
+    },
+  })
+  const clock = makeClock()
+
+  const result = await runLoginCapture(options({ loginTimeoutMs: 4000 }), {
+    browser: harness.browser,
+    clock,
+    confirm: async () => ({ confirmed: true }),
+  })
+
+  assert.equal(result.status, 'timeout')
+  assert.equal(result.error.code, 'LOGIN_TIMEOUT')
+  assert.equal(result.artifacts.state.committed, false)
+  assert.equal(saveInput.deadline, 4000)
+  assert.equal(saveInput.clock, clock)
 })
 
 test('deadline rejects zero-length, boundary, and slow observations', async () => {

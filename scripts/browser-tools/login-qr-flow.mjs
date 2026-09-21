@@ -131,6 +131,7 @@ export async function runLoginCapture(rawOptions, dependencies) {
 
     result.phase = 'qr'
     const qr = await session.exportQr({ signal })
+    const qrCompletedAt = clock.now()
     result.artifacts.qr.written = Boolean(qr.written)
     await emit({
       type: 'qr-ready',
@@ -164,7 +165,7 @@ export async function runLoginCapture(rawOptions, dependencies) {
     } else {
       result.phase = 'wait'
       result.confirmation = 'automatic'
-      const deadline = clock.now() + options.loginTimeoutMs
+      const deadline = qrCompletedAt + options.loginTimeoutMs
       await emit({ type: 'waiting', timeoutMs: options.loginTimeoutMs })
 
       while (result.status === 'error' && result.error === null) {
@@ -212,9 +213,14 @@ export async function runLoginCapture(rawOptions, dependencies) {
         throwIfAborted(signal)
 
         result.phase = 'save'
-        const saved = await session.saveState({ observationId: snapshot.observationId, signal })
+        const saved = await session.saveState({
+          observationId: snapshot.observationId,
+          signal,
+          deadline,
+          clock,
+        })
         if (saved.warning && !result.warnings.includes(saved.warning)) result.warnings.push(saved.warning)
-        if (!saved.committed && saved.reason === 'OBSERVATION_CHANGED') {
+        if (!saved.committed && ['OBSERVATION_CHANGED', 'DEADLINE_EXPIRED'].includes(saved.reason)) {
           result.phase = 'wait'
           continue
         }
