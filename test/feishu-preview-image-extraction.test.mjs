@@ -311,10 +311,16 @@ async function findCachedChromium() {
 }
 
 test('real Playwright page.evaluate matches the direct result', async (t) => {
-  const playwright = await resolvePlaywrightImport();
   const executablePath = await findCachedChromium();
   if (!executablePath) {
     t.skip('No isolated Playwright Chromium executable is cached.');
+    return;
+  }
+  let playwright;
+  try {
+    playwright = await resolvePlaywrightImport();
+  } catch {
+    t.skip('Playwright is not available in the current user cache.');
     return;
   }
   const browser = await playwright.chromium.launch({ headless: true, executablePath });
