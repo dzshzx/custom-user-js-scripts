@@ -18,6 +18,15 @@
 - 当前脚本运行范围较广，安装前应确认目标用户脚本管理器的授权提示。
 - 源码是 `web-page-assistant.entry.js` 加同目录 `*.lib.js` ES 模块，`npm run build` 打包为 dist 单文件。
 
+会话契约：
+
+- Session 直接使用 Settings 与 Refresh Runtime，独占已提交设置、规则匹配和实际应用状态；Entry 只持有 DOM 与展示状态。
+- `start()` 幂等，菜单在读取前注册，倒计时与常驻 widget 等待 DOM 和保存的位置就绪。页面与站点 scope 固定为启动时的地址。
+- 设置命令按 FIFO 持久化，成功后才重匹配并应用；暂停立即作用于当前倒计时。保存 Unlocker 不重启刷新，删除页面规则后重新匹配站点规则。
+- 操作结果区分无效输入、未就绪、已销毁、存储失败和应用失败，并携带 `persisted`。设置已保存但能力安装失败时保留设置、清理安装并显示实际应用错误。
+- 快照与内部状态隔离。每秒通知仅更新倒计时和暂停状态，对话框重建保留焦点与滚动位置。
+- `dispose()` 停止计时、卸载能力并停止通知；未执行命令结束为已销毁，在途写入完成后不恢复运行。
+
 迁移说明：
 
 - 更早：`src/web-page-assistant.user.js` → `src/userscripts/web-page-assistant/web-page-assistant.user.js`。

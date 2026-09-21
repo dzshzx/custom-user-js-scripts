@@ -1,203 +1,144 @@
-function createWebPageAssistantSession(adapters) {
-  const {
-    settingsContract,
-    storagePort,
-    refreshRuntime,
-    getSettings,
-    setSettings,
-    getActiveMatch,
-    setActiveMatch,
-    setActiveUnlockerMatch,
-    getPageKey,
-    getSiteKey,
-    getSelectedScope,
-    parseCustomInterval,
-    readUnlockerFormSetting,
-    resolveActiveSetting,
-    resolveActiveUnlockerSetting,
-    renderDialog,
-    renderWidget,
-    updatePauseButton,
-    updateCountdownText,
-    installUnlocker,
-    setMessage,
-    scopeLabel,
-    formatInterval,
-  } = adapters;
-  const supportedActions = new Set([
-    'open-settings',
-    'switch-tab',
-    'close-dialog',
-    'toggle-pause',
-    'save-preset',
-    'save-custom',
-    'delete-page',
-    'delete-site',
-    'save-unlocker',
-    'delete-unlocker-page',
-    'delete-unlocker-site',
-    'disable-active',
-  ]);
+import * as Settings from './web-page-assistant-settings.lib.js';
+import { createRefreshRuntime } from './web-page-assistant-refresh.lib.js';
 
-  function keyForScope(scope) {
-    return scope === 'site' ? getSiteKey() : getPageKey();
+// Settings and applied capabilities have one owner. Only persisted commands
+// enter the FIFO; pause remains available while a storage write is pending.
+function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker, ready = () => Promise.resolve(), onChange = () => {} }) {
+  let settings = Settings.emptySettings();
+  let lifecycle = 'idle';
+  let applicationError = null;
+  const applicationErrors = { refresh: null, unlocker: null };
+  let appliedUnlocker = null;
+  let startPromise;
+  let queue = Promise.resolve();
+  let finishDisposed;
+  const disposed = new Promise((resolve) => { finishDisposed = resolve; });
+  const runtime = createRefreshRuntime({
+    minIntervalMs: Settings.MIN_INTERVAL_MS,
+    tickMs: 1000,
+    now: clock.now,
+    setInterval: clock.setInterval,
+    clearInterval: clock.clearInterval,
+    reload,
+    onStateChange: () => emit('countdown'),
+  });
+
+  function getState() {
+    return JSON.parse(JSON.stringify({
+      lifecycle, settings, refresh: runtime.getState(), appliedUnlocker, applicationError, applicationErrors,
+      matchedRefresh: Settings.resolveActiveRefreshSetting(settings, keys),
+      matchedUnlocker: Settings.resolveActiveUnlockerSetting(settings, keys),
+    }));
   }
-
-  function canHandle(action) {
-    return supportedActions.has(action);
+  function emit(kind, area = null) {
+    if (lifecycle === 'disposed') return;
+    try { onChange(getState(), { kind, area }); } catch { /* observers cannot fail commands */ }
   }
-
-  async function writeSettings(nextSettings) {
-    const next = await storagePort.writeSettings(nextSettings);
-    setSettings(next);
-    return next;
+  function result(code = null, persisted = false, scope = null) {
+    return { ok: !code, code, persisted, scope, state: getState() };
   }
-
-  function restartActiveCountdown() {
-    refreshRuntime.restart(resolveActiveSetting(getSettings()));
-    renderWidget();
-    updatePauseButton();
-    updateCountdownText();
-  }
-
-  function refreshUnlockerState() {
-    const activeUnlockerMatch = resolveActiveUnlockerSetting(getSettings());
-    setActiveUnlockerMatch(activeUnlockerMatch);
-    installUnlocker(activeUnlockerMatch?.setting);
-    return activeUnlockerMatch;
-  }
-
-  async function saveSetting(scope, intervalMs) {
-    const next = settingsContract.setRefreshSetting(getSettings(), scope, keyForScope(scope), intervalMs);
-    await writeSettings(next);
-    restartActiveCountdown();
-  }
-
-  async function deleteSetting(scope) {
-    const next = settingsContract.deleteRefreshSetting(getSettings(), scope, keyForScope(scope));
-    await writeSettings(next);
-    restartActiveCountdown();
-  }
-
-  async function saveUnlockerSetting(scope, unlockerSetting) {
-    const normalized = settingsContract.normalizeUnlockerSetting(unlockerSetting);
-    if (!normalized) return;
-
-    const next = settingsContract.setUnlockerSetting(getSettings(), scope, keyForScope(scope), normalized);
-    await writeSettings(next);
-    refreshUnlockerState();
-  }
-
-  async function deleteUnlockerSetting(scope) {
-    const next = settingsContract.deleteUnlockerSetting(getSettings(), scope, keyForScope(scope));
-    await writeSettings(next);
-    refreshUnlockerState();
-  }
-
-  async function dispatch(action, actionNode) {
-    if (action === 'open-settings') {
-      renderDialog('', null, 'refresh');
-      return;
-    }
-
-    if (action === 'switch-tab') {
-      renderDialog('', getSelectedScope(), actionNode.dataset.partTab);
-      return;
-    }
-
-    if (action === 'close-dialog') {
-      adapters.closeDialog();
-      return;
-    }
-
-    if (action === 'toggle-pause') {
-      refreshRuntime.togglePause();
-      return;
-    }
-
-    if (action === 'save-preset') {
-      const intervalMs = Number(actionNode.dataset.intervalMs);
-      const scope = getSelectedScope();
-      if (!settingsContract.isValidIntervalMs(intervalMs)) {
-        setMessage('预设刷新时间无效。', 'error');
-        return;
+  function apply(area) {
+    let failed = false;
+    for (const capability of area === 'all' ? ['refresh', 'unlocker'] : [area]) {
+      applicationErrors[capability] = null;
+      try {
+        if (capability === 'refresh') runtime.restart(Settings.resolveActiveRefreshSetting(settings, keys));
+        else {
+          appliedUnlocker = null;
+          const match = Settings.resolveActiveUnlockerSetting(settings, keys);
+          unlocker.install(match?.setting);
+          appliedUnlocker = match;
+        }
+      } catch (error) {
+        failed = true;
+        applicationErrors[capability] = String(error?.message || error);
+        if (capability === 'refresh') runtime.stop();
+        else {
+          appliedUnlocker = null;
+          try { unlocker.uninstall(); } catch { /* preserve the original application error */ }
+        }
       }
-
-      await saveSetting(scope, intervalMs);
-      renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(intervalMs)} 刷新一次。`, scope, 'refresh');
-      return;
     }
-
-    if (action === 'save-custom') {
-      const parsed = parseCustomInterval();
-      if (parsed.error) {
-        setMessage(parsed.error, 'error');
-        return;
-      }
-
-      const scope = getSelectedScope();
-      await saveSetting(scope, parsed.intervalMs);
-      renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`, scope, 'refresh');
-      return;
-    }
-
-    if (action === 'delete-page') {
-      await deleteSetting('page');
-      renderDialog('已删除当前页面设置。', 'page', 'refresh');
-      return;
-    }
-
-    if (action === 'delete-site') {
-      await deleteSetting('site');
-      renderDialog('已删除整个站点设置。', 'site', 'refresh');
-      return;
-    }
-
-    if (action === 'save-unlocker') {
-      const scope = getSelectedScope();
-      const unlockerSetting = readUnlockerFormSetting();
-      await saveUnlockerSetting(scope, unlockerSetting);
-      renderDialog(unlockerSetting.enabled
-        ? `已保存到${scopeLabel(scope)}：${adapters.unlockerStatusText(unlockerSetting)}`
-        : `已保存到${scopeLabel(scope)}：网页限制解除关闭。`, scope, 'unlocker');
-      return;
-    }
-
-    if (action === 'delete-unlocker-page') {
-      await deleteUnlockerSetting('page');
-      renderDialog('已删除当前页面限制解除设置。', 'page', 'unlocker');
-      return;
-    }
-
-    if (action === 'delete-unlocker-site') {
-      await deleteUnlockerSetting('site');
-      renderDialog('已删除整个站点限制解除设置。', 'site', 'unlocker');
-      return;
-    }
-
-    if (action === 'disable-active') {
-      const activeMatch = getActiveMatch();
-      if (!activeMatch) return;
-
-      const disabledScope = activeMatch.scope;
-      setActiveMatch(null);
-      await deleteSetting(disabledScope);
-      if (adapters.hasDialog()) renderDialog(`已停用${scopeLabel(disabledScope)}自动刷新。`, disabledScope, 'refresh');
-    }
+    applicationError = Object.values(applicationErrors).filter(Boolean).join('; ') || null;
+    return failed ? 'application-failed' : null;
   }
-
-  return {
-    canHandle,
-    dispatch,
-    saveSetting,
-    deleteSetting,
-    saveUnlockerSetting,
-    deleteUnlockerSetting,
-    restartActiveCountdown,
-    refreshUnlockerState,
-  };
+  function start() {
+    if (lifecycle === 'disposed') return Promise.resolve(result('disposed'));
+    if (startPromise) return startPromise;
+    lifecycle = 'starting';
+    emit('lifecycle');
+    const initialize = async () => {
+      try {
+        const [loaded] = await Promise.all([storage.readSettings(), ready()]);
+        if (lifecycle === 'disposed') return result('disposed');
+        settings = Settings.normalizeSettings(loaded);
+        lifecycle = 'ready';
+        const code = apply('all');
+        emit('lifecycle');
+        return result(code);
+      } catch (error) {
+        if (lifecycle === 'disposed') return result('disposed');
+        lifecycle = 'error';
+        applicationError = String(error?.message || error);
+        emit('lifecycle');
+        return result('storage-failed');
+      }
+    };
+    startPromise = Promise.race([initialize(), disposed.then(() => result('disposed'))]);
+    return startPromise;
+  }
+  async function write(command) {
+    if (lifecycle !== 'ready') return result(lifecycle === 'disposed' ? 'disposed' : 'not-ready');
+    const { type } = command;
+    const scope = type === 'disable-active' ? runtime.getState().activeMatch?.scope : command.scope;
+    if (type === 'disable-active' && !scope) return result();
+    if (!['page', 'site'].includes(scope)) return result('invalid-input');
+    const key = scope === 'page' ? keys.pageKey : keys.siteKey;
+    const area = type.includes('unlocker') ? 'unlocker' : 'refresh';
+    let next;
+    if (type === 'save-refresh') {
+      if (!Settings.isValidIntervalMs(command.intervalMs)) return result('invalid-input');
+      next = Settings.setRefreshSetting(settings, scope, key, command.intervalMs, clock.now());
+    } else if (type === 'save-unlocker') {
+      if (!Settings.normalizeUnlockerSetting(command.setting)) return result('invalid-input');
+      next = Settings.setUnlockerSetting(settings, scope, key, command.setting, clock.now());
+    } else if (type === 'delete-unlocker') {
+      next = Settings.deleteUnlockerSetting(settings, scope, key);
+    } else if (type === 'delete-refresh' || type === 'disable-active') {
+      next = Settings.deleteRefreshSetting(settings, scope, key);
+    } else return result('invalid-input');
+    try { await storage.writeSettings(next); } catch (error) {
+      if (lifecycle === 'disposed') return result('disposed');
+      return { ...result('storage-failed'), message: String(error?.message || error) };
+    }
+    settings = next;
+    if (lifecycle === 'disposed') return result('disposed', true, scope);
+    const code = apply(area);
+    emit('settings', area);
+    return result(code, true, scope);
+  }
+  function dispatch(command) {
+    if (lifecycle !== 'ready') return Promise.resolve(result(lifecycle === 'disposed' ? 'disposed' : 'not-ready'));
+    if (command?.type === 'toggle-pause') {
+      runtime.togglePause();
+      return Promise.resolve(result());
+    }
+    // Capture caller input now, but derive the next settings at execution time.
+    const captured = JSON.parse(JSON.stringify(command || {}));
+    let started = false;
+    const pending = queue.then(() => { started = true; return write(captured); });
+    queue = pending.catch(() => {});
+    return Promise.race([pending, disposed.then(() => started ? pending : result('disposed'))]);
+  }
+  function dispose() {
+    if (lifecycle === 'disposed') return;
+    lifecycle = 'disposed';
+    runtime.stop();
+    appliedUnlocker = null;
+    try { unlocker.uninstall(); } catch { /* disposal still terminates the session */ }
+    finishDisposed();
+  }
+  return { start, dispatch, getState, dispose };
 }
 
-export {
-  createWebPageAssistantSession,
-};
+export { createWebPageAssistantSession };

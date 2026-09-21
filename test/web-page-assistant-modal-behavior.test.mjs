@@ -14,8 +14,13 @@ const distSource = await readFile(distPath, 'utf8');
 
 const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function boot({ gmSetValue, localStorageStub, seedFallbackSettings } = {}) {
+async function boot({ gmSetValue, localStorageStub, seedFallbackSettings, clock } = {}) {
   const window = createDomWindow({ url: 'https://example.com/article?id=1' });
+  if (clock) {
+    window.Date = class extends window.Date { static now() { return clock.now; } };
+    window.setInterval = (handler) => { clock.tick = handler; return 1; };
+    window.clearInterval = () => { clock.tick = () => {}; };
+  }
   const pageContent = window.document.createElement('main');
   pageContent.id = 'page-content';
   window.document.body.append(pageContent);
@@ -184,5 +189,33 @@ test('a failed write restores the button and surfaces the error reason', { skip:
   assert.equal(message.dataset.tone, 'error');
   // The GM failure is logged and falls back; the surfaced reason is the
   // fallback write that ultimately propagated.
-  assert.match(message.textContent, /操作失败：fallback full/);
+  assert.match(message.textContent, /操作失败：设置保存失败。fallback full/);
+});
+
+test('countdown ticks preserve dialog inputs, focus and lifecycle announcement', { skip: domSkip }, async () => {
+  const clock = { now: 1000 };
+  const { window, root } = await boot({
+    clock,
+    seedFallbackSettings: {
+      version: 2,
+      refresh: { pages: { 'https://example.com/article?id=1': { intervalMs: 30000 } }, sites: {} },
+    },
+  });
+  root.querySelector('[data-part-action="open-settings"]').click();
+  await flush();
+  const dialog = dialogOf(root);
+  const input = dialog.querySelector('input[type="number"]');
+  input.value = '42'; input.focus();
+  const status = root.querySelector('[data-part-role="widget-status"]');
+  const statusText = status.textContent;
+  const countdown = root.querySelector('[data-part-role="countdown"]');
+  const initialCountdown = countdown.textContent;
+  clock.now += 1000;
+  clock.tick();
+  assert.equal(dialogOf(root), dialog);
+  assert.equal(window.document.activeElement, input);
+  assert.equal(input.value, '42');
+  assert.equal(status.textContent, statusText);
+  assert.notEqual(countdown.textContent, initialCountdown);
+  window.dispatchEvent(new window.Event('pagehide'));
 });

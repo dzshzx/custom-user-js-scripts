@@ -1,15 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import { createRefreshRuntime } from '../src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js';
 
-const entryPath = path.resolve(
-  import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.entry.js',
-);
-const entryContent = await readFile(entryPath, 'utf8');
 
 function createHarness() {
   let nowMs = 0;
@@ -53,14 +46,6 @@ function createHarness() {
 }
 
 createHarness.factory = createRefreshRuntime;
-
-test('entry module imports the refresh runtime library', () => {
-  assert.equal(
-    entryContent.includes(`from './web-page-assistant-refresh.lib.js'`),
-    true,
-  );
-  assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_REFRESH_RUNTIME_START'), false);
-});
 
 test('refresh runtime starts active countdown and emits remaining time', () => {
   const harness = createHarness();

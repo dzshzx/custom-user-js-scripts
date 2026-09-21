@@ -86,10 +86,10 @@ browser page events only and never bypasses server-side limits.
 _Avoid_: bypass, crack, anti-anti-copy
 
 **Floating Widget**:
-The companion control at the page corner, created only while a refresh rule
-matches the current page or site. It shows the countdown, pause/resume and
-delete actions, and opens the settings dialog.
-_Avoid_: always-on badge, toolbar
+The resident companion control at the page corner. With an active refresh rule
+it shows the countdown, pause/resume and delete actions. Without a rule it stays
+as a dimmed idle dot that opens the settings dialog.
+_Avoid_: toolbar
 
 ### Codex Quota Compass
 

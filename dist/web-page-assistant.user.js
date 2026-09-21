@@ -329,114 +329,6 @@
     };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js
-  function createRefreshRuntime(adapters) {
-    const {
-      minIntervalMs,
-      tickMs,
-      now,
-      setInterval: setTimer,
-      clearInterval: clearTimer,
-      reload,
-      onStateChange
-    } = adapters;
-    const emptyState = {
-      activeMatch: null,
-      targetTime: 0,
-      remainingWhenPaused: 0,
-      isPaused: false,
-      isRefreshing: false,
-      timerId: null
-    };
-    let state = { ...emptyState };
-    function clearActiveTimer() {
-      if (!state.timerId) return;
-      clearTimer(state.timerId);
-      state = { ...state, timerId: null };
-    }
-    function snapshot() {
-      const remainingMs = state.activeMatch ? state.isPaused ? state.remainingWhenPaused : Math.max(0, state.targetTime - now()) : 0;
-      return {
-        activeMatch: state.activeMatch,
-        isPaused: state.isPaused,
-        isRefreshing: state.isRefreshing,
-        remainingMs
-      };
-    }
-    function emit() {
-      onStateChange(snapshot());
-    }
-    function tick() {
-      if (!state.activeMatch || state.isPaused || state.isRefreshing) {
-        emit();
-        return;
-      }
-      const remainingMs = state.targetTime - now();
-      emit();
-      if (remainingMs > 0) return;
-      state = { ...state, isRefreshing: true };
-      clearActiveTimer();
-      emit();
-      reload();
-    }
-    function startTimer() {
-      clearActiveTimer();
-      if (!state.activeMatch || state.isPaused) {
-        emit();
-        return;
-      }
-      state = { ...state, timerId: setTimer(tick, tickMs) };
-      tick();
-    }
-    function restart(activeMatch) {
-      clearActiveTimer();
-      if (!activeMatch) {
-        state = { ...emptyState };
-        emit();
-        return;
-      }
-      state = {
-        ...emptyState,
-        activeMatch,
-        targetTime: now() + activeMatch.setting.intervalMs
-      };
-      startTimer();
-    }
-    function stop() {
-      clearActiveTimer();
-      state = { ...emptyState };
-      emit();
-    }
-    function togglePause() {
-      if (!state.activeMatch) return snapshot();
-      if (state.isPaused) {
-        state = {
-          ...state,
-          targetTime: now() + state.remainingWhenPaused,
-          remainingWhenPaused: 0,
-          isPaused: false
-        };
-        startTimer();
-        return snapshot();
-      }
-      state = {
-        ...state,
-        remainingWhenPaused: Math.max(minIntervalMs, state.targetTime - now()),
-        isPaused: true
-      };
-      clearActiveTimer();
-      emit();
-      return snapshot();
-    }
-    return {
-      restart,
-      stop,
-      togglePause,
-      getState: snapshot,
-      tick
-    };
-  }
-
   // src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.js
   var LIB_NAME = "WebPageAssistantPresentationBaseStylesLib";
   function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
@@ -1421,177 +1313,272 @@
     return dialog;
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-session.lib.js
-  function createWebPageAssistantSession(adapters) {
+  // src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js
+  function createRefreshRuntime(adapters) {
     const {
-      settingsContract,
-      storagePort,
-      refreshRuntime,
-      getSettings,
-      setSettings,
-      getActiveMatch,
-      setActiveMatch,
-      setActiveUnlockerMatch,
-      getPageKey,
-      getSiteKey,
-      getSelectedScope,
-      parseCustomInterval,
-      readUnlockerFormSetting,
-      resolveActiveSetting,
-      resolveActiveUnlockerSetting: resolveActiveUnlockerSetting2,
-      renderDialog,
-      renderWidget,
-      updatePauseButton,
-      updateCountdownText,
-      installUnlocker,
-      setMessage,
-      scopeLabel,
-      formatInterval
+      minIntervalMs,
+      tickMs,
+      now,
+      setInterval: setTimer,
+      clearInterval: clearTimer,
+      reload,
+      onStateChange
     } = adapters;
-    const supportedActions = /* @__PURE__ */ new Set([
-      "open-settings",
-      "switch-tab",
-      "close-dialog",
-      "toggle-pause",
-      "save-preset",
-      "save-custom",
-      "delete-page",
-      "delete-site",
-      "save-unlocker",
-      "delete-unlocker-page",
-      "delete-unlocker-site",
-      "disable-active"
-    ]);
-    function keyForScope(scope) {
-      return scope === "site" ? getSiteKey() : getPageKey();
+    const emptyState = {
+      activeMatch: null,
+      targetTime: 0,
+      remainingWhenPaused: 0,
+      isPaused: false,
+      isRefreshing: false,
+      timerId: null
+    };
+    let state = { ...emptyState };
+    function clearActiveTimer() {
+      if (!state.timerId) return;
+      clearTimer(state.timerId);
+      state = { ...state, timerId: null };
     }
-    function canHandle(action) {
-      return supportedActions.has(action);
+    function snapshot() {
+      const remainingMs = state.activeMatch ? state.isPaused ? state.remainingWhenPaused : Math.max(0, state.targetTime - now()) : 0;
+      return {
+        activeMatch: state.activeMatch,
+        isPaused: state.isPaused,
+        isRefreshing: state.isRefreshing,
+        remainingMs
+      };
     }
-    async function writeSettings(nextSettings) {
-      const next = await storagePort.writeSettings(nextSettings);
-      setSettings(next);
-      return next;
+    function emit() {
+      onStateChange(snapshot());
     }
-    function restartActiveCountdown() {
-      refreshRuntime.restart(resolveActiveSetting(getSettings()));
-      renderWidget();
-      updatePauseButton();
-      updateCountdownText();
+    function tick() {
+      if (!state.activeMatch || state.isPaused || state.isRefreshing) {
+        emit();
+        return;
+      }
+      const remainingMs = state.targetTime - now();
+      emit();
+      if (remainingMs > 0) return;
+      state = { ...state, isRefreshing: true };
+      clearActiveTimer();
+      emit();
+      reload();
     }
-    function refreshUnlockerState() {
-      const activeUnlockerMatch = resolveActiveUnlockerSetting2(getSettings());
-      setActiveUnlockerMatch(activeUnlockerMatch);
-      installUnlocker(activeUnlockerMatch?.setting);
-      return activeUnlockerMatch;
+    function startTimer() {
+      clearActiveTimer();
+      if (!state.activeMatch || state.isPaused) {
+        emit();
+        return;
+      }
+      state = { ...state, timerId: setTimer(tick, tickMs) };
+      tick();
     }
-    async function saveSetting(scope, intervalMs) {
-      const next = settingsContract.setRefreshSetting(getSettings(), scope, keyForScope(scope), intervalMs);
-      await writeSettings(next);
-      restartActiveCountdown();
+    function restart(activeMatch) {
+      clearActiveTimer();
+      if (!activeMatch) {
+        state = { ...emptyState };
+        emit();
+        return;
+      }
+      state = {
+        ...emptyState,
+        activeMatch,
+        targetTime: now() + activeMatch.setting.intervalMs
+      };
+      startTimer();
     }
-    async function deleteSetting(scope) {
-      const next = settingsContract.deleteRefreshSetting(getSettings(), scope, keyForScope(scope));
-      await writeSettings(next);
-      restartActiveCountdown();
+    function stop() {
+      clearActiveTimer();
+      state = { ...emptyState };
+      emit();
     }
-    async function saveUnlockerSetting(scope, unlockerSetting) {
-      const normalized = settingsContract.normalizeUnlockerSetting(unlockerSetting);
-      if (!normalized) return;
-      const next = settingsContract.setUnlockerSetting(getSettings(), scope, keyForScope(scope), normalized);
-      await writeSettings(next);
-      refreshUnlockerState();
-    }
-    async function deleteUnlockerSetting2(scope) {
-      const next = settingsContract.deleteUnlockerSetting(getSettings(), scope, keyForScope(scope));
-      await writeSettings(next);
-      refreshUnlockerState();
-    }
-    async function dispatch(action, actionNode) {
-      if (action === "open-settings") {
-        renderDialog("", null, "refresh");
-        return;
+    function togglePause() {
+      if (!state.activeMatch) return snapshot();
+      if (state.isPaused) {
+        state = {
+          ...state,
+          targetTime: now() + state.remainingWhenPaused,
+          remainingWhenPaused: 0,
+          isPaused: false
+        };
+        startTimer();
+        return snapshot();
       }
-      if (action === "switch-tab") {
-        renderDialog("", getSelectedScope(), actionNode.dataset.partTab);
-        return;
-      }
-      if (action === "close-dialog") {
-        adapters.closeDialog();
-        return;
-      }
-      if (action === "toggle-pause") {
-        refreshRuntime.togglePause();
-        return;
-      }
-      if (action === "save-preset") {
-        const intervalMs = Number(actionNode.dataset.intervalMs);
-        const scope = getSelectedScope();
-        if (!settingsContract.isValidIntervalMs(intervalMs)) {
-          setMessage("预设刷新时间无效。", "error");
-          return;
-        }
-        await saveSetting(scope, intervalMs);
-        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(intervalMs)} 刷新一次。`, scope, "refresh");
-        return;
-      }
-      if (action === "save-custom") {
-        const parsed = parseCustomInterval();
-        if (parsed.error) {
-          setMessage(parsed.error, "error");
-          return;
-        }
-        const scope = getSelectedScope();
-        await saveSetting(scope, parsed.intervalMs);
-        renderDialog(`已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`, scope, "refresh");
-        return;
-      }
-      if (action === "delete-page") {
-        await deleteSetting("page");
-        renderDialog("已删除当前页面设置。", "page", "refresh");
-        return;
-      }
-      if (action === "delete-site") {
-        await deleteSetting("site");
-        renderDialog("已删除整个站点设置。", "site", "refresh");
-        return;
-      }
-      if (action === "save-unlocker") {
-        const scope = getSelectedScope();
-        const unlockerSetting = readUnlockerFormSetting();
-        await saveUnlockerSetting(scope, unlockerSetting);
-        renderDialog(unlockerSetting.enabled ? `已保存到${scopeLabel(scope)}：${adapters.unlockerStatusText(unlockerSetting)}` : `已保存到${scopeLabel(scope)}：网页限制解除关闭。`, scope, "unlocker");
-        return;
-      }
-      if (action === "delete-unlocker-page") {
-        await deleteUnlockerSetting2("page");
-        renderDialog("已删除当前页面限制解除设置。", "page", "unlocker");
-        return;
-      }
-      if (action === "delete-unlocker-site") {
-        await deleteUnlockerSetting2("site");
-        renderDialog("已删除整个站点限制解除设置。", "site", "unlocker");
-        return;
-      }
-      if (action === "disable-active") {
-        const activeMatch = getActiveMatch();
-        if (!activeMatch) return;
-        const disabledScope = activeMatch.scope;
-        setActiveMatch(null);
-        await deleteSetting(disabledScope);
-        if (adapters.hasDialog()) renderDialog(`已停用${scopeLabel(disabledScope)}自动刷新。`, disabledScope, "refresh");
-      }
+      state = {
+        ...state,
+        remainingWhenPaused: Math.max(minIntervalMs, state.targetTime - now()),
+        isPaused: true
+      };
+      clearActiveTimer();
+      emit();
+      return snapshot();
     }
     return {
-      canHandle,
-      dispatch,
-      saveSetting,
-      deleteSetting,
-      saveUnlockerSetting,
-      deleteUnlockerSetting: deleteUnlockerSetting2,
-      restartActiveCountdown,
-      refreshUnlockerState
+      restart,
+      stop,
+      togglePause,
+      getState: snapshot,
+      tick
     };
+  }
+
+  // src/userscripts/web-page-assistant/web-page-assistant-session.lib.js
+  function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker, ready = () => Promise.resolve(), onChange = () => {
+  } }) {
+    let settings = emptySettings();
+    let lifecycle = "idle";
+    let applicationError = null;
+    const applicationErrors = { refresh: null, unlocker: null };
+    let appliedUnlocker = null;
+    let startPromise;
+    let queue = Promise.resolve();
+    let finishDisposed;
+    const disposed = new Promise((resolve) => {
+      finishDisposed = resolve;
+    });
+    const runtime = createRefreshRuntime({
+      minIntervalMs: MIN_INTERVAL_MS,
+      tickMs: 1e3,
+      now: clock.now,
+      setInterval: clock.setInterval,
+      clearInterval: clock.clearInterval,
+      reload,
+      onStateChange: () => emit("countdown")
+    });
+    function getState() {
+      return JSON.parse(JSON.stringify({
+        lifecycle,
+        settings,
+        refresh: runtime.getState(),
+        appliedUnlocker,
+        applicationError,
+        applicationErrors,
+        matchedRefresh: resolveActiveRefreshSetting(settings, keys),
+        matchedUnlocker: resolveActiveUnlockerSetting(settings, keys)
+      }));
+    }
+    function emit(kind, area = null) {
+      if (lifecycle === "disposed") return;
+      try {
+        onChange(getState(), { kind, area });
+      } catch {
+      }
+    }
+    function result(code = null, persisted = false, scope = null) {
+      return { ok: !code, code, persisted, scope, state: getState() };
+    }
+    function apply(area) {
+      let failed = false;
+      for (const capability of area === "all" ? ["refresh", "unlocker"] : [area]) {
+        applicationErrors[capability] = null;
+        try {
+          if (capability === "refresh") runtime.restart(resolveActiveRefreshSetting(settings, keys));
+          else {
+            appliedUnlocker = null;
+            const match = resolveActiveUnlockerSetting(settings, keys);
+            unlocker.install(match?.setting);
+            appliedUnlocker = match;
+          }
+        } catch (error) {
+          failed = true;
+          applicationErrors[capability] = String(error?.message || error);
+          if (capability === "refresh") runtime.stop();
+          else {
+            appliedUnlocker = null;
+            try {
+              unlocker.uninstall();
+            } catch {
+            }
+          }
+        }
+      }
+      applicationError = Object.values(applicationErrors).filter(Boolean).join("; ") || null;
+      return failed ? "application-failed" : null;
+    }
+    function start() {
+      if (lifecycle === "disposed") return Promise.resolve(result("disposed"));
+      if (startPromise) return startPromise;
+      lifecycle = "starting";
+      emit("lifecycle");
+      const initialize = async () => {
+        try {
+          const [loaded] = await Promise.all([storage.readSettings(), ready()]);
+          if (lifecycle === "disposed") return result("disposed");
+          settings = normalizeSettings(loaded);
+          lifecycle = "ready";
+          const code = apply("all");
+          emit("lifecycle");
+          return result(code);
+        } catch (error) {
+          if (lifecycle === "disposed") return result("disposed");
+          lifecycle = "error";
+          applicationError = String(error?.message || error);
+          emit("lifecycle");
+          return result("storage-failed");
+        }
+      };
+      startPromise = Promise.race([initialize(), disposed.then(() => result("disposed"))]);
+      return startPromise;
+    }
+    async function write(command) {
+      if (lifecycle !== "ready") return result(lifecycle === "disposed" ? "disposed" : "not-ready");
+      const { type } = command;
+      const scope = type === "disable-active" ? runtime.getState().activeMatch?.scope : command.scope;
+      if (type === "disable-active" && !scope) return result();
+      if (!["page", "site"].includes(scope)) return result("invalid-input");
+      const key = scope === "page" ? keys.pageKey : keys.siteKey;
+      const area = type.includes("unlocker") ? "unlocker" : "refresh";
+      let next;
+      if (type === "save-refresh") {
+        if (!isValidIntervalMs(command.intervalMs)) return result("invalid-input");
+        next = setRefreshSetting(settings, scope, key, command.intervalMs, clock.now());
+      } else if (type === "save-unlocker") {
+        if (!normalizeUnlockerSetting(command.setting)) return result("invalid-input");
+        next = setUnlockerSetting(settings, scope, key, command.setting, clock.now());
+      } else if (type === "delete-unlocker") {
+        next = deleteUnlockerSetting(settings, scope, key);
+      } else if (type === "delete-refresh" || type === "disable-active") {
+        next = deleteRefreshSetting(settings, scope, key);
+      } else return result("invalid-input");
+      try {
+        await storage.writeSettings(next);
+      } catch (error) {
+        if (lifecycle === "disposed") return result("disposed");
+        return { ...result("storage-failed"), message: String(error?.message || error) };
+      }
+      settings = next;
+      if (lifecycle === "disposed") return result("disposed", true, scope);
+      const code = apply(area);
+      emit("settings", area);
+      return result(code, true, scope);
+    }
+    function dispatch(command) {
+      if (lifecycle !== "ready") return Promise.resolve(result(lifecycle === "disposed" ? "disposed" : "not-ready"));
+      if (command?.type === "toggle-pause") {
+        runtime.togglePause();
+        return Promise.resolve(result());
+      }
+      const captured = JSON.parse(JSON.stringify(command || {}));
+      let started = false;
+      const pending = queue.then(() => {
+        started = true;
+        return write(captured);
+      });
+      queue = pending.catch(() => {
+      });
+      return Promise.race([pending, disposed.then(() => started ? pending : result("disposed"))]);
+    }
+    function dispose() {
+      if (lifecycle === "disposed") return;
+      lifecycle = "disposed";
+      runtime.stop();
+      appliedUnlocker = null;
+      try {
+        unlocker.uninstall();
+      } catch {
+      }
+      finishDisposed();
+    }
+    return { start, dispatch, getState, dispose };
   }
 
   // src/userscripts/web-page-assistant/web-page-assistant-widget-layout.lib.js
@@ -2059,11 +2046,9 @@ ${root} :focus-visible {
     const WIDGET_POSITION_KEY = "pageAutoRefreshTimerWidgetPosition";
     const FALLBACK_STORAGE_KEY = `__${STORAGE_KEY}`;
     const FALLBACK_WIDGET_POSITION_KEY = `__${WIDGET_POSITION_KEY}`;
-    const MIN_INTERVAL_MS2 = MIN_INTERVAL_MS;
     const MAX_INTERVAL_MS2 = MAX_INTERVAL_MS;
     const isValidIntervalMs2 = isValidIntervalMs;
     const hasUnlockerAction2 = hasUnlockerAction;
-    const TICK_MS = 1e3;
     const WIDGET_BUTTON_SIZE = 52;
     const WIDGET_WIDTH = 154;
     const WIDGET_HEIGHT = 60;
@@ -2083,9 +2068,6 @@ ${root} :focus-visible {
     ];
     const currentPageKey = `${location.origin}${location.pathname}${location.search}`;
     const currentSiteKey = location.hostname;
-    let settings = emptySettings();
-    let activeMatch = null;
-    let activeUnlockerMatch = null;
     let root;
     let widget;
     let widgetButton;
@@ -2147,18 +2129,6 @@ ${root} :focus-visible {
       localStorageAdapter: localStorage,
       logger: console
     });
-    function resolveActiveSetting(sourceSettings = settings) {
-      return resolveActiveRefreshSetting(sourceSettings, {
-        pageKey: currentPageKey,
-        siteKey: currentSiteKey
-      });
-    }
-    function resolveActiveUnlockerSetting2(sourceSettings = settings) {
-      return resolveActiveUnlockerSetting(sourceSettings, {
-        pageKey: currentPageKey,
-        siteKey: currentSiteKey
-      });
-    }
     function onReady(callback) {
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", callback, { once: true });
@@ -2234,10 +2204,13 @@ ${root} :focus-visible {
       messageNode.dataset.tone = tone;
     }
     function currentStatusText() {
+      const activeMatch = webPageAssistantSession.getState().refresh.activeMatch;
       if (!activeMatch) return "当前未启用自动刷新。";
       return `${scopeLabel(activeMatch.scope)}已启用，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
     }
-    function unlockerStatusText(setting = activeUnlockerMatch?.setting) {
+    function unlockerStatusText() {
+      const activeUnlockerMatch = webPageAssistantSession.getState().appliedUnlocker;
+      const setting = activeUnlockerMatch?.setting;
       return unlockerRuntime.describe(setting, scopeLabel(activeUnlockerMatch?.scope || getSelectedScope()));
     }
     function defaultUnlockerSetting2(overrides = {}) {
@@ -2248,54 +2221,6 @@ ${root} :focus-visible {
       defaultUnlockerSetting: defaultUnlockerSetting2,
       formatInterval,
       defaultIntervalMs: 5 * 60 * 1e3
-    });
-    const refreshRuntime = createRefreshRuntime({
-      minIntervalMs: MIN_INTERVAL_MS2,
-      tickMs: TICK_MS,
-      now: () => Date.now(),
-      setInterval: (handler, delay) => window.setInterval(handler, delay),
-      clearInterval: (timer) => window.clearInterval(timer),
-      reload: () => location.reload(),
-      onStateChange(state) {
-        activeMatch = state.activeMatch;
-        updatePauseButton();
-        updateCountdownText();
-        updateWidgetStatusText();
-      }
-    });
-    webPageAssistantSession = createWebPageAssistantSession({
-      settingsContract: web_page_assistant_settings_lib_exports,
-      storagePort,
-      refreshRuntime,
-      getSettings: () => settings,
-      setSettings(nextSettings) {
-        settings = nextSettings;
-      },
-      getActiveMatch: () => activeMatch,
-      setActiveMatch(nextActiveMatch) {
-        activeMatch = nextActiveMatch;
-      },
-      setActiveUnlockerMatch(nextActiveUnlockerMatch) {
-        activeUnlockerMatch = nextActiveUnlockerMatch;
-      },
-      getPageKey: () => currentPageKey,
-      getSiteKey: () => currentSiteKey,
-      getSelectedScope,
-      parseCustomInterval,
-      readUnlockerFormSetting,
-      resolveActiveSetting,
-      resolveActiveUnlockerSetting: resolveActiveUnlockerSetting2,
-      renderDialog,
-      renderWidget,
-      updatePauseButton,
-      updateCountdownText,
-      installUnlocker,
-      setMessage,
-      closeDialog,
-      hasDialog: () => Boolean(dialog),
-      unlockerStatusText,
-      scopeLabel,
-      formatInterval
     });
     function clampNumber(value, min, max) {
       return Math.min(Math.max(min, value), max);
@@ -2328,7 +2253,7 @@ ${root} :focus-visible {
     });
     function createWidgetViewModel() {
       return {
-        enabled: Boolean(activeMatch),
+        enabled: Boolean(webPageAssistantSession.getState().refresh.activeMatch),
         summary: currentStatusText()
       };
     }
@@ -2363,9 +2288,9 @@ ${root} :focus-visible {
         preferredScope,
         preferredTab,
         activeTab: activeDialogTab,
-        activeRefreshMatch: activeMatch,
-        activeUnlockerMatch,
-        settings,
+        activeRefreshMatch: webPageAssistantSession.getState().refresh.activeMatch,
+        activeUnlockerMatch: webPageAssistantSession.getState().appliedUnlocker,
+        settings: webPageAssistantSession.getState().settings,
         pageKey: currentPageKey,
         siteKey: currentSiteKey,
         statusText: currentStatusText(),
@@ -2498,12 +2423,9 @@ ${root} :focus-visible {
     function readUnlockerFormSetting() {
       return dialogContract.readUnlockerFormSetting(dialog);
     }
-    function restartActiveCountdown() {
-      webPageAssistantSession.restartActiveCountdown();
-    }
     function updateCountdownText() {
       if (!countdownNodes.length) return;
-      const runtimeState = refreshRuntime.getState();
+      const runtimeState = webPageAssistantSession.getState().refresh;
       if (!runtimeState.activeMatch) {
         for (const node of countdownNodes) {
           node.textContent = "--:--";
@@ -2516,7 +2438,7 @@ ${root} :focus-visible {
       }
     }
     function widgetStatusText() {
-      const runtimeState = refreshRuntime.getState();
+      const runtimeState = webPageAssistantSession.getState().refresh;
       if (!runtimeState.activeMatch) return "当前未启用自动刷新。";
       if (runtimeState.isPaused) {
         const remaining = formatInterval(Math.max(1e3, Math.ceil(runtimeState.remainingMs / 1e3) * 1e3));
@@ -2534,7 +2456,7 @@ ${root} :focus-visible {
     function updatePauseButton() {
       const pauseButton = widget?.querySelector('[data-part-action="toggle-pause"]');
       if (!pauseButton) return;
-      pauseButton.textContent = refreshRuntime.getState().isPaused ? "继续" : "暂停";
+      pauseButton.textContent = webPageAssistantSession.getState().refresh.isPaused ? "继续" : "暂停";
     }
     unlockerRuntime = createUnlockerRuntime({
       hasUnlockerAction: hasUnlockerAction2,
@@ -2554,17 +2476,51 @@ ${root} :focus-visible {
       },
       rootId: ROOT_ID
     });
-    function installUnlocker(setting) {
-      unlockerRuntime.install(setting);
-    }
-    function refreshUnlockerState() {
-      webPageAssistantSession.refreshUnlockerState();
+    async function dispatchAction(action, node) {
+      if (action === "open-settings") return renderDialog("", null, "refresh");
+      if (action === "switch-tab") return renderDialog("", getSelectedScope(), node.dataset.partTab);
+      if (action === "close-dialog") return closeDialog();
+      let scope = getSelectedScope();
+      let command = { type: action, scope };
+      let tab = "refresh";
+      let message = "";
+      if (action === "save-preset" || action === "save-custom") {
+        const parsed = action === "save-custom" ? parseCustomInterval() : { intervalMs: Number(node.dataset.intervalMs) };
+        if (parsed.error) throw new Error(parsed.error);
+        command = { type: "save-refresh", scope, intervalMs: parsed.intervalMs };
+        message = `已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`;
+      } else if (action === "delete-page" || action === "delete-site") {
+        scope = action === "delete-page" ? "page" : "site";
+        command = { type: "delete-refresh", scope };
+        message = `已删除${scopeLabel(scope)}设置。`;
+      } else if (action === "save-unlocker") {
+        command.setting = readUnlockerFormSetting();
+        tab = "unlocker";
+        message = `已保存到${scopeLabel(scope)}。`;
+      } else if (action.startsWith("delete-unlocker-")) {
+        scope = action.endsWith("page") ? "page" : "site";
+        command = { type: "delete-unlocker", scope };
+        tab = "unlocker";
+        message = `已删除${scopeLabel(scope)}限制解除设置。`;
+      }
+      const result = await webPageAssistantSession.dispatch(command);
+      if (!result.ok) {
+        if (result.persisted && dialog) renderDialog("", result.scope || scope, tab);
+        const reasons = { "invalid-input": "设置无效。", "not-ready": "设置尚未读取完成。", disposed: "会话已结束。", "storage-failed": "设置保存失败。", "application-failed": "设置已保存，但应用失败。" };
+        throw new Error(`${reasons[result.code] || "操作失败。"}${result.message || result.state.applicationError || ""}`);
+      }
+      if (action === "toggle-pause") return;
+      if (action === "disable-active") {
+        scope = result.scope || scope;
+        message = `已停用${scopeLabel(scope)}自动刷新。`;
+      }
+      if (dialog) renderDialog(message, scope, tab);
     }
     async function handleRootClick(event) {
       const actionNode = event.target?.closest?.("[data-part-action]");
       if (!actionNode || !root?.contains(actionNode)) return;
       const action = actionNode.dataset.partAction;
-      if (!webPageAssistantSession.canHandle(action)) return;
+      if (!WRITE_ACTIONS.has(action) && !["open-settings", "switch-tab", "close-dialog", "toggle-pause"].includes(action)) return;
       if (action === "close-dialog" && dialog && actionNode === dialog && event.target === dialog) {
         closeDialog();
         return;
@@ -2584,7 +2540,7 @@ ${root} :focus-visible {
         actionNode.textContent = "处理中…";
       }
       try {
-        await webPageAssistantSession.dispatch(action, actionNode);
+        await dispatchAction(action, actionNode);
       } catch (error) {
         console.warn(`${SCRIPT_NAME}: action failed.`, error);
         if (isWrite && actionNode.isConnected !== false) {
@@ -2610,25 +2566,37 @@ ${root} :focus-visible {
     function registerMenu() {
       storagePort.registerSettingsMenu("网页助手设置", openSettingsFromMenu);
     }
-    async function init() {
-      registerMenu();
-      [settings, widgetPosition] = await Promise.all([
-        storagePort.readSettings(),
-        storagePort.readWidgetPosition()
-      ]);
-      activeMatch = resolveActiveSetting(settings);
-      activeUnlockerMatch = resolveActiveUnlockerSetting2(settings);
-      window.addEventListener("resize", () => widgetLayoutRuntime.applyPosition());
-      refreshUnlockerState();
-      onReady(() => {
-        if (activeMatch) {
-          restartActiveCountdown();
-        } else {
-          renderWidget();
-        }
-      });
-    }
-    initialStateReady = init();
+    webPageAssistantSession = createWebPageAssistantSession({
+      keys: { pageKey: currentPageKey, siteKey: currentSiteKey },
+      storage: storagePort,
+      clock: {
+        now: () => Date.now(),
+        setInterval: (handler, delay) => window.setInterval(handler, delay),
+        clearInterval: (timer) => window.clearInterval(timer)
+      },
+      reload: () => location.reload(),
+      unlocker: unlockerRuntime,
+      async ready() {
+        const [position] = await Promise.all([
+          storagePort.readWidgetPosition(),
+          new Promise((resolve) => onReady(resolve))
+        ]);
+        widgetPosition = position;
+      },
+      onChange(state, { kind, area }) {
+        if (state.lifecycle !== "ready") return;
+        if (kind === "lifecycle" || area === "refresh") renderWidget();
+        updatePauseButton();
+        updateCountdownText();
+        updateWidgetStatusText();
+      }
+    });
+    registerMenu();
+    window.addEventListener("resize", () => widgetLayoutRuntime.applyPosition());
+    window.addEventListener("pagehide", (event) => {
+      if (!event.persisted) webPageAssistantSession.dispose();
+    });
+    initialStateReady = webPageAssistantSession.start();
     initialStateReady.catch((error) => {
       console.warn(`${SCRIPT_NAME}: failed to initialize.`, error);
     });

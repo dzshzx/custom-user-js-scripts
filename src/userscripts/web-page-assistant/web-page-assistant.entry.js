@@ -29,7 +29,6 @@
 
 import * as PageAssistantSettings from './web-page-assistant-settings.lib.js';
 import { createWebPageAssistantStoragePort } from './web-page-assistant-storage.lib.js';
-import { createRefreshRuntime } from './web-page-assistant-refresh.lib.js';
 import { installAssistantBaseStyles } from './web-page-assistant-presentation-base-styles.lib.js';
 import { installAssistantDialogStyles } from './web-page-assistant-presentation-dialog-styles.lib.js';
 import {
@@ -58,11 +57,9 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
   const WIDGET_POSITION_KEY = 'pageAutoRefreshTimerWidgetPosition';
   const FALLBACK_STORAGE_KEY = `__${STORAGE_KEY}`;
   const FALLBACK_WIDGET_POSITION_KEY = `__${WIDGET_POSITION_KEY}`;
-  const MIN_INTERVAL_MS = PageAssistantSettings.MIN_INTERVAL_MS;
   const MAX_INTERVAL_MS = PageAssistantSettings.MAX_INTERVAL_MS;
   const isValidIntervalMs = PageAssistantSettings.isValidIntervalMs;
   const hasUnlockerAction = PageAssistantSettings.hasUnlockerAction;
-  const TICK_MS = 1000;
   const WIDGET_BUTTON_SIZE = 52;
   const WIDGET_WIDTH = 154;
   const WIDGET_HEIGHT = 60;
@@ -83,9 +80,6 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
   const currentPageKey = `${location.origin}${location.pathname}${location.search}`;
   const currentSiteKey = location.hostname;
 
-  let settings = PageAssistantSettings.emptySettings();
-  let activeMatch = null;
-  let activeUnlockerMatch = null;
   let root;
   let widget;
   let widgetButton;
@@ -155,20 +149,6 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
     localStorageAdapter: localStorage,
     logger: console,
   });
-
-  function resolveActiveSetting(sourceSettings = settings) {
-    return PageAssistantSettings.resolveActiveRefreshSetting(sourceSettings, {
-      pageKey: currentPageKey,
-      siteKey: currentSiteKey,
-    });
-  }
-
-  function resolveActiveUnlockerSetting(sourceSettings = settings) {
-    return PageAssistantSettings.resolveActiveUnlockerSetting(sourceSettings, {
-      pageKey: currentPageKey,
-      siteKey: currentSiteKey,
-    });
-  }
 
   function onReady(callback) {
     if (document.readyState === 'loading') {
@@ -262,11 +242,14 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
   }
 
   function currentStatusText() {
+    const activeMatch = webPageAssistantSession.getState().refresh.activeMatch;
     if (!activeMatch) return '当前未启用自动刷新。';
     return `${scopeLabel(activeMatch.scope)}已启用，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
   }
 
-  function unlockerStatusText(setting = activeUnlockerMatch?.setting) {
+  function unlockerStatusText() {
+    const activeUnlockerMatch = webPageAssistantSession.getState().appliedUnlocker;
+    const setting = activeUnlockerMatch?.setting;
     return unlockerRuntime.describe(setting, scopeLabel(activeUnlockerMatch?.scope || getSelectedScope()));
   }
 
@@ -279,56 +262,6 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
     defaultUnlockerSetting,
     formatInterval,
     defaultIntervalMs: 5 * 60 * 1000,
-  });
-
-  const refreshRuntime = createRefreshRuntime({
-    minIntervalMs: MIN_INTERVAL_MS,
-    tickMs: TICK_MS,
-    now: () => Date.now(),
-    setInterval: (handler, delay) => window.setInterval(handler, delay),
-    clearInterval: (timer) => window.clearInterval(timer),
-    reload: () => location.reload(),
-    onStateChange(state) {
-      activeMatch = state.activeMatch;
-      updatePauseButton();
-      updateCountdownText();
-      updateWidgetStatusText();
-    },
-  });
-
-  webPageAssistantSession = createWebPageAssistantSession({
-    settingsContract: PageAssistantSettings,
-    storagePort,
-    refreshRuntime,
-    getSettings: () => settings,
-    setSettings(nextSettings) {
-      settings = nextSettings;
-    },
-    getActiveMatch: () => activeMatch,
-    setActiveMatch(nextActiveMatch) {
-      activeMatch = nextActiveMatch;
-    },
-    setActiveUnlockerMatch(nextActiveUnlockerMatch) {
-      activeUnlockerMatch = nextActiveUnlockerMatch;
-    },
-    getPageKey: () => currentPageKey,
-    getSiteKey: () => currentSiteKey,
-    getSelectedScope,
-    parseCustomInterval,
-    readUnlockerFormSetting,
-    resolveActiveSetting,
-    resolveActiveUnlockerSetting,
-    renderDialog,
-    renderWidget,
-    updatePauseButton,
-    updateCountdownText,
-    installUnlocker,
-    setMessage,
-    closeDialog,
-    hasDialog: () => Boolean(dialog),
-    unlockerStatusText,
-    scopeLabel,
-    formatInterval,
   });
 
   function clampNumber(value, min, max) {
@@ -366,7 +299,7 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
   // a dimmed idle dot whose panel offers the settings entry.
   function createWidgetViewModel() {
     return {
-      enabled: Boolean(activeMatch),
+      enabled: Boolean(webPageAssistantSession.getState().refresh.activeMatch),
       summary: currentStatusText(),
     };
   }
@@ -405,9 +338,9 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
       preferredScope,
       preferredTab,
       activeTab: activeDialogTab,
-      activeRefreshMatch: activeMatch,
-      activeUnlockerMatch,
-      settings,
+      activeRefreshMatch: webPageAssistantSession.getState().refresh.activeMatch,
+      activeUnlockerMatch: webPageAssistantSession.getState().appliedUnlocker,
+      settings: webPageAssistantSession.getState().settings,
       pageKey: currentPageKey,
       siteKey: currentSiteKey,
       statusText: currentStatusText(),
@@ -566,14 +499,10 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
     return dialogContract.readUnlockerFormSetting(dialog);
   }
 
-  function restartActiveCountdown() {
-    webPageAssistantSession.restartActiveCountdown();
-  }
-
   function updateCountdownText() {
     if (!countdownNodes.length) return;
 
-    const runtimeState = refreshRuntime.getState();
+    const runtimeState = webPageAssistantSession.getState().refresh;
     if (!runtimeState.activeMatch) {
       for (const node of countdownNodes) {
         node.textContent = '--:--';
@@ -591,7 +520,7 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
   // only changes on lifecycle transitions (enable/pause/resume/disable), so
   // assistive technology is not spammed by the per-second countdown.
   function widgetStatusText() {
-    const runtimeState = refreshRuntime.getState();
+    const runtimeState = webPageAssistantSession.getState().refresh;
     if (!runtimeState.activeMatch) return '当前未启用自动刷新。';
     if (runtimeState.isPaused) {
       const remaining = formatInterval(Math.max(1000, Math.ceil(runtimeState.remainingMs / 1000) * 1000));
@@ -611,7 +540,7 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
   function updatePauseButton() {
     const pauseButton = widget?.querySelector('[data-part-action="toggle-pause"]');
     if (!pauseButton) return;
-    pauseButton.textContent = refreshRuntime.getState().isPaused ? '继续' : '暂停';
+    pauseButton.textContent = webPageAssistantSession.getState().refresh.isPaused ? '继续' : '暂停';
   }
 
   unlockerRuntime = createUnlockerRuntime({
@@ -633,12 +562,45 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
     rootId: ROOT_ID,
   });
 
-  function installUnlocker(setting) {
-    unlockerRuntime.install(setting);
-  }
-
-  function refreshUnlockerState() {
-    webPageAssistantSession.refreshUnlockerState();
+  async function dispatchAction(action, node) {
+    if (action === 'open-settings') return renderDialog('', null, 'refresh');
+    if (action === 'switch-tab') return renderDialog('', getSelectedScope(), node.dataset.partTab);
+    if (action === 'close-dialog') return closeDialog();
+    let scope = getSelectedScope();
+    let command = { type: action, scope };
+    let tab = 'refresh';
+    let message = '';
+    if (action === 'save-preset' || action === 'save-custom') {
+      const parsed = action === 'save-custom' ? parseCustomInterval() : { intervalMs: Number(node.dataset.intervalMs) };
+      if (parsed.error) throw new Error(parsed.error);
+      command = { type: 'save-refresh', scope, intervalMs: parsed.intervalMs };
+      message = `已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`;
+    } else if (action === 'delete-page' || action === 'delete-site') {
+      scope = action === 'delete-page' ? 'page' : 'site';
+      command = { type: 'delete-refresh', scope };
+      message = `已删除${scopeLabel(scope)}设置。`;
+    } else if (action === 'save-unlocker') {
+      command.setting = readUnlockerFormSetting();
+      tab = 'unlocker';
+      message = `已保存到${scopeLabel(scope)}。`;
+    } else if (action.startsWith('delete-unlocker-')) {
+      scope = action.endsWith('page') ? 'page' : 'site';
+      command = { type: 'delete-unlocker', scope };
+      tab = 'unlocker';
+      message = `已删除${scopeLabel(scope)}限制解除设置。`;
+    }
+    const result = await webPageAssistantSession.dispatch(command);
+    if (!result.ok) {
+      if (result.persisted && dialog) renderDialog('', result.scope || scope, tab);
+      const reasons = { 'invalid-input': '设置无效。', 'not-ready': '设置尚未读取完成。', disposed: '会话已结束。', 'storage-failed': '设置保存失败。', 'application-failed': '设置已保存，但应用失败。' };
+      throw new Error(`${reasons[result.code] || '操作失败。'}${result.message || result.state.applicationError || ''}`);
+    }
+    if (action === 'toggle-pause') return;
+    if (action === 'disable-active') {
+      scope = result.scope || scope;
+      message = `已停用${scopeLabel(scope)}自动刷新。`;
+    }
+    if (dialog) renderDialog(message, scope, tab);
   }
 
   async function handleRootClick(event) {
@@ -646,7 +608,7 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
     if (!actionNode || !root?.contains(actionNode)) return;
 
     const action = actionNode.dataset.partAction;
-    if (!webPageAssistantSession.canHandle(action)) return;
+    if (!WRITE_ACTIONS.has(action) && !['open-settings', 'switch-tab', 'close-dialog', 'toggle-pause'].includes(action)) return;
 
     if (action === 'close-dialog' && dialog && actionNode === dialog && event.target === dialog) {
       closeDialog();
@@ -678,7 +640,7 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
     }
 
     try {
-      await webPageAssistantSession.dispatch(action, actionNode);
+      await dispatchAction(action, actionNode);
     } catch (error) {
       console.warn(`${SCRIPT_NAME}: action failed.`, error);
       if (isWrite && actionNode.isConnected !== false) {
@@ -711,28 +673,37 @@ import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
     storagePort.registerSettingsMenu('网页助手设置', openSettingsFromMenu);
   }
 
-  async function init() {
-    registerMenu();
-
-    [settings, widgetPosition] = await Promise.all([
-      storagePort.readSettings(),
-      storagePort.readWidgetPosition(),
-    ]);
-    activeMatch = resolveActiveSetting(settings);
-    activeUnlockerMatch = resolveActiveUnlockerSetting(settings);
-    window.addEventListener('resize', () => widgetLayoutRuntime.applyPosition());
-    refreshUnlockerState();
-
-    onReady(() => {
-      if (activeMatch) {
-        restartActiveCountdown();
-      } else {
-        renderWidget();
-      }
-    });
-  }
-
-  initialStateReady = init();
+  webPageAssistantSession = createWebPageAssistantSession({
+    keys: { pageKey: currentPageKey, siteKey: currentSiteKey },
+    storage: storagePort,
+    clock: {
+      now: () => Date.now(),
+      setInterval: (handler, delay) => window.setInterval(handler, delay),
+      clearInterval: (timer) => window.clearInterval(timer),
+    },
+    reload: () => location.reload(),
+    unlocker: unlockerRuntime,
+    async ready() {
+      const [position] = await Promise.all([
+        storagePort.readWidgetPosition(),
+        new Promise((resolve) => onReady(resolve)),
+      ]);
+      widgetPosition = position;
+    },
+    onChange(state, { kind, area }) {
+      if (state.lifecycle !== 'ready') return;
+      if (kind === 'lifecycle' || area === 'refresh') renderWidget();
+      updatePauseButton();
+      updateCountdownText();
+      updateWidgetStatusText();
+    },
+  });
+  registerMenu();
+  window.addEventListener('resize', () => widgetLayoutRuntime.applyPosition());
+  window.addEventListener('pagehide', (event) => {
+    if (!event.persisted) webPageAssistantSession.dispose();
+  });
+  initialStateReady = webPageAssistantSession.start();
   initialStateReady.catch((error) => {
     console.warn(`${SCRIPT_NAME}: failed to initialize.`, error);
   });
