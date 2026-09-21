@@ -13,15 +13,16 @@ async function until(predicate) {
   assert.ok(predicate(), 'expected entrypoint state was not reached');
 }
 
-test('bundled entry preserves sync form focus and unsubmitted input during remote archive notifications', { skip: domSkip }, async () => {
+function createEntrypointHarness() {
   const window = createDomWindow({ url: 'https://chatgpt.com/codex/cloud/settings/analytics#usage' });
   const values = new Map();
   let changed;
+  let unsubscribed = 0;
   window.structuredClone = structuredClone;
   window.GM_getValue = (key, fallback) => values.get(key) || fallback;
   window.GM_setValue = (key, value) => { values.set(key, value); };
   window.GM_addValueChangeListener = (_key, listener) => { changed = listener; return 1; };
-  window.GM_removeValueChangeListener = () => {};
+  window.GM_removeValueChangeListener = () => { unsubscribed++; };
   window.GM_registerMenuCommand = () => {};
   window.fetch = async (url) => {
     let body = { data: [] };
@@ -34,6 +35,15 @@ test('bundled entry preserves sync form focus and unsubmitted input during remot
     };
     return { ok: true, json: async () => body, text: async () => JSON.stringify(body) };
   };
+  return {
+    window, values,
+    notifyArchive: () => changed(DEFAULT_ARCHIVE_KEY, null, values.get(DEFAULT_ARCHIVE_KEY), true),
+    unsubscribeCount: () => unsubscribed,
+  };
+}
+
+test('bundled entry preserves sync form focus and unsubmitted input during remote archive notifications', { skip: domSkip }, async () => {
+  const { window, values, notifyArchive } = createEntrypointHarness();
   try {
     window.eval(await readFile(new URL('../dist/codex-quota-compass.user.js', import.meta.url), 'utf8'));
     window.document.querySelector('.cqc-button').click();
@@ -43,14 +53,14 @@ test('bundled entry preserves sync form focus and unsubmitted input during remot
     token.focus();
     token.value = 'unsaved-test-input';
     token.dispatchEvent(new window.Event('input', { bubbles: true }));
-    changed(DEFAULT_ARCHIVE_KEY, null, values.get(DEFAULT_ARCHIVE_KEY), true);
+    notifyArchive();
     await tick();
     await tick();
     assert.equal(window.document.activeElement, token);
     assert.equal(window.document.querySelector('[data-field="token"]'), token);
     assert.equal(token.value, 'unsaved-test-input');
     token.blur();
-    changed(DEFAULT_ARCHIVE_KEY, null, values.get(DEFAULT_ARCHIVE_KEY), true);
+    notifyArchive();
     await tick();
     await tick();
     assert.equal(window.document.querySelector('[data-field="token"]').value, 'unsaved-test-input');
@@ -58,6 +68,38 @@ test('bundled entry preserves sync form focus and unsubmitted input during remot
     assert.equal(window.localStorage.getItem('codexQuotaCompassSnapshotArchiveFallback').includes('unsaved-test-input'), false);
   } finally {
     window.dispatchEvent(new window.Event('pagehide'));
+    await window.happyDOM.abort();
+    window.close();
+  }
+});
+
+test('bundled entry resumes calculation after bfcache pagehide/pageshow and disposes on final departure', { skip: domSkip }, async () => {
+  const { window, values, unsubscribeCount } = createEntrypointHarness();
+  function transition(type, persisted) {
+    const event = new window.Event(type);
+    Object.defineProperty(event, 'persisted', { value: persisted });
+    window.dispatchEvent(event);
+  }
+  const snapshots = () => values.get(DEFAULT_ARCHIVE_KEY)?.snapshots.length || 0;
+  try {
+    window.eval(await readFile(new URL('../dist/codex-quota-compass.user.js', import.meta.url), 'utf8'));
+    window.document.querySelector('.cqc-button').click();
+    await until(() => snapshots() === 1 && !window.__codexQuotaCompassRunning);
+    for (let count = 2; count <= 3; count++) {
+      transition('pagehide', true);
+      assert.equal(unsubscribeCount(), 0);
+      transition('pageshow', true);
+      window.document.querySelector('[data-action="refresh"]').click();
+      await until(() => snapshots() === count && !window.__codexQuotaCompassRunning);
+    }
+    transition('pagehide', false);
+    assert.equal(unsubscribeCount(), 1, 'the persisted pagehide must not consume the final cleanup listener');
+    window.document.querySelector('[data-action="refresh"]').click();
+    await tick();
+    await tick();
+    assert.equal(snapshots(), 3);
+  } finally {
+    transition('pagehide', false);
     await window.happyDOM.abort();
     window.close();
   }

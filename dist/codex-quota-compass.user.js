@@ -5230,6 +5230,7 @@ ${root} :focus-visible {
     let unsubscribe = () => {
     };
     let revision = 0;
+    let latestRefresh;
     let localRevision = 0;
     const state = {
       lifecycle: "idle",
@@ -5271,11 +5272,16 @@ ${root} :focus-visible {
       localRevision += 1;
       schedule();
     }
-    async function refresh() {
+    function refresh() {
       const currentRevision = ++revision;
+      latestRefresh = Promise.resolve().then(() => readProjection(currentRevision));
+      return latestRefresh;
+    }
+    async function readProjection(currentRevision) {
       try {
         const view = await archiveStore.readView();
-        if (disposed || currentRevision !== revision) return false;
+        if (disposed) return false;
+        if (currentRevision !== revision) return latestRefresh;
         state.archiveSummary = view.summary;
         state.ledgerCost = view.ledgerCost;
         state.storageBackend = archiveChanges?.getBackendInfo?.() || null;
@@ -5283,10 +5289,10 @@ ${root} :focus-visible {
         notify();
         return true;
       } catch (error) {
-        if (!disposed && currentRevision === revision) {
-          state.errors.projection = errorMessage(error);
-          notify();
-        }
+        if (disposed) return false;
+        if (currentRevision !== revision) return latestRefresh;
+        state.errors.projection = errorMessage(error);
+        notify();
         return false;
       }
     }
@@ -6132,7 +6138,9 @@ ${root} :focus-visible {
     }
     createUi();
     void application.start();
-    window.addEventListener("pagehide", () => application.dispose(), { once: true });
+    window.addEventListener("pagehide", (event) => {
+      if (!event.persisted) application.dispose();
+    });
     if (typeof GM_registerMenuCommand === "function") {
       GM_registerMenuCommand(t("menuRun"), () => {
         runAndRender().catch(() => {

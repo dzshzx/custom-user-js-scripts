@@ -604,7 +604,10 @@ import { createToaster } from '../shared/shared-toast.lib.js';
 
   createUi();
   void application.start();
-  window.addEventListener('pagehide', () => application.dispose(), { once: true });
+  window.addEventListener('pagehide', (event) => {
+    // A bfcache page resumes this same application and does not rerun the entry.
+    if (!event.persisted) application.dispose();
+  });
 
   if (typeof GM_registerMenuCommand === 'function') {
     GM_registerMenuCommand(t('menuRun'), () => {

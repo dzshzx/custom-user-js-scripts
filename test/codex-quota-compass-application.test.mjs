@@ -336,3 +336,60 @@ test('derived-view failure reports the completed persistence phase separately', 
   assert.equal(f.app.getState().errors.persistence, null);
   assert.equal(f.app.getState().errors.projection, 'projection read');
 });
+
+test('startup waits for the newest projection after synchronous GM migration notifications', async () => {
+  for (const failLatestRead of [false, true]) {
+    let gm = null;
+    let listener;
+    let writes = 0;
+    let reads = 0;
+    let syncs = 0;
+    const port = createSnapshotArchiveStoragePort({
+      gmGetValue() {
+        reads++;
+        if (failLatestRead && writes) throw Error('GM read failed');
+        return gm;
+      },
+      gmSetValue(key, value) {
+        const previous = gm;
+        gm = value;
+        writes++;
+        listener(key, previous, value, false);
+      },
+      gmAddValueChangeListener(_key, callback) { listener = callback; return 1; },
+      gmRemoveValueChangeListener() {},
+      localStorage: {
+        getItem() {
+          if (failLatestRead && writes) throw Error('mirror read failed');
+          return JSON.stringify(archive('2026-09-01'));
+        },
+      },
+      mergeArchives: mergeSnapshotArchives,
+      logger: { warn() {} },
+    });
+    const store = createSnapshotArchiveStore({ read: port.read, write: port.write, now });
+    const status = { enabled: true, configured: true };
+    const app = createQuotaApplication({
+      runtime: { run: async () => ({}) }, archiveStore: store, archiveChanges: port,
+      remoteSync: {
+        getStatus: async () => status,
+        syncNow: async () => { syncs++; return { status: 'synced', settings: status }; },
+      },
+    });
+    try {
+      const result = await app.start();
+      assert.equal(result.status, failLatestRead ? 'partial' : 'ok');
+      assert.equal(syncs, failLatestRead ? 0 : 1);
+      assert.equal(writes, 1);
+      assert.equal(Boolean(app.getState().errors.projection), failLatestRead);
+      if (!failLatestRead) {
+        assert.equal(app.getState().ledgerCost.allTime.totalCredits, 10);
+        listener('archive', gm, gm, true);
+        await tick();
+        assert.equal(syncs, 1);
+        assert.equal(writes, 1);
+        assert.ok(reads <= 4, 'migration notifications must converge');
+      }
+    } finally { app.dispose(); }
+  }
+});

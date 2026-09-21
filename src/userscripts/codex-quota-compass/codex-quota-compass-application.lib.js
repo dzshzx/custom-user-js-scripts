@@ -13,6 +13,7 @@ function createQuotaApplication({
   let timer = null;
   let unsubscribe = () => {};
   let revision = 0;
+  let latestRefresh;
   let localRevision = 0;
   const state = {
     lifecycle: 'idle', result: null, calculationError: null,
@@ -40,11 +41,18 @@ function createQuotaApplication({
     localRevision += 1;
     schedule();
   }
-  async function refresh() {
+  function refresh() {
     const currentRevision = ++revision;
+    // Install the promise before reading: storage migration may synchronously
+    // notify subscribers and request a newer projection.
+    latestRefresh = Promise.resolve().then(() => readProjection(currentRevision));
+    return latestRefresh;
+  }
+  async function readProjection(currentRevision) {
     try {
       const view = await archiveStore.readView();
-      if (disposed || currentRevision !== revision) return false;
+      if (disposed) return false;
+      if (currentRevision !== revision) return latestRefresh;
       state.archiveSummary = view.summary;
       state.ledgerCost = view.ledgerCost;
       state.storageBackend = archiveChanges?.getBackendInfo?.() || null;
@@ -52,10 +60,10 @@ function createQuotaApplication({
       notify();
       return true;
     } catch (error) {
-      if (!disposed && currentRevision === revision) {
-        state.errors.projection = errorMessage(error);
-        notify();
-      }
+      if (disposed) return false;
+      if (currentRevision !== revision) return latestRefresh;
+      state.errors.projection = errorMessage(error);
+      notify();
       return false;
     }
   }
