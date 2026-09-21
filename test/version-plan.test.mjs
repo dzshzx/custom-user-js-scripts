@@ -68,10 +68,9 @@ async function releaseToolRepository({ bare = false } = {}) {
   for (const file of ['candidate.sh', 'promote-version-plan.sh', 'version-plan.mjs']) {
     await copyFile(path.join(projectRoot, 'scripts', file), path.join(fixture.root, 'scripts', file));
   }
-  await copyFile(
-    path.join(projectRoot, 'scripts/lib/userscript-metadata.mjs'),
-    path.join(fixture.root, 'scripts/lib/userscript-metadata.mjs'),
-  );
+  for (const file of ['userscript-metadata.mjs', 'userscript-inventory.mjs', 'userscript-sources.mjs']) {
+    await copyFile(path.join(projectRoot, 'scripts/lib', file), path.join(fixture.root, 'scripts/lib', file));
+  }
   await chmod(path.join(fixture.root, 'scripts/candidate.sh'), 0o755);
   await chmod(path.join(fixture.root, 'scripts/promote-version-plan.sh'), 0o755);
   git(fixture.root, 'add', '.');
@@ -393,6 +392,76 @@ test('trusted promote gate rejects missing approval without moving master', asyn
   assert.equal(result.status, 1);
   assert.match(result.stderr, /requires explicit approval/);
   assert.equal(git(fixture.bareRoot, 'rev-parse', 'master'), fixture.baseline);
+});
+
+test('trusted promote reads malicious candidate inventory modules as data only', async () => {
+  const fixture = await releaseToolRepository({ bare: true });
+  await writeFile(fixture.script, metadata('1.3.0'));
+  for (const file of ['userscript-inventory.mjs', 'userscript-sources.mjs']) {
+    await writeFile(path.join(fixture.root, 'scripts/lib', file), "throw new Error('CANDIDATE_CODE_EXECUTED');\n");
+  }
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-m', 'unapproved candidate with untrusted tools');
+  const candidate = git(fixture.root, 'rev-parse', 'HEAD');
+  // Mirrors checkout(master) in promote.yml while candidate remains a Git object.
+  git(fixture.root, 'checkout', fixture.baseline, '--', 'scripts');
+  const wrapper = await gitWrapper();
+  const result = spawnSync('bash', ['scripts/promote-version-plan.sh', candidate], {
+    cwd: fixture.root, encoding: 'utf8', env: wrapper.env,
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /requires explicit approval/);
+  assert.doesNotMatch(result.stderr, /CANDIDATE_CODE_EXECUTED/);
+  assert.equal(git(fixture.bareRoot, 'rev-parse', 'master'), fixture.baseline);
+});
+
+test('five-identity fixed plan survives single-file to entry migration with the original digest', async (t) => {
+  const fixture = await fixtureRepository();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  await rm(path.join(fixture.root, 'src'), { recursive: true });
+  git(fixture.root, 'remote', 'set-url', 'origin', 'https://github.com/dzshzx/custom-user-js-scripts.git');
+  const entries = [
+    ['codex-quota-compass', 'Codex Quota Compass', '0.5.3'],
+    ['example', 'Example Custom User Script', '0.1.2'],
+    ['feishu', 'Feishu Preview Image Export', '0.1.3'],
+    ['javdb-recommend', 'JavDB Recommend Archive', '0.0.7'],
+    ['web-page-assistant', 'Web Page Assistant', '0.3.2'],
+  ];
+  for (const [id, name, version] of entries) {
+    const dir = path.join(fixture.root, 'src/userscripts', id);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, `${id}.user.js`), metadata(version, name)
+      .replace('https://example.test/userscripts', 'https://github.com/dzshzx/custom-user-js-scripts'));
+  }
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-m', 'fixed five-identity baseline');
+  git(fixture.root, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
+  const before = JSON.parse(runPlan(fixture.root, 'plan', '--json').stdout);
+  const stem = path.join(fixture.root, 'src/userscripts/javdb-recommend/javdb-recommend');
+  const content = await readFile(`${stem}.user.js`, 'utf8');
+  await writeFile(`${stem}.entry.js`, content);
+  await mkdir(path.join(fixture.root, 'dist'));
+  await writeFile(path.join(fixture.root, 'dist/javdb-recommend.user.js'), content);
+  const result = runPlan(fixture.root, 'plan', '--json');
+  assert.equal(result.status, 0, result.stderr);
+  const after = JSON.parse(result.stdout);
+  assert.deepEqual(after, before);
+  assert.deepEqual(after.plan.versions, entries.map(([, name, version]) => ({
+    baseline: version, namespace: `https://github.com/dzshzx/custom-user-js-scripts :: ${name}`, target: version,
+  })));
+  assert.ok(after.transitions.every(({ kind }) => kind === 'unchanged'));
+  assert.equal(after.summary, 'sha256:64b65c73f4769632a94d4cb818ced8b51142e5c41ecda631d0f645226d9b72a1');
+});
+
+test('version plan requires a real entry even when lint can accept a historical URL pair', async () => {
+  const fixture = await fixtureRepository();
+  const content = metadata('1.2.3').replace('// ==/UserScript==', '// @downloadURL https://example.test/dist/fixture.user.js\n// ==/UserScript==');
+  await writeFile(fixture.script, content);
+  await mkdir(path.join(fixture.root, 'dist'));
+  await writeFile(path.join(fixture.root, 'dist/fixture.user.js'), content);
+  const result = runPlan(fixture.root, 'plan');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /without a source entry owner/);
 });
 
 test('trusted promote lease rejects a still-fast-forwardable baseline race', async () => {

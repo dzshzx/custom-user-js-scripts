@@ -1,7 +1,9 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import esbuild from 'esbuild';
+import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
+import { worktreeSource } from './lib/userscript-sources.mjs';
 
 import {
   REQUIRED_METADATA_FIELDS,
@@ -16,20 +18,15 @@ const GENERATED_NOTE = (scriptId) => [
 ].join('\n');
 
 async function discoverEntries(rootDir) {
-  const userscriptsDir = path.join(rootDir, 'src', 'userscripts');
-  const entries = [];
-  for (const dirent of await readdir(userscriptsDir, { withFileTypes: true })) {
-    if (!dirent.isDirectory()) continue;
-    const scriptId = dirent.name;
-    const entryPath = path.join(userscriptsDir, scriptId, `${scriptId}.entry.js`);
-    try {
-      await readFile(entryPath, 'utf8');
-      entries.push({ scriptId, entryPath, scriptDir: path.join(userscriptsDir, scriptId) });
-    } catch {
-      // No entry module: plain single-file userscript directory, nothing to build.
-    }
-  }
-  return entries;
+  const inventory = await readUserscriptInventory(await worktreeSource(rootDir));
+  const fatal = inventory.issues.filter((issue) =>
+    (issue.type === 'read-failed' && issue.file.endsWith('.entry.js')) ||
+    ['ownership-conflict', 'invalid-entry-path'].includes(issue.type));
+  if (fatal.length) throw new Error(fatal.map((issue) => issue.message).join('\n'));
+  return inventory.records.filter((record) => record.entry).map(({ scriptId, entry }) => ({
+    scriptId, entryPath: path.join(rootDir, entry.path),
+    scriptDir: path.dirname(path.join(rootDir, entry.path)), entrySource: entry.content,
+  }));
 }
 
 function validateEntryMetadata({ scriptId, entryPath, entrySource }) {
@@ -85,8 +82,7 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
   const targets = await discoverEntries(rootDir);
   const results = [];
 
-  for (const { scriptId, entryPath, scriptDir } of targets) {
-    const entrySource = await readFile(entryPath, 'utf8');
+  for (const { scriptId, entryPath, scriptDir, entrySource } of targets) {
     const { metadataText } = validateEntryMetadata({ scriptId, entryPath, entrySource });
 
     const buildResult = await esbuild.build({

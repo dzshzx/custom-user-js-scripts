@@ -2,16 +2,13 @@
 
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import {
-  firstMetadataValue,
-  installIdentity,
-  parseMetadataBlock,
-} from './lib/userscript-metadata.mjs';
+import { firstMetadataValue } from './lib/userscript-metadata.mjs';
+import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
+import { worktreeSource, refSource } from './lib/userscript-sources.mjs';
 
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const APPROVAL_PATTERN = /^sha256:[0-9a-f]{64}$/;
@@ -103,111 +100,29 @@ function transitionKind(baseline, target, namespace, issues) {
   return 'confirmation-required';
 }
 
-async function walkFiles(root, dir = root) {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const absolute = path.join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...await walkFiles(root, absolute));
-    else if (entry.isFile()) files.push(path.relative(root, absolute).split(path.sep).join('/'));
-  }
-  return files;
-}
-
-async function worktreeSource(root) {
-  const userscriptRoot = path.join(root, 'src/userscripts');
-  const srcFiles = await walkFiles(root, userscriptRoot);
-  let distFiles = [];
-  try {
-    distFiles = await walkFiles(root, path.join(root, 'dist'));
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
-  const files = [...srcFiles, ...distFiles]
-    .filter((file) => file.endsWith('.entry.js') || file.endsWith('.user.js'));
-  return {
-    files,
-    read: (file) => readFile(path.join(root, file), 'utf8'),
-  };
-}
-
-function refSource(root, ref) {
-  let output;
-  try {
-    output = git(['ls-tree', '-r', '--name-only', ref, '--', 'src/userscripts', 'dist'], { cwd: root });
-  } catch {
-    fail(`cannot read version baseline or target ref ${ref}`);
-  }
-  const files = output.split('\n')
-    .filter(Boolean)
-    .filter((file) => file.endsWith('.entry.js') || file.endsWith('.user.js'));
-  return {
-    files,
-    read(file) {
-      try {
-        return git(['show', `${ref}:${file}`], { cwd: root });
-      } catch {
-        fail(`cannot read ${file} from ${ref}`);
-      }
-    },
-  };
-}
-
 async function readVersions(source, label) {
-  const entryOwners = new Set(source.files
-    .filter((file) => file.endsWith('.entry.js'))
-    .map((file) => file.slice(0, -'.entry.js'.length)));
-  const ownerFiles = source.files.filter((file) => file.startsWith('src/userscripts/')).filter((file) => {
-    if (file.endsWith('.entry.js')) return true;
-    return !entryOwners.has(file.slice(0, -'.user.js'.length));
-  });
+  const inventory = await readUserscriptInventory(source);
   const versions = new Map();
-  const identitiesByFile = new Map();
-  const issues = [];
-  for (const file of ownerFiles.sort()) {
-    const metadata = parseMetadataBlock(await source.read(file));
-    if (!metadata) {
-      issues.push(`${label} ${file} has no userscript metadata block`);
+  // Release requires complete owners and identity/version parity. Byte equality
+  // remains the build/lint gate; URL policy does not alter the approval schema.
+  const releaseIssues = new Set([
+    'read-failed', 'missing-file', 'invalid-metadata', 'missing-companion',
+    'metadata-mismatch', 'ownership-conflict', 'orphan-dist', 'missing-entry', 'invalid-entry-path',
+  ]);
+  const issues = inventory.issues.filter((issue) => releaseIssues.has(issue.type))
+    .map((issue) => `${label} ${issue.file} ${issue.type === 'missing-entry'
+      ? 'is an orphan installable without a source entry owner' : issue.message}`);
+  for (const { metadataOwner: owner, identity } of inventory.records) {
+    if (!owner.metadata) continue;
+    if (!identity) {
+      issues.push(`${label} ${owner.path} has no complete @namespace/@name install identity`);
       continue;
     }
-    const namespace = installIdentity(metadata);
-    const version = firstMetadataValue(metadata, '@version');
-    if (!namespace) {
-      issues.push(`${label} ${file} has no complete @namespace/@name install identity`);
+    if (versions.has(identity)) {
+      issues.push(`${label} has duplicate install identity ${identity}`);
       continue;
     }
-    if (versions.has(namespace)) {
-      issues.push(`${label} has duplicate install identity ${namespace}`);
-      continue;
-    }
-    versions.set(namespace, { file, version });
-    identitiesByFile.set(file, namespace);
-  }
-  const expectedDistFiles = new Set();
-  for (const entryFile of source.files.filter((file) => file.endsWith('.entry.js')).sort()) {
-    const stem = entryFile.slice(0, -'.entry.js'.length);
-    const entry = [...versions.values()].find(({ file }) => file === entryFile);
-    if (!entry) continue;
-    const companionFiles = [`${stem}.user.js`, `dist/${path.basename(stem)}.user.js`];
-    expectedDistFiles.add(companionFiles[1]);
-    for (const companionFile of companionFiles) {
-      if (!source.files.includes(companionFile)) {
-        issues.push(`${label} ${entryFile} is missing installable companion ${companionFile}`);
-        continue;
-      }
-      const metadata = parseMetadataBlock(await source.read(companionFile));
-      const identity = metadata && installIdentity(metadata);
-      const version = metadata && firstMetadataValue(metadata, '@version');
-      const ownerIdentity = identitiesByFile.get(entryFile);
-      if (!metadata || identity !== ownerIdentity || version !== entry.version) {
-        issues.push(`${label} ${companionFile} does not match ${entryFile} install identity and @version`);
-      }
-    }
-  }
-  for (const distFile of source.files.filter((file) => file.startsWith('dist/') && file.endsWith('.user.js'))) {
-    if (!expectedDistFiles.has(distFile)) {
-      issues.push(`${label} ${distFile} is an orphan installable without a source entry owner`);
-    }
+    versions.set(identity, { file: owner.path, version: firstMetadataValue(owner.metadata, '@version') });
   }
   return { versions, issues };
 }

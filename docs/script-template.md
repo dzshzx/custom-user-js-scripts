@@ -20,6 +20,10 @@
 - 保持原有存储 key，除非任务明确要求迁移用户数据。
 - 不要在同一次迁移里同时改 `@name`、`@namespace` 和文件路径，除非已经测试目标脚本管理器不会安装出重复脚本。
 
+安装文件归属由 `scripts/lib/userscript-inventory.mjs` 集中读取：Entry 优先拥有同 stem 的 Bridge 与对应 Dist，旧 Bridge 的 metadata 不会产生额外安装身份；无 Entry 时可由下载 URL 推断历史 Bridge/Dist 配对。工作区与 Git ref adapter 只读取文本，按规范化路径排序，每个文件读取一次，返回归属、各份 metadata、内容和稳定类型的结构诊断。Shared Lib 不进入清单；Example 模板属于完整 Version Plan，目前共五个身份。
+
+各阶段保留自己的政策：Build 允许输出尚未生成或过时，仍验证 Entry metadata、版本常量和 import 图，Entry 的真实 I/O 错误必须失败；lint 检查安装 URL、身份唯一性及 Bridge/Dist 字节相等，兼容无 Entry 的历史配对；Version Plan 要求真实 Entry、完整配对和身份／版本一致，保持现有 schema、canonical JSON、摘要和审批语义。Promote 从可信 master 加载 Version Plan、Inventory、source adapter 与 metadata parser；候选始终只作 Git 对象文本读取，不动态加载候选 module。
+
 改写已有脚本时，建议额外记录：
 
 - 原脚本来源链接。

@@ -156,3 +156,20 @@ test('buildAll returns an empty list when no entry modules exist', async (t) => 
   const results = await buildAll({ rootDir, distDir: path.join(rootDir, 'dist') });
   assert.deepEqual(results, []);
 });
+
+test('buildAll replaces a stale single-file bridge without creating another identity', async (t) => {
+  const { rootDir, scriptDir, distDir } = await createWorkspace();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  await writeFile(path.join(scriptDir, 'demo-script.user.js'), 'old single-file installation');
+  assert.equal((await buildAll({ rootDir, distDir })).length, 1);
+  assert.equal(await readFile(path.join(scriptDir, 'demo-script.user.js'), 'utf8'), await readFile(path.join(distDir, 'demo-script.user.js'), 'utf8'));
+});
+
+test('buildAll surfaces entry I/O errors instead of treating them as no entry', async (t) => {
+  const { rootDir, scriptDir, distDir } = await createWorkspace();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const entry = path.join(scriptDir, 'demo-script.entry.js');
+  await rm(entry);
+  await mkdir(entry);
+  await assert.rejects(buildAll({ rootDir, distDir }), /cannot read .*entry\.js.*EISDIR/);
+});
