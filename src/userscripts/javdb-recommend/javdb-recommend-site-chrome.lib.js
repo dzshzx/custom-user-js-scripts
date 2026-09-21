@@ -29,6 +29,7 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
   const timer = clock || defaultClock(window);
   const ownedLinks = [];
   const ownedListeners = [];
+  const ownedEntries = [];
   let ownedNavigation = null;
   let probe = null;
   let startPromise = null;
@@ -75,6 +76,7 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
   function cleanupResources() {
     ownedListeners.splice(0).forEach(remove => remove());
     ownedLinks.splice(0).forEach(link => link.remove());
+    ownedEntries.splice(0).forEach(entry => entry.remove());
     if (ownedNavigation) ownedNavigation.remove();
     ownedNavigation = null;
     if (probe) probe.remove();
@@ -179,7 +181,8 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
       navigation.dataset.jdbRaSiteChrome = 'navigation';
       absolutizeNavigation(navigation, homepageBase);
       const root = document.querySelector('.jdb-ra');
-      document.body.insertBefore(navigation, root || document.body.firstChild);
+      const page = root && root.closest('[data-jdb-ra-page]') || root;
+      document.body.insertBefore(navigation, page || document.body.firstChild);
       ownedNavigation = navigation;
     }
     navigation.querySelectorAll('[data-target]').forEach(button => {
@@ -200,6 +203,7 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
       entry.title = '浏览佳片推荐全部历史期数';
       entry.textContent = '佳片推荐';
       start.appendChild(entry);
+      ownedEntries.push(entry);
     }
   }
 

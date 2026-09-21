@@ -25,7 +25,7 @@ var BASE = location.origin;
     document.title = '佳片推荐 · 历史期数 - JavDB';
     // 只清理可识别的官网 404 内容与本脚本旧根；保留其他脚本先挂载的节点和 body 状态。
     document.body.classList.remove('rails-default-error-page');
-    document.querySelectorAll('body > .rails-default-error-page, body > .dialog, body > .jdb-ra').forEach(function (node) {
+    document.querySelectorAll('body > .rails-default-error-page, body > .dialog, body > .jdb-ra, body > [data-jdb-ra-page]').forEach(function (node) {
       node.remove();
     });
 
@@ -116,7 +116,7 @@ var BASE = location.origin;
 
     var rootHost = document.createElement('div');
     rootHost.innerHTML =
-      '<main class="jdb-ra">' +
+      '<section data-jdb-ra-page="1"><div class="jdb-ra">' +
       '<header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span>' +
       '<a class="home" href="/">' + iconSvg('arrow-left', 14) + ' 返回首页</a></header>' +
       '<div class="jdb-ra-bar">' +
@@ -141,7 +141,7 @@ var BASE = location.origin;
       '<div class="jdb-ra-results" id="jdb-ra-results" hidden></div>' +
       '<div class="jdb-ra-stream" id="jdb-ra-stream"></div>' +
       '<button type="button" class="jdb-ra-sentinel" id="jdb-ra-sentinel" disabled>加载期数列表中…</button>' +
-      '</main>';
+      '</div></section>';
     document.body.appendChild(rootHost.firstElementChild);
 
     var $ = function (id) { return document.getElementById(id); };
@@ -232,6 +232,7 @@ var BASE = location.origin;
 
     function syncArchiveGridLayout() {
       gridSyncScheduled = false;
+      if (disposed) return;
       var source = streamEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
       if (!source) source = resultsEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
       if (source) {
@@ -281,7 +282,7 @@ var BASE = location.origin;
     }
 
     function scheduleArchiveGridSync() {
-      if (gridSyncScheduled) return;
+      if (disposed || gridSyncScheduled) return;
       gridSyncScheduled = true;
       Promise.resolve().then(syncArchiveGridLayout);
     }
@@ -304,7 +305,7 @@ var BASE = location.origin;
     function loadPeriods() {
       if (disposed) return;
       setStatus('加载期数列表中…');
-      data.loadCatalog({ onProgress: count => setStatus('加载期数列表… 已获取 ' + count + ' 期') })
+      data.loadCatalog({ onProgress: count => { if (!disposed) setStatus('加载期数列表… 已获取 ' + count + ' 期'); } })
         .then(result => finish(result.periods, result.degraded ? '期数目录更新失败，使用本地缓存' : '期数目录：' + result.source))
         .catch(error => { if (!disposed) setStatus('期数列表加载失败：' + error.message + '（可点击“刷新期数”重试）'); });
     }
@@ -655,7 +656,8 @@ var BASE = location.origin;
         resultSections = [];
         siteChrome.dispose();
         styleEl.remove();
-        document.querySelector('.jdb-ra')?.remove();
+        var archiveRoot = document.querySelector('.jdb-ra');
+        (archiveRoot && archiveRoot.closest('[data-jdb-ra-page]') || archiveRoot)?.remove();
       }
     };
   }

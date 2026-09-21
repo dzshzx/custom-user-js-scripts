@@ -102,12 +102,15 @@ test('real Chromium validates native CSS, fallback, mobile layout, and observabl
         '.javdb-card-grid .jav-card-image{object-fit:cover!important;object-position:right center!important}';
       document.head.appendChild(style);
       const first = document.querySelector('.movie-list');
+      document.querySelector('.jdb-ra').style.setProperty('width', '82%', 'important');
+      document.querySelector('.jdb-ra').style.setProperty('max-width', 'none', 'important');
       first.classList.add('jav-card-grid', 'javdb-card-grid');
       first.dataset.laosijiGrid = '1';
       first.querySelector('.item').dataset.laosijiGridCard = '1';
       first.querySelector('img').classList.add('jav-card-image');
     });
     await page.waitForFunction(() => document.querySelectorAll('.movie-list')[1].style.getPropertyValue('--jav-card-columns') === '3');
+    assert.equal(await page.locator('.jdb-ra').evaluate(node => node.style.width), '82%');
     assert.equal(await page.locator('.movie-list').nth(1).locator('img').evaluate(node => node.style.objectFit), 'cover');
 
     await page.evaluate(() => {

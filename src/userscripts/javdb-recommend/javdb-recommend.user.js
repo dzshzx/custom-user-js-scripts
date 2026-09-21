@@ -696,6 +696,7 @@
     const timer = clock || defaultClock(window2);
     const ownedLinks = [];
     const ownedListeners = [];
+    const ownedEntries = [];
     let ownedNavigation = null;
     let probe = null;
     let startPromise = null;
@@ -748,6 +749,7 @@
     function cleanupResources() {
       ownedListeners.splice(0).forEach((remove) => remove());
       ownedLinks.splice(0).forEach((link) => link.remove());
+      ownedEntries.splice(0).forEach((entry) => entry.remove());
       if (ownedNavigation) ownedNavigation.remove();
       ownedNavigation = null;
       if (probe) probe.remove();
@@ -855,7 +857,8 @@
         navigation.dataset.jdbRaSiteChrome = "navigation";
         absolutizeNavigation(navigation, homepageBase);
         const root = document2.querySelector(".jdb-ra");
-        document2.body.insertBefore(navigation, root || document2.body.firstChild);
+        const page = root && root.closest("[data-jdb-ra-page]") || root;
+        document2.body.insertBefore(navigation, page || document2.body.firstChild);
         ownedNavigation = navigation;
       }
       navigation.querySelectorAll("[data-target]").forEach((button) => {
@@ -876,6 +879,7 @@
         entry.title = "浏览佳片推荐全部历史期数";
         entry.textContent = "佳片推荐";
         start.appendChild(entry);
+        ownedEntries.push(entry);
       }
     }
     async function run() {
@@ -962,7 +966,7 @@
     var disposed = false;
     document.title = "佳片推荐 · 历史期数 - JavDB";
     document.body.classList.remove("rails-default-error-page");
-    document.querySelectorAll("body > .rails-default-error-page, body > .dialog, body > .jdb-ra").forEach(function(node) {
+    document.querySelectorAll("body > .rails-default-error-page, body > .dialog, body > .jdb-ra, body > [data-jdb-ra-page]").forEach(function(node) {
       node.remove();
     });
     var CSS = [
@@ -1045,7 +1049,7 @@
     styleEl.textContent = CSS;
     document.head.appendChild(styleEl);
     var rootHost = document.createElement("div");
-    rootHost.innerHTML = '<main class="jdb-ra"><header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span><a class="home" href="/">' + iconSvg("arrow-left", 14) + ' 返回首页</a></header><div class="jdb-ra-bar"><div class="jdb-ra-bar-row jdb-ra-bar-nav"><div class="select is-small"><select id="jdb-ra-select" aria-label="选择期数"></select></div><button type="button" class="button is-small" id="jdb-ra-prev">' + iconSvg("chevron-left", 14) + ' 上一期</button><button type="button" class="button is-small" id="jdb-ra-next">下一期 ' + iconSvg("chevron-right", 14) + '</button><input class="input is-small jdb-ra-jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转"></div><div class="jdb-ra-bar-row jdb-ra-bar-tools"><div class="jdb-ra-scope" role="radiogroup" aria-label="搜索范围"><label><input type="radio" name="jdb-ra-scope" value="loaded" checked> 已加载</label><label><input type="radio" name="jdb-ra-scope" value="all"> 全部期数</label></div><input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="搜索已加载内容" aria-label="搜索关键词"><button type="button" class="button is-small" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button><button type="button" class="button is-small" id="jdb-ra-refresh" title="重新检查期数目录">刷新期数</button><button type="button" class="button is-small" id="jdb-ra-clear" title="清除本脚本的本地缓存">清缓存</button></div></div><div class="jdb-ra-status" id="jdb-ra-status" role="status">加载期数列表中…</div><div class="jdb-ra-results" id="jdb-ra-results" hidden></div><div class="jdb-ra-stream" id="jdb-ra-stream"></div><button type="button" class="jdb-ra-sentinel" id="jdb-ra-sentinel" disabled>加载期数列表中…</button></main>';
+    rootHost.innerHTML = '<section data-jdb-ra-page="1"><div class="jdb-ra"><header class="jdb-ra-hd"><h1>佳片推荐 · 历史期数</h1><span class="sub">每周一/四更新 · 滚动加载更多期数</span><a class="home" href="/">' + iconSvg("arrow-left", 14) + ' 返回首页</a></header><div class="jdb-ra-bar"><div class="jdb-ra-bar-row jdb-ra-bar-nav"><div class="select is-small"><select id="jdb-ra-select" aria-label="选择期数"></select></div><button type="button" class="button is-small" id="jdb-ra-prev">' + iconSvg("chevron-left", 14) + ' 上一期</button><button type="button" class="button is-small" id="jdb-ra-next">下一期 ' + iconSvg("chevron-right", 14) + '</button><input class="input is-small jdb-ra-jump" id="jdb-ra-jump" type="number" min="1" placeholder="期号" aria-label="输入期号后回车跳转"></div><div class="jdb-ra-bar-row jdb-ra-bar-tools"><div class="jdb-ra-scope" role="radiogroup" aria-label="搜索范围"><label><input type="radio" name="jdb-ra-scope" value="loaded" checked> 已加载</label><label><input type="radio" name="jdb-ra-scope" value="all"> 全部期数</label></div><input class="input is-small jdb-ra-search" id="jdb-ra-search" type="search" placeholder="搜索已加载内容" aria-label="搜索关键词"><button type="button" class="button is-small" id="jdb-ra-gsearch" title="在所有期数中搜索">全期搜索</button><button type="button" class="button is-small" id="jdb-ra-refresh" title="重新检查期数目录">刷新期数</button><button type="button" class="button is-small" id="jdb-ra-clear" title="清除本脚本的本地缓存">清缓存</button></div></div><div class="jdb-ra-status" id="jdb-ra-status" role="status">加载期数列表中…</div><div class="jdb-ra-results" id="jdb-ra-results" hidden></div><div class="jdb-ra-stream" id="jdb-ra-stream"></div><button type="button" class="jdb-ra-sentinel" id="jdb-ra-sentinel" disabled>加载期数列表中…</button></div></section>';
     document.body.appendChild(rootHost.firstElementChild);
     var $ = function(id) {
       return document.getElementById(id);
@@ -1124,6 +1128,7 @@
     }
     function syncArchiveGridLayout() {
       gridSyncScheduled = false;
+      if (disposed) return;
       var source = streamEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
       if (!source) source = resultsEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
       if (source) {
@@ -1172,7 +1177,7 @@
       });
     }
     function scheduleArchiveGridSync() {
-      if (gridSyncScheduled) return;
+      if (disposed || gridSyncScheduled) return;
       gridSyncScheduled = true;
       Promise.resolve().then(syncArchiveGridLayout);
     }
@@ -1195,7 +1200,9 @@
     function loadPeriods() {
       if (disposed) return;
       setStatus("加载期数列表中…");
-      data.loadCatalog({ onProgress: (count) => setStatus("加载期数列表… 已获取 " + count + " 期") }).then((result) => finish(result.periods, result.degraded ? "期数目录更新失败，使用本地缓存" : "期数目录：" + result.source)).catch((error) => {
+      data.loadCatalog({ onProgress: (count) => {
+        if (!disposed) setStatus("加载期数列表… 已获取 " + count + " 期");
+      } }).then((result) => finish(result.periods, result.degraded ? "期数目录更新失败，使用本地缓存" : "期数目录：" + result.source)).catch((error) => {
         if (!disposed) setStatus("期数列表加载失败：" + error.message + "（可点击“刷新期数”重试）");
       });
     }
@@ -1552,7 +1559,8 @@
         resultSections = [];
         siteChrome.dispose();
         styleEl.remove();
-        document.querySelector(".jdb-ra")?.remove();
+        var archiveRoot = document.querySelector(".jdb-ra");
+        (archiveRoot && archiveRoot.closest("[data-jdb-ra-page]") || archiveRoot)?.remove();
       }
     };
   }
