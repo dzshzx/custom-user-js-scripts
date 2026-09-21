@@ -23,8 +23,9 @@ node scripts/browser-tools/login-qr.mjs --refresh --tenant "小米合作伙伴"
 - 强制这次浏览器会话走直连，不使用 shell 里的代理环境变量。
 - 只使用 Playwright 自带的 `chromium`，不启动系统 Chrome。
 - 二维码、浏览器 profile、storage state 都写到 `~/.local/share/codex-browser/feishu-login/`。
-- 生成二维码后继续等待完整登录跳转；只有真正落到 `mi.feishu.cn` 或 `mi-p.feishu.cn` 页面，且二维码/扫码提示已经消失后，才会写入 storage state。
-- 登录超时不会写入新的 storage state。
+- 生成二维码后开始最长 10 分钟的自动等待，每 3 秒读取一次页面；只有同一个 document 的 URL、正文和二维码状态都读取成功，真正落到 `mi.feishu.cn` 或 `mi-p.feishu.cn`，且二维码/扫码提示已经消失后，才允许保存。
+- 导航、同 URL reload 或下一次观测都会使旧观测失效。保存前和临时 state 导出后都会重新核对观测；失效时继续在原截止时间内等待，不会重置 10 分钟期限。
+- 登录超时、页面读取失败或取消都不会替换已有 storage state。新 state 先以 `0600` 权限写入目标同目录的独占临时文件，复核完成后再用 rename 提交。
 
 非飞书网站示例：
 
@@ -49,7 +50,7 @@ node scripts/browser-tools/login-qr.mjs \
   --manual-confirm
 ```
 
-这会在二维码导出后等待你扫码并按 Enter，然后才保存 storage state。
+这会在二维码导出后等待你扫码并明确按 Enter，然后才保存 storage state。EOF、非交互终端和取消都不会保存；同时传 `--no-wait` 时，以只导出二维码为准。
 
 `agent-browser` 复用登录态：
 
@@ -58,6 +59,10 @@ agent-browser --state ~/.local/share/codex-browser/example-login/storage-state.j
 ```
 
 `storage-state.json` 含有 cookies 和本地存储，按密钥文件处理，不提交到仓库、不贴到聊天或 issue。
+
+浏览器 profile 与显式 storage state 是两种独立产物。持久化 Chromium 在运行和关闭时都可能更新 profile；storage state 则只在上述 rename 成功后视为已提交，两者不构成事务。二维码会在等待开始前写好，后续超时不会删除它。
+
+`SIGINT` 和 `SIGTERM` 会分别在资源清理结算后以 130 和 143 退出。若信号发生在 rename 已经开始之后，工具会等待 rename 结果，并准确报告 state 是否已经提交；浏览器关闭失败不会把已提交结果改成未保存，也不会覆盖原来的超时原因。
 
 常用参数：
 

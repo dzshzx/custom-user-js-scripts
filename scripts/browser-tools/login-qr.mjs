@@ -1,29 +1,22 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import os from 'node:os'
-import path from 'node:path'
 import process from 'node:process'
-import { createInterface } from 'node:readline/promises'
+import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 
-import { resolvePlaywrightImport } from './playwright-loader.mjs'
+import { runLoginCapture } from './login-qr-flow.mjs'
+import {
+  DEFAULT_ROOT_DIR,
+  compileLoginRules,
+  matchLoginState,
+  parseArgs,
+  parseInteger,
+  sanitizeUrl,
+} from './login-qr-options.mjs'
+import { createPlaywrightLoginBrowser } from './login-qr-playwright.mjs'
 
-const DEFAULT_TARGET_URL = 'https://mi.feishu.cn/file/UxkDbtSZqo9Ya4xCGNZcWOmWnlf'
-const DEFAULT_ROOT_DIR = path.join(os.homedir(), '.local', 'share', 'codex-browser', 'feishu-login')
-const DEFAULT_PROFILE_DIR = path.join(DEFAULT_ROOT_DIR, 'playwright-profile')
-const DEFAULT_QR_PATH = path.join(DEFAULT_ROOT_DIR, 'qr.png')
-const DEFAULT_STATE_PATH = path.join(DEFAULT_ROOT_DIR, 'storage-state.json')
-const DEFAULT_QR_SELECTOR = 'img[src*="/qr_img?qr="]'
-const DEFAULT_TENANT_SWITCH_TEXT = '切换租户'
-const DEFAULT_SUCCESS_HOSTS = ['mi.feishu.cn', 'mi-p.feishu.cn']
-const DEFAULT_PENDING_URL_PATTERNS = ['cas\\.mioffice\\.cn/login', 'accounts\\.feishu\\.cn']
-const DEFAULT_PENDING_TEXTS = ['Login by scanning with Mier App', '使用小米人App扫码登录']
-const DEFAULT_WAIT_AFTER_NAVIGATION_MS = 12_000
-const DEFAULT_LOGIN_TIMEOUT_MS = 10 * 60 * 1000
-const DEFAULT_NAVIGATION_TIMEOUT_MS = 45_000
-const DIRECT_PROXY_ARGS = ['--proxy-server=direct://', '--proxy-bypass-list=*']
+export { compileLoginRules, matchLoginState, parseArgs, parseInteger, sanitizeUrl }
 
-function printHelp() {
-  console.log(`Usage:
+function printHelp(output = process.stdout) {
+  output.write(`Usage:
   node scripts/browser-tools/login-qr.mjs [options]
 
 Options:
@@ -57,425 +50,128 @@ Notes:
   - Playwright uses its bundled Chromium only; this script does not launch system Chrome.
   - QR image, browser profile, and storage state default to ${DEFAULT_ROOT_DIR}
   - The saved storage state can be reused with agent-browser: agent-browser --state <state-path> open <url>
-  - The script never prints the QR token or cookies.`)
+  - The script never prints the QR token, page body, cookies, or storage state contents.\n`)
 }
 
-export function parseInteger(value, flagName) {
-  const parsed = Number.parseInt(value, 10)
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`${flagName} expects a non-negative integer, got: ${value}`)
-  }
-  return parsed
+export async function waitForManualConfirmation({
+  input = process.stdin,
+  output = process.stdout,
+  signal,
+} = {}) {
+  if (!input.isTTY) return { confirmed: false, reason: 'NOT_TTY' }
+  const readline = createInterface({ input, output })
+  output.write('Scan and finish login in the browser, then press Enter to save storage state.')
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      signal?.removeEventListener('abort', onAbort)
+      resolve(result)
+      readline.close()
+    }
+    const onAbort = () => finish({ confirmed: false, reason: 'CANCELLED' })
+    readline.once('line', () => finish({ confirmed: true }))
+    readline.once('close', () => finish({ confirmed: false, reason: 'EOF' }))
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) onAbort()
+  })
 }
 
-function requireValue(flagName, value) {
-  if (!value) throw new Error(`${flagName} requires a value`)
-  return value
+function writeLine(stream, line) {
+  stream.write(`${line}\n`)
 }
 
-function addValue(values, value) {
-  values.push(value)
-}
-
-export function parseArgs(argv) {
-  const options = {
-    url: DEFAULT_TARGET_URL,
-    profileDir: DEFAULT_PROFILE_DIR,
-    qrPath: DEFAULT_QR_PATH,
-    statePath: DEFAULT_STATE_PATH,
-    qrSelector: DEFAULT_QR_SELECTOR,
-    tenant: '',
-    tenantSwitchText: DEFAULT_TENANT_SWITCH_TEXT,
-    successHosts: [...DEFAULT_SUCCESS_HOSTS],
-    successUrlPatterns: [],
-    successTexts: [],
-    pendingUrlPatterns: [...DEFAULT_PENDING_URL_PATTERNS],
-    pendingTexts: [...DEFAULT_PENDING_TEXTS],
-    waitAfterNavigationMs: DEFAULT_WAIT_AFTER_NAVIGATION_MS,
-    loginTimeoutMs: DEFAULT_LOGIN_TIMEOUT_MS,
-    navigationTimeoutMs: DEFAULT_NAVIGATION_TIMEOUT_MS,
-    headless: true,
-    waitForLogin: true,
-    manualConfirm: false,
-    refresh: false,
-    useDirectProxy: true,
-    debug: false,
-  }
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]
-    const next = argv[index + 1]
-
-    switch (arg) {
-      case '--url':
-        options.url = requireValue('--url', next)
-        index += 1
+function eventLogger(options, output) {
+  return async (event) => {
+    switch (event.type) {
+      case 'qr-ready':
+        writeLine(output, `Saved QR image: ${event.path} (${event.method})`)
+        writeLine(output, `Profile dir: ${options.profileDir}`)
+        if (options.tenant) {
+          writeLine(output, `Tenant: ${options.tenant}${event.tenantChanged ? ' (selected)' : ' (already active)'}`)
+        }
+        if (options.debug) {
+          writeLine(output, `Target page: ${event.diagnostics?.targetPage ?? sanitizeUrl(options.url)}`)
+          writeLine(output, `QR src host: ${event.diagnostics?.qrSourceOrigin ?? '(unavailable)'}`)
+          if (event.diagnostics?.qrBox) {
+            writeLine(output, `QR box: ${event.diagnostics.qrBox.width}x${event.diagnostics.qrBox.height}`)
+          }
+        }
         break
-      case '--profile-dir':
-        options.profileDir = path.resolve(requireValue('--profile-dir', next))
-        index += 1
+      case 'waiting':
+        writeLine(output, 'Waiting for login redirect...')
         break
-      case '--qr-path':
-        options.qrPath = path.resolve(requireValue('--qr-path', next))
-        index += 1
-        break
-      case '--state-path':
-        options.statePath = path.resolve(requireValue('--state-path', next))
-        index += 1
-        break
-      case '--qr-selector':
-        options.qrSelector = requireValue('--qr-selector', next)
-        index += 1
-        break
-      case '--tenant':
-        options.tenant = requireValue('--tenant', next)
-        index += 1
-        break
-      case '--tenant-switch-text':
-        options.tenantSwitchText = requireValue('--tenant-switch-text', next)
-        index += 1
-        break
-      case '--success-host':
-        addValue(options.successHosts, requireValue('--success-host', next))
-        index += 1
-        break
-      case '--success-url-pattern':
-        addValue(options.successUrlPatterns, requireValue('--success-url-pattern', next))
-        index += 1
-        break
-      case '--success-text':
-        addValue(options.successTexts, requireValue('--success-text', next))
-        index += 1
-        break
-      case '--pending-url-pattern':
-        addValue(options.pendingUrlPatterns, requireValue('--pending-url-pattern', next))
-        index += 1
-        break
-      case '--pending-text':
-        addValue(options.pendingTexts, requireValue('--pending-text', next))
-        index += 1
-        break
-      case '--wait-after-nav-ms':
-        options.waitAfterNavigationMs = parseInteger(requireValue('--wait-after-nav-ms', next), '--wait-after-nav-ms')
-        index += 1
-        break
-      case '--login-timeout-ms':
-        options.loginTimeoutMs = parseInteger(requireValue('--login-timeout-ms', next), '--login-timeout-ms')
-        index += 1
-        break
-      case '--navigation-timeout-ms':
-        options.navigationTimeoutMs = parseInteger(requireValue('--navigation-timeout-ms', next), '--navigation-timeout-ms')
-        index += 1
-        break
-      case '--headful':
-        options.headless = false
-        break
-      case '--no-wait':
-        options.waitForLogin = false
-        break
-      case '--manual-confirm':
-        options.manualConfirm = true
-        break
-      case '--refresh':
-        options.refresh = true
-        break
-      case '--use-shell-proxy':
-        options.useDirectProxy = false
-        break
-      case '--debug':
-        options.debug = true
-        break
-      case '--help':
-      case '-h':
-        options.help = true
+      case 'state-saved':
+        writeLine(output, `Saved storage state: ${event.path}`)
         break
       default:
-        throw new Error(`Unknown argument: ${arg}`)
+        break
     }
   }
-
-  return options
 }
 
-export function sanitizeUrl(rawUrl) {
+function reportResult(result, options, output, errorOutput) {
+  if (result.artifacts.state.committed) {
+    writeLine(output, `agent-browser reuse: agent-browser --state ${options.statePath} open ${sanitizeUrl(options.url)}`)
+  }
+  if (result.status === 'timeout') {
+    writeLine(errorOutput, `Login was not detected before timeout. QR file remains at ${options.qrPath}.`)
+  } else if (result.status === 'error') {
+    writeLine(errorOutput, `Login capture failed (${result.error?.code ?? 'UNKNOWN_ERROR'}) at ${result.error?.phase ?? result.phase}.`)
+    if (result.artifacts.state.committed) writeLine(errorOutput, 'Storage state was committed before the later failure.')
+  }
+  if (result.cleanup.status === 'failed' && result.error?.code !== 'CLOSE_FAILED') {
+    writeLine(errorOutput, `Browser cleanup also failed (${result.cleanup.code}).`)
+  }
+}
+
+export async function runCli(argv = process.argv.slice(2), dependencies = {}) {
+  const runtime = dependencies.runtime ?? process
+  const output = dependencies.stdout ?? process.stdout
+  const errorOutput = dependencies.stderr ?? process.stderr
+  let options
   try {
-    const url = new URL(rawUrl)
-    return `${url.origin}${url.pathname}`
-  } catch {
-    return rawUrl
+    options = parseArgs(argv)
+  } catch (error) {
+    writeLine(errorOutput, error instanceof Error ? error.message : 'Invalid arguments')
+    return 1
   }
-}
-
-function normalizeHost(rawHost) {
-  const trimmed = rawHost.trim()
-  if (!trimmed) {
-    throw new Error('Host matchers cannot be empty')
-  }
-
-  try {
-    return new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`).host.toLowerCase()
-  } catch {
-    throw new Error(`--success-host expects a hostname or URL, got: ${rawHost}`)
-  }
-}
-
-function compilePatterns(patterns, flagName) {
-  return patterns.map((pattern) => {
-    try {
-      return new RegExp(pattern)
-    } catch {
-      throw new Error(`${flagName} expects a valid regular expression, got: ${pattern}`)
-    }
-  })
-}
-
-export function compileLoginRules(options) {
-  return {
-    successHosts: options.successHosts.map(normalizeHost),
-    successUrlPatterns: compilePatterns(options.successUrlPatterns, '--success-url-pattern'),
-    successTexts: [...options.successTexts],
-    pendingUrlPatterns: compilePatterns(options.pendingUrlPatterns, '--pending-url-pattern'),
-    pendingTexts: [...options.pendingTexts],
-  }
-}
-
-function urlHost(rawUrl) {
-  try {
-    return new URL(rawUrl).host.toLowerCase()
-  } catch {
-    return ''
-  }
-}
-
-function includesAny(value, needles) {
-  return needles.some((needle) => needle && value.includes(needle))
-}
-
-function matchesAny(value, patterns) {
-  return patterns.some((pattern) => pattern.test(value))
-}
-
-export function matchLoginState({ currentUrl, bodyText, qrVisible }, rules) {
-  const currentHost = urlHost(currentUrl)
-  const successMatches = []
-  const pendingMatches = []
-
-  if (currentHost && rules.successHosts.includes(currentHost)) {
-    successMatches.push('success-host')
-  }
-
-  if (matchesAny(currentUrl, rules.successUrlPatterns)) {
-    successMatches.push('success-url-pattern')
-  }
-
-  if (includesAny(bodyText, rules.successTexts)) {
-    successMatches.push('success-text')
-  }
-
-  if (matchesAny(currentUrl, rules.pendingUrlPatterns)) {
-    pendingMatches.push('pending-url-pattern')
-  }
-
-  if (includesAny(bodyText, rules.pendingTexts)) {
-    pendingMatches.push('pending-text')
-  }
-
-  if (qrVisible) {
-    pendingMatches.push('qr-visible')
-  }
-
-  return {
-    success: successMatches.length > 0 && pendingMatches.length === 0,
-    successMatches,
-    pendingMatches,
-  }
-}
-
-async function ensureParentDirectory(filePath) {
-  await mkdir(path.dirname(filePath), { recursive: true })
-}
-
-async function openLoginPage(page, options) {
-  await page.goto(options.url, {
-    waitUntil: 'domcontentloaded',
-    timeout: options.navigationTimeoutMs,
-  })
-  await page.waitForTimeout(options.waitAfterNavigationMs)
-
-  if (options.refresh) {
-    await page.reload({
-      waitUntil: 'domcontentloaded',
-      timeout: options.navigationTimeoutMs,
-    })
-    await page.waitForTimeout(options.waitAfterNavigationMs)
-  }
-}
-
-async function exportQrElement(page, qrPath, qrSelector) {
-  const qrImage = page.locator(qrSelector).first()
-  await qrImage.waitFor({ state: 'visible', timeout: 15_000 })
-
-  await ensureParentDirectory(qrPath)
-
-  try {
-    const dataUrl = await qrImage.evaluate((image) => {
-      const canvas = document.createElement('canvas')
-      canvas.width = image.naturalWidth
-      canvas.height = image.naturalHeight
-      const context = canvas.getContext('2d')
-      if (!context) {
-        throw new Error('canvas context unavailable')
-      }
-      context.drawImage(image, 0, 0)
-      return canvas.toDataURL('image/png')
-    })
-
-    const encoded = dataUrl.replace(/^data:image\/png;base64,/, '')
-    await writeFile(qrPath, Buffer.from(encoded, 'base64'))
-    return { qrImage, exportMethod: 'image-data' }
-  } catch {
-    await qrImage.screenshot({ path: qrPath })
-    return { qrImage, exportMethod: 'element-screenshot' }
-  }
-}
-
-async function selectTenant(page, options) {
-  if (!options.tenant) {
-    return false
-  }
-
-  const bodyText = await page.locator('body').innerText().catch(() => '')
-  if (bodyText.includes(options.tenant)) {
-    return false
-  }
-
-  const switchTenantButton = page.getByText(options.tenantSwitchText, { exact: true })
-  await switchTenantButton.waitFor({ state: 'visible', timeout: 15_000 })
-  await switchTenantButton.click()
-
-  const tenantOption = page.getByText(options.tenant, { exact: true })
-  await tenantOption.waitFor({ state: 'visible', timeout: 15_000 })
-  await tenantOption.click()
-  await page.waitForTimeout(1500)
-  return true
-}
-
-async function readLoginSnapshot(page, qrSelector) {
-  const currentUrl = page.url()
-  const bodyText = await page.locator('body').innerText().catch(() => '')
-  const qrVisible = await page.locator(qrSelector).first().isVisible().catch(() => false)
-  return { currentUrl, bodyText, qrVisible }
-}
-
-async function waitForLogin(page, options, rules) {
-  const deadline = Date.now() + options.loginTimeoutMs
-  let lastUrl = page.url()
-
-  while (Date.now() < deadline) {
-    await page.waitForTimeout(3000)
-    const snapshot = await readLoginSnapshot(page, options.qrSelector)
-    const result = matchLoginState(snapshot, rules)
-
-    if (result.success) {
-      return {
-        success: true,
-        url: snapshot.currentUrl,
-      }
-    }
-
-    lastUrl = snapshot.currentUrl
-  }
-
-  return {
-    success: false,
-    url: lastUrl,
-  }
-}
-
-async function waitForManualConfirmation(input = process.stdin, output = process.stdout) {
-  if (!input.isTTY) {
-    throw new Error('--manual-confirm requires an interactive terminal')
-  }
-
-  const readline = createInterface({ input, output })
-  try {
-    await readline.question('Scan and finish login in the browser, then press Enter to save storage state.')
-  } finally {
-    readline.close()
-  }
-}
-
-async function main() {
-  const options = parseArgs(process.argv.slice(2))
   if (options.help) {
-    printHelp()
-    return
-  }
-  const loginRules = compileLoginRules(options)
-
-  const { chromium } = await resolvePlaywrightImport()
-  await mkdir(options.profileDir, { recursive: true })
-  await ensureParentDirectory(options.qrPath)
-  await ensureParentDirectory(options.statePath)
-
-  const launchOptions = {
-    headless: options.headless,
-    args: options.useDirectProxy ? DIRECT_PROXY_ARGS : [],
-    ignoreHTTPSErrors: true,
-    viewport: { width: 1440, height: 2200 },
+    printHelp(output)
+    return 0
   }
 
-  const context = await chromium.launchPersistentContext(options.profileDir, launchOptions)
+  const abortController = new AbortController()
+  let signalExitCode = null
+  const onSigint = () => {
+    signalExitCode ??= 130
+    abortController.abort(new Error('SIGINT'))
+  }
+  const onSigterm = () => {
+    signalExitCode ??= 143
+    abortController.abort(new Error('SIGTERM'))
+  }
+  runtime.once('SIGINT', onSigint)
+  runtime.once('SIGTERM', onSigterm)
 
   try {
-    const page = context.pages()[0] ?? (await context.newPage())
-    await openLoginPage(page, options)
-    const tenantChanged = await selectTenant(page, options)
-    const { qrImage, exportMethod } = await exportQrElement(page, options.qrPath, options.qrSelector)
-
-    console.log(`Saved QR image: ${options.qrPath} (${exportMethod})`)
-    console.log(`Profile dir: ${options.profileDir}`)
-    if (options.tenant) {
-      console.log(`Tenant: ${options.tenant}${tenantChanged ? ' (selected)' : ' (already active)'}`)
-    }
-
-    if (options.debug) {
-      const qrSrc = await qrImage.getAttribute('src')
-      const qrBox = await qrImage.boundingBox()
-      console.log(`Target page: ${sanitizeUrl(page.url())}`)
-      console.log(`QR src host: ${qrSrc ? sanitizeUrl(qrSrc) : '(missing)'}`)
-      if (qrBox) {
-        console.log(`QR box: ${Math.round(qrBox.width)}x${Math.round(qrBox.height)}`)
-      }
-    }
-
-    if (!options.waitForLogin) {
-      return
-    }
-
-    if (options.manualConfirm) {
-      await waitForManualConfirmation()
-      await context.storageState({ path: options.statePath })
-      console.log(`Saved storage state: ${options.statePath}`)
-      console.log(`agent-browser reuse: agent-browser --state ${options.statePath} open ${sanitizeUrl(options.url)}`)
-      return
-    }
-
-    console.log('Waiting for login redirect...')
-    const result = await waitForLogin(page, options, loginRules)
-
-    if (!result.success) {
-      throw new Error(
-        `Login was not detected before timeout. QR file is still at ${options.qrPath}. Refresh and rerun the script for a new code.`,
-      )
-    }
-
-    await context.storageState({ path: options.statePath })
-    console.log(`Login detected: ${sanitizeUrl(result.url)}`)
-    console.log(`Saved storage state: ${options.statePath}`)
-    console.log(`agent-browser reuse: agent-browser --state ${options.statePath} open ${sanitizeUrl(options.url)}`)
+    const capture = dependencies.capture ?? runLoginCapture
+    const browser = dependencies.browser ?? createPlaywrightLoginBrowser()
+    const confirm = dependencies.confirm ?? (({ signal }) => waitForManualConfirmation({ signal }))
+    const result = await capture(options, {
+      browser,
+      clock: dependencies.clock,
+      confirm,
+      onEvent: dependencies.onEvent ?? eventLogger(options, output),
+      signal: abortController.signal,
+    })
+    reportResult(result, options, output, errorOutput)
+    if (signalExitCode !== null) return signalExitCode
+    return result.status === 'saved' || result.status === 'qr-only' ? 0 : 1
   } finally {
-    await context.close()
+    runtime.removeListener('SIGINT', onSigint)
+    runtime.removeListener('SIGTERM', onSigterm)
   }
 }
 
@@ -484,8 +180,10 @@ function isCliEntryPoint() {
 }
 
 if (isCliEntryPoint()) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error))
+  runCli().then((exitCode) => {
+    process.exitCode = exitCode
+  }).catch(() => {
+    process.stderr.write('Login capture failed unexpectedly.\n')
     process.exitCode = 1
   })
 }
