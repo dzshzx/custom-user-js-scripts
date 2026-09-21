@@ -3867,9 +3867,6 @@ ${root} :focus-visible {
   function maybePromise(value) {
     return value && typeof value.then === "function" ? value : Promise.resolve(value);
   }
-  function hasSnapshots(archive) {
-    return Array.isArray(archive?.snapshots) && archive.snapshots.length > 0;
-  }
   function createArchiveMerger(options) {
     if (typeof options.mergeArchives === "function") {
       return options.mergeArchives;
@@ -3891,6 +3888,10 @@ ${root} :focus-visible {
     const mergeArchives = createArchiveMerger(options);
     const normalizeArchive = createArchiveNormalizer(options);
     let backendInfo = STORAGE_BACKENDS.pending;
+    let mirrorDegraded = false;
+    function gmBackendInfo() {
+      return mirrorDegraded ? { ...STORAGE_BACKENDS.gm, label: "GM storage (mirror unavailable)", degraded: true, mirrorError: "Snapshot Archive mirror write failed." } : STORAGE_BACKENDS.gm;
+    }
     async function readFromGmStorage() {
       const gmGetValue = options.gmGetValue || (typeof GM_getValue === "function" ? GM_getValue : null);
       if (typeof gmGetValue === "function") {
@@ -3931,16 +3932,13 @@ ${root} :focus-visible {
     function mergeStorageArchives(primaryArchive, fallbackArchive) {
       const normalizedPrimary = normalizeArchive(primaryArchive);
       const normalizedFallback = normalizeArchive(fallbackArchive);
-      if (!mergeArchives || !hasSnapshots(normalizedFallback)) {
-        return { archive: normalizedPrimary, added: 0 };
-      }
-      if (!hasSnapshots(normalizedPrimary)) {
-        return { archive: normalizedFallback, added: normalizedFallback.snapshots.length };
+      if (!mergeArchives) {
+        return { archive: normalizedPrimary, changed: false };
       }
       const merged = mergeArchives(normalizedPrimary, normalizedFallback);
       return {
         archive: merged?.archive || normalizedPrimary,
-        added: Number(merged?.report?.added) || 0
+        changed: merged?.changed ?? Number(merged?.report?.added) > 0
       };
     }
     function getGmValueChangeAdapter() {
@@ -3968,28 +3966,31 @@ ${root} :focus-visible {
         try {
           gmArchive = await readFromGmStorage();
           gmAvailable = true;
-          backendInfo = STORAGE_BACKENDS.gm;
+          backendInfo = gmBackendInfo();
         } catch (error) {
           logger?.warn?.(`${scriptName}: failed to read userscript archive storage.`, error);
         }
         let fallbackArchive = null;
+        let fallbackAvailable = false;
         try {
           fallbackArchive = readFromLocalStorage();
+          fallbackAvailable = true;
         } catch (error) {
           logger?.warn?.(`${scriptName}: failed to read fallback archive storage.`, error);
         }
         if (gmAvailable) {
           const merged = mergeStorageArchives(gmArchive, fallbackArchive);
-          if (merged.added > 0) {
+          if (merged.changed) {
             try {
               await writeToGmStorage(merged.archive);
             } catch (error) {
               logger?.warn?.(`${scriptName}: failed to migrate fallback archive into userscript storage.`, error);
             }
           }
-          backendInfo = STORAGE_BACKENDS.gm;
+          backendInfo = gmBackendInfo();
           return merged.archive;
         }
+        if (!fallbackAvailable) throw new Error("Both Snapshot Archive storage reads failed.");
         backendInfo = STORAGE_BACKENDS.localStorage;
         return fallbackArchive;
       },
@@ -3998,10 +3999,12 @@ ${root} :focus-visible {
           await writeToGmStorage(nextArchive);
           try {
             writeToLocalStorage(nextArchive);
+            mirrorDegraded = false;
           } catch (error) {
+            mirrorDegraded = true;
             logger?.warn?.(`${scriptName}: failed to mirror userscript archive storage to fallback storage.`, error);
           }
-          backendInfo = STORAGE_BACKENDS.gm;
+          backendInfo = gmBackendInfo();
           return nextArchive;
         } catch (error) {
           logger?.warn?.(`${scriptName}: failed to write userscript archive storage.`, error);
@@ -4468,10 +4471,38 @@ ${root} :focus-visible {
         schemaVersion: ARCHIVE_SCHEMA_VERSION,
         createdAt: archive.createdAt,
         updatedAt: archive.updatedAt,
+        ledger: archive.ledger,
         snapshots: sortSnapshotsByCaptureTime(nextSnapshots)
       },
       report: { added, skipped, invalid }
     };
+  }
+  function archiveContentKey(archive) {
+    const normalized = normalizeSnapshotArchive(archive);
+    function stable(value) {
+      if (Array.isArray(value)) return value.map(stable);
+      if (isPlainObject2(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+      return value;
+    }
+    return JSON.stringify(stable({ ledger: normalized.ledger, snapshots: normalized.snapshots }));
+  }
+  function mergeSnapshotArchives(primary, incoming, { nowMs = Date.now() } = {}) {
+    const current = normalizeSnapshotArchive(primary);
+    const other = normalizeSnapshotArchive(incoming);
+    const merged = mergeSnapshots(current, other.snapshots);
+    const ledger = foldSnapshotsIntoLedger(
+      mergeLedgers(current.ledger, other.ledger),
+      [...current.snapshots, ...other.snapshots],
+      nowMs,
+      { usdPerCredit: archiveUsdPerCredit(merged.archive.snapshots) }
+    );
+    const archive = {
+      ...merged.archive,
+      createdAt: current.createdAt || other.createdAt,
+      ledger,
+      snapshots: merged.archive.snapshots.slice(-MAX_RETAINED_SNAPSHOTS)
+    };
+    return { archive, report: merged.report, changed: archiveContentKey(current) !== archiveContentKey(archive) };
   }
   function buildSnapshotExportDocument(archive, exportedAt) {
     const migrated = migrateArchive(archive, Date.parse(exportedAt) || Date.now());
@@ -4488,26 +4519,15 @@ ${root} :focus-visible {
     if (!isPlainObject2(documentObject) || documentObject.format !== EXPORT_FORMAT || !SUPPORTED_EXPORT_VERSIONS.has(documentObject.version)) {
       throw new Error("Unsupported Snapshot Export document.");
     }
-    const current = migrateArchive(currentArchive, nowMs);
     const incomingSnapshots = Array.isArray(documentObject.snapshots) ? documentObject.snapshots : [];
-    const mergedSnap = mergeSnapshots({ snapshots: current.snapshots }, incomingSnapshots);
-    const usdPerCredit = archiveUsdPerCredit(mergedSnap.archive.snapshots);
-    let ledger = current.ledger;
-    if (isPlainObject2(documentObject.ledger)) {
-      ledger = mergeLedgers(ledger, documentObject.ledger);
-    }
-    ledger = foldSnapshotsIntoLedger(ledger, incomingSnapshots, nowMs, { usdPerCredit });
-    const archive = {
-      schemaVersion: ARCHIVE_SCHEMA_VERSION,
-      createdAt: current.createdAt,
-      updatedAt: current.updatedAt,
-      ledger,
-      snapshots: mergedSnap.archive.snapshots.slice(-MAX_RETAINED_SNAPSHOTS)
-    };
+    const merged = mergeSnapshotArchives(currentArchive, documentObject, { nowMs });
+    const { archive } = merged;
+    merged.report.invalid = incomingSnapshots.filter((snapshot) => !normalizeSnapshot(snapshot)).length;
     return {
       archive,
       summary: summarizeSnapshotArchive(archive),
-      report: mergedSnap.report
+      report: merged.report,
+      changed: merged.changed
     };
   }
   function toNumber3(value) {
@@ -4641,7 +4661,7 @@ ${root} :focus-visible {
       await write(migrated);
       return migrated;
     }
-    return {
+    const operations = {
       async loadArchive() {
         return loadArchive();
       },
@@ -4676,9 +4696,17 @@ ${root} :focus-visible {
           ...options
         });
       },
+      async readView(options = {}) {
+        const timestamp = nowMs();
+        const archive = migrateArchive(await read(), timestamp);
+        return {
+          summary: summarizeSnapshotArchive(archive),
+          ledgerCost: buildLedgerCostViews(archive, { ...options, nowMs: timestamp })
+        };
+      },
       async importArchiveDocument(documentObject) {
         const merged = previewImportArchiveDocument(await loadArchive(), documentObject, nowMs());
-        const nextArchive = await writeArchive(merged.archive);
+        const nextArchive = merged.changed ? await writeArchive(merged.archive) : merged.archive;
         return {
           archive: nextArchive,
           summary: summarizeSnapshotArchive(nextArchive),
@@ -4695,16 +4723,26 @@ ${root} :focus-visible {
         return createSnapshotArchiveQuery(await loadArchive()).queryHistory(query || {});
       }
     };
+    let queue = Promise.resolve();
+    return Object.fromEntries(Object.entries(operations).map(([name, operation]) => [
+      name,
+      (...args) => {
+        const result = queue.then(() => operation(...args));
+        queue = result.catch(() => {
+        });
+        return result;
+      }
+    ]));
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js
   var REMOTE_SYNC_SETTINGS_KEY = "codexQuotaCompassRemoteSyncSettings";
-  var DEFAULT_SYNC_DEBOUNCE_MS = 5e3;
   var GITHUB_API_BASE = "https://api.github.com";
   var GITHUB_API_VERSION = "2026-03-10";
   var GIST_DESCRIPTION = "Codex Quota Compass Snapshot Archive";
   var GIST_FILENAME = "codex-quota-compass-snapshot-archive.v1.json";
   var SUPPORTED_IMPORT_VERSIONS = /* @__PURE__ */ new Set([1, 2]);
+  var UNKNOWN_WRITE_PREFIX = "Remote write outcome unknown. Verify the Gist before retrying. ";
   function maybePromise2(value) {
     return value && typeof value.then === "function" ? value : Promise.resolve(value);
   }
@@ -4883,7 +4921,8 @@ ${root} :focus-visible {
       clientId: settings.clientId,
       hasToken: Boolean(settings.token),
       lastSyncedAt: settings.lastSyncedAt,
-      lastError: settings.lastError
+      lastError: settings.token ? settings.lastError.split(settings.token).join("[redacted]") : settings.lastError,
+      remoteState: settings.lastError?.startsWith(UNKNOWN_WRITE_PREFIX) ? "unknown" : settings.lastError ? "failed" : "idle"
     };
   }
   function gitHubHeaders(token, extra = {}) {
@@ -4936,14 +4975,14 @@ ${root} :focus-visible {
     }
     return JSON.stringify(value ?? null);
   }
-  function archiveContentKey(documentObject) {
+  function archiveContentKey2(documentObject) {
     return stableStringify({
       ledger: documentObject && documentObject.ledger || {},
       snapshots: Array.isArray(documentObject?.snapshots) ? documentObject.snapshots : []
     });
   }
   function sameArchiveContent(left, right) {
-    return archiveContentKey(left) === archiveContentKey(right);
+    return archiveContentKey2(left) === archiveContentKey2(right);
   }
   var GIST_PAGE_SIZE = 100;
   var GIST_MAX_PAGES = 10;
@@ -5010,14 +5049,18 @@ ${root} :focus-visible {
     archiveStore,
     settingsStore = createGmSettingsStore(),
     requestJson = createJsonRequester(),
-    now = () => (/* @__PURE__ */ new Date()).toISOString(),
-    logger = globalThis.console,
-    debounceMs = DEFAULT_SYNC_DEBOUNCE_MS
+    now = () => (/* @__PURE__ */ new Date()).toISOString()
   } = {}) {
     if (!archiveStore?.loadArchive || !archiveStore?.importArchiveDocument) {
       throw new Error("Remote sync requires a Snapshot Archive store.");
     }
-    let pendingTimer = null;
+    let queue = Promise.resolve();
+    function enqueue(operation) {
+      const result = queue.then(operation);
+      queue = result.catch(() => {
+      });
+      return result;
+    }
     async function getSettings() {
       return settingsStore.read();
     }
@@ -5036,13 +5079,14 @@ ${root} :focus-visible {
         clientId: current.clientId || createClientId(),
         lastError: ""
       };
-      return saveSettings(next);
+      return publicStatus(await saveSettings(next));
     }
     async function getStatus() {
       return publicStatus(await getSettings());
     }
     async function markSyncFailure(settings, error) {
-      const message = error?.message || String(error);
+      const rawMessage = error?.message || String(error);
+      const message = settings.token ? rawMessage.split(settings.token).join("[redacted]") : rawMessage;
       await saveSettings({ ...settings, lastError: message });
       return message;
     }
@@ -5054,8 +5098,12 @@ ${root} :focus-visible {
       if (!settings.token) {
         return { status: "unconfigured", settings: publicStatus(settings) };
       }
+      let localMerged = false;
+      let remoteWritePending = false;
+      let phase = "persistence";
       try {
-        const localArchive = await archiveStore.loadArchive();
+        await archiveStore.loadArchive();
+        phase = "sync";
         const exportedAt = now();
         const gistApi = createGitHubGistApi({
           requestJson,
@@ -5076,7 +5124,12 @@ ${root} :focus-visible {
           gist = candidate?.id ? await gistApi.getGist(candidate.id) : null;
         }
         if (!gist) {
+          phase = "persistence";
+          const localArchive = await archiveStore.loadArchive();
+          phase = "sync";
+          remoteWritePending = true;
           gist = await gistApi.createGist(localArchive, exportedAt);
+          remoteWritePending = false;
           const savedSettings2 = await saveSettings({
             ...settings,
             gistId: gist.id,
@@ -5093,14 +5146,19 @@ ${root} :focus-visible {
           };
         }
         const remoteDocument = await archiveDocumentFromGist(gist, settings.filename, now, requestJson);
+        phase = "persistence";
         const imported = await archiveStore.importArchiveDocument(remoteDocument);
+        localMerged = true;
+        phase = "sync";
         const mergedDocument = buildSnapshotExportDocument(imported.archive, exportedAt);
         const remoteNormalized = buildSnapshotExportDocument(
           previewImportArchiveDocument({ snapshots: [] }, remoteDocument, Date.parse(exportedAt) || Date.now()).archive,
           exportedAt
         );
         const remoteNeedsUpdate = !sameArchiveContent(mergedDocument, remoteNormalized);
+        remoteWritePending = remoteNeedsUpdate;
         const updatedGist = remoteNeedsUpdate ? await gistApi.updateGist(gist.id, imported.archive, now()) : gist;
+        remoteWritePending = false;
         const savedSettings = await saveSettings({
           ...settings,
           gistId: updatedGist.id || gist.id,
@@ -5116,30 +5174,21 @@ ${root} :focus-visible {
           archive: imported.archive
         };
       } catch (error) {
-        const message = await markSyncFailure(settings, error);
-        throw new Error(message);
-      }
-    }
-    function scheduleSync({ onComplete, onError } = {}) {
-      if (pendingTimer) {
-        globalThis.clearTimeout(pendingTimer);
-      }
-      pendingTimer = globalThis.setTimeout(() => {
-        pendingTimer = null;
-        syncNow().then((result) => {
-          if (typeof onComplete === "function") onComplete(result);
-        }).catch((error) => {
-          logger?.warn?.("Codex Quota Compass remote sync failed.", error);
-          if (typeof onError === "function") onError(error);
+        const unknown = remoteWritePending && !error?.status;
+        const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
+        const message = await markSyncFailure(settings, failure).catch(() => "GitHub Gist sync failed; status could not be saved.");
+        throw Object.assign(new Error(message), {
+          localMerged,
+          phase,
+          remoteState: unknown ? "unknown" : "failed"
         });
-      }, debounceMs);
+      }
     }
     return {
-      configure,
-      getSettings,
-      getStatus,
-      scheduleSync,
-      syncNow
+      configure: (patch) => enqueue(() => configure(patch)),
+      getSettings: () => enqueue(getSettings),
+      getStatus: () => enqueue(getStatus),
+      syncNow: () => enqueue(syncNow)
     };
   }
   function planRemoteSyncSave(formValues = {}, currentStatus = {}) {
@@ -5159,6 +5208,228 @@ ${root} :focus-visible {
       },
       syncAfter: enabled && (Boolean(token) || hasToken)
     };
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-application.lib.js
+  function createQuotaApplication({
+    runtime,
+    archiveStore,
+    remoteSync,
+    archiveChanges,
+    clock = globalThis,
+    runGuard = { acquire: () => true, release() {
+    } },
+    onChange = () => {
+    }
+  }) {
+    let disposed = false;
+    let started;
+    let running;
+    let syncing;
+    let timer = null;
+    let unsubscribe = () => {
+    };
+    let revision = 0;
+    let localRevision = 0;
+    const state = {
+      lifecycle: "idle",
+      result: null,
+      calculationError: null,
+      archiveSummary: null,
+      ledgerCost: null,
+      importReport: null,
+      syncStatus: null,
+      storageBackend: null,
+      remoteState: "idle",
+      operations: { run: false, sync: false },
+      errors: { calculation: null, persistence: null, sync: null, projection: null, settings: null }
+    };
+    const getState = () => structuredClone(state);
+    function notify() {
+      if (disposed) return;
+      try {
+        onChange(getState());
+      } catch {
+      }
+    }
+    function errorMessage(error) {
+      return error?.message || String(error);
+    }
+    function clearTimer() {
+      if (timer !== null) clock.clearTimeout(timer);
+      timer = null;
+    }
+    function schedule() {
+      if (disposed || syncing || state.remoteState === "unknown") return;
+      clearTimer();
+      timer = clock.setTimeout(() => {
+        timer = null;
+        void sync();
+      }, 5e3);
+    }
+    function changedLocally() {
+      localRevision += 1;
+      schedule();
+    }
+    async function refresh() {
+      const currentRevision = ++revision;
+      try {
+        const view = await archiveStore.readView();
+        if (disposed || currentRevision !== revision) return false;
+        state.archiveSummary = view.summary;
+        state.ledgerCost = view.ledgerCost;
+        state.storageBackend = archiveChanges?.getBackendInfo?.() || null;
+        state.errors.projection = null;
+        notify();
+        return true;
+      } catch (error) {
+        if (!disposed && currentRevision === revision) {
+          state.errors.projection = errorMessage(error);
+          notify();
+        }
+        return false;
+      }
+    }
+    async function readSyncStatus() {
+      try {
+        const status = await remoteSync.getStatus();
+        if (!disposed) {
+          state.syncStatus = status;
+          if (status.remoteState === "unknown") state.remoteState = "unknown";
+          state.errors.settings = null;
+        }
+      } catch {
+        state.errors.settings = "GitHub Gist settings are unavailable.";
+      }
+      notify();
+    }
+    function sync() {
+      if (disposed) return Promise.resolve({ status: "skipped", reason: "disposed" });
+      clearTimer();
+      if (syncing) return syncing;
+      const atRevision = localRevision;
+      state.operations.sync = true;
+      notify();
+      syncing = (async () => {
+        let outcome;
+        try {
+          const result = await remoteSync.syncNow();
+          state.syncStatus = result.settings;
+          state.remoteState = result.status === "synced" ? "synced" : "idle";
+          state.errors.sync = null;
+          outcome = { status: result.status === "synced" ? "ok" : "skipped", reason: result.status, completed: result.status === "synced" ? ["sync"] : [] };
+        } catch (error) {
+          state.errors.sync = errorMessage(error);
+          if (error?.phase === "persistence") state.errors.persistence = errorMessage(error);
+          state.remoteState = error?.remoteState || "failed";
+          outcome = { status: error?.localMerged ? "partial" : "error", completed: error?.localMerged ? ["local-merge"] : [], error: state.errors.sync, remoteState: state.remoteState };
+        }
+        const refreshed = await refresh();
+        if (!refreshed && outcome.status === "ok") outcome = { ...outcome, status: "partial", error: state.errors.projection };
+        await readSyncStatus();
+        return outcome;
+      })().finally(() => {
+        syncing = null;
+        state.operations.sync = false;
+        if (localRevision !== atRevision) schedule();
+        notify();
+      });
+      return syncing;
+    }
+    function run() {
+      if (disposed) return Promise.resolve({ status: "skipped", reason: "disposed" });
+      if (running) return running;
+      if (!runGuard.acquire()) return Promise.resolve({ status: "skipped", reason: "already-running" });
+      state.operations.run = true;
+      state.calculationError = state.errors.calculation = null;
+      state.errors.persistence = null;
+      notify();
+      running = (async () => {
+        let result;
+        try {
+          result = await runtime.run();
+          state.result = result;
+          state.importReport = null;
+        } catch (error) {
+          state.calculationError = state.errors.calculation = errorMessage(error);
+          return { status: "error", error: state.calculationError, completed: [] };
+        }
+        try {
+          await archiveStore.saveSnapshot(result);
+          changedLocally();
+        } catch (error) {
+          state.errors.persistence = errorMessage(error);
+          return { status: "partial", result, completed: ["calculation"], error: state.errors.persistence };
+        }
+        const refreshed = await refresh();
+        return { status: refreshed ? "ok" : "partial", result, completed: ["calculation", "persistence", ...refreshed ? ["projection"] : []], ...refreshed ? {} : { error: state.errors.projection } };
+      })().finally(() => {
+        runGuard.release();
+        running = null;
+        state.operations.run = false;
+        notify();
+      });
+      return running;
+    }
+    async function importArchive(document2) {
+      if (disposed) return { status: "skipped", reason: "disposed" };
+      try {
+        const imported = await archiveStore.importArchiveDocument(document2);
+        state.importReport = imported.report;
+        state.errors.persistence = null;
+        changedLocally();
+        const refreshed = await refresh();
+        return { status: refreshed ? "ok" : "partial", completed: ["persistence", ...refreshed ? ["projection"] : []], report: imported.report };
+      } catch (error) {
+        state.errors.persistence = errorMessage(error);
+        notify();
+        return { status: "error", error: state.errors.persistence, completed: [] };
+      }
+    }
+    async function configureSync(formValues) {
+      if (disposed) return { status: "skipped", reason: "disposed" };
+      try {
+        const decision = planRemoteSyncSave(formValues, await remoteSync.getStatus());
+        if (!decision.ok) return { status: "error", reason: decision.reason };
+        state.syncStatus = await remoteSync.configure(decision.patch);
+        if (!decision.syncAfter) clearTimer();
+        state.errors.settings = null;
+        notify();
+        return decision.syncAfter ? sync() : { status: "ok", completed: ["settings"] };
+      } catch {
+        state.errors.settings = "GitHub Gist settings could not be saved.";
+        notify();
+        return { status: "error", error: state.errors.settings, completed: [] };
+      }
+    }
+    function start() {
+      if (started) return started;
+      if (disposed) return Promise.resolve({ status: "skipped", reason: "disposed" });
+      state.lifecycle = "starting";
+      unsubscribe = archiveChanges?.subscribeToChanges?.(() => {
+        if (!disposed) void refresh();
+      }) || (() => {
+      });
+      started = (async () => {
+        const [refreshed] = await Promise.all([refresh(), readSyncStatus()]);
+        if (disposed) return { status: "skipped", reason: "disposed" };
+        state.lifecycle = "ready";
+        notify();
+        if (state.remoteState === "unknown") return { status: "skipped", reason: "remote-state-unknown", completed: ["start"] };
+        if (refreshed && state.syncStatus?.enabled && state.syncStatus?.configured) return sync();
+        return { status: refreshed ? "ok" : "partial", completed: ["start"] };
+      })();
+      return started;
+    }
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      state.lifecycle = "disposed";
+      revision += 1;
+      clearTimer();
+      unsubscribe();
+    }
+    return { start, run, importArchive, exportArchive: () => archiveStore.buildExportDocument(), configureSync, sync, getState, dispose };
   }
 
   // src/userscripts/shared/shared-toast.lib.js
@@ -5391,6 +5662,8 @@ ${root} :focus-visible {
     let pendingRunPromise = null;
     let floatingPanelShell = null;
     let toaster = null;
+    let syncFormDirty = false;
+    let deferredPanelRefresh = false;
     const expandedViews = /* @__PURE__ */ new Set();
     const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
     const panelRenderer = createQuotaPanelRenderer({
@@ -5399,10 +5672,7 @@ ${root} :focus-visible {
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,
       normalizeArchive: normalizeSnapshotArchive,
-      mergeArchives: (primaryArchive, fallbackArchive) => mergeSnapshots(
-        primaryArchive,
-        Array.isArray(fallbackArchive?.snapshots) ? fallbackArchive.snapshots : []
-      )
+      mergeArchives: mergeSnapshotArchives
     });
     const archiveStore = createSnapshotArchiveStore({
       read: archiveStoragePort.read,
@@ -5422,50 +5692,46 @@ ${root} :focus-visible {
       return { backendId, backendLabel, crossDeviceCapable: false, localOnly, reason };
     }
     const remoteSyncClient = createRemoteSyncClient({ archiveStore });
+    const application = createQuotaApplication({
+      runtime: { run: runCompass },
+      archiveStore,
+      remoteSync: remoteSyncClient,
+      archiveChanges: archiveStoragePort,
+      runGuard: {
+        acquire() {
+          if (window[RUNNING_KEY]) return false;
+          window[RUNNING_KEY] = true;
+          return true;
+        },
+        release() {
+          window[RUNNING_KEY] = false;
+        }
+      },
+      onChange(state) {
+        latestResult = state.result;
+        latestError = state.calculationError;
+        latestArchiveSummary = state.archiveSummary;
+        latestLedgerCost = state.ledgerCost;
+        latestImportReport = state.importReport;
+        latestRemoteSyncStatus = state.syncStatus;
+        refreshCurrentPanel();
+      }
+    });
     function isUsagePage() {
       return location.hostname === "chatgpt.com" && location.pathname === "/codex/cloud/settings/analytics" && location.hash === "#usage";
     }
     function isDebugEnabled() {
       return window[DEBUG_KEY] === true;
     }
-    async function refreshArchiveSummary() {
-      if (!archiveStore) return null;
-      latestArchiveSummary = await archiveStore.summarizeArchive();
-      return latestArchiveSummary;
-    }
-    async function refreshRemoteSyncStatus() {
-      if (!remoteSyncClient) {
-        latestRemoteSyncStatus = null;
-        return null;
-      }
-      latestRemoteSyncStatus = await remoteSyncClient.getStatus();
-      return latestRemoteSyncStatus;
-    }
-    function cycleStartDateFromResult(result) {
-      const windows = Array.isArray(result?.限制窗口概览) ? result.限制窗口概览 : [];
-      const win = windows.find((entry) => entry?.窗口Key === "main.sevenDayWindow") || windows.find((entry) => /7\s*天/.test(String(entry?.名称 || "")));
-      const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(win?.["本轮开始_UTC"] || ""));
-      return match ? match[1] : null;
-    }
-    async function refreshLedgerCostForResult(result) {
-      if (!archiveStore?.queryLedgerCost) return null;
-      latestLedgerCost = await archiveStore.queryLedgerCost({
-        cycleStartDate: cycleStartDateFromResult(result)
-      });
-      return latestLedgerCost;
-    }
     function refreshCurrentPanel() {
-      if (isSyncFormEditing(contentNode, document.activeElement)) return;
+      if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) {
+        deferredPanelRefresh = true;
+        return;
+      }
+      deferredPanelRefresh = false;
       if (latestResult && !latestError) {
         renderResult(latestResult);
       }
-    }
-    function refreshArchiveViewAfterStorageChange() {
-      Promise.all([refreshArchiveSummary(), refreshRemoteSyncStatus()]).then(() => {
-        refreshCurrentPanel();
-      }).catch((error) => {
-        console.warn(`${SCRIPT_NAME}: failed to refresh archive summary after storage change.`, error);
-      });
     }
     function setStatus(text, tone = "idle") {
       floatingPanelShell?.setStatus(text, tone);
@@ -5494,6 +5760,10 @@ ${root} :focus-visible {
     }
     function renderResult(result) {
       if (!contentNode) return;
+      if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) {
+        deferredPanelRefresh = true;
+        return;
+      }
       const viewModel = createQuotaPanelViewModel({
         result,
         ledgerCost: latestLedgerCost,
@@ -5520,6 +5790,8 @@ ${root} :focus-visible {
     }
     function switchPanelView(nextView) {
       if (!contentNode || !latestPanelViewModel) return;
+      syncFormDirty = false;
+      if (deferredPanelRefresh) refreshCurrentPanel();
       statsDrill = null;
       const rendered = panelRenderer.renderActiveView(latestPanelViewModel, panelRenderState({ activePanelView: nextView }));
       activePanelView = applyActiveView(contentNode, rendered);
@@ -5533,6 +5805,7 @@ ${root} :focus-visible {
     }
     function renderLoading() {
       if (!contentNode) return;
+      if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) return;
       contentNode.innerHTML = panelRenderer.renderLoading();
       schedulePanelResize();
     }
@@ -5553,9 +5826,11 @@ ${root} :focus-visible {
       }
       try {
         const result = await runPromise;
-        await refreshLedgerCostForResult(result);
         renderResult(result);
-        setStatus(t("statusUpdated"), "success");
+        const state = application.getState();
+        const failure = state.errors.persistence || state.errors.projection;
+        if (failure) showToast(t("saveArchiveFailed", { error: failure }), "error");
+        setStatus(t(failure ? "statusFailed" : "statusUpdated"), failure ? "error" : "success");
         return result;
       } catch (error) {
         renderError(error);
@@ -5573,72 +5848,30 @@ ${root} :focus-visible {
       }
     }
     async function syncRemoteArchive(options = {}) {
-      if (!remoteSyncClient) {
-        throw new Error(t("syncPortUnavailable"));
-      }
       if (!options.silent) setStatus(t("statusLoading"), "loading");
-      const synced = await remoteSyncClient.syncNow();
-      latestRemoteSyncStatus = synced.settings || await remoteSyncClient.getStatus();
-      if (synced.status !== "synced") {
-        refreshCurrentPanel();
-        if (!options.silent) {
-          showToast(t("remoteSyncSkipped", { status: synced.status }), "info");
-          setStatus(t("statusUpdated"), "success");
-        }
-        return synced;
+      const outcome = await application.sync();
+      if (outcome.status === "error" || outcome.status === "partial") {
+        throw new Error(outcome.error || "GitHub Gist sync failed.");
       }
-      latestArchiveSummary = synced.summary || await refreshArchiveSummary();
-      if (latestResult && !latestError) {
-        await refreshLedgerCostForResult(latestResult);
+      if (outcome.status === "skipped" && !options.silent) {
+        showToast(t("remoteSyncSkipped", { status: outcome.reason }), "info");
       }
-      refreshCurrentPanel();
-      if (!options.silent) {
-        setStatus(t("statusUpdated"), "success");
-      }
-      return synced;
-    }
-    function scheduleRemoteArchiveSync() {
-      if (!remoteSyncClient) return;
-      remoteSyncClient.scheduleSync({
-        onComplete: async (result) => {
-          latestRemoteSyncStatus = result.settings || await remoteSyncClient.getStatus();
-          if (result.status === "synced") {
-            latestArchiveSummary = result.summary || await refreshArchiveSummary();
-          }
-          refreshCurrentPanel();
-        },
-        onError: async (error) => {
-          try {
-            await refreshRemoteSyncStatus();
-            refreshCurrentPanel();
-          } catch (statusError) {
-            console.warn(`${SCRIPT_NAME}: failed to refresh remote sync status after sync error.`, statusError);
-          }
-          console.warn(`${SCRIPT_NAME}: remote sync failed.`, error);
-        }
-      });
+      if (!options.silent) setStatus(t("statusUpdated"), "success");
+      return outcome;
     }
     async function saveRemoteSyncFromForm() {
-      if (!remoteSyncClient) {
-        throw new Error(t("syncPortUnavailable"));
-      }
       const formValues = readSyncFormValues(contentNode);
       if (!formValues) return null;
-      const current = await remoteSyncClient.getStatus();
-      const decision = planRemoteSyncSave(formValues, { hasToken: current.hasToken });
-      if (!decision.ok) {
+      const outcome = await application.configureSync(formValues);
+      if (outcome.reason === "token-required") {
         setStatus(t("statusFailed"), "error");
         showToast(t("remoteSyncTokenRequired"), "error");
         return null;
       }
-      await remoteSyncClient.configure(decision.patch);
-      await refreshRemoteSyncStatus();
+      if (outcome.status === "error" || outcome.status === "partial") throw new Error(outcome.error);
+      syncFormDirty = false;
       refreshCurrentPanel();
-      if (decision.syncAfter) {
-        await syncRemoteArchive();
-      } else {
-        setStatus(t("statusUpdated"), "success");
-      }
+      setStatus(t("statusUpdated"), "success");
       return latestRemoteSyncStatus;
     }
     function openSyncSettings() {
@@ -5767,6 +6000,17 @@ ${root} :focus-visible {
       const refs = mountedShell.refs();
       statusNode = refs.statusNode;
       contentNode = refs.contentNode;
+      contentNode.addEventListener("input", (event) => {
+        if (event.target.closest?.("[data-sync-form]")) syncFormDirty = true;
+      });
+      contentNode.addEventListener("change", (event) => {
+        if (event.target.closest?.("[data-sync-form]")) syncFormDirty = true;
+      });
+      contentNode.addEventListener("focusout", () => {
+        queueMicrotask(() => {
+          if (deferredPanelRefresh) refreshCurrentPanel();
+        });
+      });
       toaster = createToaster({ root: refs.root });
       if (!document.getElementById(`${ROOT_ID}-toast-style`)) {
         const style = document.createElement("style");
@@ -5776,45 +6020,28 @@ ${root} :focus-visible {
       }
     }
     async function runCompass() {
-      if (window[RUNNING_KEY]) {
-        console.warn(`[${SCRIPT_NAME}] Already running.`);
-        throw new Error(t("alreadyRunning"));
-      }
-      window[RUNNING_KEY] = true;
-      try {
-        return createQuotaRuntime({
-          config: createDefaultQuotaRuntimeConfig({
-            DEBUG: isDebugEnabled()
-          }),
-          coreLib: codex_quota_compass_core_lib_exports,
-          fetchImpl: fetch.bind(globalThis),
-          location: globalThis.location,
-          now: () => Date.now(),
-          formatLocalTime: (ms) => new Date(ms).toLocaleString(),
-          getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || "未知"
-        }).run();
-      } finally {
-        window[RUNNING_KEY] = false;
-      }
+      return createQuotaRuntime({
+        config: createDefaultQuotaRuntimeConfig({
+          DEBUG: isDebugEnabled()
+        }),
+        coreLib: codex_quota_compass_core_lib_exports,
+        fetchImpl: fetch.bind(globalThis),
+        location: globalThis.location,
+        now: () => Date.now(),
+        formatLocalTime: (ms) => new Date(ms).toLocaleString(),
+        getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || "未知"
+      }).run();
     }
     async function runAndReport(options = {}) {
       try {
-        pendingRunPromise = pendingRunPromise || runCompass();
-        const result = await pendingRunPromise;
-        latestResult = result;
-        latestError = null;
-        latestImportReport = null;
-        if (archiveStore) {
-          try {
-            const saved = await archiveStore.saveSnapshot(result);
-            latestArchiveSummary = saved.summary;
-            scheduleRemoteArchiveSync();
-          } catch (archiveError) {
-            console.error(`[${SCRIPT_NAME}] Snapshot Archive save failed.`, archiveError);
-            if (!options.silentAlert) {
-              showToast(t("saveArchiveFailed", { error: archiveError?.message || archiveError }), "error");
-            }
-          }
+        pendingRunPromise = application.run();
+        const outcome = await pendingRunPromise;
+        if (outcome.status === "error" || outcome.status === "skipped") {
+          throw new Error(outcome.error || t("alreadyRunning"));
+        }
+        const result = outcome.result;
+        if (outcome.status === "partial" && !options.silentAlert) {
+          showToast(t("saveArchiveFailed", { error: outcome.error }), "error");
         }
         if (isDebugEnabled()) {
           window[LAST_RESULT_KEY] = result;
@@ -5852,12 +6079,11 @@ ${root} :focus-visible {
       if (!archiveStore) {
         throw new Error(t("syncPortUnavailable"));
       }
-      const exportDocument = await archiveStore.buildExportDocument();
+      const exportDocument = await application.exportArchive();
       downloadTextFile(
         "codex-quota-compass-snapshot-archive.v1.json",
         JSON.stringify(exportDocument, null, 2)
       );
-      latestArchiveSummary = await archiveStore.summarizeArchive();
       refreshCurrentPanel();
       showToast(t("exportDone", { count: exportDocument.snapshotCount }), "success");
     }
@@ -5895,10 +6121,8 @@ ${root} :focus-visible {
       }
       const fileText = await chooseImportFileText();
       const importDocument = JSON.parse(fileText);
-      const imported = await archiveStore.importArchiveDocument(importDocument);
-      latestArchiveSummary = imported.summary;
-      latestImportReport = imported.report;
-      scheduleRemoteArchiveSync();
+      const imported = await application.importArchive(importDocument);
+      if (imported.status === "error" || imported.status === "skipped") throw new Error(imported.error || imported.reason);
       refreshCurrentPanel();
       showToast(t("importDone", {
         added: imported.report.added,
@@ -5907,17 +6131,8 @@ ${root} :focus-visible {
       }), "success");
     }
     createUi();
-    Promise.all([refreshArchiveSummary(), refreshRemoteSyncStatus()]).then(() => {
-      if (latestRemoteSyncStatus?.enabled && latestRemoteSyncStatus?.configured) {
-        return syncRemoteArchive({ silent: true });
-      }
-      return null;
-    }).catch((error) => {
-      console.warn(`${SCRIPT_NAME}: failed to load archive or remote sync state.`, error);
-    });
-    archiveStoragePort.subscribeToChanges?.(() => {
-      refreshArchiveViewAfterStorageChange();
-    });
+    void application.start();
+    window.addEventListener("pagehide", () => application.dispose(), { once: true });
     if (typeof GM_registerMenuCommand === "function") {
       GM_registerMenuCommand(t("menuRun"), () => {
         runAndRender().catch(() => {

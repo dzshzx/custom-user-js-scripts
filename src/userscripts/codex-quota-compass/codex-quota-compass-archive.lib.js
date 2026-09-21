@@ -236,10 +236,42 @@ function mergeSnapshots(currentArchive, incomingSnapshots) {
       schemaVersion: ARCHIVE_SCHEMA_VERSION,
       createdAt: archive.createdAt,
       updatedAt: archive.updatedAt,
+      ledger: archive.ledger,
       snapshots: sortSnapshotsByCaptureTime(nextSnapshots),
     },
     report: { added, skipped, invalid },
   };
+}
+
+function archiveContentKey(archive) {
+  const normalized = normalizeSnapshotArchive(archive);
+  function stable(value) {
+    if (Array.isArray(value)) return value.map(stable);
+    if (isPlainObject(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+    return value;
+  }
+  return JSON.stringify(stable({ ledger: normalized.ledger, snapshots: normalized.snapshots }));
+}
+
+function mergeSnapshotArchives(primary, incoming, { nowMs = Date.now() } = {}) {
+  const current = normalizeSnapshotArchive(primary);
+  const other = normalizeSnapshotArchive(incoming);
+  const merged = mergeSnapshots(current, other.snapshots);
+  // Fold both complete inputs before deduplication/retention: a duplicate snapshot
+  // may carry historical rows missing from the other storage backend.
+  const ledger = foldSnapshotsIntoLedger(
+    mergeLedgers(current.ledger, other.ledger),
+    [...current.snapshots, ...other.snapshots],
+    nowMs,
+    { usdPerCredit: archiveUsdPerCredit(merged.archive.snapshots) },
+  );
+  const archive = {
+    ...merged.archive,
+    createdAt: current.createdAt || other.createdAt,
+    ledger,
+    snapshots: merged.archive.snapshots.slice(-MAX_RETAINED_SNAPSHOTS),
+  };
+  return { archive, report: merged.report, changed: archiveContentKey(current) !== archiveContentKey(archive) };
 }
 
 function buildSnapshotExportDocument(archive, exportedAt) {
@@ -262,32 +294,16 @@ function previewImportArchiveDocument(currentArchive, documentObject, nowMs = Da
     throw new Error('Unsupported Snapshot Export document.');
   }
 
-  const current = migrateArchive(currentArchive, nowMs);
   const incomingSnapshots = Array.isArray(documentObject.snapshots) ? documentObject.snapshots : [];
-
-  // Snapshot-level merge keeps the existing added/skipped/invalid report semantics.
-  const mergedSnap = mergeSnapshots({ snapshots: current.snapshots }, incomingSnapshots);
-  const usdPerCredit = archiveUsdPerCredit(mergedSnap.archive.snapshots);
-
-  // Ledger merge: current + (v2 doc ledger) + fold incoming snapshots (covers v1 docs and gaps).
-  let ledger = current.ledger;
-  if (isPlainObject(documentObject.ledger)) {
-    ledger = mergeLedgers(ledger, documentObject.ledger);
-  }
-  ledger = foldSnapshotsIntoLedger(ledger, incomingSnapshots, nowMs, { usdPerCredit });
-
-  const archive = {
-    schemaVersion: ARCHIVE_SCHEMA_VERSION,
-    createdAt: current.createdAt,
-    updatedAt: current.updatedAt,
-    ledger,
-    snapshots: mergedSnap.archive.snapshots.slice(-MAX_RETAINED_SNAPSHOTS),
-  };
+  const merged = mergeSnapshotArchives(currentArchive, documentObject, { nowMs });
+  const { archive } = merged;
+  merged.report.invalid = incomingSnapshots.filter((snapshot) => !normalizeSnapshot(snapshot)).length;
 
   return {
     archive,
     summary: summarizeSnapshotArchive(archive),
-    report: mergedSnap.report,
+    report: merged.report,
+    changed: merged.changed,
   };
 }
 
@@ -453,7 +469,7 @@ function createSnapshotArchiveStore({
     return migrated;
   }
 
-  return {
+  const operations = {
     async loadArchive() {
       return loadArchive();
     },
@@ -494,9 +510,18 @@ function createSnapshotArchiveStore({
       });
     },
 
+    async readView(options = {}) {
+      const timestamp = nowMs();
+      const archive = migrateArchive(await read(), timestamp);
+      return {
+        summary: summarizeSnapshotArchive(archive),
+        ledgerCost: buildLedgerCostViews(archive, { ...options, nowMs: timestamp }),
+      };
+    },
+
     async importArchiveDocument(documentObject) {
       const merged = previewImportArchiveDocument(await loadArchive(), documentObject, nowMs());
-      const nextArchive = await writeArchive(merged.archive);
+      const nextArchive = merged.changed ? await writeArchive(merged.archive) : merged.archive;
 
       return {
         archive: nextArchive,
@@ -517,6 +542,17 @@ function createSnapshotArchiveStore({
       return createSnapshotArchiveQuery(await loadArchive()).queryHistory(query || {});
     },
   };
+  // All reads (including adapter migrations) and mutations share one local queue.
+  // Operations call private implementations, never their queued public siblings.
+  let queue = Promise.resolve();
+  return Object.fromEntries(Object.entries(operations).map(([name, operation]) => [
+    name,
+    (...args) => {
+      const result = queue.then(() => operation(...args));
+      queue = result.catch(() => {});
+      return result;
+    },
+  ]));
 }
 
 export {
@@ -533,6 +569,8 @@ export {
   buildSnapshotExportDocument,
   previewImportArchiveDocument,
   mergeSnapshots,
+  mergeSnapshotArchives,
+  archiveContentKey,
   cycleStartDateFromArchive,
   buildLedgerCostViews,
   createSnapshotArchiveStore,

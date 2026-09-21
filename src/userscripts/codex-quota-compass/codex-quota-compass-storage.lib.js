@@ -10,10 +10,6 @@ function maybePromise(value) {
   return value && typeof value.then === 'function' ? value : Promise.resolve(value);
 }
 
-function hasSnapshots(archive) {
-  return Array.isArray(archive?.snapshots) && archive.snapshots.length > 0;
-}
-
 function createArchiveMerger(options) {
   if (typeof options.mergeArchives === 'function') {
     return options.mergeArchives;
@@ -39,6 +35,12 @@ function createSnapshotArchiveStoragePort(options = {}) {
   const mergeArchives = createArchiveMerger(options);
   const normalizeArchive = createArchiveNormalizer(options);
   let backendInfo = STORAGE_BACKENDS.pending;
+  let mirrorDegraded = false;
+  function gmBackendInfo() {
+    return mirrorDegraded
+      ? { ...STORAGE_BACKENDS.gm, label: 'GM storage (mirror unavailable)', degraded: true, mirrorError: 'Snapshot Archive mirror write failed.' }
+      : STORAGE_BACKENDS.gm;
+  }
 
   async function readFromGmStorage() {
     const gmGetValue = options.gmGetValue || (typeof GM_getValue === 'function' ? GM_getValue : null);
@@ -89,18 +91,14 @@ function createSnapshotArchiveStoragePort(options = {}) {
     const normalizedPrimary = normalizeArchive(primaryArchive);
     const normalizedFallback = normalizeArchive(fallbackArchive);
 
-    if (!mergeArchives || !hasSnapshots(normalizedFallback)) {
-      return { archive: normalizedPrimary, added: 0 };
-    }
-
-    if (!hasSnapshots(normalizedPrimary)) {
-      return { archive: normalizedFallback, added: normalizedFallback.snapshots.length };
+    if (!mergeArchives) {
+      return { archive: normalizedPrimary, changed: false };
     }
 
     const merged = mergeArchives(normalizedPrimary, normalizedFallback);
     return {
       archive: merged?.archive || normalizedPrimary,
-      added: Number(merged?.report?.added) || 0,
+      changed: merged?.changed ?? (Number(merged?.report?.added) > 0),
     };
   }
 
@@ -138,21 +136,23 @@ function createSnapshotArchiveStoragePort(options = {}) {
       try {
         gmArchive = await readFromGmStorage();
         gmAvailable = true;
-        backendInfo = STORAGE_BACKENDS.gm;
+        backendInfo = gmBackendInfo();
       } catch (error) {
         logger?.warn?.(`${scriptName}: failed to read userscript archive storage.`, error);
       }
 
       let fallbackArchive = null;
+      let fallbackAvailable = false;
       try {
         fallbackArchive = readFromLocalStorage();
+        fallbackAvailable = true;
       } catch (error) {
         logger?.warn?.(`${scriptName}: failed to read fallback archive storage.`, error);
       }
 
       if (gmAvailable) {
         const merged = mergeStorageArchives(gmArchive, fallbackArchive);
-        if (merged.added > 0) {
+        if (merged.changed) {
           try {
             await writeToGmStorage(merged.archive);
           } catch (error) {
@@ -160,10 +160,11 @@ function createSnapshotArchiveStoragePort(options = {}) {
           }
         }
 
-        backendInfo = STORAGE_BACKENDS.gm;
+        backendInfo = gmBackendInfo();
         return merged.archive;
       }
 
+      if (!fallbackAvailable) throw new Error('Both Snapshot Archive storage reads failed.');
       backendInfo = STORAGE_BACKENDS.localStorage;
       return fallbackArchive;
     },
@@ -173,10 +174,12 @@ function createSnapshotArchiveStoragePort(options = {}) {
         await writeToGmStorage(nextArchive);
         try {
           writeToLocalStorage(nextArchive);
+          mirrorDegraded = false;
         } catch (error) {
+          mirrorDegraded = true;
           logger?.warn?.(`${scriptName}: failed to mirror userscript archive storage to fallback storage.`, error);
         }
-        backendInfo = STORAGE_BACKENDS.gm;
+        backendInfo = gmBackendInfo();
         return nextArchive;
       } catch (error) {
         logger?.warn?.(`${scriptName}: failed to write userscript archive storage.`, error);

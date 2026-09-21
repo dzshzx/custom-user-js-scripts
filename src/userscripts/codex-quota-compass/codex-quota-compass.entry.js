@@ -33,8 +33,9 @@ import { createFloatingPanelShell } from './codex-quota-compass-panel-shell.lib.
 import { createQuotaPanelRenderer } from './codex-quota-compass-panel-renderer.lib.js';
 import { applyActiveView, readSyncFormValues, isSyncFormEditing } from './codex-quota-compass-panel-dom.lib.js';
 import { createSnapshotArchiveStoragePort } from './codex-quota-compass-storage.lib.js';
-import { normalizeSnapshotArchive, mergeSnapshots, createSnapshotArchiveStore } from './codex-quota-compass-archive.lib.js';
-import { createRemoteSyncClient, planRemoteSyncSave } from './codex-quota-compass-remote-sync.lib.js';
+import { normalizeSnapshotArchive, mergeSnapshotArchives, createSnapshotArchiveStore } from './codex-quota-compass-archive.lib.js';
+import { createRemoteSyncClient } from './codex-quota-compass-remote-sync.lib.js';
+import { createQuotaApplication } from './codex-quota-compass-application.lib.js';
 import { buildTokenCss } from '../shared/shared-tokens.lib.js';
 import { createToaster } from '../shared/shared-toast.lib.js';
 
@@ -64,6 +65,8 @@ import { createToaster } from '../shared/shared-toast.lib.js';
   let pendingRunPromise = null;
   let floatingPanelShell = null;
   let toaster = null;
+  let syncFormDirty = false;
+  let deferredPanelRefresh = false;
   const expandedViews = new Set();
   const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
   const panelRenderer = createQuotaPanelRenderer({
@@ -72,10 +75,7 @@ import { createToaster } from '../shared/shared-toast.lib.js';
   const archiveStoragePort = createSnapshotArchiveStoragePort({
     scriptName: SCRIPT_NAME,
     normalizeArchive: normalizeSnapshotArchive,
-    mergeArchives: (primaryArchive, fallbackArchive) => mergeSnapshots(
-      primaryArchive,
-      Array.isArray(fallbackArchive?.snapshots) ? fallbackArchive.snapshots : [],
-    ),
+    mergeArchives: mergeSnapshotArchives,
   });
   const archiveStore = createSnapshotArchiveStore({
     read: archiveStoragePort.read,
@@ -96,6 +96,29 @@ import { createToaster } from '../shared/shared-toast.lib.js';
   }
 
   const remoteSyncClient = createRemoteSyncClient({ archiveStore });
+  const application = createQuotaApplication({
+    runtime: { run: runCompass },
+    archiveStore,
+    remoteSync: remoteSyncClient,
+    archiveChanges: archiveStoragePort,
+    runGuard: {
+      acquire() {
+        if (window[RUNNING_KEY]) return false;
+        window[RUNNING_KEY] = true;
+        return true;
+      },
+      release() { window[RUNNING_KEY] = false; },
+    },
+    onChange(state) {
+      latestResult = state.result;
+      latestError = state.calculationError;
+      latestArchiveSummary = state.archiveSummary;
+      latestLedgerCost = state.ledgerCost;
+      latestImportReport = state.importReport;
+      latestRemoteSyncStatus = state.syncStatus;
+      refreshCurrentPanel();
+    },
+  });
 
   function isUsagePage() {
     return (
@@ -109,54 +132,16 @@ import { createToaster } from '../shared/shared-toast.lib.js';
     return window[DEBUG_KEY] === true;
   }
 
-  async function refreshArchiveSummary() {
-    if (!archiveStore) return null;
-    latestArchiveSummary = await archiveStore.summarizeArchive();
-    return latestArchiveSummary;
-  }
-
-  async function refreshRemoteSyncStatus() {
-    if (!remoteSyncClient) {
-      latestRemoteSyncStatus = null;
-      return null;
-    }
-
-    latestRemoteSyncStatus = await remoteSyncClient.getStatus();
-    return latestRemoteSyncStatus;
-  }
-
-  function cycleStartDateFromResult(result) {
-    const windows = Array.isArray(result?.限制窗口概览) ? result.限制窗口概览 : [];
-    const win = windows.find((entry) => entry?.窗口Key === 'main.sevenDayWindow')
-      || windows.find((entry) => /7\s*天/.test(String(entry?.名称 || '')));
-    const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(win?.['本轮开始_UTC'] || ''));
-    return match ? match[1] : null;
-  }
-
-  async function refreshLedgerCostForResult(result) {
-    if (!archiveStore?.queryLedgerCost) return null;
-    latestLedgerCost = await archiveStore.queryLedgerCost({
-      cycleStartDate: cycleStartDateFromResult(result),
-    });
-    return latestLedgerCost;
-  }
-
   function refreshCurrentPanel() {
     // Avoid clobbering a token/gist id the user is actively typing in the sync form.
-    if (isSyncFormEditing(contentNode, document.activeElement)) return;
+    if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) {
+      deferredPanelRefresh = true;
+      return;
+    }
+    deferredPanelRefresh = false;
     if (latestResult && !latestError) {
       renderResult(latestResult);
     }
-  }
-
-  function refreshArchiveViewAfterStorageChange() {
-    Promise.all([refreshArchiveSummary(), refreshRemoteSyncStatus()])
-      .then(() => {
-        refreshCurrentPanel();
-      })
-      .catch((error) => {
-        console.warn(`${SCRIPT_NAME}: failed to refresh archive summary after storage change.`, error);
-      });
   }
 
   function setStatus(text, tone = 'idle') {
@@ -195,6 +180,10 @@ import { createToaster } from '../shared/shared-toast.lib.js';
 
   function renderResult(result) {
     if (!contentNode) return;
+    if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) {
+      deferredPanelRefresh = true;
+      return;
+    }
     const viewModel = createQuotaPanelViewModel({
       result,
       ledgerCost: latestLedgerCost,
@@ -226,6 +215,8 @@ import { createToaster } from '../shared/shared-toast.lib.js';
 
   function switchPanelView(nextView) {
     if (!contentNode || !latestPanelViewModel) return;
+    syncFormDirty = false;
+    if (deferredPanelRefresh) refreshCurrentPanel();
     // Leaving (or re-entering) a top-level tab drops any open drill-down so the
     // Statistics tab always reopens at its summary.
     statsDrill = null;
@@ -246,6 +237,7 @@ import { createToaster } from '../shared/shared-toast.lib.js';
 
   function renderLoading() {
     if (!contentNode) return;
+    if (syncFormDirty || isSyncFormEditing(contentNode, document.activeElement)) return;
     contentNode.innerHTML = panelRenderer.renderLoading();
     schedulePanelResize();
   }
@@ -271,9 +263,11 @@ import { createToaster } from '../shared/shared-toast.lib.js';
 
     try {
       const result = await runPromise;
-      await refreshLedgerCostForResult(result);
       renderResult(result);
-      setStatus(t('statusUpdated'), 'success');
+      const state = application.getState();
+      const failure = state.errors.persistence || state.errors.projection;
+      if (failure) showToast(t('saveArchiveFailed', { error: failure }), 'error');
+      setStatus(t(failure ? 'statusFailed' : 'statusUpdated'), failure ? 'error' : 'success');
       return result;
     } catch (error) {
       renderError(error);
@@ -294,87 +288,31 @@ import { createToaster } from '../shared/shared-toast.lib.js';
   }
 
   async function syncRemoteArchive(options = {}) {
-    if (!remoteSyncClient) {
-      throw new Error(t('syncPortUnavailable'));
-    }
-
     if (!options.silent) setStatus(t('statusLoading'), 'loading');
-    const synced = await remoteSyncClient.syncNow();
-    latestRemoteSyncStatus = synced.settings || await remoteSyncClient.getStatus();
-
-    if (synced.status !== 'synced') {
-      refreshCurrentPanel();
-      if (!options.silent) {
-        showToast(t('remoteSyncSkipped', { status: synced.status }), 'info');
-        setStatus(t('statusUpdated'), 'success');
-      }
-      return synced;
+    const outcome = await application.sync();
+    if (outcome.status === 'error' || outcome.status === 'partial') {
+      throw new Error(outcome.error || 'GitHub Gist sync failed.');
     }
-
-    latestArchiveSummary = synced.summary || await refreshArchiveSummary();
-    if (latestResult && !latestError) {
-      await refreshLedgerCostForResult(latestResult);
+    if (outcome.status === 'skipped' && !options.silent) {
+      showToast(t('remoteSyncSkipped', { status: outcome.reason }), 'info');
     }
-    refreshCurrentPanel();
-
-    // Quiet feedback only: the button status line and the in-panel sync form's
-    // "last synced" line already reflect success — no modal popup.
-    if (!options.silent) {
-      setStatus(t('statusUpdated'), 'success');
-    }
-    return synced;
-  }
-
-  function scheduleRemoteArchiveSync() {
-    if (!remoteSyncClient) return;
-    remoteSyncClient.scheduleSync({
-      onComplete: async (result) => {
-        latestRemoteSyncStatus = result.settings || await remoteSyncClient.getStatus();
-        if (result.status === 'synced') {
-          latestArchiveSummary = result.summary || await refreshArchiveSummary();
-        }
-        refreshCurrentPanel();
-      },
-      onError: async (error) => {
-        try {
-          await refreshRemoteSyncStatus();
-          refreshCurrentPanel();
-        } catch (statusError) {
-          console.warn(`${SCRIPT_NAME}: failed to refresh remote sync status after sync error.`, statusError);
-        }
-        console.warn(`${SCRIPT_NAME}: remote sync failed.`, error);
-      },
-    });
+    if (!options.silent) setStatus(t('statusUpdated'), 'success');
+    return outcome;
   }
 
   async function saveRemoteSyncFromForm() {
-    if (!remoteSyncClient) {
-      throw new Error(t('syncPortUnavailable'));
-    }
-
     const formValues = readSyncFormValues(contentNode);
     if (!formValues) return null;
-
-    const current = await remoteSyncClient.getStatus();
-    const decision = planRemoteSyncSave(formValues, { hasToken: current.hasToken });
-
-    if (!decision.ok) {
+    const outcome = await application.configureSync(formValues);
+    if (outcome.reason === 'token-required') {
       setStatus(t('statusFailed'), 'error');
       showToast(t('remoteSyncTokenRequired'), 'error');
       return null;
     }
-
-    await remoteSyncClient.configure(decision.patch);
-    await refreshRemoteSyncStatus();
+    if (outcome.status === 'error' || outcome.status === 'partial') throw new Error(outcome.error);
+    syncFormDirty = false;
     refreshCurrentPanel();
-
-    // Sync immediately after enabling so the form reflects a real result instead
-    // of forcing a second manual click.
-    if (decision.syncAfter) {
-      await syncRemoteArchive();
-    } else {
-      setStatus(t('statusUpdated'), 'success');
-    }
+    setStatus(t('statusUpdated'), 'success');
     return latestRemoteSyncStatus;
   }
 
@@ -519,6 +457,15 @@ import { createToaster } from '../shared/shared-toast.lib.js';
     const refs = mountedShell.refs();
     statusNode = refs.statusNode;
     contentNode = refs.contentNode;
+    contentNode.addEventListener('input', (event) => {
+      if (event.target.closest?.('[data-sync-form]')) syncFormDirty = true;
+    });
+    contentNode.addEventListener('change', (event) => {
+      if (event.target.closest?.('[data-sync-form]')) syncFormDirty = true;
+    });
+    contentNode.addEventListener('focusout', () => {
+      queueMicrotask(() => { if (deferredPanelRefresh) refreshCurrentPanel(); });
+    });
 
     toaster = createToaster({ root: refs.root });
     if (!document.getElementById(`${ROOT_ID}-toast-style`)) {
@@ -530,14 +477,6 @@ import { createToaster } from '../shared/shared-toast.lib.js';
   }
 
   async function runCompass() {
-    if (window[RUNNING_KEY]) {
-      console.warn(`[${SCRIPT_NAME}] Already running.`);
-      throw new Error(t('alreadyRunning'));
-    }
-
-    window[RUNNING_KEY] = true;
-
-    try {
       return createQuotaRuntime({
         config: createDefaultQuotaRuntimeConfig({
           DEBUG: isDebugEnabled(),
@@ -551,30 +490,18 @@ import { createToaster } from '../shared/shared-toast.lib.js';
           Intl.DateTimeFormat().resolvedOptions().timeZone || '未知'
         ),
       }).run();
-    } finally {
-      window[RUNNING_KEY] = false;
-    }
   }
 
   async function runAndReport(options = {}) {
     try {
-      pendingRunPromise = pendingRunPromise || runCompass();
-      const result = await pendingRunPromise;
-      latestResult = result;
-      latestError = null;
-      latestImportReport = null;
-
-      if (archiveStore) {
-        try {
-          const saved = await archiveStore.saveSnapshot(result);
-          latestArchiveSummary = saved.summary;
-          scheduleRemoteArchiveSync();
-        } catch (archiveError) {
-          console.error(`[${SCRIPT_NAME}] Snapshot Archive save failed.`, archiveError);
-          if (!options.silentAlert) {
-            showToast(t('saveArchiveFailed', { error: archiveError?.message || archiveError }), 'error');
-          }
-        }
+      pendingRunPromise = application.run();
+      const outcome = await pendingRunPromise;
+      if (outcome.status === 'error' || outcome.status === 'skipped') {
+        throw new Error(outcome.error || t('alreadyRunning'));
+      }
+      const result = outcome.result;
+      if (outcome.status === 'partial' && !options.silentAlert) {
+        showToast(t('saveArchiveFailed', { error: outcome.error }), 'error');
       }
 
       if (isDebugEnabled()) {
@@ -617,12 +544,11 @@ import { createToaster } from '../shared/shared-toast.lib.js';
       throw new Error(t('syncPortUnavailable'));
     }
 
-    const exportDocument = await archiveStore.buildExportDocument();
+    const exportDocument = await application.exportArchive();
     downloadTextFile(
       'codex-quota-compass-snapshot-archive.v1.json',
       JSON.stringify(exportDocument, null, 2),
     );
-    latestArchiveSummary = await archiveStore.summarizeArchive();
     refreshCurrentPanel();
     showToast(t('exportDone', { count: exportDocument.snapshotCount }), 'success');
   }
@@ -666,10 +592,8 @@ import { createToaster } from '../shared/shared-toast.lib.js';
 
     const fileText = await chooseImportFileText();
     const importDocument = JSON.parse(fileText);
-    const imported = await archiveStore.importArchiveDocument(importDocument);
-    latestArchiveSummary = imported.summary;
-    latestImportReport = imported.report;
-    scheduleRemoteArchiveSync();
+    const imported = await application.importArchive(importDocument);
+    if (imported.status === 'error' || imported.status === 'skipped') throw new Error(imported.error || imported.reason);
     refreshCurrentPanel();
     showToast(t('importDone', {
       added: imported.report.added,
@@ -679,19 +603,8 @@ import { createToaster } from '../shared/shared-toast.lib.js';
   }
 
   createUi();
-  Promise.all([refreshArchiveSummary(), refreshRemoteSyncStatus()])
-    .then(() => {
-      if (latestRemoteSyncStatus?.enabled && latestRemoteSyncStatus?.configured) {
-        return syncRemoteArchive({ silent: true });
-      }
-      return null;
-    })
-    .catch((error) => {
-      console.warn(`${SCRIPT_NAME}: failed to load archive or remote sync state.`, error);
-    });
-  archiveStoragePort.subscribeToChanges?.(() => {
-    refreshArchiveViewAfterStorageChange();
-  });
+  void application.start();
+  window.addEventListener('pagehide', () => application.dispose(), { once: true });
 
   if (typeof GM_registerMenuCommand === 'function') {
     GM_registerMenuCommand(t('menuRun'), () => {

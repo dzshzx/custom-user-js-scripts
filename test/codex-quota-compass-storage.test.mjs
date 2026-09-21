@@ -33,6 +33,7 @@ test('createSnapshotArchiveStoragePort prefers GM storage for read and write', a
     gmSetValue: async (key, archive) => {
       writes.push({ key, archive });
     },
+    localStorage: createLocalStorage(),
     logger: { warn() {} },
   });
 
@@ -176,7 +177,7 @@ test('createSnapshotArchiveStoragePort mirrors successful GM writes to fallback 
   assert.deepEqual(port.getBackendInfo(), { id: 'gm', label: 'GM storage' });
 });
 
-test('createSnapshotArchiveStoragePort returns null when both read paths fail', async () => {
+test('createSnapshotArchiveStoragePort rejects when both read paths fail', async () => {
   const warnings = [];
   const port = createSnapshotArchiveStoragePort({
     gmGetValue: async () => {
@@ -194,10 +195,7 @@ test('createSnapshotArchiveStoragePort returns null when both read paths fail', 
     },
   });
 
-  const archive = await port.read();
-
-  assert.equal(archive, null);
-  assert.deepEqual(port.getBackendInfo(), { id: 'localStorage', label: 'localStorage' });
+  await assert.rejects(port.read(), /Both Snapshot Archive storage reads failed/);
   assert.deepEqual(warnings, [
     'Codex Quota Compass: failed to read userscript archive storage.',
     'Codex Quota Compass: failed to read fallback archive storage.',

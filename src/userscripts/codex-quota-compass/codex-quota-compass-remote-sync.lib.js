@@ -6,13 +6,13 @@ import {
 } from './codex-quota-compass-archive.lib.js';
 
 const REMOTE_SYNC_SETTINGS_KEY = 'codexQuotaCompassRemoteSyncSettings';
-const DEFAULT_SYNC_DEBOUNCE_MS = 5000;
 const GITHUB_API_BASE = 'https://api.github.com';
 const GITHUB_API_VERSION = '2026-03-10';
 const GIST_DESCRIPTION = 'Codex Quota Compass Snapshot Archive';
 const GIST_FILENAME = 'codex-quota-compass-snapshot-archive.v1.json';
 // Read both the legacy full-snapshot doc (v1) and the new ledger doc (v2).
 const SUPPORTED_IMPORT_VERSIONS = new Set([1, 2]);
+const UNKNOWN_WRITE_PREFIX = 'Remote write outcome unknown. Verify the Gist before retrying. ';
 
 function maybePromise(value) {
   return value && typeof value.then === 'function' ? value : Promise.resolve(value);
@@ -229,7 +229,8 @@ function publicStatus(settings) {
     clientId: settings.clientId,
     hasToken: Boolean(settings.token),
     lastSyncedAt: settings.lastSyncedAt,
-    lastError: settings.lastError,
+    lastError: settings.token ? settings.lastError.split(settings.token).join('[redacted]') : settings.lastError,
+    remoteState: settings.lastError?.startsWith(UNKNOWN_WRITE_PREFIX) ? 'unknown' : (settings.lastError ? 'failed' : 'idle'),
   };
 }
 
@@ -388,14 +389,17 @@ function createRemoteSyncClient({
   settingsStore = createGmSettingsStore(),
   requestJson = createJsonRequester(),
   now = () => new Date().toISOString(),
-  logger = globalThis.console,
-  debounceMs = DEFAULT_SYNC_DEBOUNCE_MS,
 } = {}) {
   if (!archiveStore?.loadArchive || !archiveStore?.importArchiveDocument) {
     throw new Error('Remote sync requires a Snapshot Archive store.');
   }
 
-  let pendingTimer = null;
+  let queue = Promise.resolve();
+  function enqueue(operation) {
+    const result = queue.then(operation);
+    queue = result.catch(() => {});
+    return result;
+  }
 
   async function getSettings() {
     return settingsStore.read();
@@ -417,7 +421,7 @@ function createRemoteSyncClient({
       clientId: current.clientId || createClientId(),
       lastError: '',
     };
-    return saveSettings(next);
+    return publicStatus(await saveSettings(next));
   }
 
   async function getStatus() {
@@ -425,7 +429,8 @@ function createRemoteSyncClient({
   }
 
   async function markSyncFailure(settings, error) {
-    const message = error?.message || String(error);
+    const rawMessage = error?.message || String(error);
+    const message = settings.token ? rawMessage.split(settings.token).join('[redacted]') : rawMessage;
     await saveSettings({ ...settings, lastError: message });
     return message;
   }
@@ -439,8 +444,12 @@ function createRemoteSyncClient({
       return { status: 'unconfigured', settings: publicStatus(settings) };
     }
 
+    let localMerged = false;
+    let remoteWritePending = false;
+    let phase = 'persistence';
     try {
-      const localArchive = await archiveStore.loadArchive();
+      await archiveStore.loadArchive();
+      phase = 'sync';
       const exportedAt = now();
       const gistApi = createGitHubGistApi({
         requestJson,
@@ -465,7 +474,12 @@ function createRemoteSyncClient({
       }
 
       if (!gist) {
+        phase = 'persistence';
+        const localArchive = await archiveStore.loadArchive();
+        phase = 'sync';
+        remoteWritePending = true;
         gist = await gistApi.createGist(localArchive, exportedAt);
+        remoteWritePending = false;
         const savedSettings = await saveSettings({
           ...settings,
           gistId: gist.id,
@@ -483,7 +497,10 @@ function createRemoteSyncClient({
       }
 
       const remoteDocument = await archiveDocumentFromGist(gist, settings.filename, now, requestJson);
+      phase = 'persistence';
       const imported = await archiveStore.importArchiveDocument(remoteDocument);
+      localMerged = true;
+      phase = 'sync';
       // Write back whenever the merged content (ledger or retained snapshots)
       // differs from what the remote currently holds. A snapshot-count check is
       // not enough: the ledger keeps growing one row per settled day while the
@@ -501,9 +518,11 @@ function createRemoteSyncClient({
         exportedAt,
       );
       const remoteNeedsUpdate = !sameArchiveContent(mergedDocument, remoteNormalized);
+      remoteWritePending = remoteNeedsUpdate;
       const updatedGist = remoteNeedsUpdate
         ? await gistApi.updateGist(gist.id, imported.archive, now())
         : gist;
+      remoteWritePending = false;
       const savedSettings = await saveSettings({
         ...settings,
         gistId: updatedGist.id || gist.id,
@@ -520,34 +539,22 @@ function createRemoteSyncClient({
         archive: imported.archive,
       };
     } catch (error) {
-      const message = await markSyncFailure(settings, error);
-      throw new Error(message);
+      const unknown = remoteWritePending && !error?.status;
+      const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
+      const message = await markSyncFailure(settings, failure).catch(() => 'GitHub Gist sync failed; status could not be saved.');
+      throw Object.assign(new Error(message), {
+        localMerged,
+        phase,
+        remoteState: unknown ? 'unknown' : 'failed',
+      });
     }
-  }
-
-  function scheduleSync({ onComplete, onError } = {}) {
-    if (pendingTimer) {
-      globalThis.clearTimeout(pendingTimer);
-    }
-    pendingTimer = globalThis.setTimeout(() => {
-      pendingTimer = null;
-      syncNow()
-        .then((result) => {
-          if (typeof onComplete === 'function') onComplete(result);
-        })
-        .catch((error) => {
-          logger?.warn?.('Codex Quota Compass remote sync failed.', error);
-          if (typeof onError === 'function') onError(error);
-        });
-    }, debounceMs);
   }
 
   return {
-    configure,
-    getSettings,
-    getStatus,
-    scheduleSync,
-    syncNow,
+    configure: (patch) => enqueue(() => configure(patch)),
+    getSettings: () => enqueue(getSettings),
+    getStatus: () => enqueue(getStatus),
+    syncNow: () => enqueue(syncNow),
   };
 }
 
