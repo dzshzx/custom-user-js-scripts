@@ -70,9 +70,9 @@ Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜�
 
 ## JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数
 
-安装入口为 `dist/javdb-recommend.user.js`；旧 src 安装地址保留逐字节相同的完整 Bridge File。源码由 Entry、数据、请求、Period Section 及展示 Lib Module 组成。
+安装入口为 `dist/javdb-recommend.user.js`；旧 src 安装地址保留逐字节相同的完整 Bridge File。源码由 Entry、数据、请求、Period Section、Site Chrome 及展示 Lib Module 组成。
 
-JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、javdb.today 等镜像域名），在顶部导航栏加入「佳片推荐」入口，点击打开独立页面 `/recommend-archive` 浏览「佳片推荐」栏目的全部历史期数。归档页复用官网首页的样式表与导航（运行时复制，视觉与官网一致）：
+JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、javdb.today 等镜像域名），在顶部导航栏加入「佳片推荐」入口，点击打开独立页面 `/recommend-archive` 浏览「佳片推荐」栏目的全部历史期数。归档页从官网首页动态发现样式表与导航；资源在 12 秒内全部加载并通过基础计算样式检查后才启用官网外观，否则使用完整内置样式：
 
 - 瀑布流浏览：从上次浏览的期数开始按期流式渲染，滚动到底自动加载更早的期数；相邻未加载期会沿当前流追加，远距离或反向跳转则直接以目标期重建流，不再请求中间期，并记住浏览位置。
 - 影片列表：横版封面完整显示（不裁切），卡片展示番号、评分与发售日期，点击直达官网影片详情页。

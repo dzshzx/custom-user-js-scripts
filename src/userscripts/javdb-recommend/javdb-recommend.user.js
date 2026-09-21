@@ -668,9 +668,284 @@
     };
   }
 
+  // src/userscripts/javdb-recommend/javdb-recommend-site-chrome.lib.js
+  var CHROME_TIMEOUT_MS = 12e3;
+  var ROUTE = "/recommend-archive";
+  function defaultClock(window2) {
+    return {
+      now: () => Date.now(),
+      setTimeout: window2.setTimeout.bind(window2),
+      clearTimeout: window2.clearTimeout.bind(window2)
+    };
+  }
+  function timeoutError() {
+    const error = new Error("site chrome deadline exceeded");
+    error.code = "timeout";
+    return error;
+  }
+  function disposedError() {
+    const error = new Error("site chrome disposed");
+    error.code = "disposed";
+    return error;
+  }
+  function diagnostic(reason, details = {}) {
+    return { status: "fallback", reason, ...details };
+  }
+  function createSiteChrome({ document: document2, window: window2, fetch: fetch2, clock, baseUrl, onChange = () => {
+  } }) {
+    const timer = clock || defaultClock(window2);
+    const ownedLinks = [];
+    const ownedListeners = [];
+    let ownedNavigation = null;
+    let probe = null;
+    let startPromise = null;
+    let disposed = false;
+    let fetchController = null;
+    let deadline = 0;
+    let ownedNativeClass = false;
+    let ownedNavbarClass = false;
+    let ownedTheme = null;
+    let resolveDisposed;
+    const disposedSignal = new Promise((resolve) => {
+      resolveDisposed = resolve;
+    });
+    function publish(result) {
+      if (!disposed) {
+        try {
+          onChange(result);
+        } catch (error) {
+        }
+      }
+      return result;
+    }
+    function remaining() {
+      return Math.max(0, deadline - timer.now());
+    }
+    function byDeadline(promise) {
+      const wait = remaining();
+      if (wait <= 0) return Promise.reject(timeoutError());
+      return new Promise((resolve, reject) => {
+        const timeout = timer.setTimeout(() => reject(timeoutError()), wait);
+        Promise.resolve(promise).then(
+          (value) => {
+            timer.clearTimeout(timeout);
+            resolve(value);
+          },
+          (error) => {
+            timer.clearTimeout(timeout);
+            reject(error);
+          }
+        );
+        disposedSignal.then(() => {
+          timer.clearTimeout(timeout);
+          reject(disposedError());
+        });
+      });
+    }
+    function notifyDisposed() {
+      return { status: "disposed", reason: "disposed" };
+    }
+    function cleanupResources() {
+      ownedListeners.splice(0).forEach((remove) => remove());
+      ownedLinks.splice(0).forEach((link) => link.remove());
+      if (ownedNavigation) ownedNavigation.remove();
+      ownedNavigation = null;
+      if (probe) probe.remove();
+      probe = null;
+      if (ownedNativeClass) document2.documentElement.classList.remove("jdb-ra-native");
+      if (ownedNavbarClass) document2.documentElement.classList.remove("has-navbar-fixed-top");
+      ownedNativeClass = false;
+      ownedNavbarClass = false;
+      if (ownedTheme && document2.documentElement.dataset.theme === ownedTheme) {
+        delete document2.documentElement.dataset.theme;
+      }
+      ownedTheme = null;
+    }
+    function resolveHomepageBase(homeDocument, responseUrl) {
+      const declaredBase = homeDocument.querySelector("base[href]")?.getAttribute("href");
+      try {
+        return declaredBase ? new window2.URL(declaredBase, responseUrl).href : responseUrl;
+      } catch (error) {
+        return responseUrl;
+      }
+    }
+    function applicableStyles(homeDocument) {
+      return [...homeDocument.querySelectorAll('link[rel~="stylesheet"][href]')].filter((link) => {
+        const media = String(link.getAttribute("media") || "").trim();
+        if (!media || media.toLowerCase() === "all") return true;
+        try {
+          return !window2.matchMedia || window2.matchMedia(media).matches;
+        } catch (error) {
+          return false;
+        }
+      });
+    }
+    function prepareStyles(styles, homepageBase) {
+      return styles.map((source) => {
+        const link = document2.createElement("link");
+        link.rel = "stylesheet";
+        link.href = new window2.URL(source.getAttribute("href"), homepageBase).href;
+        link.dataset.jdbRaSiteChrome = "stylesheet";
+        const intendedMedia = source.getAttribute("media") || "";
+        link.media = "not all";
+        const loaded = new Promise((resolve, reject) => {
+          const onLoad = () => resolve();
+          const onError = () => reject(new Error(`stylesheet failed: ${link.href}`));
+          link.addEventListener("load", onLoad, { once: true });
+          link.addEventListener("error", onError, { once: true });
+          ownedListeners.push(() => {
+            link.removeEventListener("load", onLoad);
+            link.removeEventListener("error", onError);
+          });
+        });
+        ownedLinks.push(link);
+        document2.head.appendChild(link);
+        return { link, intendedMedia, loaded };
+      });
+    }
+    function createProbe() {
+      const root = document2.createElement("div");
+      root.dataset.jdbRaSiteChrome = "probe";
+      root.setAttribute("aria-hidden", "true");
+      root.style.cssText = "position:absolute;left:-100000px;top:0;visibility:hidden;pointer-events:none;";
+      const nav = document2.createElement("nav");
+      nav.className = "navbar main-nav";
+      const button = document2.createElement("button");
+      button.className = "button";
+      button.type = "button";
+      const box = document2.createElement("div");
+      box.className = "box";
+      root.append(nav, button, box);
+      document2.body.appendChild(root);
+      probe = root;
+      return { nav, button, box };
+    }
+    function nativeStylesApply() {
+      const nodes = createProbe();
+      const navStyle = window2.getComputedStyle(nodes.nav);
+      const buttonStyle = window2.getComputedStyle(nodes.button);
+      const boxStyle = window2.getComputedStyle(nodes.box);
+      const navReady = navStyle.display === "flex" || parseFloat(navStyle.minHeight) > 0;
+      const buttonReady = /flex/.test(buttonStyle.display) || parseFloat(buttonStyle.paddingLeft) > 4;
+      const boxReady = boxStyle.boxShadow && boxStyle.boxShadow !== "none" || parseFloat(boxStyle.paddingTop) > 0;
+      probe.remove();
+      probe = null;
+      return Boolean(navReady && buttonReady && boxReady);
+    }
+    function absolutizeNavigation(navigation, homepageBase) {
+      navigation.querySelectorAll("[href]").forEach((node) => {
+        try {
+          node.setAttribute("href", new window2.URL(node.getAttribute("href"), homepageBase).href);
+        } catch (error) {
+        }
+      });
+      navigation.querySelectorAll("[src]").forEach((node) => {
+        try {
+          node.setAttribute("src", new window2.URL(node.getAttribute("src"), homepageBase).href);
+        } catch (error) {
+        }
+      });
+    }
+    function installNavigation(homeDocument, homepageBase) {
+      let navigation = document2.body.querySelector("nav.main-nav");
+      if (!navigation) {
+        const source = homeDocument.querySelector("nav.main-nav");
+        if (!source) return;
+        navigation = document2.importNode(source, true);
+        navigation.dataset.jdbRaSiteChrome = "navigation";
+        absolutizeNavigation(navigation, homepageBase);
+        const root = document2.querySelector(".jdb-ra");
+        document2.body.insertBefore(navigation, root || document2.body.firstChild);
+        ownedNavigation = navigation;
+      }
+      navigation.querySelectorAll("[data-target]").forEach((button) => {
+        const click = (event) => {
+          event.preventDefault();
+          const target = document2.getElementById(button.getAttribute("data-target"));
+          button.classList.toggle("is-active");
+          if (target) target.classList.toggle("is-active");
+        };
+        button.addEventListener("click", click);
+        ownedListeners.push(() => button.removeEventListener("click", click));
+      });
+      const start = navigation.querySelector(".navbar-start");
+      if (start && !start.querySelector(`a[href$="${ROUTE}"]`)) {
+        const entry = document2.createElement("a");
+        entry.className = "navbar-item";
+        entry.href = ROUTE;
+        entry.title = "浏览佳片推荐全部历史期数";
+        entry.textContent = "佳片推荐";
+        start.appendChild(entry);
+      }
+    }
+    async function run() {
+      deadline = timer.now() + CHROME_TIMEOUT_MS;
+      try {
+        const homepageUrl = new window2.URL("/", baseUrl).href;
+        if (window2.AbortController) fetchController = new window2.AbortController();
+        const response = await byDeadline(fetch2(homepageUrl, fetchController ? { signal: fetchController.signal } : void 0));
+        if (disposed) return notifyDisposed();
+        if (!response || !response.ok) return publish(diagnostic("homepage-fetch", { httpStatus: response && response.status }));
+        const html = await byDeadline(response.text());
+        if (disposed) return notifyDisposed();
+        const homeDocument = new window2.DOMParser().parseFromString(html, "text/html");
+        const responseUrl = response.url || homepageUrl;
+        const homepageBase = resolveHomepageBase(homeDocument, responseUrl);
+        const styles = applicableStyles(homeDocument);
+        if (!styles.length) return publish(diagnostic("no-stylesheets"));
+        const prepared = prepareStyles(styles, homepageBase);
+        await byDeadline(Promise.all(prepared.map((item) => item.loaded)));
+        if (disposed) return notifyDisposed();
+        prepared.forEach(({ link, intendedMedia }) => {
+          if (intendedMedia) link.media = intendedMedia;
+          else link.removeAttribute("media");
+        });
+        await Promise.resolve();
+        if (!nativeStylesApply()) {
+          cleanupResources();
+          return publish(diagnostic("style-check"));
+        }
+        if (disposed) return notifyDisposed();
+        installNavigation(homeDocument, homepageBase);
+        if (!document2.documentElement.classList.contains("jdb-ra-native")) {
+          document2.documentElement.classList.add("jdb-ra-native");
+          ownedNativeClass = true;
+        }
+        if (document2.body.querySelector("nav.main-nav") && !document2.documentElement.classList.contains("has-navbar-fixed-top")) {
+          document2.documentElement.classList.add("has-navbar-fixed-top");
+          ownedNavbarClass = true;
+        }
+        const theme = homeDocument.documentElement.dataset.theme;
+        if (theme && !document2.documentElement.dataset.theme) {
+          document2.documentElement.dataset.theme = theme;
+          ownedTheme = theme;
+        }
+        return publish({ status: "native", reason: "ready", stylesheets: prepared.length });
+      } catch (error) {
+        if (disposed) return notifyDisposed();
+        const reason = error && error.code === "timeout" ? "timeout" : /^stylesheet failed:/.test(String(error && error.message)) ? "stylesheet-error" : "homepage-fetch";
+        cleanupResources();
+        return publish(diagnostic(reason));
+      }
+    }
+    return {
+      start() {
+        if (disposed) return Promise.resolve(notifyDisposed());
+        if (!startPromise) startPromise = run();
+        return startPromise;
+      },
+      dispose() {
+        if (disposed) return;
+        disposed = true;
+        resolveDisposed();
+        if (fetchController) fetchController.abort();
+        cleanupResources();
+      }
+    };
+  }
+
   // src/userscripts/javdb-recommend/javdb-recommend-view.lib.js
   var BASE = location.origin;
-  var ROUTE = "/recommend-archive";
   var ICON_PATHS2 = {
     "search": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     "chevron-left": '<path d="m15 18-6-6 6-6"/>',
@@ -684,6 +959,7 @@
   var searching = false;
   var LS_KEY = "javdb_recommend_last_period";
   function bootArchivePage(data) {
+    var disposed = false;
     document.title = "佳片推荐 · 历史期数 - JavDB";
     document.body.classList.remove("rails-default-error-page");
     document.querySelectorAll("body > .rails-default-error-page, body > .dialog, body > .jdb-ra").forEach(function(node) {
@@ -916,54 +1192,15 @@
     function readyText() {
       return "共 " + periods.length + " 期 · 每周一/四更新 · 滚动加载更多";
     }
-    function loadSiteChrome() {
-      fetch(BASE + "/").then(function(r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.text();
-      }).then(function(html) {
-        var doc = new DOMParser().parseFromString(html, "text/html");
-        if (doc.documentElement.dataset.theme) {
-          document.documentElement.dataset.theme = doc.documentElement.dataset.theme;
-        }
-        doc.querySelectorAll('link[rel~="stylesheet"]').forEach(function(l) {
-          var link = document.createElement("link");
-          link.rel = "stylesheet";
-          link.href = l.getAttribute("href");
-          if (l.getAttribute("media")) link.media = l.getAttribute("media");
-          document.head.appendChild(link);
-        });
-        var nav = doc.querySelector("nav.main-nav");
-        if (nav) {
-          document.body.insertAdjacentHTML("afterbegin", nav.outerHTML);
-          document.documentElement.classList.add("has-navbar-fixed-top");
-          document.body.querySelectorAll("nav.main-nav [data-target]").forEach(function(btn) {
-            btn.addEventListener("click", function(e) {
-              e.preventDefault();
-              var t = document.getElementById(btn.getAttribute("data-target"));
-              btn.classList.toggle("is-active");
-              if (t) t.classList.toggle("is-active");
-            });
-          });
-          var start = document.body.querySelector("nav.main-nav .navbar-start");
-          if (start && !start.querySelector('a[href="' + ROUTE + '"]')) {
-            var a = document.createElement("a");
-            a.className = "navbar-item";
-            a.href = ROUTE;
-            a.title = "浏览佳片推荐全部历史期数";
-            a.textContent = "佳片推荐";
-            start.appendChild(a);
-          }
-        }
-        document.documentElement.classList.add("jdb-ra-native");
-      }).catch(function(e) {
-        console.warn("[javdb-recommend] 官网样式加载失败，使用内置兜底样式:", e.message);
+    function loadPeriods() {
+      if (disposed) return;
+      setStatus("加载期数列表中…");
+      data.loadCatalog({ onProgress: (count) => setStatus("加载期数列表… 已获取 " + count + " 期") }).then((result) => finish(result.periods, result.degraded ? "期数目录更新失败，使用本地缓存" : "期数目录：" + result.source)).catch((error) => {
+        if (!disposed) setStatus("期数列表加载失败：" + error.message + "（可点击“刷新期数”重试）");
       });
     }
-    function loadPeriods() {
-      setStatus("加载期数列表中…");
-      data.loadCatalog({ onProgress: (count) => setStatus("加载期数列表… 已获取 " + count + " 期") }).then((result) => finish(result.periods, result.degraded ? "期数目录更新失败，使用本地缓存" : "期数目录：" + result.source)).catch((error) => setStatus("期数列表加载失败：" + error.message + "（可点击“刷新期数”重试）"));
-    }
     function finish(list, sourceLabel) {
+      if (disposed) return;
       periods = list;
       renderSelect();
       setStatus(sourceLabel ? readyText() + " · " + sourceLabel : readyText());
@@ -986,6 +1223,7 @@
     var streamGeneration = 0;
     var navigationGeneration = 0;
     var streamLease = null;
+    var streamIntersectionObserver = null;
     var loadedSections = {};
     var currentIdx = 0;
     function setSentinel(t, disabled) {
@@ -1004,6 +1242,7 @@
     }
     function appendNext(generation) {
       if (generation === void 0) generation = streamGeneration;
+      if (disposed) return Promise.resolve(false);
       if (generation !== streamGeneration) return Promise.resolve(false);
       if (streamBusy || !periods.length) return Promise.resolve(false);
       if (streamNext >= periods.length) {
@@ -1020,7 +1259,7 @@
       streamLease = lease;
       return lease.promise.then(function(result) {
         var movies = result.movies;
-        if (generation !== streamGeneration) return false;
+        if (disposed || generation !== streamGeneration) return false;
         if (result.degraded) setStatus("详情更新失败，使用本地缓存");
         section.update({ movies, degraded: result.degraded });
         streamNext = streamNext + 1;
@@ -1032,7 +1271,7 @@
         if (sentinelVisible) appendNext(generation);
         return true;
       }).catch(function(e) {
-        if (generation !== streamGeneration) return false;
+        if (disposed || generation !== streamGeneration) return false;
         streamBusy = false;
         delete loadedSections[p.period];
         section.dispose();
@@ -1054,11 +1293,11 @@
         appendNext();
       });
       if (typeof IntersectionObserver !== "undefined") {
-        var io = new IntersectionObserver(function(entries) {
+        streamIntersectionObserver = new IntersectionObserver(function(entries) {
           sentinelVisible = entries[0].isIntersecting;
           if (sentinelVisible) appendNext();
         }, { rootMargin: "600px" });
-        io.observe(sentinel);
+        streamIntersectionObserver.observe(sentinel);
       }
       appendNext();
     }
@@ -1244,7 +1483,7 @@
         setStatus("索引补全 " + update.completed + "/" + update.total + " 期 · 命中 " + update.hits + " 部");
       } });
       activeSearch.done.then((result) => {
-        if (generation !== searchGeneration) return;
+        if (disposed || generation !== searchGeneration) return;
         searching = false;
         btnEl.textContent = "全期搜索";
         setStatus((result.status === "partial" ? "搜索部分完成 · 失败 " + result.failed + " 期 · " : result.status === "cancelled" ? "搜索已停止 · " : "搜索完成 · ") + "命中 " + result.hits + " 部（" + result.hitPeriods + " 期）" + (result.degraded ? " · 使用旧缓存 " + result.degraded + " 期" : ""));
@@ -1272,8 +1511,50 @@
       data.clearCaches();
       location.reload();
     });
-    loadSiteChrome();
+    var siteChrome = createSiteChrome({
+      document,
+      window,
+      fetch,
+      baseUrl: BASE,
+      onChange: function() {
+        scheduleArchiveGridSync();
+      }
+    });
+    siteChrome.start().then(function(result) {
+      if (!disposed && result.status === "fallback") {
+        console.warn("[javdb-recommend] 官网样式不可用，使用内置兜底样式:", result.reason);
+      }
+    });
     loadPeriods();
+    return {
+      dispose: function() {
+        if (disposed) return;
+        disposed = true;
+        clearTimeout(debounceTimer);
+        streamGeneration += 1;
+        navigationGeneration += 1;
+        searchGeneration += 1;
+        if (activeSearch) activeSearch.cancel();
+        activeSearch = null;
+        if (streamLease) streamLease.release();
+        streamLease = null;
+        if (streamIntersectionObserver) streamIntersectionObserver.disconnect();
+        if (archiveMutationObserver) archiveMutationObserver.disconnect();
+        if (gridResizeObserver) gridResizeObserver.disconnect();
+        window.removeEventListener("resize", scheduleArchiveGridSync);
+        Object.keys(loadedSections).forEach(function(period) {
+          loadedSections[period].dispose();
+        });
+        loadedSections = {};
+        resultSections.forEach(function(section) {
+          section.dispose();
+        });
+        resultSections = [];
+        siteChrome.dispose();
+        styleEl.remove();
+        document.querySelector(".jdb-ra")?.remove();
+      }
+    };
   }
 
   // src/userscripts/javdb-recommend/javdb-recommend.entry.js
@@ -1290,9 +1571,12 @@
   }
   if (location.pathname.replace(/\/+$/, "") === ROUTE2) {
     const data = createArchiveData({ storage: localStorage, request: createRequest({ base: location.origin }) });
-    bootArchivePage(data);
+    const view = bootArchivePage(data);
     window.addEventListener("pagehide", (event) => {
-      if (!event.persisted) data.dispose();
+      if (!event.persisted) {
+        view.dispose();
+        data.dispose();
+      }
     });
   } else injectNavEntry();
 })();

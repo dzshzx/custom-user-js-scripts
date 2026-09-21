@@ -188,7 +188,7 @@ out where script-owned pages differ.
 ## JavDB Recommend Archive UI
 
 - The surface is a quiet navbar entry on JavDB pages plus a script-owned archive page rendered at `/recommend-archive`; no floating panel.
-- The archive page mirrors the site's native look: stylesheet links and navbar markup are copied from the live homepage at runtime (asset URLs are deploy-fingerprinted and must not be hard-coded). If that copy fails, the page falls back to its own light, readable structural styles.
+- The archive page mirrors the site's native look through the Site Chrome module: deploy-fingerprinted stylesheet URLs and navigation come from the live homepage, resolve against its response/base URL, and stay inactive until every screen-applicable stylesheet loads within one 12-second deadline. Native mode requires computed navigation, button, and box styles; any missing, failed, timed-out, or ineffective resource is removed before the complete readable fallback remains active. The style probe lives outside the archive root, is non-interactive, and never uses `.movie-list`.
 - Script-owned styles stay scoped under `.jdb-ra` and own only what the site CSS does not cover: toolbar, period section headers, grid column count, and uncropped covers. Once a card or list carries an external enhancement marker, its observable cover mode and inline layout win over the archive defaults.
 - When another userscript decorates a native-style movie grid, the archive treats that grid's effective column count, gaps, and cover mode as the compatibility seam and applies them only to undecorated later period grids. Copied inline values are individually owned and released if that grid is later decorated, without changing values the other script wrote. Compatibility is verified against Tampermonkey and `JAV老司机-新` 2.8.4.8 DOM markers; the archive does not call that script's private functions.
 - Browsing is one scrollable stream of period sections (newest first) that auto-loads older periods via a sentinel. Navigation appends the adjacent next section when it matches the stream cursor; distant or reverse navigation re-anchors the stream at the target period so intermediate periods are neither fetched nor rendered.
@@ -200,6 +200,7 @@ out where script-owned pages differ.
 - The search box is disambiguated by a segmented control (loaded stream vs. all periods): the loaded segment filters instantly on input, the all-periods segment runs the stoppable full-archive search from an explicit submit (Enter or the search button).
 - Period sections render gray skeleton cards at the native card aspect ratio (`padding-top: 67%`) while loading, swapped wholesale when data arrives; a failed cover image yields a labelled placeholder box instead of a hidden hole.
 - On narrow viewports (<769px) the sticky toolbar becomes two fixed rows (period navigation, then search and actions), with anchor scroll margins recalculated to match.
+- Site Chrome startup is idempotent and independent from Catalog loading. It reuses existing navigation, owns its hamburger listeners and injected resources, preserves an existing or late-selected theme, and cannot re-enable native mode after archive disposal.
 
 ## Components
 

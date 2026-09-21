@@ -77,6 +77,21 @@ const CHROME_HTML =
 async function runScript(window, fetchImpl, extraGlobals = {}, storage = createMemoryStorage()) {
   const source = await readFile(srcPath, 'utf8');
   window.happyDOM.settings.disableCSSFileLoading = true;
+  const nativeGetComputedStyle = window.getComputedStyle.bind(window);
+  window.getComputedStyle = node => {
+    if (!node.closest?.('[data-jdb-ra-site-chrome="probe"]')) return nativeGetComputedStyle(node);
+    if (node.matches('nav')) return { display: 'flex', minHeight: '52px' };
+    if (node.matches('button')) return { display: 'inline-flex', paddingLeft: '12px' };
+    return { display: 'block', paddingTop: '20px', boxShadow: 'rgb(0 0 0 / 10%) 0px 1px 2px' };
+  };
+  const nativeLinkListener = window.HTMLLinkElement.prototype.addEventListener;
+  window.HTMLLinkElement.prototype.addEventListener = function (type, listener, options) {
+    if (this.dataset.jdbRaSiteChrome && type === 'error') return;
+    nativeLinkListener.call(this, type, listener, options);
+    if (this.dataset.jdbRaSiteChrome && type === 'load') {
+      Promise.resolve().then(() => this.dispatchEvent(new window.Event('load')));
+    }
+  };
   const context = vm.createContext({
     window,
     document: window.document,
@@ -99,6 +114,10 @@ async function runScript(window, fetchImpl, extraGlobals = {}, storage = createM
   // 等待期数列表、首期详情与官网外观的 promise 链落定
   for (let i = 0; i < 20; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
+    window.document.querySelectorAll('link[data-jdb-ra-site-chrome]:not([data-test-loaded])').forEach(link => {
+      link.dataset.testLoaded = '1';
+      link.dispatchEvent(new window.Event('load'));
+    });
   }
   return context;
 }
@@ -130,7 +149,7 @@ test('standalone archive page adopts site chrome and streams native-style cards'
   assert.equal(doc.title, '佳片推荐 · 历史期数 - JavDB');
 
   // 官网样式表与导航复制自首页，并打上 jdb-ra-native 标记
-  assert.ok(doc.querySelector('link[href="/packs/css/app-testhash.css"]'));
+  assert.ok(doc.querySelector('link[href$="/packs/css/app-testhash.css"]'));
   assert.ok(doc.querySelector('nav.main-nav'));
   assert.ok(doc.documentElement.classList.contains('jdb-ra-native'));
   assert.match(doc.querySelector('style').textContent, /content-visibility:auto/);

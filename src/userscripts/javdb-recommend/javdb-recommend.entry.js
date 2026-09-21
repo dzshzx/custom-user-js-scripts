@@ -34,8 +34,11 @@ const ROUTE = '/recommend-archive';
 
 if (location.pathname.replace(/\/+$/, '') === ROUTE) {
   const data = createArchiveData({ storage: localStorage, request: createRequest({ base: location.origin }) });
-  bootArchivePage(data);
+  const view = bootArchivePage(data);
   window.addEventListener('pagehide', event => {
-    if (!event.persisted) data.dispose();
+    if (!event.persisted) {
+      view.dispose();
+      data.dispose();
+    }
   });
 } else injectNavEntry();

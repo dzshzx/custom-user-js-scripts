@@ -1,8 +1,8 @@
 import { createPeriodSection } from './javdb-recommend-period-section.lib.js';
+import { createSiteChrome } from './javdb-recommend-site-chrome.lib.js';
 
 var BASE = location.origin;
   /* ================= 官网资源约定 ================= */
-  var ROUTE = '/recommend-archive';
   /* 图标 vendored from Lucide (https://lucide.dev), ISC License —— 与
      src/userscripts/shared/shared-icons.lib.js 同源；由构建打包到安装文件。 */
   var ICON_PATHS = {
@@ -21,6 +21,7 @@ var BASE = location.origin;
   var periods = [], searching = false;
   var LS_KEY = 'javdb_recommend_last_period';
   export function bootArchivePage(data) {
+    var disposed = false;
     document.title = '佳片推荐 · 历史期数 - JavDB';
     // 只清理可识别的官网 404 内容与本脚本旧根；保留其他脚本先挂载的节点和 body 状态。
     document.body.classList.remove('rails-default-error-page');
@@ -299,65 +300,17 @@ var BASE = location.origin;
     function setStatus(t) { statusEl.textContent = t; }
     function readyText() { return '共 ' + periods.length + ' 期 · 每周一/四更新 · 滚动加载更多'; }
 
-    /* ---------- 官网原生外观 ----------
-       样式表与导航直接复制自官网首页（同源）。样式表 URL 带部署指纹
-       （/packs/css/app-<hash>.css），硬编码会随官网发版失效，只能运行时复制。
-       失败时页面用上面的兜底样式，功能不受影响。 */
-    function loadSiteChrome() {
-      fetch(BASE + '/').then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.text();
-      }).then(function (html) {
-        var doc = new DOMParser().parseFromString(html, 'text/html');
-        if (doc.documentElement.dataset.theme) {
-          document.documentElement.dataset.theme = doc.documentElement.dataset.theme;
-        }
-        doc.querySelectorAll('link[rel~="stylesheet"]').forEach(function (l) {
-          var link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = l.getAttribute('href');
-          if (l.getAttribute('media')) link.media = l.getAttribute('media');
-          document.head.appendChild(link);
-        });
-        var nav = doc.querySelector('nav.main-nav');
-        if (nav) {
-          document.body.insertAdjacentHTML('afterbegin', nav.outerHTML);
-          document.documentElement.classList.add('has-navbar-fixed-top');
-          // 官网 JS 不在本页运行，汉堡菜单的展开收起由脚本接管
-          document.body.querySelectorAll('nav.main-nav [data-target]').forEach(function (btn) {
-            btn.addEventListener('click', function (e) {
-              e.preventDefault();
-              var t = document.getElementById(btn.getAttribute('data-target'));
-              btn.classList.toggle('is-active');
-              if (t) t.classList.toggle('is-active');
-            });
-          });
-          // 补归档页自身入口，与官网其他页面保持一致
-          var start = document.body.querySelector('nav.main-nav .navbar-start');
-          if (start && !start.querySelector('a[href="' + ROUTE + '"]')) {
-            var a = document.createElement('a');
-            a.className = 'navbar-item';
-            a.href = ROUTE;
-            a.title = '浏览佳片推荐全部历史期数';
-            a.textContent = '佳片推荐';
-            start.appendChild(a);
-          }
-        }
-        document.documentElement.classList.add('jdb-ra-native');
-      }).catch(function (e) {
-        console.warn('[javdb-recommend] 官网样式加载失败，使用内置兜底样式:', e.message);
-      });
-    }
-
     /* ---------- 期数列表 ---------- */
     function loadPeriods() {
+      if (disposed) return;
       setStatus('加载期数列表中…');
       data.loadCatalog({ onProgress: count => setStatus('加载期数列表… 已获取 ' + count + ' 期') })
         .then(result => finish(result.periods, result.degraded ? '期数目录更新失败，使用本地缓存' : '期数目录：' + result.source))
-        .catch(error => setStatus('期数列表加载失败：' + error.message + '（可点击“刷新期数”重试）'));
+        .catch(error => { if (!disposed) setStatus('期数列表加载失败：' + error.message + '（可点击“刷新期数”重试）'); });
     }
 
     function finish(list, sourceLabel) {
+      if (disposed) return;
       periods = list;
       renderSelect();
       setStatus(sourceLabel ? readyText() + ' · ' + sourceLabel : readyText());
@@ -384,6 +337,7 @@ var BASE = location.origin;
     var streamGeneration = 0;
     var navigationGeneration = 0;
     var streamLease = null;
+    var streamIntersectionObserver = null;
     var loadedSections = {}; // period -> section 元素
     var currentIdx = 0;
 
@@ -405,6 +359,7 @@ var BASE = location.origin;
 
     function appendNext(generation) {
       if (generation === undefined) generation = streamGeneration;
+      if (disposed) return Promise.resolve(false);
       if (generation !== streamGeneration) return Promise.resolve(false);
       if (streamBusy || !periods.length) return Promise.resolve(false);
       if (streamNext >= periods.length) {
@@ -421,7 +376,7 @@ var BASE = location.origin;
       streamLease = lease;
       return lease.promise.then(function (result) {
         var movies = result.movies;
-        if (generation !== streamGeneration) return false;
+        if (disposed || generation !== streamGeneration) return false;
         if (result.degraded) setStatus('详情更新失败，使用本地缓存');
         section.update({ movies: movies, degraded: result.degraded });
         streamNext = streamNext + 1;
@@ -433,7 +388,7 @@ var BASE = location.origin;
         if (sentinelVisible) appendNext(generation);
         return true;
       }).catch(function (e) {
-        if (generation !== streamGeneration) return false;
+        if (disposed || generation !== streamGeneration) return false;
         streamBusy = false;
         delete loadedSections[p.period];
         section.dispose();
@@ -452,11 +407,11 @@ var BASE = location.origin;
       currentIdx = streamNext;
       sentinel.addEventListener('click', function () { appendNext(); });
       if (typeof IntersectionObserver !== 'undefined') {
-        var io = new IntersectionObserver(function (entries) {
+        streamIntersectionObserver = new IntersectionObserver(function (entries) {
           sentinelVisible = entries[0].isIntersecting;
           if (sentinelVisible) appendNext();
         }, { rootMargin: '600px' });
-        io.observe(sentinel);
+        streamIntersectionObserver.observe(sentinel);
       }
       appendNext();
     }
@@ -630,7 +585,7 @@ var BASE = location.origin;
         setStatus('索引补全 ' + update.completed + '/' + update.total + ' 期 · 命中 ' + update.hits + ' 部');
       } });
       activeSearch.done.then(result => {
-        if (generation !== searchGeneration) return;
+        if (disposed || generation !== searchGeneration) return;
         searching = false;
         btnEl.textContent = '全期搜索';
         setStatus((result.status === 'partial' ? '搜索部分完成 · 失败 ' + result.failed + ' 期 · ' :
@@ -665,6 +620,42 @@ var BASE = location.origin;
       location.reload();
     });
 
-    loadSiteChrome();
+    var siteChrome = createSiteChrome({
+      document: document,
+      window: window,
+      fetch: fetch,
+      baseUrl: BASE,
+      onChange: function () { scheduleArchiveGridSync(); }
+    });
+    siteChrome.start().then(function (result) {
+      if (!disposed && result.status === 'fallback') {
+        console.warn('[javdb-recommend] 官网样式不可用，使用内置兜底样式:', result.reason);
+      }
+    });
     loadPeriods();
+    return {
+      dispose: function () {
+        if (disposed) return;
+        disposed = true;
+        clearTimeout(debounceTimer);
+        streamGeneration += 1;
+        navigationGeneration += 1;
+        searchGeneration += 1;
+        if (activeSearch) activeSearch.cancel();
+        activeSearch = null;
+        if (streamLease) streamLease.release();
+        streamLease = null;
+        if (streamIntersectionObserver) streamIntersectionObserver.disconnect();
+        if (archiveMutationObserver) archiveMutationObserver.disconnect();
+        if (gridResizeObserver) gridResizeObserver.disconnect();
+        window.removeEventListener('resize', scheduleArchiveGridSync);
+        Object.keys(loadedSections).forEach(function (period) { loadedSections[period].dispose(); });
+        loadedSections = {};
+        resultSections.forEach(function (section) { section.dispose(); });
+        resultSections = [];
+        siteChrome.dispose();
+        styleEl.remove();
+        document.querySelector('.jdb-ra')?.remove();
+      }
+    };
   }
