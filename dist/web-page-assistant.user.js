@@ -2191,6 +2191,7 @@ ${root} :focus-visible {
     let openPromise = null;
     let pendingOpenIntent = null;
     const pendingSubmissions = /* @__PURE__ */ new Set();
+    const pendingActionTokens = /* @__PURE__ */ new WeakMap();
     const ownedStyleIds = /* @__PURE__ */ new Set();
     let finishDisposed;
     const disposedPromise = new Promise((resolve) => {
@@ -2520,8 +2521,12 @@ ${root} :focus-visible {
       }
       const submission = { generation: dialogGeneration, revision: editRevision, dialog };
       if (WRITE_ACTIONS.has(action)) pendingSubmissions.add(submission);
-      const result = await session.dispatch(command);
-      pendingSubmissions.delete(submission);
+      let result;
+      try {
+        result = await session.dispatch(command);
+      } finally {
+        pendingSubmissions.delete(submission);
+      }
       latestSnapshot = result.state;
       const sameDialog = dialog === submission.dialog && dialogGeneration === submission.generation;
       const sameDraft = sameDialog && editRevision === submission.revision;
@@ -2561,7 +2566,11 @@ ${root} :focus-visible {
       event.stopPropagation();
       const isWrite = WRITE_ACTIONS.has(action);
       const pendingLabel = isWrite ? actionNode.textContent : null;
+      const actionDialog = dialog;
+      const actionGeneration = dialogGeneration;
+      const actionToken = {};
       if (isWrite) {
+        pendingActionTokens.set(actionNode, actionToken);
         actionNode.disabled = true;
         actionNode.textContent = "处理中…";
       }
@@ -2570,12 +2579,16 @@ ${root} :focus-visible {
       } catch (error) {
         if (disposed) return;
         console.warn(`${SCRIPT_NAME}: action failed.`, error);
-        if (isWrite && actionNode.isConnected !== false) {
-          actionNode.disabled = false;
-          actionNode.textContent = pendingLabel;
-        }
-        if (dialog && !dialog.querySelector('[data-part-role="message"]')?.textContent) {
+        if (dialog === actionDialog && dialogGeneration === actionGeneration && !dialog?.querySelector('[data-part-role="message"]')?.textContent) {
           setMessage(`操作失败：${error?.message || error}`, "error");
+        }
+      } finally {
+        if (isWrite && pendingActionTokens.get(actionNode) === actionToken) {
+          pendingActionTokens.delete(actionNode);
+          if (!disposed && actionNode.isConnected !== false) {
+            actionNode.disabled = false;
+            actionNode.textContent = pendingLabel;
+          }
         }
       }
     }

@@ -135,6 +135,13 @@ test('settings notification and save completion preserve edits made during the w
   assert.equal(input.value, '42');
   assert.equal(harness.window.document.activeElement, input);
   assert.match(dialog.querySelector('[data-part-role="message"]').textContent, /已保存到当前页面/);
+  const saveButton = dialog.querySelector('[data-part-action="save-custom"]');
+  assert.equal(saveButton.disabled, false);
+  assert.equal(saveButton.textContent, '保存自定义时间');
+  saveButton.click();
+  await flush();
+  await flush();
+  assert.equal(harness.writes.length, 2, 'the preserved form can save again');
   harness.view.dispose();
   harness.session.dispose();
 });
@@ -181,6 +188,30 @@ test('a save from a closed dialog cannot rebuild a newly opened dialog', { skip:
   assert.equal(dialogOf(harness.window), reopened);
   assert.equal(reopened.querySelector('[data-part-role="custom-value"]'), input);
   assert.equal(input.value, '42');
+  harness.view.dispose();
+  harness.session.dispose();
+});
+
+test('a rejected dispatch clears pending state and cannot report into a reopened dialog', { skip: domSkip }, async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const rejected = deferred();
+  const harness = createHarness();
+  await harness.view.openSettings();
+  harness.session.dispatch = () => rejected.promise;
+  const original = dialogOf(harness.window);
+  original.querySelector('[data-part-action="save-preset"]').click();
+  await flush();
+  original.querySelector('[data-part-action="close-dialog"]').click();
+  await harness.view.openSettings();
+  const reopened = dialogOf(harness.window);
+  rejected.reject(new Error('transport rejected'));
+  await flush();
+  await flush();
+
+  assert.equal(dialogOf(harness.window), reopened);
+  assert.equal(reopened.querySelector('[data-part-role="message"]').textContent, '');
+  harness.view.update(harness.session.getState(), { kind: 'settings', area: 'unlocker' });
+  assert.notEqual(dialogOf(harness.window), reopened, 'dispatch rejection releases the pending update guard');
   harness.view.dispose();
   harness.session.dispose();
 });
