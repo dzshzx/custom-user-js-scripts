@@ -1,5 +1,4 @@
 import process from 'node:process'
-import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 
 import { runLoginCapture } from './login-qr-flow.mjs'
@@ -59,22 +58,36 @@ export async function waitForManualConfirmation({
   signal,
 } = {}) {
   if (!input.isTTY) return { confirmed: false, reason: 'NOT_TTY' }
-  const readline = createInterface({ input, output })
   output.write('Scan and finish login in the browser, then press Enter to save storage state.')
   return new Promise((resolve) => {
     let settled = false
+    const cleanup = () => {
+      input.removeListener('data', onData)
+      input.removeListener('end', onEnd)
+      input.removeListener('close', onEnd)
+      input.removeListener('error', onError)
+      signal?.removeEventListener('abort', onAbort)
+    }
     const finish = (result) => {
       if (settled) return
       settled = true
-      signal?.removeEventListener('abort', onAbort)
+      cleanup()
       resolve(result)
-      readline.close()
     }
+    const onData = (chunk) => {
+      const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
+      if (text.includes('\n') || text.includes('\r')) finish({ confirmed: true })
+    }
+    const onEnd = () => finish({ confirmed: false, reason: 'EOF' })
+    const onError = () => finish({ confirmed: false, reason: 'TERMINAL_ERROR' })
     const onAbort = () => finish({ confirmed: false, reason: 'CANCELLED' })
-    readline.once('line', () => finish({ confirmed: true }))
-    readline.once('close', () => finish({ confirmed: false, reason: 'EOF' }))
+    input.on('data', onData)
+    input.once('end', onEnd)
+    input.once('close', onEnd)
+    input.once('error', onError)
     signal?.addEventListener('abort', onAbort, { once: true })
     if (signal?.aborted) onAbort()
+    else input.resume?.()
   })
 }
 

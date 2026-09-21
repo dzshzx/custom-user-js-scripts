@@ -57,6 +57,66 @@ async function reserveTemporaryStatePath(statePath, fileSystem, makeId) {
   throw codedError('STATE_TEMP_UNAVAILABLE')
 }
 
+async function runBeforeCommitDeadline(operation, {
+  deadline,
+  clock,
+  signal,
+  onLateSettle,
+}) {
+  throwIfAborted(signal)
+  if (deadline !== null) {
+    if (!clock?.now || !clock?.sleep) throw codedError('COMMIT_CLOCK_INVALID')
+    if (clock.now() >= deadline) return { kind: 'deadline' }
+  }
+
+  let operationSettled = false
+  const operationPromise = Promise.resolve().then(operation)
+  const observedOperation = operationPromise.then(
+    (value) => {
+      operationSettled = true
+      return { kind: 'value', value }
+    },
+    (error) => {
+      operationSettled = true
+      throw error
+    },
+  )
+  observedOperation.catch(() => {})
+
+  const timerController = new AbortController()
+  const competitors = [observedOperation]
+  if (deadline !== null) {
+    const remaining = deadline - clock.now()
+    const deadlinePromise = clock.sleep(remaining, { signal: timerController.signal })
+      .then(() => ({ kind: 'deadline' }))
+    deadlinePromise.catch(() => {})
+    competitors.push(deadlinePromise)
+  }
+
+  let removeAbortListener = () => {}
+  if (signal) {
+    competitors.push(new Promise((_, reject) => {
+      const onAbort = () => reject(codedError('CANCELLED'))
+      removeAbortListener = () => signal.removeEventListener('abort', onAbort)
+      signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) onAbort()
+    }))
+  }
+
+  try {
+    const result = await Promise.race(competitors)
+    throwIfAborted(signal)
+    if (deadline !== null && clock.now() >= deadline) return { kind: 'deadline' }
+    return result
+  } finally {
+    timerController.abort()
+    removeAbortListener()
+    if (!operationSettled && onLateSettle) {
+      operationPromise.then(onLateSettle, onLateSettle).catch(() => {})
+    }
+  }
+}
+
 function createSession({ context, page, options, fileSystem, makeId }) {
   let navigationRevision = 0
   let observationGeneration = 0
@@ -264,13 +324,23 @@ function createSession({ context, page, options, fileSystem, makeId }) {
 
     async saveState({ observationId, signal, deadline = null, clock = null } = {}) {
       throwIfAborted(signal)
+      if (deadline !== null && (!clock?.now || !clock?.sleep)) {
+        throw codedError('COMMIT_CLOCK_INVALID')
+      }
 
       const invalidCommitReason = async () => {
         throwIfAborted(signal)
         if (deadline !== null && clock.now() >= deadline) return 'DEADLINE_EXPIRED'
-        if (observationId !== null && !(await validateObservation(observationId))) {
-          return 'OBSERVATION_CHANGED'
+        if (observationId !== null) {
+          const validation = await runBeforeCommitDeadline(
+            () => validateObservation(observationId),
+            { deadline, clock, signal },
+          )
+          if (validation.kind === 'deadline') return 'DEADLINE_EXPIRED'
+          throwIfAborted(signal)
+          if (!validation.value) return 'OBSERVATION_CHANGED'
         }
+        throwIfAborted(signal)
         if (deadline !== null && clock.now() >= deadline) return 'DEADLINE_EXPIRED'
         return null
       }
@@ -285,19 +355,48 @@ function createSession({ context, page, options, fileSystem, makeId }) {
       let primaryError = null
 
       try {
-        await context.storageState({ path: temporaryPath })
-        const afterExportReason = await invalidCommitReason()
-        if (afterExportReason) {
-          outcome = { committed: false, reason: afterExportReason }
+        const beforeExportReason = await invalidCommitReason()
+        if (beforeExportReason) {
+          outcome = { committed: false, reason: beforeExportReason }
         } else {
-          await fileSystem.chmod(temporaryPath, 0o600)
-          const beforeRenameReason = await invalidCommitReason()
-          if (beforeRenameReason) {
-            outcome = { committed: false, reason: beforeRenameReason }
+          const exported = await runBeforeCommitDeadline(
+            () => context.storageState({ path: temporaryPath }),
+            {
+              deadline,
+              clock,
+              signal,
+              onLateSettle: () => fileSystem.unlink(temporaryPath).catch(() => {}),
+            },
+          )
+          if (exported.kind === 'deadline') {
+            outcome = { committed: false, reason: 'DEADLINE_EXPIRED' }
           } else {
-            await fileSystem.rename(temporaryPath, options.statePath)
-            committed = true
-            outcome = { committed: true }
+            const afterExportReason = await invalidCommitReason()
+            if (afterExportReason) {
+              outcome = { committed: false, reason: afterExportReason }
+            } else {
+              const secured = await runBeforeCommitDeadline(
+                () => fileSystem.chmod(temporaryPath, 0o600),
+                { deadline, clock, signal },
+              )
+              if (secured.kind === 'deadline') {
+                outcome = { committed: false, reason: 'DEADLINE_EXPIRED' }
+              } else {
+                const beforeRenameReason = await invalidCommitReason()
+                if (beforeRenameReason) {
+                  outcome = { committed: false, reason: beforeRenameReason }
+                } else {
+                  throwIfAborted(signal)
+                  if (deadline !== null && clock.now() >= deadline) {
+                    outcome = { committed: false, reason: 'DEADLINE_EXPIRED' }
+                  } else {
+                    await fileSystem.rename(temporaryPath, options.statePath)
+                    committed = true
+                    outcome = { committed: true }
+                  }
+                }
+              }
+            }
           }
         }
       } catch (error) {
@@ -307,9 +406,11 @@ function createSession({ context, page, options, fileSystem, makeId }) {
       if (!committed) {
         try {
           await fileSystem.unlink(temporaryPath)
-        } catch {
-          if (outcome) outcome.warning = 'STATE_TEMP_CLEANUP_FAILED'
-          else primaryError.secondaryCode = 'STATE_TEMP_CLEANUP_FAILED'
+        } catch (error) {
+          if (error?.code !== 'ENOENT') {
+            if (outcome) outcome.warning = 'STATE_TEMP_CLEANUP_FAILED'
+            else primaryError.secondaryCode = 'STATE_TEMP_CLEANUP_FAILED'
+          }
         }
       }
       if (primaryError) throw primaryError

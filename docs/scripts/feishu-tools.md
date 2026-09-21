@@ -25,7 +25,7 @@ node scripts/browser-tools/login-qr.mjs --refresh --tenant "小米合作伙伴"
 - 二维码、浏览器 profile、storage state 都写到 `~/.local/share/codex-browser/feishu-login/`。
 - 二维码文件写完时立即开始最长 10 分钟的自动等待；日志或事件处理耗时不会推迟截止时间。工具每 3 秒读取一次页面，只有同一个 document 的 URL、正文和二维码状态都读取成功，真正落到 `mi.feishu.cn` 或 `mi-p.feishu.cn`，且二维码/扫码提示已经消失后，才允许保存。
 - 导航、同 URL reload 或下一次观测都会使旧观测失效。保存前和临时 state 导出后都会重新核对观测；失效时继续在原截止时间内等待，不会重置 10 分钟期限。
-- 登录超时、页面读取失败或取消都不会替换已有 storage state。新 state 先以 `0600` 权限写入目标同目录的独占临时文件；导出前、导出后和 rename 前均复核原截止时间及页面观测，只有仍有效时才提交。
+- 登录超时、页面读取失败或取消都不会替换已有 storage state。新 state 先以 `0600` 权限写入目标同目录的独占临时文件；导出前、导出后和 rename 前均复核原截止时间及页面观测，页面校验或临时 state 导出无响应也不能延长截止时间，只有仍有效时才提交。
 
 非飞书网站示例：
 

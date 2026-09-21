@@ -22,6 +22,14 @@ test('manual confirmation distinguishes Enter, EOF, and non-TTY input', async ()
     { confirmed: false, reason: 'EOF' },
   )
 
+  const trailingText = new PassThrough()
+  trailingText.isTTY = true
+  trailingText.end('not-enter')
+  assert.deepEqual(
+    await waitForManualConfirmation({ input: trailingText, output: new PassThrough() }),
+    { confirmed: false, reason: 'EOF' },
+  )
+
   const piped = new PassThrough()
   piped.isTTY = false
   assert.deepEqual(

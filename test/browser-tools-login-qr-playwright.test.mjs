@@ -5,19 +5,79 @@ import { access, chmod, mkdtemp, readFile, readdir, stat, writeFile } from 'node
 import os from 'node:os'
 import path from 'node:path'
 
+import { runLoginCapture } from '../scripts/browser-tools/login-qr-flow.mjs'
 import { createPlaywrightLoginBrowser } from '../scripts/browser-tools/login-qr-playwright.mjs'
 import { parseArgs } from '../scripts/browser-tools/login-qr.mjs'
 import { resolvePlaywrightImport } from '../scripts/browser-tools/playwright-loader.mjs'
 
+function controlledClock(start = 0) {
+  let now = start
+  const sleepers = new Set()
+  const settleDue = () => {
+    for (const sleeper of [...sleepers]) {
+      if (sleeper.target > now) continue
+      sleepers.delete(sleeper)
+      sleeper.cleanup()
+      sleeper.resolve()
+    }
+  }
+  return {
+    now: () => now,
+    advance(ms) {
+      now += ms
+      settleDue()
+    },
+    sleep(ms, { signal } = {}) {
+      return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new Error('timer cancelled'))
+          return
+        }
+        const sleeper = {
+          target: now + ms,
+          resolve,
+          cleanup: () => signal?.removeEventListener('abort', onAbort),
+        }
+        const onAbort = () => {
+          sleepers.delete(sleeper)
+          reject(new Error('timer cancelled'))
+        }
+        sleepers.add(sleeper)
+        signal?.addEventListener('abort', onAbort, { once: true })
+        settleDue()
+      })
+    },
+  }
+}
+
+const wallClock = {
+  now: () => Date.now(),
+  sleep(ms, { signal } = {}) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, ms)
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer)
+        reject(new Error('timer cancelled'))
+      }, { once: true })
+    })
+  },
+}
+
 function fakePlaywright({
   onStorageState,
   onDocumentSnapshot,
+  onSameDocument,
   onQrVisible,
+  initialDocument,
   canvasError = false,
 } = {}) {
   const pageEvents = new EventEmitter()
   const mainFrame = {}
-  let documentObject = { url: 'https://login.example.test/qr', bodyText: 'Scan', qrVisible: true }
+  let documentObject = initialDocument ?? {
+    url: 'https://login.example.test/qr',
+    bodyText: 'Scan',
+    qrVisible: true,
+  }
   let closed = false
   let storageStateCalls = 0
 
@@ -27,6 +87,8 @@ function fakePlaywright({
     mainFrame: () => mainFrame,
     isClosed: () => closed,
     url: () => documentObject.url,
+    async goto() {},
+    async waitForTimeout() {},
     async evaluateHandle() {
       const captured = documentObject
       return {
@@ -36,6 +98,7 @@ function fakePlaywright({
             if (captured.bodyText === null) return { bodyMissing: true }
             return { currentUrl: captured.url, bodyText: captured.bodyText }
           }
+          await onSameDocument?.()
           return captured === documentObject && captured.url === argument
         },
         async dispose() {},
@@ -224,17 +287,12 @@ test('state is staged as mode 0600 and observation change preserves the old targ
 })
 
 test('state export checks the original deadline before export, after export, and before rename', async () => {
-  const makeClock = (start = 0) => {
-    let now = start
-    return { now: () => now, advance: (ms) => { now += ms } }
-  }
-
   {
     const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-expired-before-export-'))
     const fake = fakePlaywright()
     const { session } = await openSession(root, fake)
     const snapshot = await session.readSnapshot()
-    const clock = makeClock(10)
+    const clock = controlledClock(10)
     assert.deepEqual(
       await session.saveState({ observationId: snapshot.observationId, deadline: 10, clock }),
       { committed: false, reason: 'DEADLINE_EXPIRED' },
@@ -245,7 +303,7 @@ test('state export checks the original deadline before export, after export, and
 
   {
     const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-expired-after-export-'))
-    const clock = makeClock()
+    const clock = controlledClock()
     const fake = fakePlaywright({ onStorageState: async () => clock.advance(11) })
     const { options, session } = await openSession(root, fake)
     await writeFile(options.statePath, 'old-state', { mode: 0o600 })
@@ -260,7 +318,7 @@ test('state export checks the original deadline before export, after export, and
 
   {
     const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-expired-before-rename-'))
-    const clock = makeClock()
+    const clock = controlledClock()
     const fake = fakePlaywright()
     let renames = 0
     const { options, session } = await openSession(root, fake, {
@@ -284,6 +342,126 @@ test('state export checks the original deadline before export, after export, and
   }
 })
 
+test('abort during the final asynchronous observation check prevents rename', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-abort-validation-'))
+  const controller = new AbortController()
+  let checks = 0
+  let renames = 0
+  const fake = fakePlaywright({
+    onSameDocument: async () => {
+      checks += 1
+      if (checks === 4) controller.abort(new Error('cancel during final validation'))
+    },
+  })
+  const { session } = await openSession(root, fake, {
+    fileSystem: {
+      async rename() { renames += 1 },
+    },
+  })
+  const snapshot = await session.readSnapshot()
+
+  await assert.rejects(
+    session.saveState({ observationId: snapshot.observationId, signal: controller.signal }),
+    (error) => error?.code === 'CANCELLED',
+  )
+  assert.equal(renames, 0)
+  await session.close()
+})
+
+test('a hung state export returns at the original deadline without a late rename', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-hung-export-'))
+  let exportStarted
+  const started = new Promise((resolve) => { exportStarted = resolve })
+  let releaseExport
+  const stalled = new Promise((resolve) => { releaseExport = resolve })
+  let renames = 0
+  const fake = fakePlaywright({
+    onStorageState: async () => {
+      exportStarted()
+      await stalled
+    },
+  })
+  const clock = controlledClock()
+  const { session } = await openSession(root, fake, {
+    fileSystem: {
+      async rename() { renames += 1 },
+    },
+  })
+  const snapshot = await session.readSnapshot()
+  const saving = session.saveState({
+    observationId: snapshot.observationId,
+    deadline: 10,
+    clock,
+  })
+  await started
+  clock.advance(10)
+
+  const outcome = await Promise.race([
+    saving,
+    new Promise((resolve) => setTimeout(() => resolve({ timedOutInTest: true }), 50)),
+  ])
+  assert.deepEqual(outcome, { committed: false, reason: 'DEADLINE_EXPIRED' })
+  assert.equal(renames, 0)
+  releaseExport()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(renames, 0)
+  assert.deepEqual((await readdir(root)).filter((name) => name.includes('.tmp-')), [])
+  await session.close()
+})
+
+test('Flow returns its original timeout when the production adapter state export hangs', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-flow-hung-export-'))
+  let exportStarted
+  const started = new Promise((resolve) => { exportStarted = resolve })
+  const fake = fakePlaywright({
+    initialDocument: {
+      url: 'https://login.example.test/done',
+      bodyText: 'Home',
+      qrVisible: false,
+    },
+    onStorageState: async () => {
+      exportStarted()
+      await new Promise(() => {})
+    },
+  })
+  const browser = createPlaywrightLoginBrowser({ loadPlaywright: async () => fake.module })
+  const clock = controlledClock()
+  let waiting
+  const waitingStarted = new Promise((resolve) => { waiting = resolve })
+  const options = {
+    ...parseArgs([]),
+    url: 'https://login.example.test/qr',
+    profileDir: path.join(root, 'profile'),
+    qrPath: path.join(root, 'qr.png'),
+    statePath: path.join(root, 'state.json'),
+    qrSelector: '#qr',
+    waitAfterNavigationMs: 0,
+    loginTimeoutMs: 10,
+    successHosts: ['login.example.test'],
+    pendingUrlPatterns: [],
+    pendingTexts: [],
+  }
+
+  const running = runLoginCapture(options, {
+    browser,
+    clock,
+    confirm: async () => ({ confirmed: true }),
+    onEvent: async (event) => {
+      if (event.type === 'waiting') waiting()
+    },
+  })
+  await waitingStarted
+  clock.advance(3)
+  await exportStarted
+  clock.advance(7)
+  const result = await running
+
+  assert.equal(result.status, 'timeout')
+  assert.equal(result.error.code, 'LOGIN_TIMEOUT')
+  assert.equal(result.artifacts.state.committed, false)
+  assert.deepEqual(result.cleanup, { status: 'closed' })
+})
+
 test('rename is the commit point and an abort after it starts waits for its outcome', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-rename-'))
   const fake = fakePlaywright()
@@ -291,13 +469,12 @@ test('rename is the commit point and an abort after it starts waits for its outc
   let renameStarted
   const started = new Promise((resolve) => { renameStarted = resolve })
   const release = new Promise((resolve) => { releaseRename = resolve })
-  let now = 0
-  const clock = { now: () => now }
+  const clock = controlledClock()
   const { options, session } = await openSession(root, fake, {
     fileSystem: {
       async rename(from, to) {
         renameStarted()
-        now = 11
+        clock.advance(11)
         await release
         const fs = await import('node:fs/promises')
         await fs.rename(from, to)
@@ -497,12 +674,11 @@ test('real Playwright fixture observes one document and commits private state', 
     assert.equal(snapshot.qrVisible, true)
     assert.equal(await session.validateObservation(snapshot.observationId), true)
 
-    const clock = { now: () => Date.now() }
     assert.deepEqual(
       await session.saveState({
         observationId: snapshot.observationId,
-        deadline: clock.now() + 10_000,
-        clock,
+        deadline: wallClock.now() + 10_000,
+        clock: wallClock,
       }),
       { committed: true },
     )
