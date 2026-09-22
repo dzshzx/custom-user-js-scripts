@@ -139,6 +139,11 @@ test('dist shows an info toast when no exportable image exists', { skip: domSkip
   assert.match(toast.textContent, /当前页面没有找到可导出的主图/);
   // token 与 toast 样式一次性安装
   assert.ok(window.document.getElementById('feishu-pie-root-style').textContent.includes('--wk-accent: oklch(55% 0.15 250)'));
+  // The toast leaves a real happy-dom auto-dismiss setTimeout (4s) pending;
+  // node:test's mock.timers can't reach it (happy-dom binds its own timer
+  // globals at module load, before any mock is installed), so abort it the
+  // way javdb-recommend.test.mjs already does for its DOM windows.
+  await window.happyDOM.close();
 });
 
 test('dist reports export progress and success through toast', { skip: domSkip }, async () => {
@@ -163,6 +168,8 @@ test('dist reports export progress and success through toast', { skip: domSkip }
   const toast = window.document.querySelector('#feishu-pie-root .wk-toast');
   assert.equal(toast.dataset.tone, 'success');
   assert.match(toast.textContent, /已导出 报价单\.png/);
+  // See the "info toast" test above: aborts the real happy-dom dismiss timer.
+  await window.happyDOM.close();
 });
 
 test('dist maps export failures to Chinese user copy on an error toast', { skip: domSkip }, async () => {
@@ -180,6 +187,9 @@ test('dist maps export failures to Chinese user copy on an error toast', { skip:
   const toast = window.document.querySelector('#feishu-pie-root .wk-toast');
   assert.equal(toast.dataset.tone, 'error');
   assert.match(toast.textContent, /下载超时，请重试。/);
+  // See the "info toast" test above: aborts the real happy-dom dismiss timer
+  // (this one is the longest, ERROR_DURATION_MS = 6s).
+  await window.happyDOM.close();
 });
 
 test('dist source contains no alert() call', async () => {
