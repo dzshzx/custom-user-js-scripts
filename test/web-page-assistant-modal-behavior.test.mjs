@@ -122,27 +122,37 @@ test('write actions show a pending state while storage is in flight', { skip: do
   const { window, root } = await boot({
     gmSetValue: () => new Promise((resolve) => { resolveWrite = resolve; }),
   });
-  root.querySelector('.part-widget-button').click();
-  await flush();
+  // Saving the preset below activates a refresh, which starts a *real*
+  // happy-dom setInterval (no fake clock installed here). Dispose it the
+  // same way a real page unload would, or happy-dom's own iteration cap
+  // only clears it after ~30 real seconds, stalling the whole file.
+  try {
+    root.querySelector('.part-widget-button').click();
+    await flush();
 
-  const preset = dialogOf(root).querySelector('[data-part-action="save-preset"][data-interval-ms="30000"]');
-  preset.click();
-  await flush();
+    const preset = dialogOf(root).querySelector('[data-part-action="save-preset"][data-interval-ms="30000"]');
+    preset.click();
+    await flush();
 
-  assert.equal(preset.disabled, true);
-  assert.equal(preset.textContent, '处理中…');
+    assert.equal(preset.disabled, true);
+    assert.equal(preset.textContent, '处理中…');
 
-  resolveWrite();
-  await flush(10);
+    resolveWrite();
+    await flush(10);
 
-  // The dialog re-rendered with the confirmation message and the widget went live.
-  assert.match(dialogOf(root).querySelector('[data-part-role="message"]').textContent, /已保存到当前页面/);
-  assert.equal(root.querySelector('.part-widget').classList.contains('is-idle'), false);
-  assert.ok(root.querySelector('[data-part-action="toggle-pause"]'));
-  assert.match(
-    root.querySelector('[data-part-role="widget-status"]').textContent,
-    /自动刷新已启用/,
-  );
+    // The dialog re-rendered with the confirmation message and the widget went live.
+    assert.match(dialogOf(root).querySelector('[data-part-role="message"]').textContent, /已保存到当前页面/);
+    assert.equal(root.querySelector('.part-widget').classList.contains('is-idle'), false);
+    assert.ok(root.querySelector('[data-part-action="toggle-pause"]'));
+    assert.match(
+      root.querySelector('[data-part-role="widget-status"]').textContent,
+      /自动刷新已启用/,
+    );
+  } finally {
+    const exiting = new window.Event('pagehide');
+    Object.defineProperty(exiting, 'persisted', { value: false });
+    window.dispatchEvent(exiting);
+  }
 });
 
 test('pause and resume announce a full status sentence through the live region', { skip: domSkip }, async () => {
@@ -153,17 +163,28 @@ test('pause and resume announce a full status sentence through the live region',
       unlocker: { pages: {}, sites: {} },
     },
   });
+  // This boot leaves an active refresh scheduled, which starts a *real*
+  // happy-dom setInterval (no fake clock is installed here, unlike the
+  // "countdown ticks" test below). Left running, happy-dom's own
+  // maxIntervalIterations cap only clears it after ~30 real seconds,
+  // stalling the whole file. Dispose it the same way a real page unload
+  // would, mirroring the "persisted pagehide" test's exit event.
+  try {
+    const statusNode = root.querySelector('[data-part-role="widget-status"]');
+    assert.match(statusNode.textContent, /当前页面自动刷新已启用，每 30 秒 刷新一次。/);
 
-  const statusNode = root.querySelector('[data-part-role="widget-status"]');
-  assert.match(statusNode.textContent, /当前页面自动刷新已启用，每 30 秒 刷新一次。/);
+    root.querySelector('[data-part-action="toggle-pause"]').click();
+    await flush();
+    assert.match(statusNode.textContent, /自动刷新已暂停，剩余 30 秒。/);
 
-  root.querySelector('[data-part-action="toggle-pause"]').click();
-  await flush();
-  assert.match(statusNode.textContent, /自动刷新已暂停，剩余 30 秒。/);
-
-  root.querySelector('[data-part-action="toggle-pause"]').click();
-  await flush();
-  assert.match(statusNode.textContent, /自动刷新已启用/);
+    root.querySelector('[data-part-action="toggle-pause"]').click();
+    await flush();
+    assert.match(statusNode.textContent, /自动刷新已启用/);
+  } finally {
+    const exiting = new window.Event('pagehide');
+    Object.defineProperty(exiting, 'persisted', { value: false });
+    window.dispatchEvent(exiting);
+  }
 });
 
 test('a failed write restores the button and surfaces the error reason', { skip: domSkip }, async () => {
