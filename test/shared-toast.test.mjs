@@ -79,22 +79,29 @@ test('showProgress updates, then settles into success or error tones', { skip: d
   toaster.destroy();
 });
 
-test('show auto-dismisses after the given duration', { skip: domSkip }, async () => {
+test('show auto-dismisses after the given duration', { skip: domSkip }, (t) => {
+  // shared-toast.lib.js is imported directly (not evaluated inside a
+  // happy-dom window), so its bare `setTimeout` is Node's real global and
+  // node:test's mock.timers can advance it without any real wait.
   const { container, toaster } = setup();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   toaster.show({ message: 'Quick', duration: 30 });
   assert.equal(container.children.length, 1);
 
-  await new Promise((resolve) => setTimeout(resolve, 30 + 160 + 80));
+  t.mock.timers.tick(30);
+  t.mock.timers.tick(160);
   assert.equal(container.children.length, 0);
   toaster.destroy();
 });
 
-test('destroy removes the container and clears pending timers', { skip: domSkip }, async () => {
+test('destroy removes the container and clears pending timers', { skip: domSkip }, () => {
   const { root, container, toaster } = setup();
   toaster.show({ message: 'Bye', duration: 20 });
   toaster.destroy();
 
+  // destroy() clears every pending timer synchronously (shared-toast.lib.js
+  // destroy(): `for (const timer of timers) clearTimeout(timer)`), so there
+  // is nothing left to wait for here.
   assert.equal(root.querySelector('.wk-toasts'), null);
   assert.equal(container.isConnected, false);
-  await new Promise((resolve) => setTimeout(resolve, 60));
 });
