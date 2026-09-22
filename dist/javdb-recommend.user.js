@@ -1308,6 +1308,7 @@
       });
       streamNext = idx >= 0 ? idx : 0;
       currentIdx = streamNext;
+      select.value = String(periods[currentIdx].period);
       sentinel.addEventListener("click", function() {
         appendNext();
       });

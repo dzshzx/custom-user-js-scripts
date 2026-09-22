@@ -202,6 +202,36 @@ test('standalone archive page adopts site chrome and streams native-style cards'
   await window.happyDOM.close();
 });
 
+test('restored browsing position selects the displayed period and lets users choose the latest', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  const storage = createMemoryStorage();
+  storage.setItem('javdb_recommend_last_period', '593');
+  const catalog = [596, 595, 594, 593].map(period => ({
+    period, movies_count: 1, created_at: '2026-09-21',
+  }));
+  const requests = [];
+  await runScript(window, async url => {
+    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+    if (url.includes('recommend_periods')) return { ok: true, json: async () => ({ success: 1, data: { periods: catalog } }) };
+    const period = Number(new URL(url).searchParams.get('period'));
+    requests.push(period);
+    return { ok: true, json: async () => DETAIL };
+  }, { IntersectionObserver: class { observe() {} disconnect() {} } }, storage);
+  try {
+    const select = window.document.getElementById('jdb-ra-select');
+    assert.equal(window.document.querySelector('.jdb-ra-sec').dataset.period, '593');
+    assert.equal(select.value, '593');
+    select.value = '596';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    for (let i = 0; i < 20; i += 1) await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(window.document.querySelector('.jdb-ra-sec').dataset.period, '596');
+    assert.equal(select.value, '596');
+    assert.deepEqual(requests, [593, 596]);
+  } finally {
+    await window.happyDOM.close();
+  }
+});
+
 test('release-date metadata omits invalid dates without hiding independent score metadata', { skip: domSkip }, async () => {
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
   const invalidDetail = {

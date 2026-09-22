@@ -419,6 +419,7 @@ var BASE = location.origin;
       var idx = periods.findIndex(function (p) { return p.period === saved; });
       streamNext = idx >= 0 ? idx : 0;
       currentIdx = streamNext;
+      select.value = String(periods[currentIdx].period);
       sentinel.addEventListener('click', function () { appendNext(); });
       if (typeof IntersectionObserver !== 'undefined') {
         streamIntersectionObserver = new IntersectionObserver(function (entries) {

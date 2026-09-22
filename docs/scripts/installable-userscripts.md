@@ -86,6 +86,8 @@
 
 ## JavDB Recommend Archive
 
+归档页恢复上次浏览期数时，期数选择框与正文起始期保持一致；选择最新期可直接跳转。刷新期数和清缓存保留浏览位置。
+
 安装入口：
 
 - [../../dist/javdb-recommend.user.js](../../dist/javdb-recommend.user.js)
