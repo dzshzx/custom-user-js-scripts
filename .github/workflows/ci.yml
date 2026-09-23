@@ -31,3 +31,4 @@ jobs:
         with:
           name: test-report
           path: .scratch/test-report/
+          include-hidden-files: true
