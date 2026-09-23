@@ -41,7 +41,7 @@ import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quo
   const DEBUG_KEY = '__codexQuotaCompassDebug';
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
-  const SCRIPT_VERSION = '0.5.4';
+  const SCRIPT_VERSION = '0.5.5';
   const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
   const archiveStoragePort = createSnapshotArchiveStoragePort({
     scriptName: SCRIPT_NAME,
