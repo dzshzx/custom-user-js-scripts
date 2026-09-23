@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.4
+// @version      0.5.5
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.

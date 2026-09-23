@@ -314,9 +314,9 @@ function createQuotaCalculator({
     };
   }
 
-  // breakdown 接口的 credits 与 daily analytics 的 credits 单位不同（实测相差两个数量级），
-  // 不能套 USD_PER_CREDIT 折算；模型维度只给原始 Credits 和占比。
-  function summarizeModels(json) {
+  // breakdown 接口给的是相对值（units=percent，查询区间内用量最大的一天记 100），与每日 Credits
+  // 严格成正比。用同一区间 daily analytics 的 Credits 合计换算成绝对 Credits 与折算 USD。
+  function summarizeModels(json, rangeCredits) {
     const rowsByModel = new Map();
 
     for (const day of json?.data ?? []) {
@@ -331,27 +331,29 @@ function createQuotaCalculator({
     }
 
     const rows = [...rowsByModel.values()];
-    const totalCredits = rows.reduce((sum, row) => sum + row.Credits, 0);
+    const totalRelative = rows.reduce((sum, row) => sum + row.Credits, 0);
+    const scale = totalRelative > 0 ? toNumber(rangeCredits) / totalRelative : 0;
     return rows
       .map((row) => ({
         模型: row.模型,
         速度: row.速度,
-        Credits: roundNumber(row.Credits, 6),
-        占比百分比: totalCredits > 0
-          ? roundNumber((row.Credits / totalCredits) * 100, 1)
+        Credits: roundNumber(row.Credits * scale, 2),
+        折算USD: roundNumber(row.Credits * scale * config.USD_PER_CREDIT, 2),
+        占比百分比: totalRelative > 0
+          ? roundNumber((row.Credits / totalRelative) * 100, 1)
           : 0,
       }))
-      .sort((left, right) => right.Credits - left.Credits);
+      .sort((left, right) => right.Credits - left.Credits || right.占比百分比 - left.占比百分比);
   }
 
   // 模型汇总是增强数据：失败不拖垮主报告，但错误必须显式写进结果。
-  async function collectModelSummaries(startDate, endExclusiveDate) {
+  async function collectModelSummaries(startDate, endExclusiveDate, rangeCredits) {
     if (typeof fetchDailyTokenBreakdown !== 'function') {
       return { modelSummaries: null, modelSummaryError: '' };
     }
     try {
       const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
-      return { modelSummaries: summarizeModels(json), modelSummaryError: '' };
+      return { modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: '' };
     } catch (error) {
       return { modelSummaries: [], modelSummaryError: String(error?.message || error) };
     }
@@ -517,7 +519,11 @@ function createQuotaCalculator({
       rollingStartDate,
       endExclusiveDate,
     );
-    const rollingModels = await collectModelSummaries(rollingStartDate, endExclusiveDate);
+    const rollingModels = await collectModelSummaries(
+      rollingStartDate,
+      endExclusiveDate,
+      rolling.rows.reduce((sum, row) => sum + toNumber(row.Credits), 0),
+    );
     const resetCredits = await collectResetCredits(usage);
 
     return buildQuotaSnapshotResult({

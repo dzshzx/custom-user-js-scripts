@@ -241,9 +241,10 @@ test('createQuotaCalculator aggregates rolling model summaries from daily token 
   const result = await calculator.run();
 
   assert.deepEqual(breakdownCalls, [['2026-05-01', '2026-05-31']]);
+  // breakdown 是相对值：按占比切分同区间每日 Credits 的合计（夹具共 10 credits）
   assert.deepEqual(result.近30天.模型汇总, [
-    { 模型: 'gpt-5.6-sol', 速度: 'standard', Credits: 50, 占比百分比: 90.9 },
-    { 模型: 'gpt-5.3-codex', 速度: 'fast', Credits: 5, 占比百分比: 9.1 },
+    { 模型: 'gpt-5.6-sol', 速度: 'standard', Credits: 9.09, 折算USD: 0.36, 占比百分比: 90.9 },
+    { 模型: 'gpt-5.3-codex', 速度: 'fast', Credits: 0.91, 折算USD: 0.04, 占比百分比: 9.1 },
   ]);
 });
 

@@ -163,6 +163,7 @@ function createDetailsSections({
       dataColumn('速度', { labelKey: 'columnSpeed', priority: 'secondary' }),
       dataColumn('占比百分比', { labelKey: 'columnSharePercent', priority: 'primary' }),
       dataColumn('Credits', { labelKey: 'columnCredits', priority: 'secondary' }),
+      dataColumn('折算USD', { labelKey: 'statsColumnUsd', priority: 'secondary' }),
     ]),
     dataView('details-reset-credits', 'sectionResetCredits', resetCredits?.明细, [
       dataColumn('标题', { labelKey: 'columnTitle', priority: 'primary', wrap: true }),

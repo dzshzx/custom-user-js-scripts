@@ -114,7 +114,7 @@ test('createQuotaRuntime runs quota calculation through injected browser adapter
   assert.equal(calls[1].options.headers.authorization, `Bearer ${token}`);
   assert.equal(calls[2].options.credentials, 'include');
   assert.deepEqual(result.近30天.模型汇总, [
-    { 模型: 'gpt-5.6-sol', 速度: 'standard', Credits: 5, 占比百分比: 100 },
+    { 模型: 'gpt-5.6-sol', 速度: 'standard', Credits: 10, 折算USD: 0.4, 占比百分比: 100 },
   ]);
   assert.equal(result.重置券.可用张数, 3);
   assert.equal(result.重置券.明细[0].标题, 'Full reset');

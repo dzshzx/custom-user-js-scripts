@@ -723,7 +723,7 @@
         clients: summarizeClients(json)
       };
     }
-    function summarizeModels(json) {
+    function summarizeModels(json, rangeCredits) {
       const rowsByModel = /* @__PURE__ */ new Map();
       for (const day of json?.data ?? []) {
         for (const entry of day.models ?? []) {
@@ -736,21 +736,23 @@
         }
       }
       const rows = [...rowsByModel.values()];
-      const totalCredits = rows.reduce((sum, row) => sum + row.Credits, 0);
+      const totalRelative = rows.reduce((sum, row) => sum + row.Credits, 0);
+      const scale = totalRelative > 0 ? toNumber(rangeCredits) / totalRelative : 0;
       return rows.map((row) => ({
         模型: row.模型,
         速度: row.速度,
-        Credits: roundNumber(row.Credits, 6),
-        占比百分比: totalCredits > 0 ? roundNumber(row.Credits / totalCredits * 100, 1) : 0
-      })).sort((left, right) => right.Credits - left.Credits);
+        Credits: roundNumber(row.Credits * scale, 2),
+        折算USD: roundNumber(row.Credits * scale * config.USD_PER_CREDIT, 2),
+        占比百分比: totalRelative > 0 ? roundNumber(row.Credits / totalRelative * 100, 1) : 0
+      })).sort((left, right) => right.Credits - left.Credits || right.占比百分比 - left.占比百分比);
     }
-    async function collectModelSummaries(startDate, endExclusiveDate) {
+    async function collectModelSummaries(startDate, endExclusiveDate, rangeCredits) {
       if (typeof fetchDailyTokenBreakdown !== "function") {
         return { modelSummaries: null, modelSummaryError: "" };
       }
       try {
         const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
-        return { modelSummaries: summarizeModels(json), modelSummaryError: "" };
+        return { modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: "" };
       } catch (error) {
         return { modelSummaries: [], modelSummaryError: String(error?.message || error) };
       }
@@ -893,7 +895,11 @@
         rollingStartDate,
         endExclusiveDate
       );
-      const rollingModels = await collectModelSummaries(rollingStartDate, endExclusiveDate);
+      const rollingModels = await collectModelSummaries(
+        rollingStartDate,
+        endExclusiveDate,
+        rolling.rows.reduce((sum, row) => sum + toNumber(row.Credits), 0)
+      );
       const resetCredits = await collectResetCredits(usage);
       return buildQuotaSnapshotResult({
         config,
@@ -2806,7 +2812,8 @@ ${text.slice(0, 800)}`);
         dataColumn("模型", { labelKey: "columnModel", priority: "primary", wrap: true }),
         dataColumn("速度", { labelKey: "columnSpeed", priority: "secondary" }),
         dataColumn("占比百分比", { labelKey: "columnSharePercent", priority: "primary" }),
-        dataColumn("Credits", { labelKey: "columnCredits", priority: "secondary" })
+        dataColumn("Credits", { labelKey: "columnCredits", priority: "secondary" }),
+        dataColumn("折算USD", { labelKey: "statsColumnUsd", priority: "secondary" })
       ]),
       dataView("details-reset-credits", "sectionResetCredits", resetCredits?.明细, [
         dataColumn("标题", { labelKey: "columnTitle", priority: "primary", wrap: true }),
