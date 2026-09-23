@@ -1,14 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { access, chmod, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
 import { runLoginCapture } from '../scripts/browser-tools/login-qr-flow.mjs'
 import { createPlaywrightLoginBrowser } from '../scripts/browser-tools/login-qr-playwright.mjs'
 import { parseArgs } from '../scripts/browser-tools/login-qr.mjs'
-import { resolvePlaywrightImport } from '../scripts/browser-tools/playwright-loader.mjs'
+import { loadTestPlaywright } from '../scripts/test-playwright.mjs'
 
 function controlledClock(start = 0) {
   let now = start
@@ -602,40 +602,8 @@ test('adapter cleans a partially opened context before reporting open failure', 
   assert.equal(closes, 1)
 })
 
-async function findCachedChromium() {
-  const cacheRoot = path.join(os.homedir(), '.cache', 'ms-playwright')
-  let entries
-  try {
-    entries = await readdir(cacheRoot, { withFileTypes: true })
-  } catch {
-    return ''
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !entry.name.startsWith('chromium-')) continue
-    const executable = path.join(cacheRoot, entry.name, 'chrome-linux64', 'chrome')
-    try {
-      await access(executable)
-      return executable
-    } catch {
-      // Continue looking for another isolated browser revision.
-    }
-  }
-  return ''
-}
-
-test('real Playwright fixture observes one document and commits private state', async (t) => {
-  const executablePath = await findCachedChromium()
-  if (!executablePath) {
-    t.skip('No isolated Playwright Chromium executable is cached.')
-    return
-  }
-  let playwright
-  try {
-    playwright = await resolvePlaywrightImport()
-  } catch {
-    t.skip('Playwright is not available in the current user cache.')
-    return
-  }
+test('real Playwright fixture observes one document and commits private state', async () => {
+  const playwright = await loadTestPlaywright();
 
   const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-real-browser-'))
   let context
@@ -645,7 +613,6 @@ test('real Playwright fixture observes one document and commits private state', 
         async launchPersistentContext(profileDir, launchOptions) {
           context = await playwright.chromium.launchPersistentContext(profileDir, {
             ...launchOptions,
-            executablePath,
           })
           return context
         },

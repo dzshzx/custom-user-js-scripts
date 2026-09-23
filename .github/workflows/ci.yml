@@ -23,9 +23,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
-      # Committed dist bundles and byte-identical bridge files must match the sources.
-      - run: git diff --exit-code -- dist src
-      - run: test -z "$(git status --porcelain dist)"
-      - run: npm run lint
-      - run: npm test
+      - run: npm run test:prepare
+      # Build once, retain dist freshness and metadata gates, require all tests.
+      - run: npm run verify
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: test-report
+          path: .scratch/test-report/

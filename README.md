@@ -100,13 +100,17 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 需要 Node.js 22 或更高版本。
 
 ```bash
-npm ci          # 安装 devDependencies（esbuild、happy-dom）
-npm run build   # 把 src 的 entry.js 打包为 dist/*.user.js（并生成桥接文件）
-npm run lint
-npm test
+npm ci
+npm run test:prepare # 项目锁定的 Playwright CLI 安装对应 Chromium 和系统依赖
+npm run verify      # 一次构建、产物一致性、metadata lint、全部测试
 ```
 
-`npm run lint` 与 `npm test` 都会先自动执行构建，保证 dist 产物与源码一致；改动多模块脚本后需把重建出的 `dist/` 与桥接文件一并提交，否则 CI 的一致性门禁会失败。DOM 层测试依赖 devDependencies 里的 happy-dom；环境缺失时相关测试自动跳过。
+`npm run lint` 与 `npm test` 仍可独立运行，会先自动构建。完整入口要求所有测试通过，
+并核对五项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
+项目精确锁定 Playwright 1.61.1；测试只加载本项目依赖和该版本的默认 Chromium，
+缺依赖或浏览器直接报错。日常 browser-tools 的缓存兼容行为不变。
+聚焦调试使用 `node --test test/<name>.test.mjs`；它不代表完整验收。
+原生 JSON 报告、准备时间和人工验收边界见 [测试说明](docs/testing.md)。
 
 脚本的 raw `@downloadURL` / `@updateURL` 直接读取 `master`，因此合并带新
 `@version` 的提交就是外部发布。修改版本前先运行

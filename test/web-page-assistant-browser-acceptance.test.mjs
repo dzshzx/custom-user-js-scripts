@@ -1,48 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, readFile, readdir } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 
-import { resolvePlaywrightImport } from '../scripts/browser-tools/playwright-loader.mjs';
+import { loadTestPlaywright } from '../scripts/test-playwright.mjs';
 
 const bundle = await readFile(new URL('../dist/web-page-assistant.user.js', import.meta.url), 'utf8');
 
-async function findCachedChromium() {
-  const cacheRoot = path.join(os.homedir(), '.cache', 'ms-playwright');
-  let entries;
-  try {
-    entries = await readdir(cacheRoot, { withFileTypes: true });
-  } catch {
-    return '';
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !entry.name.startsWith('chromium-')) continue;
-    const executable = path.join(cacheRoot, entry.name, 'chrome-linux64', 'chrome');
-    try {
-      await access(executable);
-      return executable;
-    } catch {
-      // Continue looking for another cached revision.
-    }
-  }
-  return '';
-}
-
-test('real Chromium runs the bundle without inert or stale-save lifecycle leaks', async (t) => {
-  const executablePath = await findCachedChromium();
-  if (!executablePath) {
-    t.skip('No isolated Playwright Chromium executable is cached.');
-    return;
-  }
-  let playwright;
-  try {
-    playwright = await resolvePlaywrightImport();
-  } catch {
-    t.skip('Playwright is not available in the current user cache.');
-    return;
-  }
-  const browser = await playwright.chromium.launch({ headless: true, executablePath });
+test('real Chromium runs the bundle without inert or stale-save lifecycle leaks', async () => {
+  const playwright = await loadTestPlaywright();
+  const browser = await playwright.chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
     await page.route('https://assistant.test/**', (route) => route.fulfill({

@@ -1,11 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, readdir } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
 import { readPreviewImage } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js';
-import { resolvePlaywrightImport } from '../scripts/browser-tools/playwright-loader.mjs';
+import { loadTestPlaywright } from '../scripts/test-playwright.mjs';
 
 function image({
   src = '',
@@ -289,41 +286,9 @@ test('imported function survives serialization without module-scope closures', a
   );
 });
 
-async function findCachedChromium() {
-  const cacheRoot = path.join(os.homedir(), '.cache', 'ms-playwright');
-  let entries;
-  try {
-    entries = await readdir(cacheRoot, { withFileTypes: true });
-  } catch {
-    return '';
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !entry.name.startsWith('chromium-')) continue;
-    const executable = path.join(cacheRoot, entry.name, 'chrome-linux64', 'chrome');
-    try {
-      await access(executable);
-      return executable;
-    } catch {
-      // Continue looking for another cached revision.
-    }
-  }
-  return '';
-}
-
-test('real Playwright page.evaluate matches the direct result', async (t) => {
-  const executablePath = await findCachedChromium();
-  if (!executablePath) {
-    t.skip('No isolated Playwright Chromium executable is cached.');
-    return;
-  }
-  let playwright;
-  try {
-    playwright = await resolvePlaywrightImport();
-  } catch {
-    t.skip('Playwright is not available in the current user cache.');
-    return;
-  }
-  const browser = await playwright.chromium.launch({ headless: true, executablePath });
+test('real Playwright page.evaluate matches the direct result', async () => {
+  const playwright = await loadTestPlaywright();
+  const browser = await playwright.chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
     await page.setContent('<img id="target" src="data:image/png;base64,Ynl0ZXM=">');

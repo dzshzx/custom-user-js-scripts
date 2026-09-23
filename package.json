@@ -15,7 +15,9 @@
     "prelint": "npm run build",
     "lint": "node scripts/check-userscripts.mjs",
     "pretest": "npm run build",
-    "test": "node --test"
+    "test": "node scripts/run-tests.mjs",
+    "test:prepare": "node scripts/prepare-tests.mjs",
+    "verify": "node scripts/verify.mjs"
   },
   "keywords": [
     "userscript",
@@ -25,7 +27,8 @@
   ],
   "devDependencies": {
     "esbuild": "0.28.1",
-    "happy-dom": "20.11.1"
+    "happy-dom": "20.11.1",
+    "playwright": "1.61.1"
   },
   "allowScripts": {
     "esbuild@0.28.1": true

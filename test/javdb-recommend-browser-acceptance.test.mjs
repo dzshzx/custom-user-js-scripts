@@ -1,24 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, readFile, readdir } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 
-import { resolvePlaywrightImport } from '../scripts/browser-tools/playwright-loader.mjs';
+import { loadTestPlaywright } from '../scripts/test-playwright.mjs';
 
 const bundle = await readFile(new URL('../dist/javdb-recommend.user.js', import.meta.url), 'utf8');
-
-async function findCachedChromium() {
-  const root = path.join(os.homedir(), '.cache', 'ms-playwright');
-  let entries;
-  try { entries = await readdir(root, { withFileTypes: true }); } catch { return ''; }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !entry.name.startsWith('chromium-')) continue;
-    const executable = path.join(root, entry.name, 'chrome-linux64', 'chrome');
-    try { await access(executable); return executable; } catch {}
-  }
-  return '';
-}
 
 const periods = {
   success: 1,
@@ -78,12 +64,9 @@ async function installFixture(page, { styles = true } = {}) {
   });
 }
 
-test('real Chromium validates native CSS, fallback, mobile layout, and observable JAV老司机 compatibility', async t => {
-  const executablePath = await findCachedChromium();
-  if (!executablePath) return t.skip('No isolated Playwright Chromium executable is cached.');
-  let playwright;
-  try { playwright = await resolvePlaywrightImport(); } catch { return t.skip('Playwright is not available in the current user cache.'); }
-  const browser = await playwright.chromium.launch({ headless: true, executablePath });
+test('real Chromium validates native CSS, fallback, mobile layout, and observable JAV老司机 compatibility', async () => {
+  const playwright = await loadTestPlaywright();
+  const browser = await playwright.chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await installFixture(page);
