@@ -24,10 +24,17 @@ including skip/todo metadata, and never parses console TAP.
 
 Reports live under `.scratch/test-report/`:
 
-- preparation.json: Node/Playwright versions, browser/OS setup duration and exit.
+- preparation.json: commit, preparation scope, Node/Playwright versions,
+  browser/OS setup duration, exit and environment-ready/environment-unavailable.
 - results.json: tested HEAD and dirty flag, Node/Playwright/launched browser
   versions, scope, environment preflight/build/test timings, per-test results
   and failure/skip reasons, and each mandatory acceptance result.
+
+Reports explicitly mark preparation, preflight, build/checks and tests as
+passed, failed or not-run as applicable. Counts are null when tests did not
+execute, so an unavailable environment cannot look like a zero-test success.
+The independent test runner marks build as not-in-this-entry: npm test owns
+its separate pretest build, while verify records its own build stage.
 
 CI uploads this directory through GitHub Actions artifacts even on failure.
 No full environment, credentials, browser state or real account data is added

@@ -55,19 +55,35 @@ export async function writeReport(report) {
   report.worktreeDirty = Boolean(execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim());
   report.scope = 'All node:test tests; browser acceptance uses synthetic fixtures. Manual browser and real sites remain unverified.';
   await writeFile('.scratch/test-report/results.json', JSON.stringify(report, null, 2) + '\n');
-  console.log(JSON.stringify({ passed: report.passed, counts: report.counts, timings: report.timings, error: report.error }));
+  console.log(JSON.stringify({ passed: report.passed, status: report.status, stages: report.stages, counts: report.counts, timings: report.timings, error: report.error }));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  let report = { passed: false, environment: { node: process.version, playwright: '1.61.1', browser: null } };
+  const report = {
+    passed: false, status: 'tests-not-run', counts: null,
+    environment: { node: process.version, playwright: '1.61.1', browser: null },
+    stages: { environment: 'not-run', build: 'not-in-this-entry', tests: 'not-run' },
+    timings: {},
+  };
   try {
     if (process.argv.length > 2 || process.execArgv.some(arg => arg.startsWith('--test'))) throw new Error('Full test entry does not accept filters; use node --test for focused checks.');
     const started = performance.now();
-    const environment = await environmentReport();
-    const environment_ms = performance.now() - started;
-    report = { environment, ...await runTests(), timings: { environment_ms } };
+    report.stages.environment = 'running';
+    try { report.environment = await environmentReport(); }
+    finally { report.timings.environment_ms = performance.now() - started; }
+    report.stages.environment = 'passed';
+    report.stages.tests = 'running';
+    Object.assign(report, await runTests());
     report.timings.tests_ms = report.duration_ms;
-  } catch (error) { report.error = error.message; }
+    report.stages.tests = report.passed ? 'passed' : 'failed';
+    report.status = report.passed ? 'passed' : 'tests-failed';
+  } catch (error) {
+    report.error = error.message;
+    report.status = report.stages.environment === 'running' ? 'environment-unavailable' : 'verification-failed';
+    for (const stage of Object.keys(report.stages)) {
+      if (report.stages[stage] === 'running') report.stages[stage] = 'failed';
+    }
+  }
   await writeReport(report);
   if (!report.passed) process.exitCode = 1;
 }
