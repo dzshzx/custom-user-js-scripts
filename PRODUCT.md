@@ -60,6 +60,10 @@ cross-device transfer, or synchronized through a user-owned GitHub Gist.
 The archive stores organized quota data, not cookies, tokens, authorization
 headers, or raw private API responses.
 
+It is currently designed for a single ChatGPT account. Switching accounts in the
+same browser mixes their data into one `Snapshot Archive` and `Cost Ledger`;
+telling accounts and workspaces apart is a TODO.
+
 ### Feishu Preview Image Export
 
 Runs on `https://mi.feishu.cn/file/*`.
