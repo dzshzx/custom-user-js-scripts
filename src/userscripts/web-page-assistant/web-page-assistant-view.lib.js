@@ -575,7 +575,7 @@ function createWebPageAssistantView({
     }
     if (snapshot.lifecycle !== 'ready') return;
     initializationError = null;
-    if (change.kind === 'lifecycle' || (change.kind === 'settings' && change.area === 'refresh')) renderWidget();
+    if (change.kind === 'lifecycle' || (change.kind === 'settings' && ['refresh', 'all'].includes(change.area))) renderWidget();
     updatePauseButton();
     updateCountdownText();
     updateWidgetStatusText();

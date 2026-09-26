@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.3
+// @version      0.3.4
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -16,9 +16,13 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @grant        GM_addValueChangeListener
+// @grant        GM_removeValueChangeListener
 // @grant        GM.getValue
 // @grant        GM.setValue
 // @grant        GM.registerMenuCommand
+// @grant        GM.addValueChangeListener
+// @grant        GM.removeValueChangeListener
 // @run-at       document-idle
 // @homepageURL  https://github.com/dzshzx/custom-user-js-scripts
 // @supportURL   https://github.com/dzshzx/custom-user-js-scripts/issues
@@ -219,8 +223,11 @@
       gmGetValue,
       gmSetValue,
       gmRegisterMenuCommand,
+      gmAddValueChangeListener,
+      gmRemoveValueChangeListener,
       gmApi,
       localStorageAdapter,
+      eventTarget,
       logger,
       toPromise = maybePromise
     } = adapters;
@@ -261,20 +268,96 @@
     function writeFallbackJson(key, value) {
       localStorageAdapter.setItem(key, JSON.stringify(value));
     }
+    async function readSettingsWithSource() {
+      try {
+        const primary = await readPrimaryValue(storageKey, settingsContract.emptySettings());
+        if (primary.available) {
+          return { source: "primary", settings: settingsContract.normalizeSettings(primary.value) };
+        }
+      } catch (error) {
+        logger.warn(`${scriptName}: failed to read userscript storage.`, error);
+        return { source: "fallback-after-primary-failure", settings: readFallbackSettings() };
+      }
+      return { source: "fallback", settings: readFallbackSettings() };
+    }
+    function readFallbackSettings() {
+      return readFallbackJson(
+        fallbackStorageKey,
+        settingsContract.normalizeSettings,
+        settingsContract.emptySettings(),
+        `${scriptName}: failed to read fallback storage.`
+      );
+    }
+    async function writeSettingsTo(nextSettings, { primary = true } = {}) {
+      const normalized = settingsContract.normalizeSettings(nextSettings);
+      if (primary) {
+        try {
+          if (await writePrimaryValue(storageKey, normalized)) return normalized;
+        } catch (error) {
+          logger.warn(`${scriptName}: failed to write userscript storage.`, error);
+        }
+      }
+      writeFallbackJson(fallbackStorageKey, normalized);
+      return normalized;
+    }
+    function subscribePrimary(onChange) {
+      const listener = (_name, _oldValue, _newValue, remote) => {
+        if (remote) onChange();
+      };
+      if (typeof gmAddValueChangeListener === "function") {
+        const id = gmAddValueChangeListener(storageKey, listener);
+        return () => {
+          if (typeof gmRemoveValueChangeListener === "function") gmRemoveValueChangeListener(id);
+        };
+      }
+      if (gmApi && typeof gmApi.addValueChangeListener === "function") {
+        const id = toPromise(gmApi.addValueChangeListener(storageKey, listener));
+        id.catch((error) => logger.warn(`${scriptName}: failed to watch userscript storage.`, error));
+        return () => {
+          if (typeof gmApi.removeValueChangeListener !== "function") return;
+          id.then((value) => gmApi.removeValueChangeListener(value)).catch(() => {
+          });
+        };
+      }
+      return null;
+    }
     return {
       async readSettings() {
+        return (await readSettingsWithSource()).settings;
+      },
+      // Applies one change to the latest stored settings instead of a copy held
+      // since page load, so saves from other tabs are kept.
+      async updateSettings(transform) {
+        const latest = await readSettingsWithSource();
+        const next = transform(latest.settings);
+        return writeSettingsTo(next, { primary: latest.source !== "fallback-after-primary-failure" });
+      },
+      // Calls onChange when another tab changes the settings. Returns an
+      // unsubscribe function; managers without change events only get the
+      // same-origin fallback storage event.
+      subscribeSettings(onChange) {
+        const cleanups = [];
         try {
-          const primary = await readPrimaryValue(storageKey, settingsContract.emptySettings());
-          if (primary.available) return settingsContract.normalizeSettings(primary.value);
+          const unsubscribe = subscribePrimary(onChange);
+          if (unsubscribe) cleanups.push(unsubscribe);
         } catch (error) {
-          logger.warn(`${scriptName}: failed to read userscript storage.`, error);
+          logger.warn(`${scriptName}: failed to watch userscript storage.`, error);
         }
-        return readFallbackJson(
-          fallbackStorageKey,
-          settingsContract.normalizeSettings,
-          settingsContract.emptySettings(),
-          `${scriptName}: failed to read fallback storage.`
-        );
+        if (eventTarget && typeof eventTarget.addEventListener === "function") {
+          const onStorage = (event) => {
+            if (event?.key === fallbackStorageKey || event?.key === null) onChange();
+          };
+          eventTarget.addEventListener("storage", onStorage);
+          cleanups.push(() => eventTarget.removeEventListener("storage", onStorage));
+        }
+        return () => {
+          for (const cleanup of cleanups) {
+            try {
+              cleanup();
+            } catch {
+            }
+          }
+        };
       },
       async readWidgetPosition() {
         try {
@@ -291,14 +374,7 @@
         );
       },
       async writeSettings(nextSettings) {
-        const normalized = settingsContract.normalizeSettings(nextSettings);
-        try {
-          if (await writePrimaryValue(storageKey, normalized)) return normalized;
-        } catch (error) {
-          logger.warn(`${scriptName}: failed to write userscript storage.`, error);
-        }
-        writeFallbackJson(fallbackStorageKey, normalized);
-        return normalized;
+        return writeSettingsTo(nextSettings);
       },
       async writeWidgetPosition(position) {
         const normalized = normalizePosition(position);
@@ -447,6 +523,9 @@
     let appliedUnlocker = null;
     let startPromise;
     let queue = Promise.resolve();
+    let unsubscribeStorage = null;
+    let changedWhileStarting = false;
+    let refreshQueued = false;
     let finishDisposed;
     const disposed = new Promise((resolve) => {
       finishDisposed = resolve;
@@ -510,11 +589,48 @@
       applicationError = Object.values(applicationErrors).filter(Boolean).join("; ") || null;
       return failed ? "application-failed" : null;
     }
+    function changedAreas(previous, next) {
+      const same = (resolve) => JSON.stringify(resolve(previous, keys)) === JSON.stringify(resolve(next, keys));
+      return [
+        ...same(resolveActiveRefreshSetting) ? [] : ["refresh"],
+        ...same(resolveActiveUnlockerSetting) ? [] : ["unlocker"]
+      ];
+    }
+    function combinedArea(areas) {
+      return areas.length > 1 ? "all" : areas[0] ?? null;
+    }
+    function adoptStoredSettings(latest) {
+      const next = normalizeSettings(latest);
+      if (JSON.stringify(next) === JSON.stringify(settings)) return;
+      const area = combinedArea(changedAreas(settings, next));
+      settings = next;
+      if (area) apply(area);
+      emit("settings", area);
+    }
+    function refreshFromStorage() {
+      if (refreshQueued) return;
+      refreshQueued = true;
+      queue = queue.then(async () => {
+        refreshQueued = false;
+        if (lifecycle !== "ready") return;
+        const latest = await storage.readSettings();
+        if (lifecycle === "ready") adoptStoredSettings(latest);
+      }).catch(() => {
+      });
+    }
+    function handleStorageChange() {
+      if (lifecycle === "starting") changedWhileStarting = true;
+      else if (lifecycle === "ready") refreshFromStorage();
+    }
     function start() {
       if (lifecycle === "disposed") return Promise.resolve(result("disposed"));
       if (startPromise) return startPromise;
       lifecycle = "starting";
       emit("lifecycle");
+      try {
+        unsubscribeStorage = storage.subscribeSettings?.(handleStorageChange) || null;
+      } catch {
+      }
       const initialize = async () => {
         try {
           const [loaded] = await Promise.all([storage.readSettings(), ready()]);
@@ -523,6 +639,7 @@
           lifecycle = "ready";
           const code = apply("all");
           emit("lifecycle");
+          if (changedWhileStarting) refreshFromStorage();
           return result(code);
         } catch (error) {
           if (lifecycle === "disposed") return result("disposed");
@@ -543,28 +660,32 @@
       if (!["page", "site"].includes(scope)) return result("invalid-input");
       const key = scope === "page" ? keys.pageKey : keys.siteKey;
       const area = type.includes("unlocker") ? "unlocker" : "refresh";
-      let next;
+      let change;
       if (type === "save-refresh") {
         if (!isValidIntervalMs(command.intervalMs)) return result("invalid-input");
-        next = setRefreshSetting(settings, scope, key, command.intervalMs, clock.now());
+        const updatedAt = clock.now();
+        change = (latest) => setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
       } else if (type === "save-unlocker") {
         if (!normalizeUnlockerSetting(command.setting)) return result("invalid-input");
-        next = setUnlockerSetting(settings, scope, key, command.setting, clock.now());
+        const updatedAt = clock.now();
+        change = (latest) => setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
       } else if (type === "delete-unlocker") {
-        next = deleteUnlockerSetting(settings, scope, key);
+        change = (latest) => deleteUnlockerSetting(latest, scope, key);
       } else if (type === "delete-refresh" || type === "disable-active") {
-        next = deleteRefreshSetting(settings, scope, key);
+        change = (latest) => deleteRefreshSetting(latest, scope, key);
       } else return result("invalid-input");
+      let next;
       try {
-        await storage.writeSettings(next);
+        next = normalizeSettings(await storage.updateSettings(change));
       } catch (error) {
         if (lifecycle === "disposed") return result("disposed");
         return { ...result("storage-failed"), message: String(error?.message || error) };
       }
+      const applied = combinedArea([.../* @__PURE__ */ new Set([area, ...changedAreas(settings, next)])]);
       settings = next;
       if (lifecycle === "disposed") return result("disposed", true, scope);
-      const code = apply(area);
-      emit("settings", area);
+      const code = apply(applied);
+      emit("settings", applied);
       return result(code, true, scope);
     }
     function dispatch(command) {
@@ -586,6 +707,11 @@
     function dispose() {
       if (lifecycle === "disposed") return;
       lifecycle = "disposed";
+      try {
+        unsubscribeStorage?.();
+      } catch {
+      }
+      unsubscribeStorage = null;
       runtime.stop();
       appliedUnlocker = null;
       try {
@@ -2617,7 +2743,7 @@ ${root} :focus-visible {
       }
       if (snapshot.lifecycle !== "ready") return;
       initializationError = null;
-      if (change.kind === "lifecycle" || change.kind === "settings" && change.area === "refresh") renderWidget();
+      if (change.kind === "lifecycle" || change.kind === "settings" && ["refresh", "all"].includes(change.area)) renderWidget();
       updatePauseButton();
       updateCountdownText();
       updateWidgetStatusText();
@@ -2726,8 +2852,11 @@ ${root} :focus-visible {
       gmGetValue: typeof GM_getValue === "function" ? GM_getValue : null,
       gmSetValue: typeof GM_setValue === "function" ? GM_setValue : null,
       gmRegisterMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
+      gmAddValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
+      gmRemoveValueChangeListener: typeof GM_removeValueChangeListener === "function" ? GM_removeValueChangeListener : null,
       gmApi: typeof GM !== "undefined" ? GM : null,
       localStorageAdapter: localStorage,
+      eventTarget: window,
       logger: console
     });
     const unlocker = createUnlockerRuntime({

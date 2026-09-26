@@ -11,9 +11,17 @@ function harness(overrides = {}) {
   const timers = new Map();
   const writes = [];
   const events = [];
+  let stored = overrides.seed || Settings.emptySettings();
+  const persist = (value) => { stored = JSON.parse(JSON.stringify(value)); return value; };
   const storage = {
-    async readSettings() { reads++; return overrides.seed || Settings.emptySettings(); },
-    async writeSettings(value) { writes.push(value); return value; },
+    async readSettings() { reads++; return JSON.parse(JSON.stringify(stored)); },
+    async writeSettings(value) { writes.push(value); return persist(value); },
+    // Mirrors the port: the change is applied to the latest stored settings.
+    async updateSettings(change) {
+      const next = change(Settings.normalizeSettings(JSON.parse(JSON.stringify(stored))));
+      await storage.writeSettings(next);
+      return next;
+    },
     ...overrides.storage,
   };
   const session = createWebPageAssistantSession({
@@ -24,7 +32,7 @@ function harness(overrides = {}) {
     ready: overrides.ready,
     onChange(state, event) { events.push({ state, ...event }); overrides.onChange?.(); },
   });
-  return { session, storage, writes, events, timers, get reads() { return reads; }, get installs() { return installs; }, tick() { time += 1000; for (const f of timers.values()) f(); } };
+  return { session, storage, writes, events, timers, persist, get stored() { return stored; }, get reads() { return reads; }, get installs() { return installs; }, tick() { time += 1000; for (const f of timers.values()) f(); } };
 }
 const save = (scope = 'page', intervalMs = 30000) => ({ type: 'save-refresh', scope, intervalMs });
 
@@ -46,7 +54,7 @@ test('start is idempotent, waits for readiness, and snapshots isolate committed 
 test('FIFO writes use the latest committed settings and failure does not poison the queue', async () => {
   const h = harness(); await h.session.start();
   const gate = deferred(); let calls = 0;
-  h.storage.writeSettings = async (value) => { if (++calls === 1) { await gate.promise; throw Error('disk'); } h.writes.push(value); };
+  h.storage.writeSettings = async (value) => { if (++calls === 1) { await gate.promise; throw Error('disk'); } h.writes.push(value); h.persist(value); };
   const a = h.session.dispatch(save());
   const b = h.session.dispatch(save('site', 60000));
   gate.resolve();
@@ -75,7 +83,7 @@ test('failed disable keeps active state; successful delete rematches the site ru
   h.storage.writeSettings = async () => { throw Error('disk'); };
   assert.equal((await h.session.dispatch({ type: 'disable-active' })).persisted, false);
   assert.equal(h.session.getState().refresh.activeMatch.scope, 'page');
-  h.storage.writeSettings = async () => {};
+  h.storage.writeSettings = async (value) => { h.persist(value); };
   await h.session.dispatch({ type: 'disable-active' });
   assert.equal(h.session.getState().refresh.activeMatch.scope, 'site');
 });

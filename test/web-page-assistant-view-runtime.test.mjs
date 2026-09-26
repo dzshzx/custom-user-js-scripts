@@ -25,11 +25,18 @@ function createHarness({ readSettings, writeSettings, initialPosition = null, pr
   let view;
   let position = initialPosition;
   const writes = [];
+  let stored = Settings.emptySettings();
   const storage = {
-    readSettings: readSettings || (async () => Settings.emptySettings()),
+    readSettings: readSettings || (async () => JSON.parse(JSON.stringify(stored))),
     async writeSettings(value) {
       writes.push(value);
       if (writeSettings) await writeSettings(value);
+      stored = JSON.parse(JSON.stringify(value));
+    },
+    async updateSettings(change) {
+      const next = change(Settings.normalizeSettings(await storage.readSettings()));
+      await storage.writeSettings(next);
+      return next;
     },
   };
   const session = createWebPageAssistantSession({

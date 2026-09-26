@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.3
+// @version      0.3.4
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -16,9 +16,13 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @grant        GM_addValueChangeListener
+// @grant        GM_removeValueChangeListener
 // @grant        GM.getValue
 // @grant        GM.setValue
 // @grant        GM.registerMenuCommand
+// @grant        GM.addValueChangeListener
+// @grant        GM.removeValueChangeListener
 // @run-at       document-idle
 // @homepageURL  https://github.com/dzshzx/custom-user-js-scripts
 // @supportURL   https://github.com/dzshzx/custom-user-js-scripts/issues
@@ -72,8 +76,11 @@ import { createWebPageAssistantView } from './web-page-assistant-view.lib.js';
     gmGetValue: typeof GM_getValue === 'function' ? GM_getValue : null,
     gmSetValue: typeof GM_setValue === 'function' ? GM_setValue : null,
     gmRegisterMenuCommand: typeof GM_registerMenuCommand === 'function' ? GM_registerMenuCommand : null,
+    gmAddValueChangeListener: typeof GM_addValueChangeListener === 'function' ? GM_addValueChangeListener : null,
+    gmRemoveValueChangeListener: typeof GM_removeValueChangeListener === 'function' ? GM_removeValueChangeListener : null,
     gmApi: typeof GM !== 'undefined' ? GM : null,
     localStorageAdapter: localStorage,
+    eventTarget: window,
     logger: console,
   });
   const unlocker = createUnlockerRuntime({

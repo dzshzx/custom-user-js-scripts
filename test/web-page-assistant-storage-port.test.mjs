@@ -165,3 +165,73 @@ test('storage port registers settings menu through available GM adapter', () => 
   assert.equal(promiseCalls.length, 1);
   assert.deepEqual(promiseCalls[0], ['网页助手设置', callback]);
 });
+
+test('storage port reports only other tabs\' settings changes and unsubscribes', async () => {
+  const calls = [];
+  const removed = [];
+  const listeners = [];
+  const storageHandlers = new Set();
+  const port = createWebPageAssistantStoragePort(baseAdapters({
+    gmApi: {
+      addValueChangeListener(key, listener) {
+        listeners.push([key, listener]);
+        return Promise.resolve(7);
+      },
+      removeValueChangeListener(id) {
+        removed.push(id);
+      },
+    },
+    eventTarget: {
+      addEventListener(type, handler) { if (type === 'storage') storageHandlers.add(handler); },
+      removeEventListener(type, handler) { storageHandlers.delete(handler); },
+    },
+  }));
+
+  const unsubscribe = port.subscribeSettings(() => calls.push('change'));
+  assert.equal(listeners[0][0], 'settings');
+  listeners[0][1]('settings', null, {}, false);
+  listeners[0][1]('settings', null, {}, true);
+  for (const handler of storageHandlers) {
+    handler({ key: 'unrelated' });
+    handler({ key: 'fallbackSettings' });
+  }
+  assert.deepEqual(calls, ['change', 'change']);
+
+  unsubscribe();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(removed, [7]);
+  assert.equal(storageHandlers.size, 0);
+});
+
+test('storage port updates the latest primary settings and keeps a failed read off primary', async () => {
+  let primary = { stored: 1 };
+  const gmWrites = [];
+  const localStorageAdapter = createLocalStorage({ fallbackSettings: JSON.stringify({ from: 'local' }) });
+  let failRead = false;
+  const port = createWebPageAssistantStoragePort(baseAdapters({
+    localStorageAdapter,
+    gmGetValue() {
+      if (failRead) throw new Error('read failed');
+      return primary;
+    },
+    gmSetValue(key, value) {
+      gmWrites.push([key, value]);
+      primary = value;
+    },
+  }));
+
+  const seen = [];
+  await port.updateSettings((latest) => { seen.push(latest); return { next: 1 }; });
+  assert.deepEqual(seen, [{ normalized: true, value: { stored: 1 } }]);
+  assert.deepEqual(gmWrites, [['settings', { normalized: true, value: { next: 1 } }]]);
+
+  failRead = true;
+  await port.updateSettings((latest) => { seen.push(latest); return { next: 2 }; });
+  assert.deepEqual(seen[1], { normalized: true, value: { from: 'local' } });
+  assert.equal(gmWrites.length, 1);
+  assert.deepEqual(localStorageAdapter.writes.at(-1), [
+    'fallbackSettings',
+    JSON.stringify({ normalized: true, value: { next: 2 } }),
+  ]);
+});
