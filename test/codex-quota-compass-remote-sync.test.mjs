@@ -567,3 +567,145 @@ test('planRemoteSyncSave trims the gist id and keeps it as an explicit patch fie
   );
   assert.equal(blank.patch.gistId, '');
 });
+
+// Two tabs share one GM settings store; each tab has its own sync client.
+// `onRequest` runs while tab A's request is in flight, i.e. from tab B.
+function createTwoTabSync({ initialSettings, archive = createMemoryArchiveStore(), respond, onRequest }) {
+  const settingsStore = createMemorySettingsStore(initialSettings);
+  const requests = [];
+  const noNetwork = async () => { throw new Error('tab B makes no requests'); };
+  const tabB = createRemoteSyncClient({ archiveStore: archive.store, settingsStore, requestJson: noNetwork });
+  const tabA = createRemoteSyncClient({
+    archiveStore: archive.store,
+    settingsStore,
+    now: () => '2026-06-13T12:30:00.000Z',
+    requestJson: async (request) => {
+      requests.push(request);
+      await onRequest?.(request, tabB);
+      return respond(request);
+    },
+  });
+  return { tabA, tabB, settingsStore, requests };
+}
+
+const gistUrl = (id) => `${GITHUB_API_BASE}/gists/${id}`;
+const isPush = (request) => request.method === 'PATCH' || request.method === 'POST';
+const localArchive = () => createMemoryArchiveStore({
+  snapshots: [createSnapshot('local-snapshot', '2026-06-13T10:00:00.000Z', 10)],
+});
+
+test('syncNow does not push or re-enable when another tab disables sync mid-request', async () => {
+  const { tabA, settingsStore, requests } = createTwoTabSync({
+    initialSettings: { enabled: true, token: 'old-token', gistId: 'gist-1' },
+    archive: localArchive(),
+    respond: (request) => {
+      if (request.method === 'GET' && request.url === gistUrl('gist-1')) return createGist({ id: 'gist-1' });
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+    onRequest: (request, tabB) => (request.method === 'GET' ? tabB.configure({ enabled: false }) : null),
+  });
+
+  const result = await tabA.syncNow();
+
+  assert.equal(result.status, 'disabled');
+  assert.equal(requests.some(isPush), false);
+  assert.equal(settingsStore.dump().enabled, false);
+  assert.equal(settingsStore.dump().lastSyncedAt, '');
+  assert.equal((await tabA.syncNow()).status, 'disabled');
+  assert.equal(requests.length, 1);
+});
+
+test('syncNow does not create a gist with a token replaced mid-request', async () => {
+  const { tabA, settingsStore, requests } = createTwoTabSync({
+    initialSettings: { enabled: true, token: 'old-token' },
+    archive: localArchive(),
+    respond: (request) => {
+      if (request.method === 'GET' && request.url.startsWith(`${GITHUB_API_BASE}/gists?`)) return [];
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+    onRequest: (request, tabB) => tabB.configure({ token: 'new-token' }),
+  });
+
+  const result = await tabA.syncNow();
+
+  assert.equal(result.status, 'superseded');
+  assert.equal(requests.some(isPush), false);
+  assert.equal(settingsStore.dump().token, 'new-token');
+  assert.equal(settingsStore.dump().gistId, '');
+});
+
+test('a completed push keeps the token and gist another tab saved during the push', async () => {
+  const { tabA, settingsStore, requests } = createTwoTabSync({
+    initialSettings: { enabled: true, token: 'old-token', gistId: 'gist-1' },
+    archive: localArchive(),
+    respond: (request) => {
+      if (request.method === 'GET' && request.url === gistUrl('gist-1')) return createGist({ id: 'gist-1' });
+      if (request.method === 'PATCH' && request.url === gistUrl('gist-1')) return createGist({ id: 'gist-1' });
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+    onRequest: (request, tabB) => (
+      request.method === 'PATCH' ? tabB.configure({ token: 'new-token', gistId: 'gist-9' }) : null
+    ),
+  });
+
+  const result = await tabA.syncNow();
+
+  assert.equal(result.status, 'synced');
+  assert.equal(requests.filter(isPush).length, 1);
+  assert.equal(settingsStore.dump().token, 'new-token');
+  assert.equal(settingsStore.dump().gistId, 'gist-9');
+  assert.equal(settingsStore.dump().enabled, true);
+  assert.equal(settingsStore.dump().lastSyncedAt, '');
+  assert.equal(result.settings.gistId, 'gist-9');
+});
+
+test('a successful sync writes only its own fields onto the latest settings', async () => {
+  const { tabA, settingsStore } = createTwoTabSync({
+    initialSettings: { enabled: true, token: 'old-token', gistId: 'gist-1', lastError: 'earlier failure' },
+    respond: (request) => {
+      if (request.method === 'GET' && request.url === gistUrl('gist-1')) return createGist({ id: 'gist-1' });
+      throw new Error(`unexpected request ${request.method} ${request.url}`);
+    },
+    // Tab B saves the same target again; the sync still owns its result.
+    onRequest: (request, tabB) => tabB.configure({ enabled: true }),
+  });
+
+  const result = await tabA.syncNow();
+
+  assert.equal(result.status, 'synced');
+  assert.equal(settingsStore.dump().lastSyncedAt, '2026-06-13T12:30:00.000Z');
+  assert.equal(settingsStore.dump().lastError, '');
+  assert.equal(settingsStore.dump().token, 'old-token');
+});
+
+test('a failed sync neither restores a disabled state nor an old token', async () => {
+  for (const [patch, expected] of [
+    [{ enabled: false }, { enabled: false, token: 'old-token' }],
+    [{ token: 'new-token' }, { enabled: true, token: 'new-token' }],
+  ]) {
+    const { tabA, settingsStore } = createTwoTabSync({
+      initialSettings: { enabled: true, token: 'old-token', gistId: 'gist-1' },
+      respond: () => { throw new Error('server unavailable for old-token'); },
+      onRequest: (request, tabB) => tabB.configure(patch),
+    });
+
+    await assert.rejects(() => tabA.syncNow(), (error) => {
+      assert.equal(error.message, 'server unavailable for [redacted]');
+      return true;
+    });
+    assert.equal(settingsStore.dump().enabled, expected.enabled);
+    assert.equal(settingsStore.dump().token, expected.token);
+    assert.equal(settingsStore.dump().lastError, '');
+  }
+});
+
+test('a failed sync of an unchanged target records a redacted error', async () => {
+  const { tabA, settingsStore } = createTwoTabSync({
+    initialSettings: { enabled: true, token: 'old-token', gistId: 'gist-1' },
+    respond: () => { throw new Error('server unavailable for old-token'); },
+  });
+
+  await assert.rejects(() => tabA.syncNow(), /server unavailable for \[redacted\]/);
+  assert.equal(settingsStore.dump().lastError, 'server unavailable for [redacted]');
+  assert.equal(settingsStore.dump().token, 'old-token');
+});

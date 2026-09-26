@@ -428,11 +428,45 @@ function createRemoteSyncClient({
     return publicStatus(await getSettings());
   }
 
+  // A sync belongs to the settings it started with. Another tab may disable
+  // sync or change the token, Gist or file while requests are in flight; the
+  // stored settings then win and this sync's outcome is discarded.
+  function isSameSyncTarget(started, latest) {
+    return latest.enabled
+      && Boolean(latest.token)
+      && latest.token === started.token
+      && latest.gistId === started.gistId
+      && latest.filename === started.filename;
+  }
+
+  function supersededError(latest) {
+    return Object.assign(new Error('GitHub Gist sync settings changed during sync.'), {
+      superseded: true,
+      latest,
+    });
+  }
+
+  async function assertSyncTargetCurrent(started) {
+    const latest = await getSettings();
+    if (!isSameSyncTarget(started, latest)) throw supersededError(latest);
+  }
+
+  // Writes only the fields a sync produces, onto the latest stored settings.
+  async function saveSyncOutcome(started, outcome) {
+    const latest = await getSettings();
+    if (!isSameSyncTarget(started, latest)) return latest;
+    return saveSettings({ ...latest, ...outcome });
+  }
+
   async function markSyncFailure(settings, error) {
     const rawMessage = error?.message || String(error);
     const message = settings.token ? rawMessage.split(settings.token).join('[redacted]') : rawMessage;
-    await saveSettings({ ...settings, lastError: message });
+    await saveSyncOutcome(settings, { lastError: message });
     return message;
+  }
+
+  function supersededResult(latest) {
+    return { status: latest.enabled ? 'superseded' : 'disabled', settings: publicStatus(latest) };
   }
 
   async function syncNow() {
@@ -477,11 +511,11 @@ function createRemoteSyncClient({
         phase = 'persistence';
         const localArchive = await archiveStore.loadArchive();
         phase = 'sync';
+        await assertSyncTargetCurrent(settings);
         remoteWritePending = true;
         gist = await gistApi.createGist(localArchive, exportedAt);
         remoteWritePending = false;
-        const savedSettings = await saveSettings({
-          ...settings,
+        const savedSettings = await saveSyncOutcome(settings, {
           gistId: gist.id,
           lastSyncedAt: exportedAt,
           lastError: '',
@@ -518,13 +552,13 @@ function createRemoteSyncClient({
         exportedAt,
       );
       const remoteNeedsUpdate = !sameArchiveContent(mergedDocument, remoteNormalized);
+      if (remoteNeedsUpdate) await assertSyncTargetCurrent(settings);
       remoteWritePending = remoteNeedsUpdate;
       const updatedGist = remoteNeedsUpdate
         ? await gistApi.updateGist(gist.id, imported.archive, now())
         : gist;
       remoteWritePending = false;
-      const savedSettings = await saveSettings({
-        ...settings,
+      const savedSettings = await saveSyncOutcome(settings, {
         gistId: updatedGist.id || gist.id,
         lastSyncedAt: now(),
         lastError: '',
@@ -539,6 +573,8 @@ function createRemoteSyncClient({
         archive: imported.archive,
       };
     } catch (error) {
+      // Nothing was pushed; a completed local merge stays, as on any failure.
+      if (error?.superseded) return supersededResult(error.latest);
       const unknown = remoteWritePending && !error?.status;
       const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
       const message = await markSyncFailure(settings, failure).catch(() => 'GitHub Gist sync failed; status could not be saved.');

@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.5
+// @version      0.5.6
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -2297,11 +2297,32 @@ ${text.slice(0, 800)}`);
     async function getStatus() {
       return publicStatus(await getSettings());
     }
+    function isSameSyncTarget(started, latest) {
+      return latest.enabled && Boolean(latest.token) && latest.token === started.token && latest.gistId === started.gistId && latest.filename === started.filename;
+    }
+    function supersededError(latest) {
+      return Object.assign(new Error("GitHub Gist sync settings changed during sync."), {
+        superseded: true,
+        latest
+      });
+    }
+    async function assertSyncTargetCurrent(started) {
+      const latest = await getSettings();
+      if (!isSameSyncTarget(started, latest)) throw supersededError(latest);
+    }
+    async function saveSyncOutcome(started, outcome) {
+      const latest = await getSettings();
+      if (!isSameSyncTarget(started, latest)) return latest;
+      return saveSettings({ ...latest, ...outcome });
+    }
     async function markSyncFailure(settings, error) {
       const rawMessage = error?.message || String(error);
       const message = settings.token ? rawMessage.split(settings.token).join("[redacted]") : rawMessage;
-      await saveSettings({ ...settings, lastError: message });
+      await saveSyncOutcome(settings, { lastError: message });
       return message;
+    }
+    function supersededResult(latest) {
+      return { status: latest.enabled ? "superseded" : "disabled", settings: publicStatus(latest) };
     }
     async function syncNow() {
       const settings = await getSettings();
@@ -2340,11 +2361,11 @@ ${text.slice(0, 800)}`);
           phase = "persistence";
           const localArchive = await archiveStore.loadArchive();
           phase = "sync";
+          await assertSyncTargetCurrent(settings);
           remoteWritePending = true;
           gist = await gistApi.createGist(localArchive, exportedAt);
           remoteWritePending = false;
-          const savedSettings2 = await saveSettings({
-            ...settings,
+          const savedSettings2 = await saveSyncOutcome(settings, {
             gistId: gist.id,
             lastSyncedAt: exportedAt,
             lastError: ""
@@ -2369,11 +2390,11 @@ ${text.slice(0, 800)}`);
           exportedAt
         );
         const remoteNeedsUpdate = !sameArchiveContent(mergedDocument, remoteNormalized);
+        if (remoteNeedsUpdate) await assertSyncTargetCurrent(settings);
         remoteWritePending = remoteNeedsUpdate;
         const updatedGist = remoteNeedsUpdate ? await gistApi.updateGist(gist.id, imported.archive, now()) : gist;
         remoteWritePending = false;
-        const savedSettings = await saveSettings({
-          ...settings,
+        const savedSettings = await saveSyncOutcome(settings, {
           gistId: updatedGist.id || gist.id,
           lastSyncedAt: now(),
           lastError: ""
@@ -2387,6 +2408,7 @@ ${text.slice(0, 800)}`);
           archive: imported.archive
         };
       } catch (error) {
+        if (error?.superseded) return supersededResult(error.latest);
         const unknown = remoteWritePending && !error?.status;
         const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
         const message = await markSyncFailure(settings, failure).catch(() => "GitHub Gist sync failed; status could not be saved.");
@@ -6137,7 +6159,7 @@ ${root} :focus-visible {
     const DEBUG_KEY = "__codexQuotaCompassDebug";
     const LAST_RESULT_KEY = "__codexQuotaCompassLastResult";
     const RUNNING_KEY = "__codexQuotaCompassRunning";
-    const SCRIPT_VERSION = "0.5.5";
+    const SCRIPT_VERSION = "0.5.6";
     const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,
