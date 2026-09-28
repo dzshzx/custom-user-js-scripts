@@ -12,9 +12,9 @@ const srcPath = path.resolve(import.meta.dirname, '../src/userscripts/javdb-reco
 
 const RAW_URL = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js';
 
-test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.9', async () => {
+test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.10', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
-  assert.deepEqual(metadata.get('@version'), ['0.0.9']);
+  assert.deepEqual(metadata.get('@version'), ['0.0.10']);
   assert.deepEqual(metadata.get('@downloadURL'), [RAW_URL]);
   assert.deepEqual(metadata.get('@updateURL'), [RAW_URL]);
 });
