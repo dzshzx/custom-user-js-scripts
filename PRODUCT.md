@@ -156,9 +156,9 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
   decision is missing, prepare and validate the changes on the task branch,
   then ask before pushing the candidate. Script managers key update discovery
   and cache refresh on `@version`.
-- The agent chooses each target `@version` itself. Default to the next patch. Use a minor only when
-  the release adds a capability the user can notice. Use a major (including
-  `0.x` -> `1.0.0`) only when the user names it. Internal refactors, directory
+- Default each target `@version` to the next patch. A minor (the release adds
+  a capability the user can notice) and a major (including `0.x` -> `1.0.0`)
+  need the user's confirmation first. Internal refactors, directory
   moves, and internal storage-format migrations that keep compatible reads are
   not breaking changes.
 - Before changing versions, refresh the baseline with `git fetch origin master`,
