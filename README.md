@@ -112,6 +112,11 @@ npm run verify      # 一次构建、产物一致性、metadata lint、全部测
 聚焦调试使用 `node --test test/<name>.test.mjs`；它不代表完整验收。
 原生 JSON 报告、准备时间和人工验收边界见 [测试说明](docs/testing.md)。
 
+提交前运行 `scripts/format.sh`：prettier（版本锁在 `package.json` devDependencies）重排
+JS、Markdown、YAML 与 JSON，shfmt（脚本内固定版本与 sha256）重排 Shell；
+`scripts/format.sh --check` 只检查。`dist/`、`src/` 下与 dist 逐字节相同的桥接文件、
+`package-lock.json` 是生成物或锁文件，不参与重排。
+
 脚本的 raw `@downloadURL` / `@updateURL` 直接读取 `master`，因此合并带新
 `@version` 的提交就是外部发布。修改版本前先运行
 `git fetch origin master` 刷新基线，再运行
