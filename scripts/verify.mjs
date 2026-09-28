@@ -36,6 +36,7 @@ try {
   command('git', ['diff', '--exit-code', '--', 'dist', 'src']);
   command('sh', ['-c', 'test -z "$(git status --porcelain dist)"']);
   command(process.execPath, ['scripts/check-userscripts.mjs']);
+  command('bash', ['scripts/format.sh', '--check']);
   report.stages.checks = 'passed';
   report.stages.tests = 'running';
   Object.assign(report, await runTests());

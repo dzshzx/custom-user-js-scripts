@@ -114,8 +114,10 @@ npm run verify      # 一次构建、产物一致性、metadata lint、全部测
 
 提交前运行 `scripts/format.sh`：prettier（版本锁在 `package.json` devDependencies）重排
 JS、Markdown、YAML 与 JSON，shfmt（脚本内固定版本与 sha256）重排 Shell；
-`scripts/format.sh --check` 只检查。`dist/`、`src/` 下与 dist 逐字节相同的桥接文件、
+`scripts/format.sh --check` 只检查，`npm run verify` 的检查阶段会运行它，格式不一致即失败。`dist/`、`src/` 下与 dist 逐字节相同的桥接文件、
 `package-lock.json` 是生成物或锁文件，不参与重排。
+纯格式重排提交登记在 `.git-blame-ignore-revs`，本地可用
+`git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它们。
 
 脚本的 raw `@downloadURL` / `@updateURL` 直接读取 `master`，因此合并带新
 `@version` 的提交就是外部发布。修改版本前先运行
