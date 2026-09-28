@@ -156,8 +156,7 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
   decision is missing, prepare and validate the changes on the task branch,
   then ask before pushing the candidate. Script managers key update discovery
   and cache refresh on `@version`.
-- The agent chooses each target `@version` itself and does not stop to ask for
-  approval of the bump level. Default to the next patch. Use a minor only when
+- The agent chooses each target `@version` itself. Default to the next patch. Use a minor only when
   the release adds a capability the user can notice. Use a major (including
   `0.x` -> `1.0.0`) only when the user names it. Internal refactors, directory
   moves, and internal storage-format migrations that keep compatible reads are

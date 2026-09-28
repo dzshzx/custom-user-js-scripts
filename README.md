@@ -117,7 +117,7 @@ npm run verify      # 一次构建、产物一致性、metadata lint、全部测
 `git fetch origin master` 刷新基线，再运行
 `node scripts/version-plan.mjs plan --target '<安装身份>=<目标版本>'`（多个目标重复传参），
 在不写文件的情况下查看全部可安装脚本从 `origin/master` 基线到目标版本的完整计划。
-目标版本由 agent 按 `PRODUCT.md`「Version Policy」自定，无需停下征求确认：默认 patch，
+目标版本由 agent 按 `PRODUCT.md`「Version Policy」自定：默认 patch，
 有用户能感知的新能力才 minor，major（含 0.x→1.0）只在用户点名时升。改 metadata、
 重建后用 `scripts/candidate.sh` 推候选。
 候选入口会在推送前校验，受信任的 promote workflow 会在推进 `master` 前按最新基线
