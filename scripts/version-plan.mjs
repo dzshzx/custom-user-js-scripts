@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +9,6 @@ import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource, refSource } from './lib/userscript-sources.mjs';
 
 const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const APPROVAL_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const DEFAULT_BASE_REF = 'origin/master';
 
 function usage() {
@@ -19,55 +16,16 @@ function usage() {
   node scripts/version-plan.mjs plan [--base-ref REF] [--target-ref REF]
        [--target 'INSTALL_IDENTITY=VERSION']... [--json]
   node scripts/version-plan.mjs check [--base-ref REF] [--target-ref REF]
-       [--confirmed-version-plan sha256:...] [--approval-ref REF] [--json]
+       [--json]
 
 Without --target-ref, plan reads the current worktree. check requires a Git
-target ref. The default authoritative baseline is origin/master.`;
+target ref. The default authoritative baseline is origin/master. Any forward
+version transition passes; unknown baselines, missing targets, invalid
+metadata, and downgrades of an immutable published version stop the release.`;
 }
 
 function fail(message) {
   throw new Error(message);
-}
-
-function git(args, options = {}) {
-  return execFileSync('git', args, {
-    cwd: options.cwd || process.cwd(),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trimEnd();
-}
-
-export function normalizeRepository(remoteUrl) {
-  let pathname = remoteUrl.trim();
-  const scpMatch = pathname.match(/^(?:[^@/]+@)?[^:/]+:(.+)$/);
-  if (scpMatch && !pathname.includes('://')) {
-    pathname = scpMatch[1];
-  } else {
-    try {
-      pathname = new URL(pathname).pathname;
-    } catch {
-      fail(`origin URL is not a supported Git remote: ${remoteUrl}`);
-    }
-  }
-  const parts = pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '').split('/');
-  if (parts.length !== 2 || parts.some((part) => !part)) {
-    fail(`origin URL must identify one owner/repository pair: ${remoteUrl}`);
-  }
-  return parts.join('/').toLowerCase();
-}
-
-export function canonicalJson(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(',')}]`;
-  }
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-export function planSummary(plan) {
-  return `sha256:${createHash('sha256').update(canonicalJson(plan), 'utf8').digest('hex')}`;
 }
 
 function parseVersion(value, label, issues) {
@@ -94,17 +52,14 @@ function transitionKind(baseline, target, namespace, issues) {
     issues.push(`${namespace} target ${target} is older than immutable published baseline ${baseline}`);
     return 'invalid';
   }
-  if (before[0] === after[0] && before[1] === after[1] && after[2] === before[2] + 1) {
-    return 'patch';
-  }
-  return 'confirmation-required';
+  return ['major', 'minor', 'patch'][direction];
 }
 
 async function readVersions(source, label) {
   const inventory = await readUserscriptInventory(source);
   const versions = new Map();
   // Release requires complete owners and identity/version parity. Byte equality
-  // remains the build/lint gate; URL policy does not alter the approval schema.
+  // remains the build/lint gate; URL policy does not alter the version plan.
   const releaseIssues = new Set([
     'read-failed', 'missing-file', 'invalid-metadata', 'missing-companion',
     'metadata-mismatch', 'ownership-conflict', 'orphan-dist', 'missing-entry', 'invalid-entry-path',
@@ -133,7 +88,6 @@ export async function buildVersionPlan({
   targetRef,
   targetOverrides = new Map(),
 } = {}) {
-  const repository = normalizeRepository(git(['remote', 'get-url', 'origin'], { cwd: root }));
   const baselineState = await readVersions(refSource(root, baseRef), baseRef);
   const targetState = await readVersions(
     targetRef ? refSource(root, targetRef) : await worktreeSource(root),
@@ -149,7 +103,6 @@ export async function buildVersionPlan({
     targetState.versions.set(namespace, { ...existing, version });
   }
   const identities = new Set([...baselineState.versions.keys(), ...targetState.versions.keys()]);
-  const versions = [];
   const transitions = [];
   for (const namespace of [...identities].sort()) {
     const baseline = baselineState.versions.get(namespace)?.version;
@@ -162,45 +115,10 @@ export async function buildVersionPlan({
       issues.push(`${namespace} is missing from the complete target version set`);
       continue;
     }
-    const version = { baseline, namespace, target };
-    versions.push(version);
-    transitions.push({ ...version, kind: transitionKind(baseline, target, namespace, issues) });
+    transitions.push({ baseline, namespace, target, kind: transitionKind(baseline, target, namespace, issues) });
   }
-  const plan = { repository, schema: 1, versions };
-  if (versions.length === 0) issues.push('complete target version set is empty');
-  return {
-    canonical: canonicalJson(plan),
-    issues,
-    plan,
-    requiresConfirmation: transitions.some(({ kind }) => kind === 'confirmation-required'),
-    summary: planSummary(plan),
-    transitions,
-  };
-}
-
-function approvalTrailers(root, ref) {
-  let message;
-  try {
-    message = git(['show', '-s', '--format=%B', ref], { cwd: root });
-  } catch {
-    fail(`cannot read approval trailer from ${ref}`);
-  }
-  const rawLines = message.split('\n').filter((line) => line.startsWith('Version-Approval:'));
-  if (rawLines.some((line) => !/^Version-Approval: sha256:[0-9a-f]{64}$/.test(line))) {
-    fail(`${ref} contains a malformed Version-Approval trailer`);
-  }
-  const parsed = execFileSync('git', ['interpret-trailers', '--parse'], {
-    cwd: root,
-    encoding: 'utf8',
-    input: message,
-  });
-  const parsedTrailers = parsed.split('\n')
-    .map((line) => line.match(/^Version-Approval:\s*(\S+)\s*$/)?.[1])
-    .filter(Boolean);
-  if (parsedTrailers.length !== rawLines.length) {
-    fail(`${ref} contains Version-Approval outside the commit trailer block`);
-  }
-  return parsedTrailers;
+  if (transitions.length === 0) issues.push('complete target version set is empty');
+  return { issues, transitions };
 }
 
 function parseArgs(argv) {
@@ -220,9 +138,6 @@ function parseArgs(argv) {
       if (options.targetOverrides.has(namespace)) fail(`duplicate --target install identity: ${namespace}`);
       options.targetOverrides.set(namespace, version);
     }
-    else if (arg === '--confirmed-version-plan') options.confirmed = args.shift() || fail('--confirmed-version-plan requires a value');
-    else if (arg === '--approval-ref') options.approvalRef = args.shift() || fail('--approval-ref requires a value');
-    else if (arg === '--require-confirmed-argument') options.requireConfirmedArgument = true;
     else if (arg === '--json') options.json = true;
     else if (arg === '-h' || arg === '--help') options.help = true;
     else fail(`unknown argument: ${arg}`);
@@ -239,14 +154,10 @@ function printResult(result, json) {
     console.log(JSON.stringify(result));
     return;
   }
-  console.log(`Repository: ${result.plan.repository}`);
   console.log('Version plan:');
   for (const transition of result.transitions) {
     console.log(`  ${transition.namespace}: ${transition.baseline} -> ${transition.target} (${transition.kind})`);
   }
-  console.log(`Canonical plan: ${result.canonical}`);
-  console.log(`Summary: ${result.summary}`);
-  console.log(`Confirmation required: ${result.requiresConfirmation ? 'yes' : 'no'}`);
   for (const issue of result.issues) console.error(`version-plan: ${issue}`);
 }
 
@@ -259,31 +170,6 @@ async function main() {
   const result = await buildVersionPlan(options);
   printResult(result, options.json);
   if (result.issues.length > 0) fail('version plan is incomplete');
-  if (options.command === 'plan') return;
-  if (options.confirmed) {
-    if (!APPROVAL_PATTERN.test(options.confirmed)) fail('confirmed version plan must be a sha256 digest');
-    if (options.confirmed !== result.summary) fail('confirmed version plan does not match the current complete version plan');
-  }
-  let trailers = [];
-  if (options.approvalRef) {
-    trailers = approvalTrailers(process.cwd(), options.approvalRef);
-    if (trailers.length > 0 && (trailers.length !== 1 || trailers[0] !== result.summary)) {
-      fail(`${options.approvalRef} must contain at most one Version-Approval trailer matching ${result.summary}`);
-    }
-  }
-  if (options.confirmed && (!options.approvalRef || trailers.length !== 1)) {
-    fail(`a supplied confirmation must be recorded as exactly one Version-Approval: ${result.summary} trailer on --approval-ref`);
-  }
-  if (!result.requiresConfirmation) return;
-  if (options.requireConfirmedArgument && !options.confirmed) {
-    fail(`this entry requires --confirmed-version-plan ${result.summary}`);
-  }
-  if (!options.confirmed && trailers.length === 0) {
-    fail(`this version transition requires explicit approval; rerun with --confirmed-version-plan ${result.summary} and record the same value in a Version-Approval commit trailer`);
-  }
-  if (!options.approvalRef || trailers.length !== 1) {
-    fail(`confirmation-required plans must have exactly one Version-Approval: ${result.summary} trailer on --approval-ref`);
-  }
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : '';

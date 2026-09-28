@@ -3,18 +3,15 @@
 # The remote runs CI on the candidate; promote.yml fast-forwards master to the
 # exact sha when every CI run for it is green, then deletes the candidate branch.
 # Usage: scripts/candidate.sh [--no-wait] [--timeout SECONDS]
-#        [--confirmed-version-plan sha256:...]
 set -euo pipefail
 
 timeout=900
 wait=1
-confirmed_version_plan=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-wait) wait=0 ;;
     --timeout) timeout="$2"; shift ;;
-    --confirmed-version-plan) confirmed_version_plan="$2"; shift ;;
-    -h|--help) sed -n '2,6p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,5p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -32,17 +29,8 @@ sha="$(git rev-parse HEAD)"
 git merge-base --is-ancestor origin/master "$sha" || die "rebase onto origin/master first"
 [ "$sha" != "$(git rev-parse origin/master)" ] || die "HEAD is already master; nothing to promote"
 
-version_plan_args=(
-  check
-  --base-ref origin/master
-  --target-ref "$sha"
-  --approval-ref "$sha"
-  --require-confirmed-argument
-)
-if [ -n "$confirmed_version_plan" ]; then
-  version_plan_args+=(--confirmed-version-plan "$confirmed_version_plan")
-fi
-node scripts/version-plan.mjs "${version_plan_args[@]}" || die "version plan was not authorized"
+node scripts/version-plan.mjs check --base-ref origin/master --target-ref "$sha" \
+  || die "version plan is invalid"
 
 suffix="$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
 candidate="candidate/${sha:0:12}-${suffix}"

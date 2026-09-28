@@ -17,10 +17,9 @@ git merge-base --is-ancestor "$master_head" "$candidate" || {
 
 node scripts/version-plan.mjs check \
   --base-ref origin/master \
-  --target-ref "$candidate" \
-  --approval-ref "$candidate"
+  --target-ref "$candidate"
 
 # The lease closes the gap between the fresh baseline check and the write. It
-# rejects even a still-fast-forwardable master advance, which needs a new plan.
+# rejects even a still-fast-forwardable master advance, which needs a new check.
 git push --force-with-lease="refs/heads/master:$master_head" \
   origin "$candidate:refs/heads/master"

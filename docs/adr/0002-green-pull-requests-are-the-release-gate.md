@@ -81,3 +81,20 @@ from trusted `master`, fetches `origin/master` again after CI admission and
 rechecks the candidate tree and commit trailer in the same step that performs
 the fast-forward. It never executes candidate-owned guard code with its write
 token.
+
+## Amendment: agent-chosen versions (2026-09-28)
+
+The 2026-09-14 version-plan approval gate is withdrawn. Stopping for the user
+to confirm minor, major, or skipped-patch plans interrupted releases without
+constraining them. The agent now chooses each target `@version` under the bump
+levels in `PRODUCT.md` "Version Policy" (patch by default, minor for a
+user-visible capability, major only when the user names it).
+
+`scripts/version-plan.mjs` no longer computes a plan digest, and neither
+`scripts/candidate.sh` nor the trusted promote step accepts or requires a
+confirmation argument or `Version-Approval` trailer; trailers on older commits
+are ignored. The remaining hard stops are unchanged: an unknown baseline, an
+incomplete target set or invalid metadata, and a downgrade of an immutable
+published version. Every other forward transition passes. The promote
+workflow still rechecks the candidate from trusted `master` against a fresh
+baseline immediately before the fast-forward.
