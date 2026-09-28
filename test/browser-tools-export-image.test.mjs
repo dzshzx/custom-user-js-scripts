@@ -14,10 +14,7 @@ import {
 import { readPreviewImage } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js';
 
 test('CLI module imports without running and retains argument behavior', () => {
-  assert.equal(
-    isMain(new URL('../scripts/browser-tools/export-image.mjs', import.meta.url).href),
-    false,
-  );
+  assert.equal(isMain(new URL('../scripts/browser-tools/export-image.mjs', import.meta.url).href), false);
   assert.deepEqual(parseArgs(['--url', 'https://example.test/file', '--no-play', '--headful']), {
     url: 'https://example.test/file',
     profileDir: path.join(os.homedir(), '.local', 'share', 'codex-browser', 'feishu-login', 'playwright-profile'),
@@ -28,7 +25,10 @@ test('CLI module imports without running and retains argument behavior', () => {
     headless: false,
     debug: false,
   });
-  assert.match(guessOutputPath('', 'image/jpeg', new Date('2026-09-21T01:02:03Z')), /feishu-image-20260921010203\.jpg$/);
+  assert.match(
+    guessOutputPath('', 'image/jpeg', new Date('2026-09-21T01:02:03Z')),
+    /feishu-image-20260921010203\.jpg$/,
+  );
 });
 
 test('extractLargestImage evaluates the shared reader with the CLI profile', async () => {
@@ -63,7 +63,9 @@ test('runExportImage writes the exact decoded bytes and closes its context', asy
   };
   const context = {
     pages: () => [page],
-    close: async () => { closed += 1; },
+    close: async () => {
+      closed += 1;
+    },
   };
   const options = {
     ...parseArgs(['--url', 'https://mi.feishu.cn/file/test', '--no-play']),
@@ -78,7 +80,7 @@ test('runExportImage writes the exact decoded bytes and closes its context', asy
   });
 
   assert.equal(result.outputPath, output);
-  assert.deepEqual([...await readFile(output)], [0, 255, 65]);
+  assert.deepEqual([...(await readFile(output))], [0, 255, 65]);
   assert.equal(closed, 1);
 });
 
@@ -92,7 +94,9 @@ test('runExportImage does not write when extraction is empty', async () => {
   };
   const context = {
     pages: () => [page],
-    close: async () => { closed += 1; },
+    close: async () => {
+      closed += 1;
+    },
   };
 
   await assert.rejects(
@@ -100,7 +104,9 @@ test('runExportImage does not write when extraction is empty', async () => {
       resolvePlaywright: async () => ({
         chromium: { launchPersistentContext: async () => context },
       }),
-      writeFileImpl: async () => { writes += 1; },
+      writeFileImpl: async () => {
+        writes += 1;
+      },
       mkdirImpl: async () => {},
       log: () => {},
     }),

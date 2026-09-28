@@ -58,8 +58,12 @@ function createHarness({ readSettings, writeSettings, initialPosition = null, pr
   });
   const positions = {
     get: () => position,
-    normalize(value) { return value; },
-    async write(value) { return value; },
+    normalize(value) {
+      return value;
+    },
+    async write(value) {
+      return value;
+    },
   };
   view = createWebPageAssistantView({
     session,
@@ -94,7 +98,11 @@ test('open intents merge while initialization is pending and failure disables wr
   harness.view.dispose();
   harness.session.dispose();
 
-  const failed = createHarness({ readSettings: async () => { throw new Error('read failed'); } });
+  const failed = createHarness({
+    readSettings: async () => {
+      throw new Error('read failed');
+    },
+  });
   const result = await failed.view.openSettings({ tab: 'refresh' });
   assert.equal(result.ok, false);
   const failedDialog = dialogOf(failed.window);
@@ -104,22 +112,26 @@ test('open intents merge while initialization is pending and failure disables wr
   failed.session.dispose();
 });
 
-test('dialog preserves pre-existing inert and relinquishes attributes changed by the host', { skip: domSkip }, async () => {
-  const harness = createHarness();
-  harness.host.setAttribute('inert', 'host-before-open');
-  const sibling = harness.window.document.createElement('aside');
-  harness.window.document.body.append(sibling);
-  await harness.view.openSettings();
-  assert.equal(harness.host.getAttribute('inert'), 'host-before-open');
-  assert.equal(sibling.getAttribute('inert'), '');
+test(
+  'dialog preserves pre-existing inert and relinquishes attributes changed by the host',
+  { skip: domSkip },
+  async () => {
+    const harness = createHarness();
+    harness.host.setAttribute('inert', 'host-before-open');
+    const sibling = harness.window.document.createElement('aside');
+    harness.window.document.body.append(sibling);
+    await harness.view.openSettings();
+    assert.equal(harness.host.getAttribute('inert'), 'host-before-open');
+    assert.equal(sibling.getAttribute('inert'), '');
 
-  sibling.setAttribute('inert', 'host-during-open');
-  dialogOf(harness.window).querySelector('[data-part-action="close-dialog"]').click();
-  assert.equal(harness.host.getAttribute('inert'), 'host-before-open');
-  assert.equal(sibling.getAttribute('inert'), 'host-during-open');
-  harness.view.dispose();
-  harness.session.dispose();
-});
+    sibling.setAttribute('inert', 'host-during-open');
+    dialogOf(harness.window).querySelector('[data-part-action="close-dialog"]').click();
+    assert.equal(harness.host.getAttribute('inert'), 'host-before-open');
+    assert.equal(sibling.getAttribute('inert'), 'host-during-open');
+    harness.view.dispose();
+    harness.session.dispose();
+  },
+);
 
 test('settings notification and save completion preserve edits made during the write', { skip: domSkip }, async () => {
   const write = deferred();
@@ -199,29 +211,33 @@ test('a save from a closed dialog cannot rebuild a newly opened dialog', { skip:
   harness.session.dispose();
 });
 
-test('a rejected dispatch clears pending state and cannot report into a reopened dialog', { skip: domSkip }, async (t) => {
-  t.mock.method(console, 'warn', () => {});
-  const rejected = deferred();
-  const harness = createHarness();
-  await harness.view.openSettings();
-  harness.session.dispatch = () => rejected.promise;
-  const original = dialogOf(harness.window);
-  original.querySelector('[data-part-action="save-preset"]').click();
-  await flush();
-  original.querySelector('[data-part-action="close-dialog"]').click();
-  await harness.view.openSettings();
-  const reopened = dialogOf(harness.window);
-  rejected.reject(new Error('transport rejected'));
-  await flush();
-  await flush();
+test(
+  'a rejected dispatch clears pending state and cannot report into a reopened dialog',
+  { skip: domSkip },
+  async (t) => {
+    t.mock.method(console, 'warn', () => {});
+    const rejected = deferred();
+    const harness = createHarness();
+    await harness.view.openSettings();
+    harness.session.dispatch = () => rejected.promise;
+    const original = dialogOf(harness.window);
+    original.querySelector('[data-part-action="save-preset"]').click();
+    await flush();
+    original.querySelector('[data-part-action="close-dialog"]').click();
+    await harness.view.openSettings();
+    const reopened = dialogOf(harness.window);
+    rejected.reject(new Error('transport rejected'));
+    await flush();
+    await flush();
 
-  assert.equal(dialogOf(harness.window), reopened);
-  assert.equal(reopened.querySelector('[data-part-role="message"]').textContent, '');
-  harness.view.update(harness.session.getState(), { kind: 'settings', area: 'unlocker' });
-  assert.notEqual(dialogOf(harness.window), reopened, 'dispatch rejection releases the pending update guard');
-  harness.view.dispose();
-  harness.session.dispose();
-});
+    assert.equal(dialogOf(harness.window), reopened);
+    assert.equal(reopened.querySelector('[data-part-role="message"]').textContent, '');
+    harness.view.update(harness.session.getState(), { kind: 'settings', area: 'unlocker' });
+    assert.notEqual(dialogOf(harness.window), reopened, 'dispatch rejection releases the pending update guard');
+    harness.view.dispose();
+    harness.session.dispose();
+  },
+);
 
 test('dispose settles an open intent whose initialization is still pending', { skip: domSkip }, async () => {
   const read = deferred();

@@ -11,15 +11,19 @@ test('real Chromium runs the bundle without inert or stale-save lifecycle leaks'
   const browser = await playwright.chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    await page.route('https://assistant.test/**', (route) => route.fulfill({
-      contentType: 'text/html',
-      body: '<main id="host" inert="host-before-open"></main><aside id="sibling"></aside>',
-    }));
+    await page.route('https://assistant.test/**', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<main id="host" inert="host-before-open"></main><aside id="sibling"></aside>',
+      }),
+    );
     await page.goto('https://assistant.test/fixture');
     await page.evaluate(() => {
       window.GM_setValue = (key) => {
         if (key !== 'pageAutoRefreshTimerSettings') return Promise.resolve();
-        return new Promise((resolve) => { window.__releaseAssistantWrite = resolve; });
+        return new Promise((resolve) => {
+          window.__releaseAssistantWrite = resolve;
+        });
       };
     });
     await page.evaluate((source) => window.eval(source), bundle);
@@ -36,9 +40,9 @@ test('real Chromium runs the bundle without inert or stale-save lifecycle leaks'
 
     await page.locator('.part-widget-button').click();
     await page.locator('[data-part-action="save-preset"]').first().click();
-    await page.waitForFunction(() => (
-      document.querySelector('[data-part-action="save-preset"]')?.textContent === '处理中…'
-    ));
+    await page.waitForFunction(
+      () => document.querySelector('[data-part-action="save-preset"]')?.textContent === '处理中…',
+    );
     await page.locator('button[data-part-action="close-dialog"]').click();
     await page.locator('.part-widget-button').click();
     await page.locator('[data-part-role="custom-value"]').evaluate((input) => {

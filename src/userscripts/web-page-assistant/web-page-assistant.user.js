@@ -514,8 +514,16 @@
   }
 
   // src/userscripts/web-page-assistant/web-page-assistant-session.lib.js
-  function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker, ready = () => Promise.resolve(), onChange = () => {
-  } }) {
+  function createWebPageAssistantSession({
+    keys,
+    storage,
+    clock,
+    reload,
+    unlocker,
+    ready = () => Promise.resolve(),
+    onChange = () => {
+    }
+  }) {
     let settings = emptySettings();
     let lifecycle = "idle";
     let applicationError = null;
@@ -540,16 +548,18 @@
       onStateChange: () => emit("countdown")
     });
     function getState() {
-      return JSON.parse(JSON.stringify({
-        lifecycle,
-        settings,
-        refresh: runtime.getState(),
-        appliedUnlocker,
-        applicationError,
-        applicationErrors,
-        matchedRefresh: resolveActiveRefreshSetting(settings, keys),
-        matchedUnlocker: resolveActiveUnlockerSetting(settings, keys)
-      }));
+      return JSON.parse(
+        JSON.stringify({
+          lifecycle,
+          settings,
+          refresh: runtime.getState(),
+          appliedUnlocker,
+          applicationError,
+          applicationErrors,
+          matchedRefresh: resolveActiveRefreshSetting(settings, keys),
+          matchedUnlocker: resolveActiveUnlockerSetting(settings, keys)
+        })
+      );
     }
     function emit(kind, area = null) {
       if (lifecycle === "disposed") return;
@@ -739,9 +749,21 @@
       { option: "allowSelection", label: "选择文本", target: getDocumentTarget, type: "selectstart", handler: stopEvent },
       { option: "allowCopy", label: "复制/剪切", target: getDocumentTarget, type: "copy", handler: stopEvent },
       { option: "allowCopy", label: "复制/剪切", target: getDocumentTarget, type: "cut", handler: stopEvent },
-      { option: "allowContextMenu", label: "右键菜单", target: getDocumentTarget, type: "contextmenu", handler: stopEvent },
+      {
+        option: "allowContextMenu",
+        label: "右键菜单",
+        target: getDocumentTarget,
+        type: "contextmenu",
+        handler: stopEvent
+      },
       { option: "allowDrag", label: "拖拽", target: getDocumentTarget, type: "dragstart", handler: stopEvent },
-      { option: "suppressBeforeUnload", label: "离开提示", target: getWindowTarget, type: "beforeunload", handler: stopBeforeUnload }
+      {
+        option: "suppressBeforeUnload",
+        label: "离开提示",
+        target: getWindowTarget,
+        type: "beforeunload",
+        handler: stopBeforeUnload
+      }
     ];
     let cleanupStack = [];
     function stopEvent(event) {
@@ -1458,21 +1480,14 @@
     try {
       const matchMedia = windowObject?.matchMedia;
       if (typeof matchMedia === "function") {
-        return Boolean(
-          matchMedia.call(windowObject, "(hover: none), (pointer: coarse)").matches
-        );
+        return Boolean(matchMedia.call(windowObject, "(hover: none), (pointer: coarse)").matches);
       }
     } catch {
     }
     return false;
   }
   function createPageAssistantDialogContract(adapters) {
-    const {
-      settingsContract,
-      defaultUnlockerSetting: defaultUnlockerSetting2,
-      formatInterval: formatInterval2,
-      defaultIntervalMs
-    } = adapters;
+    const { settingsContract, defaultUnlockerSetting: defaultUnlockerSetting2, formatInterval: formatInterval2, defaultIntervalMs } = adapters;
     const tabs = { refresh: "refresh", unlocker: "unlocker" };
     const roles = {
       status: "status",
@@ -1871,20 +1886,12 @@
       );
       const panelHeight = panel.offsetHeight;
       const maxLeft = Math.max(constants.safeMargin, viewport.width - panelWidth - constants.safeMargin);
-      const panelLeft = clampNumber(
-        widgetRect.right - panelWidth,
-        constants.safeMargin,
-        maxLeft
-      );
+      const panelLeft = clampNumber(widgetRect.right - panelWidth, constants.safeMargin, maxLeft);
       const aboveTop = widgetRect.top - panelHeight - constants.panelGap;
       const belowTop = widgetRect.top + constants.widgetHeight + constants.panelGap;
       const maxTop = Math.max(constants.safeMargin, viewport.height - panelHeight - constants.safeMargin);
       const shouldPlaceBelow = aboveTop < constants.safeMargin && belowTop <= maxTop;
-      const panelTop = clampNumber(
-        shouldPlaceBelow ? belowTop : aboveTop,
-        constants.safeMargin,
-        maxTop
-      );
+      const panelTop = clampNumber(shouldPlaceBelow ? belowTop : aboveTop, constants.safeMargin, maxTop);
       const placement = {
         left: Math.round(panelLeft - widgetRect.left),
         top: Math.round(panelTop - widgetRect.top),
@@ -2450,7 +2457,10 @@ ${root} :focus-visible {
           focusSelector = `input[name="part-scope"][value="${active.value}"]`;
         } else if (actionNode) {
           focusSelector = dialogContract.actionSelector(actionNode.dataset.partAction);
-          for (const [datasetKey, attribute] of [["partTab", "data-part-tab"], ["intervalMs", "data-interval-ms"]]) {
+          for (const [datasetKey, attribute] of [
+            ["partTab", "data-part-tab"],
+            ["intervalMs", "data-interval-ms"]
+          ]) {
             if (actionNode.dataset[datasetKey]) focusSelector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
           }
         }
@@ -2553,7 +2563,9 @@ ${root} :focus-visible {
       if (event.key !== "Tab") return;
       const panel = dialog.querySelector(".part-dialog");
       if (!panel) return;
-      const focusables = [...panel.querySelectorAll(FOCUSABLE_SELECTOR)].filter((element) => !element.disabled && !element.closest("[hidden]"));
+      const focusables = [...panel.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+        (element) => !element.disabled && !element.closest("[hidden]")
+      );
       if (!focusables.length) return;
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
@@ -2658,7 +2670,8 @@ ${root} :focus-visible {
       const sameDraft = sameDialog && editRevision === submission.revision;
       if (!result.ok) {
         const error = operationError(result);
-        if (sameDraft && result.persisted) renderDialog({ message: error, tone: "error", scope: result.scope || scope, tab });
+        if (sameDraft && result.persisted)
+          renderDialog({ message: error, tone: "error", scope: result.scope || scope, tab });
         else if (sameDialog) {
           updateDialogStatus();
           setMessage(`操作失败：${error}`, "error");
@@ -2681,13 +2694,15 @@ ${root} :focus-visible {
       const actionNode = event.target?.closest?.("[data-part-action]");
       if (!actionNode || !root?.contains(actionNode)) return;
       const action = actionNode.dataset.partAction;
-      if (!WRITE_ACTIONS.has(action) && !["open-settings", "switch-tab", "close-dialog", "toggle-pause"].includes(action)) return;
+      if (!WRITE_ACTIONS.has(action) && !["open-settings", "switch-tab", "close-dialog", "toggle-pause"].includes(action))
+        return;
       if (action === "close-dialog" && dialog && actionNode === dialog && event.target === dialog) {
         closeDialog();
         return;
       }
       if (action === "close-dialog" && dialog && actionNode === dialog) return;
-      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && layout.isExpansionSuppressed()) return;
+      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && layout.isExpansionSuppressed())
+        return;
       event.preventDefault();
       event.stopPropagation();
       const isWrite = WRITE_ACTIONS.has(action);
@@ -2743,7 +2758,8 @@ ${root} :focus-visible {
       }
       if (snapshot.lifecycle !== "ready") return;
       initializationError = null;
-      if (change.kind === "lifecycle" || change.kind === "settings" && ["refresh", "all"].includes(change.area)) renderWidget();
+      if (change.kind === "lifecycle" || change.kind === "settings" && ["refresh", "all"].includes(change.area))
+        renderWidget();
       updatePauseButton();
       updateCountdownText();
       updateWidgetStatusText();
@@ -2766,12 +2782,14 @@ ${root} :focus-visible {
       const opening = (async () => {
         let startup;
         try {
-          startup = await Promise.race([
-            Promise.resolve().then(() => ready()),
-            disposedPromise
-          ]);
+          startup = await Promise.race([Promise.resolve().then(() => ready()), disposedPromise]);
         } catch (error) {
-          startup = { ok: false, code: "storage-failed", message: String(error?.message || error), state: session.getState() };
+          startup = {
+            ok: false,
+            code: "storage-failed",
+            message: String(error?.message || error),
+            state: session.getState()
+          };
         }
         if (disposed || startup?.code === "disposed") return { ok: false, code: "disposed" };
         if (startup?.state) latestSnapshot = startup.state;
@@ -2877,10 +2895,7 @@ ${root} :focus-visible {
       rootId: ROOT_ID2
     });
     let widgetPosition = null;
-    const interfaceReady = Promise.all([
-      storage.readWidgetPosition(),
-      documentReady()
-    ]).then(([position]) => {
+    const interfaceReady = Promise.all([storage.readWidgetPosition(), documentReady()]).then(([position]) => {
       widgetPosition = position;
     });
     let view;

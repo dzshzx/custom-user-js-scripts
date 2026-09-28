@@ -41,7 +41,7 @@ function makeRecord(date, credits, usdPerCredit, settled, settledAt) {
     credits: creditsNum,
     usd: round2(creditsNum * usdPerCredit),
     settled: Boolean(settled),
-    settledAt: settled ? (settledAt || null) : null,
+    settledAt: settled ? settledAt || null : null,
   };
 }
 
@@ -67,9 +67,7 @@ function upsertLedgerRow(ledger, row, nowMs, options = {}) {
   // and settled only ever flips false -> true.
   const nextCredits = Math.max(toNumber(existing.credits), credits);
   const settled = existing.settled || settledNow;
-  const settledAt = existing.settled
-    ? existing.settledAt
-    : (settledNow ? nowIso : null);
+  const settledAt = existing.settled ? existing.settledAt : settledNow ? nowIso : null;
   ledger[date] = makeRecord(date, nextCredits, usdPerCredit, settled, settledAt);
   return ledger;
 }
@@ -120,7 +118,9 @@ function normalizeLedger(rawLedger, options = {}) {
     ledger[date] = {
       date,
       credits: toNumber(record.credits),
-      usd: Number.isFinite(Number(record.usd)) ? round2(Number(record.usd)) : round2(toNumber(record.credits) * usdPerCredit),
+      usd: Number.isFinite(Number(record.usd))
+        ? round2(Number(record.usd))
+        : round2(toNumber(record.credits) * usdPerCredit),
       settled,
       settledAt: settled ? (typeof record.settledAt === 'string' ? record.settledAt : null) : null,
     };
@@ -193,9 +193,7 @@ function shiftMonthKey(monthStr, deltaMonths) {
 function utcMonthRange(monthStr, nowMs) {
   const fallbackMonth = currentUtcDate(nowMs).slice(0, 7);
   const requestedMonth = String(monthStr || '');
-  const month = /^(\d{4})-(0[1-9]|1[0-2])$/.test(requestedMonth)
-    ? requestedMonth
-    : fallbackMonth;
+  const month = /^(\d{4})-(0[1-9]|1[0-2])$/.test(requestedMonth) ? requestedMonth : fallbackMonth;
   const [year, monthNumber] = month.split('-').map(Number);
   const to = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
   return { month, from: `${month}-01`, to };
@@ -246,10 +244,24 @@ function aggregateMonthlyList(ledger, { nowMs, count = 6, buffer = SETTLE_BUFFER
     const { from, to } = utcMonthRange(month, nowMs);
     if (i === 0) {
       const raw = sumRangeRaw(ledger, { from, to });
-      current = { month, from, to, totalCredits: round2(raw.totalCredits), totalUsd: round2(raw.totalUsd), settled: false };
+      current = {
+        month,
+        from,
+        to,
+        totalCredits: round2(raw.totalCredits),
+        totalUsd: round2(raw.totalUsd),
+        settled: false,
+      };
     } else {
       const agg = aggregateMonth(ledger, month, { nowMs, buffer });
-      months.push({ month, from, to, totalCredits: round2(agg.totalCredits), totalUsd: round2(agg.totalUsd), settled: true });
+      months.push({
+        month,
+        from,
+        to,
+        totalCredits: round2(agg.totalCredits),
+        totalUsd: round2(agg.totalUsd),
+        settled: true,
+      });
     }
   }
   return { current, months };

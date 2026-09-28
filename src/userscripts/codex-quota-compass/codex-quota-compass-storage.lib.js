@@ -38,7 +38,12 @@ function createSnapshotArchiveStoragePort(options = {}) {
   let mirrorDegraded = false;
   function gmBackendInfo() {
     return mirrorDegraded
-      ? { ...STORAGE_BACKENDS.gm, label: 'GM storage (mirror unavailable)', degraded: true, mirrorError: 'Snapshot Archive mirror write failed.' }
+      ? {
+          ...STORAGE_BACKENDS.gm,
+          label: 'GM storage (mirror unavailable)',
+          degraded: true,
+          mirrorError: 'Snapshot Archive mirror write failed.',
+        }
       : STORAGE_BACKENDS.gm;
   }
 
@@ -98,14 +103,16 @@ function createSnapshotArchiveStoragePort(options = {}) {
     const merged = mergeArchives(normalizedPrimary, normalizedFallback);
     return {
       archive: merged?.archive || normalizedPrimary,
-      changed: merged?.changed ?? (Number(merged?.report?.added) > 0),
+      changed: merged?.changed ?? Number(merged?.report?.added) > 0,
     };
   }
 
   function getGmValueChangeAdapter() {
-    const gmAddValueChangeListener = options.gmAddValueChangeListener ||
+    const gmAddValueChangeListener =
+      options.gmAddValueChangeListener ||
       (typeof GM_addValueChangeListener === 'function' ? GM_addValueChangeListener : null);
-    const gmRemoveValueChangeListener = options.gmRemoveValueChangeListener ||
+    const gmRemoveValueChangeListener =
+      options.gmRemoveValueChangeListener ||
       (typeof GM_removeValueChangeListener === 'function' ? GM_removeValueChangeListener : null);
 
     if (typeof gmAddValueChangeListener === 'function') {
@@ -119,9 +126,8 @@ function createSnapshotArchiveStoragePort(options = {}) {
     if (typeof gmApi?.addValueChangeListener === 'function') {
       return {
         add: gmApi.addValueChangeListener.bind(gmApi),
-        remove: typeof gmApi.removeValueChangeListener === 'function'
-          ? gmApi.removeValueChangeListener.bind(gmApi)
-          : null,
+        remove:
+          typeof gmApi.removeValueChangeListener === 'function' ? gmApi.removeValueChangeListener.bind(gmApi) : null,
       };
     }
 
@@ -218,9 +224,4 @@ function createSnapshotArchiveStoragePort(options = {}) {
   };
 }
 
-export {
-  DEFAULT_ARCHIVE_KEY,
-  DEFAULT_ARCHIVE_FALLBACK_KEY,
-  STORAGE_BACKENDS,
-  createSnapshotArchiveStoragePort,
-};
+export { DEFAULT_ARCHIVE_KEY, DEFAULT_ARCHIVE_FALLBACK_KEY, STORAGE_BACKENDS, createSnapshotArchiveStoragePort };

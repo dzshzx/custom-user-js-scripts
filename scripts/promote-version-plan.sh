@@ -3,13 +3,22 @@
 # script out from master; the candidate commit is read only as Git object data.
 set -euo pipefail
 
-[ "$#" -eq 1 ] || { echo "usage: scripts/promote-version-plan.sh CANDIDATE_SHA" >&2; exit 2; }
+[ "$#" -eq 1 ] || {
+  echo "usage: scripts/promote-version-plan.sh CANDIDATE_SHA" >&2
+  exit 2
+}
 candidate="$1"
-[[ "$candidate" =~ ^[0-9a-f]{40}$ ]] || { echo "promote-version-plan: invalid candidate sha" >&2; exit 1; }
+[[ "$candidate" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "promote-version-plan: invalid candidate sha" >&2
+  exit 1
+}
 
 git fetch -q origin master
 master_head="$(git rev-parse origin/master)"
-[ "$candidate" != "$master_head" ] || { echo "promote-version-plan: candidate is already master" >&2; exit 1; }
+[ "$candidate" != "$master_head" ] || {
+  echo "promote-version-plan: candidate is already master" >&2
+  exit 1
+}
 git merge-base --is-ancestor "$master_head" "$candidate" || {
   echo "promote-version-plan: candidate does not descend from current master" >&2
   exit 1

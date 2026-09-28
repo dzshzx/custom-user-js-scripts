@@ -25,9 +25,10 @@ function readPreviewImage(options = {}, environment = {}) {
 
   const host = typeof globalThis === 'object' && globalThis ? globalThis : {};
   const documentObject = environment.documentObject || host.document;
-  const imageNodes = profile === 'userscript-v1'
-    ? [...(documentObject.images || documentObject.getElementsByTagName('img'))]
-    : [...documentObject.querySelectorAll('img')];
+  const imageNodes =
+    profile === 'userscript-v1'
+      ? [...(documentObject.images || documentObject.getElementsByTagName('img'))]
+      : [...documentObject.querySelectorAll('img')];
 
   const items = imageNodes
     .map((img, index) => {
@@ -36,23 +37,19 @@ function readPreviewImage(options = {}, environment = {}) {
       const rawHeight = rect.height;
       const width = Math.round(rawWidth);
       const height = Math.round(rawHeight);
-      const area = profile === 'userscript-v1'
-        ? width * height
-        : rawWidth * rawHeight;
+      const area = profile === 'userscript-v1' ? width * height : rawWidth * rawHeight;
       return {
-        src: profile === 'userscript-v1'
-          ? (img.currentSrc || img.src || '')
-          : (img.getAttribute('src') || ''),
+        src: profile === 'userscript-v1' ? img.currentSrc || img.src || '' : img.getAttribute('src') || '',
         width,
         height,
         area,
         index,
       };
     })
-    .filter((item) => (profile === 'userscript-v1'
-      ? item.width > 0 && item.height > 0 && item.area >= 20_000
-      : item.area > 20_000))
-    .sort((left, right) => (right.area - left.area) || (left.index - right.index))
+    .filter((item) =>
+      profile === 'userscript-v1' ? item.width > 0 && item.height > 0 && item.area >= 20_000 : item.area > 20_000,
+    )
+    .sort((left, right) => right.area - left.area || left.index - right.index)
     .map(({ index: _index, ...item }) => item);
 
   if (mode === 'inspect') {
@@ -67,11 +64,7 @@ function readPreviewImage(options = {}, environment = {}) {
     const target = items[0];
     const source = target.src;
     if (profile === 'userscript-v1' && !source) {
-      throw attachDiagnostic(
-        new Error('Image source is empty'),
-        'FEISHU_IMAGE_SOURCE_EMPTY',
-        'source',
-      );
+      throw attachDiagnostic(new Error('Image source is empty'), 'FEISHU_IMAGE_SOURCE_EMPTY', 'source');
     }
 
     if (source.startsWith('data:')) {
@@ -80,11 +73,7 @@ function readPreviewImage(options = {}, environment = {}) {
         if (profile === 'cli-v1') {
           return { kind: 'empty', reason: 'invalid-data-url' };
         }
-        throw attachDiagnostic(
-          new Error('Unsupported data URL format'),
-          'FEISHU_IMAGE_INVALID_DATA_URL',
-          'data-url',
-        );
+        throw attachDiagnostic(new Error('Unsupported data URL format'), 'FEISHU_IMAGE_INVALID_DATA_URL', 'data-url');
       }
       return {
         kind: 'image',
@@ -92,25 +81,19 @@ function readPreviewImage(options = {}, environment = {}) {
         width: target.width,
         height: target.height,
         mode: 'data-url',
-        payload: profile === 'userscript-v1'
-          ? { encoding: 'data-url', data: source }
-          : { encoding: 'base64', data: match[2] },
+        payload:
+          profile === 'userscript-v1' ? { encoding: 'data-url', data: source } : { encoding: 'base64', data: match[2] },
       };
     }
 
     const fetcher = environment.fetchImpl || host.fetch?.bind(host);
     if (typeof fetcher !== 'function') {
-      throw attachDiagnostic(
-        new Error('fetch unavailable'),
-        'FEISHU_IMAGE_FETCH_FAILED',
-        'fetch',
-      );
+      throw attachDiagnostic(new Error('fetch unavailable'), 'FEISHU_IMAGE_FETCH_FAILED', 'fetch');
     }
     let response;
     try {
-      response = profile === 'userscript-v1'
-        ? await fetcher(source, { credentials: 'include' })
-        : await fetcher(source);
+      response =
+        profile === 'userscript-v1' ? await fetcher(source, { credentials: 'include' }) : await fetcher(source);
     } catch (error) {
       throw attachDiagnostic(error, 'FEISHU_IMAGE_FETCH_FAILED', 'fetch');
     }

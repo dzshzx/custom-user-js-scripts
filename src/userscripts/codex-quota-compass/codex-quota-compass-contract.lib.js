@@ -109,9 +109,4 @@ function projectQuotaSnapshotForArchive(result) {
   };
 }
 
-export {
-  rollingPeriodKey,
-  isMainSevenDayWindow,
-  createQuotaSnapshotAccess,
-  projectQuotaSnapshotForArchive,
-};
+export { rollingPeriodKey, isMainSevenDayWindow, createQuotaSnapshotAccess, projectQuotaSnapshotForArchive };

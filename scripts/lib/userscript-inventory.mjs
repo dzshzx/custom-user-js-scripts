@@ -5,7 +5,8 @@ import { firstMetadataValue, installIdentity, parseMetadataBlock } from './users
 // at their stage. No source module is imported or evaluated.
 export async function readUserscriptInventory({ files, readText }) {
   const paths = [...new Set(files.map((file) => path.posix.normalize(file.replaceAll('\\', '/'))))]
-    .filter((file) => /\.(entry|user)\.js$/.test(file) && /^(src\/|dist\/)/.test(file)).sort();
+    .filter((file) => /\.(entry|user)\.js$/.test(file) && /^(src\/|dist\/)/.test(file))
+    .sort();
   const facts = new Map();
   const issues = [];
   const issue = (type, file, message, related = []) => issues.push({ type, file, related, message });
@@ -25,31 +26,51 @@ export async function readUserscriptInventory({ files, readText }) {
   const records = [];
   const claimed = new Map();
   function claim(record, file) {
-    if (claimed.has(file)) issue('ownership-conflict', file, 'multiple metadata owners claim this path', [claimed.get(file), record.metadataOwner.path]);
+    if (claimed.has(file))
+      issue('ownership-conflict', file, 'multiple metadata owners claim this path', [
+        claimed.get(file),
+        record.metadataOwner.path,
+      ]);
     claimed.set(file, record.metadataOwner.path);
   }
   function add(owner, entry, bridge, dist, single) {
     const record = {
       scriptId: path.posix.basename(owner.path).replace(/\.(entry|user)\.js$/, ''),
       identity: owner.metadata ? installIdentity(owner.metadata) : '',
-      metadataOwner: owner, entry, bridge, dist, single,
+      metadataOwner: owner,
+      entry,
+      bridge,
+      dist,
+      single,
       ownership: entry ? 'entry' : bridge ? 'url' : 'single',
     };
     records.push(record);
     for (const file of [entry, bridge, dist, single].filter(Boolean)) claim(record, file.path);
     if (bridge && dist) {
       for (const file of [bridge, dist]) {
-        if (!file.exists) issue('missing-companion', owner.path, `missing installable companion ${file.path}`, [file.path]);
+        if (!file.exists)
+          issue('missing-companion', owner.path, `missing installable companion ${file.path}`, [file.path]);
       }
       if (bridge.content !== undefined && dist.content !== undefined && bridge.content !== dist.content) {
-        issue('content-mismatch', bridge.path, `bridge content does not match ${dist.path} (rebuild with npm run build)`, [dist.path]);
+        issue(
+          'content-mismatch',
+          bridge.path,
+          `bridge content does not match ${dist.path} (rebuild with npm run build)`,
+          [dist.path],
+        );
       }
     }
     if (entry) {
       for (const companion of [bridge, dist].filter((file) => file.exists && file.content !== undefined)) {
-        if (!companion.metadata || installIdentity(companion.metadata) !== record.identity ||
-            firstMetadataValue(companion.metadata, '@version') !== firstMetadataValue(entry.metadata || new Map(), '@version')) {
-          issue('metadata-mismatch', companion.path, `does not match ${entry.path} install identity and @version`, [entry.path]);
+        if (
+          !companion.metadata ||
+          installIdentity(companion.metadata) !== record.identity ||
+          firstMetadataValue(companion.metadata, '@version') !==
+            firstMetadataValue(entry.metadata || new Map(), '@version')
+        ) {
+          issue('metadata-mismatch', companion.path, `does not match ${entry.path} install identity and @version`, [
+            entry.path,
+          ]);
         }
       }
     }
@@ -80,16 +101,24 @@ export async function readUserscriptInventory({ files, readText }) {
   for (const record of records) {
     const owner = record.metadataOwner;
     if (!owner.metadata) continue;
-    for (const [field, values] of [['identity', [record.identity]], ...['@downloadURL', '@updateURL'].map((key) => [key, owner.metadata.get(key) || []])]) {
+    for (const [field, values] of [
+      ['identity', [record.identity]],
+      ...['@downloadURL', '@updateURL'].map((key) => [key, owner.metadata.get(key) || []]),
+    ]) {
       for (const value of values.filter(Boolean)) {
         const key = `${field}:${value}`;
-        if (seen.has(key)) issue(field === 'identity' ? 'duplicate-identity' : 'duplicate-url', owner.path,
-          `duplicate ${field === 'identity' ? 'userscript install identity' : `${field} value`} with ${seen.get(key)}`, [seen.get(key)]);
+        if (seen.has(key))
+          issue(
+            field === 'identity' ? 'duplicate-identity' : 'duplicate-url',
+            owner.path,
+            `duplicate ${field === 'identity' ? 'userscript install identity' : `${field} value`} with ${seen.get(key)}`,
+            [seen.get(key)],
+          );
         else seen.set(key, owner.path);
       }
     }
   }
-  const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
   records.sort((a, b) => compare(a.metadataOwner.path, b.metadataOwner.path));
   issues.sort((a, b) => compare(a.file, b.file) || compare(a.type, b.type));
   return { records, issues, files: [...facts.values()] };

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 
 import { createRefreshRuntime } from '../src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js';
 
-
 function createHarness() {
   let nowMs = 0;
   let intervalHandler = null;

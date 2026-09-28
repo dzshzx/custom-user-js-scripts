@@ -52,11 +52,13 @@ test('upsert grows by max while unsettled, then locks once settled', () => {
 });
 
 function sampleSnapshots() {
-  const day = (date, credits) => ({ '日期桶': date, Credits: credits, '折算USD': credits * USD });
+  const day = (date, credits) => ({ 日期桶: date, Credits: credits, 折算USD: credits * USD });
   return [
     {
       capturedAt: '2026-06-13T09:00:00.000Z',
-      periodDetails: { rolling: { dailyBuckets: [day('2026-06-11', 1000), day('2026-06-12', 2000), day('2026-06-13', 30)] } },
+      periodDetails: {
+        rolling: { dailyBuckets: [day('2026-06-11', 1000), day('2026-06-12', 2000), day('2026-06-13', 30)] },
+      },
     },
     {
       // same-day later snapshot: 13th grew; duplicates of settled days repeated verbatim
@@ -119,7 +121,9 @@ test('aggregates exclude the previous day while it is still inside the settle bu
 });
 
 test('mergeLedgers: per-date max credits and OR settled', () => {
-  const a = { '2026-06-11': { date: '2026-06-11', credits: 1000, usd: 40, settled: true, settledAt: '2026-06-12T00:20:00Z' } };
+  const a = {
+    '2026-06-11': { date: '2026-06-11', credits: 1000, usd: 40, settled: true, settledAt: '2026-06-12T00:20:00Z' },
+  };
   const b = {
     '2026-06-11': { date: '2026-06-11', credits: 1200, usd: 48, settled: true, settledAt: '2026-06-12T00:18:00Z' },
     '2026-06-12': { date: '2026-06-12', credits: 500, usd: 20, settled: false, settledAt: null },
@@ -138,10 +142,10 @@ test('settle buffer constant is 15 minutes', () => {
 // Shared fixture for the multi-granularity aggregates. now = 2026-06-20T12:00Z,
 // so today (06-20) is in progress and every earlier day below is settled.
 const STATS_LEDGER = {
-  '2026-06-20': { date: '2026-06-20', credits: 5 },   // today, unsettled
-  '2026-06-18': { date: '2026-06-18', credits: 10 },  // current rolling week, settled
-  '2026-06-10': { date: '2026-06-10', credits: 20 },  // prior week
-  '2026-06-03': { date: '2026-06-03', credits: 30 },  // week before that
+  '2026-06-20': { date: '2026-06-20', credits: 5 }, // today, unsettled
+  '2026-06-18': { date: '2026-06-18', credits: 10 }, // current rolling week, settled
+  '2026-06-10': { date: '2026-06-10', credits: 20 }, // prior week
+  '2026-06-03': { date: '2026-06-03', credits: 30 }, // week before that
 };
 const STATS_NOW = ms('2026-06-20T12:00:00Z');
 
@@ -190,10 +194,13 @@ test('aggregateMonthlyList: ranges end on the real UTC month boundary', () => {
     assert.equal(monthly.current.to, expectedTo, nowIso);
   }
 
-  const priorMonths = aggregateMonthlyList({}, {
-    nowMs: ms('2026-05-15T12:00:00Z'),
-    count: 3,
-  });
+  const priorMonths = aggregateMonthlyList(
+    {},
+    {
+      nowMs: ms('2026-05-15T12:00:00Z'),
+      count: 3,
+    },
+  );
   assert.deepEqual(
     priorMonths.months.map((month) => month.to),
     ['2026-04-30', '2026-03-31'],

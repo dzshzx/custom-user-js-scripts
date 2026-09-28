@@ -12,7 +12,10 @@ function escapeHtml(value) {
 
 function formatValue(value) {
   if (value === null || value === undefined || value === '') return '-';
-  if (typeof value === 'number') return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  if (typeof value === 'number')
+    return Number.isInteger(value)
+      ? value.toLocaleString()
+      : value.toLocaleString(undefined, { maximumFractionDigits: 6 });
   return String(value);
 }
 
@@ -28,12 +31,13 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   // Render stored UTC ISO timestamps in the viewer's own locale/timezone.
   // No-arg toLocaleString() uses the host environment's timezone, which in the
   // browser is the user's. Falls back to the raw value for unparseable input.
-  const formatLocalTimestamp = typeof formatTimestamp === 'function'
-    ? formatTimestamp
-    : (value) => {
-      const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
-    };
+  const formatLocalTimestamp =
+    typeof formatTimestamp === 'function'
+      ? formatTimestamp
+      : (value) => {
+          const date = new Date(value);
+          return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+        };
 
   // Guards empty/placeholder values (new Date(null) would wrongly become 1970)
   // before localizing a captured/synced timestamp.
@@ -44,23 +48,29 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
 
   function normalizeDataColumns(rows, columns) {
     if (Array.isArray(columns) && columns.length) {
-      return columns.map((column) => (
-        typeof column === 'string'
-          ? { key: column, label: column, priority: 'secondary', compact: true }
-          : {
-            key: column.key || column.label || '',
-            label: column.label || column.key || '',
-            labelKey: column.labelKey || '',
-            priority: column.priority || 'secondary',
-            truncate: Boolean(column.truncate),
-            wrap: Boolean(column.wrap),
-            compact: column.compact !== false,
-          }
-      )).filter((column) => column.key);
+      return columns
+        .map((column) =>
+          typeof column === 'string'
+            ? { key: column, label: column, priority: 'secondary', compact: true }
+            : {
+                key: column.key || column.label || '',
+                label: column.label || column.key || '',
+                labelKey: column.labelKey || '',
+                priority: column.priority || 'secondary',
+                truncate: Boolean(column.truncate),
+                wrap: Boolean(column.wrap),
+                compact: column.compact !== false,
+              },
+        )
+        .filter((column) => column.key);
     }
 
-    return [...new Set(rows.flatMap((row) => Object.keys(row || {})))]
-      .map((key) => ({ key, label: key, priority: 'secondary', compact: true }));
+    return [...new Set(rows.flatMap((row) => Object.keys(row || {})))].map((key) => ({
+      key,
+      label: key,
+      priority: 'secondary',
+      compact: true,
+    }));
   }
 
   function columnLabel(column) {
@@ -73,18 +83,18 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
       column.truncate ? 'is-truncated' : '',
       column.wrap ? 'is-wrappable' : '',
       column.priority ? `is-${column.priority}` : '',
-    ].filter(Boolean).join(' ');
+    ]
+      .filter(Boolean)
+      .join(' ');
     const title = column.truncate ? ` title="${escapeHtml(value)}"` : '';
     return `<td class="${escapeHtml(classes)}"${title}>${escapeHtml(value)}</td>`;
   }
 
   function compactValueHtml(row, column) {
     const value = formatValue(row?.[column.key]);
-    const classes = [
-      'cqc-compact-value',
-      column.truncate ? 'is-truncated' : '',
-      column.wrap ? 'is-wrappable' : '',
-    ].filter(Boolean).join(' ');
+    const classes = ['cqc-compact-value', column.truncate ? 'is-truncated' : '', column.wrap ? 'is-wrappable' : '']
+      .filter(Boolean)
+      .join(' ');
     const title = column.truncate ? ` title="${escapeHtml(value)}"` : '';
     return `
       <div class="cqc-compact-field">
@@ -106,23 +116,19 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
       return `<div class="cqc-empty">${escapeHtml(t(view.emptyKey || 'tableNoData'))}</div>`;
     }
 
-    const head = columns
-      .map((column) => `<th>${escapeHtml(columnLabel(column))}</th>`)
-      .join('');
+    const head = columns.map((column) => `<th>${escapeHtml(columnLabel(column))}</th>`).join('');
     const body = visibleRows
-      .map((row) => (
-        `<tr>${columns
-          .map((column) => dataCellHtml(row, column))
-          .join('')}</tr>`
-      ))
+      .map((row) => `<tr>${columns.map((column) => dataCellHtml(row, column)).join('')}</tr>`)
       .join('');
     const compactColumns = columns.filter((column) => column.compact && column.priority !== 'debug');
     const compact = visibleRows
-      .map((row) => `
+      .map(
+        (row) => `
         <dl class="cqc-compact-row">
           ${compactColumns.map((column) => compactValueHtml(row, column)).join('')}
         </dl>
-      `)
+      `,
+      )
       .join('');
     const toggle = expandable
       ? `<div class="cqc-table-note"><button type="button" class="cqc-table-expand" data-action="toggle-rows" data-view-id="${escapeHtml(view.id || '')}" data-expanded="${expanded ? 'true' : 'false'}">${escapeHtml(expanded ? t('tableShowLess') : t('tableShowAll', { total: rows.length }))}</button></div>`
@@ -169,9 +175,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   }
 
   function usdMetricValue(value) {
-    return value === null || value === undefined || value === ''
-      ? '-'
-      : `$${formatMetricDecimal(value)}`;
+    return value === null || value === undefined || value === '' ? '-' : `$${formatMetricDecimal(value)}`;
   }
 
   function formatHoursDuration(hours) {
@@ -197,7 +201,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   }
 
   function primaryMetricHtml(metric) {
-    const label = metric?.labelKey ? t(metric.labelKey) : (metric?.label || '-');
+    const label = metric?.labelKey ? t(metric.labelKey) : metric?.label || '-';
     if (metric?.type === 'credit') {
       return creditMetricHtml(label, metric.usd);
     }
@@ -209,7 +213,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
 
   function heroHtml(metric) {
     if (!metric) return '';
-    const label = metric.labelKey ? t(metric.labelKey) : (metric.label || '-');
+    const label = metric.labelKey ? t(metric.labelKey) : metric.label || '-';
     const value = metric.type === 'credit' ? usdMetricValue(metric.usd) : formatValue(metric.value);
     const hours = Number(metric.resetHours);
     const subline = Number.isFinite(hours)
@@ -262,9 +266,10 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     const statusLine = lastError
       ? `<div class="cqc-sync-form-status" data-tone="error">${escapeHtml(t('remoteSyncStatusError', { error: lastError }))}</div>`
       : `<div class="cqc-sync-form-status" data-tone="muted">${escapeHtml(lastSyncedAt ? t('remoteSyncLastSynced', { lastSyncedAt: formatLocalTimestamp(lastSyncedAt) }) : t('remoteSyncNeverSynced'))}</div>`;
-    const syncNowButton = enabled && configured
-      ? `<button type="button" data-action="sync-remote">${escapeHtml(t('remoteSyncNowAction'))}</button>`
-      : '';
+    const syncNowButton =
+      enabled && configured
+        ? `<button type="button" data-action="sync-remote">${escapeHtml(t('remoteSyncNowAction'))}</button>`
+        : '';
 
     // A plain container (not a <form>) so pressing Enter never submits/reloads
     // the host page, and no inline event handlers trip the site CSP.
@@ -310,9 +315,13 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   function detailActionsHtml(actions) {
     return `
       <div class="cqc-detail-footnote">
-        ${actions.map((item) => `
+        ${actions
+          .map(
+            (item) => `
           <button type="button" data-action="${escapeHtml(item.action)}">${escapeHtml(item.label)}</button>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </div>
     `;
   }
@@ -334,42 +343,48 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
       t('archiveMonthlyCredits'),
       t('archiveWeeklyUsedPercent'),
     ];
-    const overview = dataViewHtml({
-      id: 'archive-overview',
-      rows: [
-        {
-          [overviewColumns[0]]: model.snapshotCount,
-          [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
-          [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
-          [overviewColumns[3]]: model.storageBackend?.label || '-',
-        },
-      ],
-      columns: overviewColumns.map((column) => ({
-        key: column,
-        label: column,
-        priority: column === t('archiveSnapshotCount') ? 'primary' : 'secondary',
-        truncate: column !== t('archiveSnapshotCount'),
-      })),
-      limit: 1,
-    }, state);
+    const overview = dataViewHtml(
+      {
+        id: 'archive-overview',
+        rows: [
+          {
+            [overviewColumns[0]]: model.snapshotCount,
+            [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
+            [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
+            [overviewColumns[3]]: model.storageBackend?.label || '-',
+          },
+        ],
+        columns: overviewColumns.map((column) => ({
+          key: column,
+          label: column,
+          priority: column === t('archiveSnapshotCount') ? 'primary' : 'secondary',
+          truncate: column !== t('archiveSnapshotCount'),
+        })),
+        limit: 1,
+      },
+      state,
+    );
 
     const recentSnapshots = safeRows(model.recentSnapshots || [], 5);
     const recent = recentSnapshots.length
-      ? dataViewHtml({
-        id: 'archive-recent',
-        rows: recentSnapshots.map((row) => ({
-          [recentColumns[0]]: displayTimestamp(row.capturedAt),
-          [recentColumns[1]]: row.snapshotId,
-          [recentColumns[2]]: row.monthlyCredits,
-          [recentColumns[3]]: row.weeklyUsedPercent,
-        })),
-        columns: recentColumns.map((column) => ({
-          key: column,
-          label: column,
-          priority: column === t('archiveSnapshotId') ? 'primary' : 'secondary',
-          truncate: column === t('archiveSnapshotId') || column === t('archiveCapturedAt'),
-        })),
-      }, state)
+      ? dataViewHtml(
+          {
+            id: 'archive-recent',
+            rows: recentSnapshots.map((row) => ({
+              [recentColumns[0]]: displayTimestamp(row.capturedAt),
+              [recentColumns[1]]: row.snapshotId,
+              [recentColumns[2]]: row.monthlyCredits,
+              [recentColumns[3]]: row.weeklyUsedPercent,
+            })),
+            columns: recentColumns.map((column) => ({
+              key: column,
+              label: column,
+              priority: column === t('archiveSnapshotId') ? 'primary' : 'secondary',
+              truncate: column === t('archiveSnapshotId') || column === t('archiveCapturedAt'),
+            })),
+          },
+          state,
+        )
       : `<div class="cqc-empty">${escapeHtml(t('archiveNoSnapshot'))}</div>`;
 
     const importReport = model.importReport
@@ -387,23 +402,28 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   }
 
   function panelTabsHtml(model, activePanelView) {
-    const tabs = Array.isArray(model?.tabs) && model.tabs.length
-      ? model.tabs
-      : [
-        { id: 'details', labelKey: 'tabDetails' },
-        { id: 'stats', labelKey: 'tabStats' },
-        { id: 'archive', labelKey: 'tabArchiveWorkspace' },
-      ];
+    const tabs =
+      Array.isArray(model?.tabs) && model.tabs.length
+        ? model.tabs
+        : [
+            { id: 'details', labelKey: 'tabDetails' },
+            { id: 'stats', labelKey: 'tabStats' },
+            { id: 'archive', labelKey: 'tabArchiveWorkspace' },
+          ];
     return `
       <div class="cqc-tabs">
-        ${tabs.map((tab) => `
+        ${tabs
+          .map(
+            (tab) => `
           <button
             type="button"
             class="cqc-tab${activePanelView === tab.id ? ' is-active' : ''}"
             data-action="switch-view"
             data-view="${escapeHtml(tab.id)}"
           >${escapeHtml(tab.labelKey ? t(tab.labelKey) : tab.label)}</button>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </div>
     `;
   }
@@ -431,9 +451,9 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     if (section.type === 'actions') {
       const actions = Array.isArray(section.actions)
         ? section.actions.map((item) => ({
-          action: item.action,
-          label: item.labelKey ? t(item.labelKey) : item.label,
-        }))
+            action: item.action,
+            label: item.labelKey ? t(item.labelKey) : item.label,
+          }))
         : [];
       return actions.length ? detailActionsHtml(actions) : '';
     }
@@ -551,6 +571,4 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   };
 }
 
-export {
-  createQuotaPanelRenderer,
-};
+export { createQuotaPanelRenderer };

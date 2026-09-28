@@ -61,12 +61,24 @@ async function readVersions(source, label) {
   // Release requires complete owners and identity/version parity. Byte equality
   // remains the build/lint gate; URL policy does not alter the version plan.
   const releaseIssues = new Set([
-    'read-failed', 'missing-file', 'invalid-metadata', 'missing-companion',
-    'metadata-mismatch', 'ownership-conflict', 'orphan-dist', 'missing-entry', 'invalid-entry-path',
+    'read-failed',
+    'missing-file',
+    'invalid-metadata',
+    'missing-companion',
+    'metadata-mismatch',
+    'ownership-conflict',
+    'orphan-dist',
+    'missing-entry',
+    'invalid-entry-path',
   ]);
-  const issues = inventory.issues.filter((issue) => releaseIssues.has(issue.type))
-    .map((issue) => `${label} ${issue.file} ${issue.type === 'missing-entry'
-      ? 'is an orphan installable without a source entry owner' : issue.message}`);
+  const issues = inventory.issues
+    .filter((issue) => releaseIssues.has(issue.type))
+    .map(
+      (issue) =>
+        `${label} ${issue.file} ${
+          issue.type === 'missing-entry' ? 'is an orphan installable without a source entry owner' : issue.message
+        }`,
+    );
   for (const { metadataOwner: owner, identity } of inventory.records) {
     if (!owner.metadata) continue;
     if (!identity) {
@@ -137,15 +149,15 @@ function parseArgs(argv) {
       const version = value.slice(separator + 1);
       if (options.targetOverrides.has(namespace)) fail(`duplicate --target install identity: ${namespace}`);
       options.targetOverrides.set(namespace, version);
-    }
-    else if (arg === '--json') options.json = true;
+    } else if (arg === '--json') options.json = true;
     else if (arg === '-h' || arg === '--help') options.help = true;
     else fail(`unknown argument: ${arg}`);
   }
   if (options.help) return options;
   if (!['plan', 'check'].includes(command)) fail(`unknown command: ${command}`);
   if (command === 'check' && !options.targetRef) fail('check requires --target-ref');
-  if (command === 'check' && options.targetOverrides.size > 0) fail('check reads actual target metadata and does not accept --target overrides');
+  if (command === 'check' && options.targetOverrides.size > 0)
+    fail('check reads actual target metadata and does not accept --target overrides');
   return options;
 }
 

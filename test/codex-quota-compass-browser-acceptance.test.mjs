@@ -18,7 +18,7 @@ test('real Chromium preserves the bundle sync draft and cancels file work on dis
       const listeners = new Map();
       let listenerId = 0;
       window.__quotaAcceptance = { values, writes: 0, removedListeners: 0, menus: [] };
-      window.GM_getValue = (key, fallback) => values.has(key) ? values.get(key) : fallback;
+      window.GM_getValue = (key, fallback) => (values.has(key) ? values.get(key) : fallback);
       window.GM_setValue = (key, value) => {
         values.set(key, structuredClone(value));
         window.__quotaAcceptance.writes += 1;
@@ -53,12 +53,14 @@ test('real Chromium preserves the bundle sync draft and cancels file work on dis
         route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({
-            rate_limit: { secondary_window: {
-              used_percent: 40,
-              limit_window_seconds: 7 * 86400,
-              reset_after_seconds: 86400,
-              reset_at: Math.floor(Date.now() / 1000) + 86400,
-            } },
+            rate_limit: {
+              secondary_window: {
+                used_percent: 40,
+                limit_window_seconds: 7 * 86400,
+                reset_after_seconds: 86400,
+                reset_at: Math.floor(Date.now() / 1000) + 86400,
+              },
+            },
           }),
         });
         return;

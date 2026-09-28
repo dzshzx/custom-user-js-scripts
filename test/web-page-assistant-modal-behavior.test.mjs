@@ -6,10 +6,7 @@ import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
 // Dist-level behavior tests: the dialog/modal wiring lives in the entry IIFE,
 // so these drive the built userscript in a DOM instead of importing libs.
-const distPath = path.resolve(
-  import.meta.dirname,
-  '../dist/web-page-assistant.user.js',
-);
+const distPath = path.resolve(import.meta.dirname, '../dist/web-page-assistant.user.js');
 const distSource = await readFile(distPath, 'utf8');
 
 const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,9 +14,18 @@ const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 async function boot({ gmSetValue, localStorageStub, seedFallbackSettings, clock } = {}) {
   const window = createDomWindow({ url: 'https://example.com/article?id=1' });
   if (clock) {
-    window.Date = class extends window.Date { static now() { return clock.now; } };
-    window.setInterval = (handler) => { clock.tick = handler; return 1; };
-    window.clearInterval = () => { clock.tick = () => {}; };
+    window.Date = class extends window.Date {
+      static now() {
+        return clock.now;
+      }
+    };
+    window.setInterval = (handler) => {
+      clock.tick = handler;
+      return 1;
+    };
+    window.clearInterval = () => {
+      clock.tick = () => {};
+    };
   }
   const pageContent = window.document.createElement('main');
   pageContent.id = 'page-content';
@@ -53,10 +59,7 @@ test('idle widget renders collapsed and opens the settings dialog on click', { s
 
   assert.ok(root.querySelector('.part-widget').classList.contains('is-idle'));
   assert.equal(root.querySelectorAll('[data-part-role="countdown"]').length, 0);
-  assert.equal(
-    root.querySelector('[data-part-role="widget-status"]').textContent,
-    '当前未启用自动刷新。',
-  );
+  assert.equal(root.querySelector('[data-part-role="widget-status"]').textContent, '当前未启用自动刷新。');
 
   button.click();
   await flush();
@@ -76,8 +79,9 @@ test('dialog traps Tab focus, closes on Escape, inerts the page, and returns foc
   assert.ok(dialog.contains(window.document.activeElement));
 
   // Shift+Tab on the first focusable wraps to the last one inside the panel.
-  const focusables = [...panel.querySelectorAll('button, [href], input, select, textarea')]
-    .filter((el) => !el.disabled && !el.closest('[hidden]'));
+  const focusables = [...panel.querySelectorAll('button, [href], input, select, textarea')].filter(
+    (el) => !el.disabled && !el.closest('[hidden]'),
+  );
   const first = focusables[0];
   const last = focusables[focusables.length - 1];
   first.focus();
@@ -120,7 +124,10 @@ test('dialog rebuilds preserve scroll offset and the focused control', { skip: d
 test('write actions show a pending state while storage is in flight', { skip: domSkip }, async () => {
   let resolveWrite;
   const { window, root } = await boot({
-    gmSetValue: () => new Promise((resolve) => { resolveWrite = resolve; }),
+    gmSetValue: () =>
+      new Promise((resolve) => {
+        resolveWrite = resolve;
+      }),
   });
   // Saving the preset below activates a refresh, which starts a *real*
   // happy-dom setInterval (no fake clock installed here). Dispose it the
@@ -144,10 +151,7 @@ test('write actions show a pending state while storage is in flight', { skip: do
     assert.match(dialogOf(root).querySelector('[data-part-role="message"]').textContent, /已保存到当前页面/);
     assert.equal(root.querySelector('.part-widget').classList.contains('is-idle'), false);
     assert.ok(root.querySelector('[data-part-action="toggle-pause"]'));
-    assert.match(
-      root.querySelector('[data-part-role="widget-status"]').textContent,
-      /自动刷新已启用/,
-    );
+    assert.match(root.querySelector('[data-part-role="widget-status"]').textContent, /自动刷新已启用/);
   } finally {
     const exiting = new window.Event('pagehide');
     Object.defineProperty(exiting, 'persisted', { value: false });
@@ -193,7 +197,9 @@ test('a failed write restores the button and surfaces the error reason', { skip:
     // The localStorage fallback also fails, so the write propagates.
     localStorageStub: {
       getItem: () => null,
-      setItem: () => { throw new Error('fallback full'); },
+      setItem: () => {
+        throw new Error('fallback full');
+      },
     },
   });
 
@@ -226,7 +232,8 @@ test('countdown ticks preserve dialog inputs, focus and lifecycle announcement',
   await flush();
   const dialog = dialogOf(root);
   const input = dialog.querySelector('input[type="number"]');
-  input.value = '42'; input.focus();
+  input.value = '42';
+  input.focus();
   const status = root.querySelector('[data-part-role="widget-status"]');
   const statusText = status.textContent;
   const countdown = root.querySelector('[data-part-role="countdown"]');

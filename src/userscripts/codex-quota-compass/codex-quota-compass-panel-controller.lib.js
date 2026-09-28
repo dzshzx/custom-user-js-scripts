@@ -12,13 +12,14 @@ function createSnapshotSyncStatus(backendInfo) {
   const backendId = backendInfo?.backendId || backendInfo?.id || 'unavailable';
   const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
   const localOnly = backendId === 'gm' || backendId === 'localStorage';
-  const reason = backendId === 'gm'
-    ? 'Userscript manager storage is local to this manager profile; use GitHub Gist sync for cross-device Snapshot Archive sync.'
-    : backendId === 'localStorage'
-      ? 'localStorage is browser-local and will not sync personal usage history across devices.'
-      : backendId === 'pending'
-        ? 'Snapshot Archive storage has not been loaded yet.'
-        : 'Snapshot Archive storage is unavailable.';
+  const reason =
+    backendId === 'gm'
+      ? 'Userscript manager storage is local to this manager profile; use GitHub Gist sync for cross-device Snapshot Archive sync.'
+      : backendId === 'localStorage'
+        ? 'localStorage is browser-local and will not sync personal usage history across devices.'
+        : backendId === 'pending'
+          ? 'Snapshot Archive storage has not been loaded yet.'
+          : 'Snapshot Archive storage is unavailable.';
   return { backendId, backendLabel, crossDeviceCapable: false, localOnly, reason };
 }
 
@@ -29,7 +30,10 @@ function createBrowserQuotaFiles({ document, window, t }) {
   const activePickers = new Set();
   function chooseText({ signal } = {}) {
     return new Promise((resolve, reject) => {
-      if (signal?.aborted) { resolve({ status: 'cancelled' }); return; }
+      if (signal?.aborted) {
+        resolve({ status: 'cancelled' });
+        return;
+      }
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'application/json,.json';
@@ -53,32 +57,46 @@ function createBrowserQuotaFiles({ document, window, t }) {
         if (error) reject(error);
         else resolve(value);
       }
-      function aborted() { finish({ status: 'cancelled' }); }
-      function cancelled() { finish({ status: 'cancelled' }); }
+      function aborted() {
+        finish({ status: 'cancelled' });
+      }
+      function cancelled() {
+        finish({ status: 'cancelled' });
+      }
       function focused() {
         // Browsers without a native cancel event restore focus after the picker
         // closes. Let a pending change event run before treating it as cancel.
-        if (pickerActive) focusTimer = window.setTimeout(() => {
-          if (!settled && !input.files?.length) cancelled();
-        }, 250);
+        if (pickerActive)
+          focusTimer = window.setTimeout(() => {
+            if (!settled && !input.files?.length) cancelled();
+          }, 250);
       }
       function changed() {
         pickerActive = false;
         const file = input.files?.[0];
-        if (!file) { cancelled(); return; }
+        if (!file) {
+          cancelled();
+          return;
+        }
         reader = new window.FileReader();
         reader.onerror = () => finish(null, Object.assign(new Error(t('importReadFailed')), { stage: 'read' }));
         reader.onload = () => finish({ status: 'selected', text: String(reader.result || '') });
-        try { reader.readAsText(file, 'utf-8'); }
-        catch (error) { finish(null, Object.assign(error, { stage: 'read' })); }
+        try {
+          reader.readAsText(file, 'utf-8');
+        } catch (error) {
+          finish(null, Object.assign(error, { stage: 'read' }));
+        }
       }
       input.addEventListener('change', changed);
       input.addEventListener('cancel', cancelled);
       signal?.addEventListener('abort', aborted, { once: true });
       activePickers.add(aborted);
       window.addEventListener('focus', focused);
-      try { input.click(); }
-      catch (error) { finish(null, Object.assign(error, { stage: 'select' })); }
+      try {
+        input.click();
+      } catch (error) {
+        finish(null, Object.assign(error, { stage: 'select' }));
+      }
     });
   }
   function downloadText(filename, content) {
@@ -127,17 +145,26 @@ function createQuotaPanelController({ application, document, window, storage, t,
   const shell = createFloatingPanelShell({
     rootId: ROOT_ID,
     labels: {
-      panelTitle: t('panelTitle'), buttonTitle: t('buttonTitle'),
-      buttonAriaOpen: t('buttonAriaOpen'), statusIdle: t('statusIdle'),
-      actionRefresh: t('actionRefresh'), closeAria: t('closeAria'),
+      panelTitle: t('panelTitle'),
+      buttonTitle: t('buttonTitle'),
+      buttonAriaOpen: t('buttonAriaOpen'),
+      statusIdle: t('statusIdle'),
+      actionRefresh: t('actionRefresh'),
+      closeAria: t('closeAria'),
     },
     tokenCss: buildTokenCss({ rootSelector: `#${ROOT_ID}`, accent: '#10a37f', accentDark: '#19c37d' }),
     positionKey: 'codexQuotaCompassButtonPosition',
-    document, window, storage,
+    document,
+    window,
+    storage,
     onAction: handleAction,
     onOpen: () => {
       if (!snapshot?.result || snapshot?.calculationError) void dispatch({ type: 'refresh', open: true });
-      else { presentation = 'snapshot'; commitPresentation(); shell.setStatus(t('statusCached'), 'success'); }
+      else {
+        presentation = 'snapshot';
+        commitPresentation();
+        shell.setStatus(t('statusCached'), 'success');
+      }
     },
   });
   const mounted = shell.mount();
@@ -161,9 +188,12 @@ function createQuotaPanelController({ application, document, window, storage, t,
     if (!snapshot?.result) return null;
     const backend = snapshot.storageBackend;
     return createQuotaPanelViewModel({
-      result: snapshot.result, ledgerCost: snapshot.ledgerCost,
-      archiveSummary: snapshot.archiveSummary, importReport: snapshot.importReport,
-      storageBackend: backend, syncStatus: createSnapshotSyncStatus(backend),
+      result: snapshot.result,
+      ledgerCost: snapshot.ledgerCost,
+      archiveSummary: snapshot.archiveSummary,
+      importReport: snapshot.importReport,
+      storageBackend: backend,
+      syncStatus: createSnapshotSyncStatus(backend),
       remoteSyncStatus: snapshot.syncStatus,
     });
   }
@@ -174,16 +204,27 @@ function createQuotaPanelController({ application, document, window, storage, t,
     const error = snapshot?.errors?.sync || status.lastError;
     node.textContent = error
       ? t('remoteSyncStatusError', { error })
-      : status.lastSyncedAt ? t('remoteSyncLastSynced', { lastSyncedAt: new Date(status.lastSyncedAt).toLocaleString() }) : t('remoteSyncNeverSynced');
+      : status.lastSyncedAt
+        ? t('remoteSyncLastSynced', { lastSyncedAt: new Date(status.lastSyncedAt).toLocaleString() })
+        : t('remoteSyncNeverSynced');
     node.dataset.tone = error ? 'error' : 'muted';
   }
   function commitPresentation() {
     if (disposed || !content) return;
-    if (protectedForm()) { deferred = true; safeStatus(); return; }
+    if (protectedForm()) {
+      deferred = true;
+      safeStatus();
+      return;
+    }
     deferred = false;
-    const next = presentation === 'loading' ? renderer.renderLoading()
-      : presentation === 'error' ? renderer.renderError(presentationError)
-        : (viewModel = createViewModel()) ? renderer.renderResult(viewModel, renderState()).html : '';
+    const next =
+      presentation === 'loading'
+        ? renderer.renderLoading()
+        : presentation === 'error'
+          ? renderer.renderError(presentationError)
+          : (viewModel = createViewModel())
+            ? renderer.renderResult(viewModel, renderState()).html
+            : '';
     if (content.innerHTML !== next) {
       content.innerHTML = next;
       formGeneration++;
@@ -196,7 +237,9 @@ function createQuotaPanelController({ application, document, window, storage, t,
     if (presentation === 'snapshot') commitPresentation();
     else if (protectedForm()) safeStatus();
   }
-  function notice(message, tone = 'info') { if (!disposed) toaster?.show({ message, tone }); }
+  function notice(message, tone = 'info') {
+    if (!disposed) toaster?.show({ message, tone });
+  }
   function foregroundStatus(sequence, status, tone) {
     if (!disposed && sequence === foreground) shell.setStatus(t(status), tone);
   }
@@ -204,24 +247,44 @@ function createQuotaPanelController({ application, document, window, storage, t,
     try {
       const returned = onRefreshSettled(outcome);
       if (returned?.then) void returned.catch(() => {});
-    } catch { /* Debug adapters must not change the operation result. */ }
+    } catch {
+      /* Debug adapters must not change the operation result. */
+    }
   }
   function once(type, perform) {
     if (inFlight.has(type)) return inFlight.get(type);
-    const operation = Promise.resolve().then(perform).catch((error) => {
-      const outcome = {
-        status: 'error', completed: [], error: error?.message || String(error),
-        stage: error?.stage || (type === 'export-archive' ? 'export' : type === 'import-archive' ? 'import' : type),
-      };
-      if (!disposed) {
-        if (type === 'refresh') { presentation = 'error'; presentationError = outcome.error; commitPresentation(); }
-        const noticeKey = type === 'refresh' ? 'runFailed' : type === 'import-archive' ? 'importFailed' : type === 'export-archive' ? 'exportFailed' : 'remoteSyncFailed';
-        notice(t(noticeKey, { error: outcome.error }), 'error');
-        shell.setStatus(t('statusFailed'), 'error');
-      }
-      if (type === 'refresh') settleRefresh(outcome);
-      return outcome;
-    }).finally(() => { if (inFlight.get(type) === operation) inFlight.delete(type); });
+    const operation = Promise.resolve()
+      .then(perform)
+      .catch((error) => {
+        const outcome = {
+          status: 'error',
+          completed: [],
+          error: error?.message || String(error),
+          stage: error?.stage || (type === 'export-archive' ? 'export' : type === 'import-archive' ? 'import' : type),
+        };
+        if (!disposed) {
+          if (type === 'refresh') {
+            presentation = 'error';
+            presentationError = outcome.error;
+            commitPresentation();
+          }
+          const noticeKey =
+            type === 'refresh'
+              ? 'runFailed'
+              : type === 'import-archive'
+                ? 'importFailed'
+                : type === 'export-archive'
+                  ? 'exportFailed'
+                  : 'remoteSyncFailed';
+          notice(t(noticeKey, { error: outcome.error }), 'error');
+          shell.setStatus(t('statusFailed'), 'error');
+        }
+        if (type === 'refresh') settleRefresh(outcome);
+        return outcome;
+      })
+      .finally(() => {
+        if (inFlight.get(type) === operation) inFlight.delete(type);
+      });
     inFlight.set(type, operation);
     return operation;
   }
@@ -243,7 +306,11 @@ function createQuotaPanelController({ application, document, window, storage, t,
           if (outcome.status === 'error') notice(t('runFailed', { error: outcome.error }), 'error');
         } else {
           presentation = 'snapshot';
-          foregroundStatus(sequence, outcome.status === 'partial' ? 'statusFailed' : 'statusUpdated', outcome.status === 'partial' ? 'error' : 'success');
+          foregroundStatus(
+            sequence,
+            outcome.status === 'partial' ? 'statusFailed' : 'statusUpdated',
+            outcome.status === 'partial' ? 'error' : 'success',
+          );
           if (outcome.status === 'partial') notice(t('saveArchiveFailed', { error: outcome.error }), 'error');
         }
         commitPresentation();
@@ -267,9 +334,14 @@ function createQuotaPanelController({ application, document, window, storage, t,
       foregroundStatus(sequence, 'statusLoading', 'loading');
       const outcome = await application.sync();
       if (!disposed) {
-        if (outcome.status === 'error' || outcome.status === 'partial') notice(t('remoteSyncFailed', { error: outcome.error }), 'error');
+        if (outcome.status === 'error' || outcome.status === 'partial')
+          notice(t('remoteSyncFailed', { error: outcome.error }), 'error');
         else if (outcome.status === 'skipped') notice(t('remoteSyncSkipped', { status: outcome.reason }), 'info');
-        foregroundStatus(sequence, outcome.status === 'error' || outcome.status === 'partial' ? 'statusFailed' : 'statusUpdated', outcome.status === 'error' || outcome.status === 'partial' ? 'error' : 'success');
+        foregroundStatus(
+          sequence,
+          outcome.status === 'error' || outcome.status === 'partial' ? 'statusFailed' : 'statusUpdated',
+          outcome.status === 'error' || outcome.status === 'partial' ? 'error' : 'success',
+        );
       }
       return outcome;
     });
@@ -293,18 +365,29 @@ function createQuotaPanelController({ application, document, window, storage, t,
         commitPresentation();
       }
       if (outcome.reason === 'token-required') notice(t('remoteSyncTokenRequired'), 'error');
-      else if (outcome.status === 'error' || outcome.status === 'partial') notice(t('remoteSyncFailed', { error: outcome.error || outcome.reason }), 'error');
-      foregroundStatus(sequence, outcome.status === 'ok' ? 'statusUpdated' : 'statusFailed', outcome.status === 'ok' ? 'success' : 'error');
+      else if (outcome.status === 'error' || outcome.status === 'partial')
+        notice(t('remoteSyncFailed', { error: outcome.error || outcome.reason }), 'error');
+      foregroundStatus(
+        sequence,
+        outcome.status === 'ok' ? 'statusUpdated' : 'statusFailed',
+        outcome.status === 'ok' ? 'success' : 'error',
+      );
       return outcome;
     });
   }
   function importArchive() {
     return once('import-archive', async () => {
       const picked = await files.chooseText({ signal: abortFiles.signal });
-      if (disposed || picked?.status === 'cancelled' || picked == null) return { status: 'skipped', reason: disposed ? 'disposed' : 'cancelled', completed: [] };
+      if (disposed || picked?.status === 'cancelled' || picked == null)
+        return { status: 'skipped', reason: disposed ? 'disposed' : 'cancelled', completed: [] };
       let imported;
-      try { imported = JSON.parse(picked.text); }
-      catch (error) { const outcome = { status: 'error', completed: ['select'], stage: 'parse', error: error.message }; notice(t('importFailed', { error: outcome.error }), 'error'); return outcome; }
+      try {
+        imported = JSON.parse(picked.text);
+      } catch (error) {
+        const outcome = { status: 'error', completed: ['select'], stage: 'parse', error: error.message };
+        notice(t('importFailed', { error: outcome.error }), 'error');
+        return outcome;
+      }
       const outcome = await application.importArchive(imported);
       if (!disposed) {
         if (outcome.status === 'ok') notice(t('importDone', outcome.report), 'success');
@@ -320,8 +403,18 @@ function createQuotaPanelController({ application, document, window, storage, t,
     return once('export-archive', async () => {
       const exported = await application.exportArchive();
       if (disposed) return { status: 'skipped', reason: 'disposed', completed: ['export'] };
-      try { await files.downloadText(EXPORT_NAME, JSON.stringify(exported, null, 2)); }
-      catch (error) { const outcome = { status: 'error', completed: ['export'], stage: 'download', error: error?.message || String(error) }; notice(t('exportFailed', { error: outcome.error }), 'error'); return outcome; }
+      try {
+        await files.downloadText(EXPORT_NAME, JSON.stringify(exported, null, 2));
+      } catch (error) {
+        const outcome = {
+          status: 'error',
+          completed: ['export'],
+          stage: 'download',
+          error: error?.message || String(error),
+        };
+        notice(t('exportFailed', { error: outcome.error }), 'error');
+        return outcome;
+      }
       if (!disposed) notice(t('exportDone', { count: exported.snapshotCount }), 'success');
       return { status: 'ok', completed: ['export', 'download'], count: exported.snapshotCount };
     });
@@ -351,7 +444,10 @@ function createQuotaPanelController({ application, document, window, storage, t,
       statsDrill = null;
       activePanelView = nextView;
     }
-    if (deferred) { presentation = 'snapshot'; commitPresentation(); }
+    if (deferred) {
+      presentation = 'snapshot';
+      commitPresentation();
+    }
     viewModel = createViewModel() || viewModel;
     const rendered = renderer.renderActiveView(viewModel, renderState());
     activePanelView = applyActiveView(content, rendered);
@@ -360,27 +456,70 @@ function createQuotaPanelController({ application, document, window, storage, t,
   }
   function handleAction(action, event) {
     if (disposed || action === 'toggle') return;
-    if (action === 'close') { shell.closePanel(); return; }
-    if (action === 'refresh') { void dispatch({ type: 'refresh' }); return; }
-    if (action === 'sync-remote') { void dispatch({ type: 'sync' }); return; }
-    if (action === 'save-remote-sync') { void dispatch({ type: 'save-remote-sync' }); return; }
-    if (action === 'import-archive' || action === 'export-archive') { void dispatch({ type: action }); return; }
+    if (action === 'close') {
+      shell.closePanel();
+      return;
+    }
+    if (action === 'refresh') {
+      void dispatch({ type: 'refresh' });
+      return;
+    }
+    if (action === 'sync-remote') {
+      void dispatch({ type: 'sync' });
+      return;
+    }
+    if (action === 'save-remote-sync') {
+      void dispatch({ type: 'save-remote-sync' });
+      return;
+    }
+    if (action === 'import-archive' || action === 'export-archive') {
+      void dispatch({ type: action });
+      return;
+    }
     const target = event.target;
-    if (action === 'switch-view') { rerenderActive(target.closest('[data-view]')?.dataset.view); return; }
+    if (action === 'switch-view') {
+      rerenderActive(target.closest('[data-view]')?.dataset.view);
+      return;
+    }
     if (action === 'toggle-rows') {
       const id = target.closest('[data-view-id]')?.dataset.viewId;
-      if (id) { if (expandedViews.has(id)) expandedViews.delete(id); else expandedViews.add(id); rerenderActive(); }
+      if (id) {
+        if (expandedViews.has(id)) expandedViews.delete(id);
+        else expandedViews.add(id);
+        rerenderActive();
+      }
     }
-    if (action === 'switch-stats-period') { activeStatsPeriod = target.closest('[data-period]')?.dataset.period || activeStatsPeriod; statsDrill = null; rerenderActive(); }
+    if (action === 'switch-stats-period') {
+      activeStatsPeriod = target.closest('[data-period]')?.dataset.period || activeStatsPeriod;
+      statsDrill = null;
+      rerenderActive();
+    }
     if (action === 'stats-drill') {
       const node = target.closest('[data-from]');
-      if (node?.dataset.from && node?.dataset.to) { statsDrill = { from: node.dataset.from, to: node.dataset.to, label: node.dataset.label || `${node.dataset.from} ~ ${node.dataset.to}` }; rerenderActive(); }
+      if (node?.dataset.from && node?.dataset.to) {
+        statsDrill = {
+          from: node.dataset.from,
+          to: node.dataset.to,
+          label: node.dataset.label || `${node.dataset.from} ~ ${node.dataset.to}`,
+        };
+        rerenderActive();
+      }
     }
-    if (action === 'stats-drill-back') { statsDrill = null; rerenderActive(); }
+    if (action === 'stats-drill-back') {
+      statsDrill = null;
+      rerenderActive();
+    }
   }
-  function edited(event) { if (event.target?.closest?.('[data-sync-form]')) { dirty = true; editRevision++; } }
+  function edited(event) {
+    if (event.target?.closest?.('[data-sync-form]')) {
+      dirty = true;
+      editRevision++;
+    }
+  }
   function focusEnded() {
-    window.queueMicrotask(() => { if (deferred && !protectedForm()) commitPresentation(); });
+    window.queueMicrotask(() => {
+      if (deferred && !protectedForm()) commitPresentation();
+    });
   }
   content?.addEventListener('input', edited);
   content?.addEventListener('change', edited);

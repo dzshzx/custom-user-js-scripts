@@ -341,6 +341,4 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
   documentObject.documentElement.append(style);
 }
 
-export {
-  installAssistantBaseStyles,
-};
+export { installAssistantBaseStyles };

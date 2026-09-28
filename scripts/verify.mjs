@@ -2,7 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { environmentReport, runTests, writeReport } from './run-tests.mjs';
 
 const report = {
-  passed: false, status: 'tests-not-run', counts: null,
+  passed: false,
+  status: 'tests-not-run',
+  counts: null,
   environment: { node: process.version, playwright: '1.61.1', browser: null },
   stages: { environment: 'not-run', build: 'not-run', checks: 'not-run', tests: 'not-run' },
   timings: {},
@@ -12,16 +14,23 @@ function command(command, args) {
   if (result.error || result.status !== 0) throw new Error(command + ' ' + args.join(' ') + ' failed');
 }
 try {
-  if (process.argv.length > 2 || process.execArgv.some(arg => arg.startsWith('--test'))) throw new Error('Full verify does not accept filters.');
+  if (process.argv.length > 2 || process.execArgv.some((arg) => arg.startsWith('--test')))
+    throw new Error('Full verify does not accept filters.');
   let started = performance.now();
   report.stages.environment = 'running';
-  try { report.environment = await environmentReport(); }
-  finally { report.timings.environment_ms = performance.now() - started; }
+  try {
+    report.environment = await environmentReport();
+  } finally {
+    report.timings.environment_ms = performance.now() - started;
+  }
   report.stages.environment = 'passed';
   started = performance.now();
   report.stages.build = 'running';
-  try { command(process.execPath, ['scripts/build-userscripts.mjs']); }
-  finally { report.timings.build_ms = performance.now() - started; }
+  try {
+    command(process.execPath, ['scripts/build-userscripts.mjs']);
+  } finally {
+    report.timings.build_ms = performance.now() - started;
+  }
   report.stages.build = 'passed';
   report.stages.checks = 'running';
   command('git', ['diff', '--exit-code', '--', 'dist', 'src']);

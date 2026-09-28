@@ -28,31 +28,35 @@ async function createWorkspace() {
   const scriptDir = path.join(rootDir, 'src', 'userscripts', 'demo-script');
   await mkdir(scriptDir, { recursive: true });
 
-  await writeFile(path.join(scriptDir, 'demo-script-greeting.lib.js'), [
-    "export function greetingText(name) {",
-    "  return `你好, ${name}`;",
-    '}',
-    '',
-  ].join('\n'));
-  await writeFile(path.join(scriptDir, 'demo-script-banner.lib.js'), [
-    "import { greetingText } from './demo-script-greeting.lib.js';",
-    '',
-    'export function bannerText() {',
-    "  return greetingText('近7天');",
-    '}',
-    '',
-  ].join('\n'));
-  await writeFile(path.join(scriptDir, 'demo-script.entry.js'), [
-    entryMetadata('demo-script'),
-    '',
-    "import { bannerText } from './demo-script-banner.lib.js';",
-    '',
-    '(function () {',
-    "  'use strict';",
-    '  console.log(bannerText());',
-    '})();',
-    '',
-  ].join('\n'));
+  await writeFile(
+    path.join(scriptDir, 'demo-script-greeting.lib.js'),
+    ['export function greetingText(name) {', '  return `你好, ${name}`;', '}', ''].join('\n'),
+  );
+  await writeFile(
+    path.join(scriptDir, 'demo-script-banner.lib.js'),
+    [
+      "import { greetingText } from './demo-script-greeting.lib.js';",
+      '',
+      'export function bannerText() {',
+      "  return greetingText('近7天');",
+      '}',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(
+    path.join(scriptDir, 'demo-script.entry.js'),
+    [
+      entryMetadata('demo-script'),
+      '',
+      "import { bannerText } from './demo-script-banner.lib.js';",
+      '',
+      '(function () {',
+      "  'use strict';",
+      '  console.log(bannerText());',
+      '})();',
+      '',
+    ].join('\n'),
+  );
 
   return { rootDir, scriptDir, distDir: path.join(rootDir, 'dist') };
 }
@@ -62,7 +66,10 @@ test('buildAll bundles an entry into a metadata-headed single-file userscript', 
   t.after(() => rm(rootDir, { recursive: true, force: true }));
 
   const results = await buildAll({ rootDir, distDir });
-  assert.deepEqual(results.map((r) => r.scriptId), ['demo-script']);
+  assert.deepEqual(
+    results.map((r) => r.scriptId),
+    ['demo-script'],
+  );
 
   const bundled = await readFile(path.join(distDir, 'demo-script.user.js'), 'utf8');
   assert.ok(bundled.startsWith('// ==UserScript=='));
@@ -111,10 +118,7 @@ test('buildAll fails on a lib file outside the module graph (orphan lib)', async
 
   await writeFile(path.join(scriptDir, 'demo-script-orphan.lib.js'), 'export const orphan = 1;\n');
 
-  await assert.rejects(
-    () => buildAll({ rootDir, distDir }),
-    /orphan lib/i,
-  );
+  await assert.rejects(() => buildAll({ rootDir, distDir }), /orphan lib/i);
 });
 
 test('buildAll rejects entries whose metadata still declares @require or wrong dist URL', async (t) => {
@@ -124,10 +128,13 @@ test('buildAll rejects entries whose metadata still declares @require or wrong d
   const entryPath = path.join(scriptDir, 'demo-script.entry.js');
   const original = await readFile(entryPath, 'utf8');
 
-  await writeFile(entryPath, original.replace(
-    '// @downloadURL',
-    `// @require      ${RAW_BASE}/src/userscripts/demo-script/demo-script-greeting.lib.js\n// @downloadURL`,
-  ));
+  await writeFile(
+    entryPath,
+    original.replace(
+      '// @downloadURL',
+      `// @require      ${RAW_BASE}/src/userscripts/demo-script/demo-script-greeting.lib.js\n// @downloadURL`,
+    ),
+  );
   await assert.rejects(() => buildAll({ rootDir, distDir }), /@require/);
 
   await writeFile(entryPath, original.replaceAll(`/dist/demo-script.user.js`, '/dist/other.user.js'));
@@ -141,10 +148,7 @@ test('buildAll enforces SCRIPT_VERSION to match metadata @version when present',
   const entryPath = path.join(scriptDir, 'demo-script.entry.js');
   const original = await readFile(entryPath, 'utf8');
 
-  await writeFile(entryPath, original.replace(
-    "(function () {",
-    "const SCRIPT_VERSION = '9.9.9';\n(function () {",
-  ));
+  await writeFile(entryPath, original.replace('(function () {', "const SCRIPT_VERSION = '9.9.9';\n(function () {"));
   await assert.rejects(() => buildAll({ rootDir, distDir }), /SCRIPT_VERSION/);
 });
 
@@ -162,7 +166,10 @@ test('buildAll replaces a stale single-file bridge without creating another iden
   t.after(() => rm(rootDir, { recursive: true, force: true }));
   await writeFile(path.join(scriptDir, 'demo-script.user.js'), 'old single-file installation');
   assert.equal((await buildAll({ rootDir, distDir })).length, 1);
-  assert.equal(await readFile(path.join(scriptDir, 'demo-script.user.js'), 'utf8'), await readFile(path.join(distDir, 'demo-script.user.js'), 'utf8'));
+  assert.equal(
+    await readFile(path.join(scriptDir, 'demo-script.user.js'), 'utf8'),
+    await readFile(path.join(distDir, 'demo-script.user.js'), 'utf8'),
+  );
 });
 
 test('buildAll surfaces entry I/O errors instead of treating them as no entry', async (t) => {

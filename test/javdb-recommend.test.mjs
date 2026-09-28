@@ -8,13 +8,9 @@ import { md5 } from '../src/userscripts/javdb-recommend/javdb-recommend-request.
 import { createDomWindow, createMemoryStorage, domSkip } from './helpers/dom-env.mjs';
 import { parseMetadataBlock } from '../scripts/lib/userscript-metadata.mjs';
 
-const srcPath = path.resolve(
-  import.meta.dirname,
-  '../src/userscripts/javdb-recommend/javdb-recommend.user.js',
-);
+const srcPath = path.resolve(import.meta.dirname, '../src/userscripts/javdb-recommend/javdb-recommend.user.js');
 
-const RAW_URL =
-  'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js';
+const RAW_URL = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js';
 
 test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.9', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
@@ -78,7 +74,7 @@ async function runScript(window, fetchImpl, extraGlobals = {}, storage = createM
   const source = await readFile(srcPath, 'utf8');
   window.happyDOM.settings.disableCSSFileLoading = true;
   const nativeGetComputedStyle = window.getComputedStyle.bind(window);
-  window.getComputedStyle = node => {
+  window.getComputedStyle = (node) => {
     if (!node.closest?.('[data-jdb-ra-site-chrome="probe"]')) return nativeGetComputedStyle(node);
     if (node.matches('nav')) return { display: 'flex', minHeight: '52px' };
     if (node.matches('button')) return { display: 'inline-flex', paddingLeft: '12px' };
@@ -114,7 +110,7 @@ async function runScript(window, fetchImpl, extraGlobals = {}, storage = createM
   // 等待期数列表、首期详情与官网外观的 promise 链落定
   for (let i = 0; i < 20; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
-    window.document.querySelectorAll('link[data-jdb-ra-site-chrome]:not([data-test-loaded])').forEach(link => {
+    window.document.querySelectorAll('link[data-jdb-ra-site-chrome]:not([data-test-loaded])').forEach((link) => {
       link.dataset.testLoaded = '1';
       link.dispatchEvent(new window.Event('load'));
     });
@@ -134,16 +130,22 @@ test('standalone archive page adopts site chrome and streams native-style cards'
   const calls = [];
   let ioCallback = null;
   class FakeIO {
-    constructor(cb) { ioCallback = cb; }
+    constructor(cb) {
+      ioCallback = cb;
+    }
     observe() {}
     disconnect() {}
   }
-  await runScript(window, async (url) => {
-    calls.push(url);
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
-    return { ok: true, json: async () => payload };
-  }, { IntersectionObserver: FakeIO });
+  await runScript(
+    window,
+    async (url) => {
+      calls.push(url);
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+      return { ok: true, json: async () => payload };
+    },
+    { IntersectionObserver: FakeIO },
+  );
 
   const doc = window.document;
   assert.equal(doc.title, '佳片推荐 · 历史期数 - JavDB');
@@ -195,388 +197,527 @@ test('standalone archive page adopts site chrome and streams native-style cards'
   search.value = 'HND';
   search.dispatchEvent(new window.Event('input', { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 400)); // 300ms 防抖
-  const visible = [...doc.querySelectorAll('.jdb-ra-stream .item')]
-    .filter((item) => item.dataset.jdbRaFiltered !== 'true');
+  const visible = [...doc.querySelectorAll('.jdb-ra-stream .item')].filter(
+    (item) => item.dataset.jdbRaFiltered !== 'true',
+  );
   assert.equal(visible.length, 2);
   assert.match(doc.getElementById('jdb-ra-status').textContent, /命中 2 部/);
   await window.happyDOM.close();
 });
 
-test('restored browsing position selects the displayed period and lets users choose the latest', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  const storage = createMemoryStorage();
-  storage.setItem('javdb_recommend_last_period', '593');
-  const catalog = [596, 595, 594, 593].map(period => ({
-    period, movies_count: 1, created_at: '2026-09-21',
-  }));
-  const requests = [];
-  await runScript(window, async url => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) return { ok: true, json: async () => ({ success: 1, data: { periods: catalog } }) };
-    const period = Number(new URL(url).searchParams.get('period'));
-    requests.push(period);
-    return { ok: true, json: async () => DETAIL };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } }, storage);
-  try {
-    const select = window.document.getElementById('jdb-ra-select');
-    assert.equal(window.document.querySelector('.jdb-ra-sec').dataset.period, '593');
-    assert.equal(select.value, '593');
-    select.value = '596';
-    select.dispatchEvent(new window.Event('change', { bubbles: true }));
-    for (let i = 0; i < 20; i += 1) await new Promise(resolve => setTimeout(resolve, 0));
-    assert.equal(window.document.querySelector('.jdb-ra-sec').dataset.period, '596');
-    assert.equal(select.value, '596');
-    assert.deepEqual(requests, [593, 596]);
-  } finally {
-    await window.happyDOM.close();
-  }
-});
-
-test('release-date metadata omits invalid dates without hiding independent score metadata', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  const invalidDetail = {
-    success: 1,
-    data: {
-      period: 2,
-      movies: [
-        { ...DETAIL.data.movies[0], release_date: '2025-02-29' },
-        { ...DETAIL.data.movies[1], release_date: '2026-99-99' },
-      ],
-    },
-  };
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    const payload = url.includes('recommend_periods') ? PERIODS : invalidDetail;
-    return { ok: true, json: async () => payload };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
-
-  const cards = window.document.querySelectorAll('.jdb-ra-sec .item');
-  assert.equal(cards[0].querySelector('.meta').textContent, '4.22');
-  assert.equal(cards[1].querySelector('.meta'), null);
-  await window.happyDOM.close();
-});
-
-test('the actual bundle renders damaged period metadata as text and preserves third-party body nodes', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  const thirdPartyNode = window.document.createElement('aside');
-  thirdPartyNode.id = 'third-party-state';
-  window.document.body.appendChild(thirdPartyNode);
-  const damaged = {
-    success: 1,
-    data: {
-      periods: [{
-        period: 2,
-        movies_count: '<img src=x>',
-        views_count: 0,
-        created_at: '<strong>today</strong>',
-      }],
-    },
-  };
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    return { ok: true, json: async () => url.includes('recommend_periods') ? damaged : DETAIL };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
-
-  const document = window.document;
-  assert.equal(document.getElementById('third-party-state'), thirdPartyNode);
-  assert.equal(document.querySelector('.jdb-ra-ph').textContent, '第 2 期 — · — 部');
-  assert.equal(document.querySelector('.jdb-ra-ph em, .jdb-ra-ph img, .jdb-ra-ph strong'), null);
-  await window.happyDOM.close();
-});
-
-test('later period grids follow the column setting applied to the first grid by another userscript', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  let ioCallback = null;
-  class FakeIO {
-    constructor(cb) { ioCallback = cb; }
-    observe() {}
-    disconnect() {}
-  }
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
-    return { ok: true, json: async () => payload };
-  }, { IntersectionObserver: FakeIO });
-
-  const firstGrid = window.document.querySelector('.jdb-ra-sec .movie-list');
-  firstGrid.classList.add('jav-card-grid', 'javdb-card-grid');
-  firstGrid.style.setProperty('--jav-card-columns', '5');
-  firstGrid.style.setProperty('grid-template-columns', 'repeat(5, minmax(0, 1fr))', 'important');
-  firstGrid.style.setProperty('column-gap', '14px', 'important');
-  firstGrid.style.setProperty('row-gap', '14px', 'important');
-
-  ioCallback([{ isIntersecting: true }]);
-  for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
-
-  const grids = [...window.document.querySelectorAll('.jdb-ra-sec .movie-list')];
-  assert.equal(grids.length, 2);
-  for (const grid of grids) {
-    assert.equal(grid.style.getPropertyValue('grid-template-columns'), 'repeat(5, minmax(0, 1fr))');
-    assert.equal(grid.style.getPropertyPriority('grid-template-columns'), 'important');
-    assert.equal(grid.style.getPropertyValue('column-gap'), '14px');
-    assert.equal(grid.style.getPropertyValue('row-gap'), '14px');
-  }
-
-  firstGrid.style.setProperty('--jav-card-columns', '4');
-  firstGrid.style.setProperty('grid-template-columns', 'repeat(4, minmax(0, 1fr))', 'important');
-  for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
-  for (const grid of grids) {
-    assert.equal(grid.style.getPropertyValue('grid-template-columns'), 'repeat(4, minmax(0, 1fr))');
-  }
-  await window.happyDOM.close();
-});
-
-test('layout copying leaves enhanced grids independent and releases only owned inline values on takeover', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  let ioCallback = null;
-  class FakeIO {
-    constructor(callback) { ioCallback = callback; }
-    observe() {}
-    disconnect() {}
-  }
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    return { ok: true, json: async () => url.includes('recommend_periods') ? PERIODS : DETAIL };
-  }, { IntersectionObserver: FakeIO });
-
-  const first = window.document.querySelector('.movie-list');
-  first.classList.add('javdb-card-grid');
-  first.dataset.laosijiGrid = '1';
-  first.style.setProperty('grid-template-columns', 'repeat(6, minmax(0, 1fr))', 'important');
-  first.style.setProperty('column-gap', '12px', 'important');
-  first.style.setProperty('row-gap', '16px', 'important');
-  const sourceImage = first.querySelector('img');
-  sourceImage.style.setProperty('object-fit', 'cover', 'important');
-  sourceImage.style.setProperty('object-position', 'right center', 'important');
-  sourceImage.closest('.cover').style.setProperty('aspect-ratio', '380 / 538', 'important');
-
-  ioCallback([{ isIntersecting: true }]);
-  for (let index = 0; index < 20; index += 1) await new Promise(resolve => setTimeout(resolve, 0));
-  const second = window.document.querySelectorAll('.movie-list')[1];
-  assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
-  assert.equal(second.querySelector('img').style.getPropertyValue('object-fit'), 'cover');
-
-  const secondImage = second.querySelector('img');
-  const secondCover = secondImage.closest('.cover');
-  secondImage.style.setProperty('object-position', 'left top', 'important');
-  second.querySelector('.item').dataset.laosijiGridCard = '1';
-  second.querySelector('.item').classList.add('jav-card', 'javdb-grid-card');
-  secondImage.classList.add('jav-card-image', 'javdb-card-image');
-  secondCover.classList.add('jav-card-cover', 'javdb-cover-frame');
-  for (let index = 0; index < 10; index += 1) await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(secondImage.style.getPropertyValue('object-fit'), '');
-  assert.equal(secondImage.style.getPropertyValue('object-position'), 'left top');
-  assert.equal(secondCover.style.getPropertyValue('aspect-ratio'), '');
-  assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
-
-  second.style.setProperty('column-gap', '23px', 'important');
-  second.classList.add('javdb-card-grid');
-  second.dataset.laosijiGrid = '1';
-  second.style.setProperty('grid-template-columns', 'repeat(3, minmax(0, 1fr))', 'important');
-  for (let index = 0; index < 10; index += 1) await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(3, minmax(0, 1fr))');
-  assert.equal(second.style.getPropertyValue('column-gap'), '23px');
-  assert.equal(first.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
-  await window.happyDOM.close();
-});
-
-test('a fresh local cache avoids refetching the period catalog and loaded period details on reopen', { skip: domSkip }, async () => {
-  const storage = createMemoryStorage();
-  const firstCalls = [];
-  const firstWindow = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  await runScript(firstWindow, async (url) => {
-    firstCalls.push(url);
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
-    return { ok: true, json: async () => payload };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } }, storage);
-
-  assert.equal(firstCalls.filter((url) => url.includes('recommend_periods')).length, 1);
-  assert.equal(firstCalls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 1);
-
-  const secondCalls = [];
-  const secondWindow = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  await runScript(secondWindow, async (url) => {
-    secondCalls.push(url);
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
-    return { ok: true, json: async () => payload };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } }, storage);
-
-  assert.equal(secondWindow.document.querySelectorAll('.jdb-ra-sec .item').length, 2);
-  assert.equal(secondWindow.document.querySelector('.jdb-ra-sec .item .meta').textContent, '4.22 · 发售 2026-08-01');
-  assert.equal(secondCalls.filter((url) => url.includes('/api/v1/movies/')).length, 0);
-  assert.equal(secondCalls.filter((url) => url === 'https://javdb.com/').length, 1);
-  firstWindow.close();
-  secondWindow.close();
-});
-
-test('stream rendering and full-archive search share one in-flight detail request per period', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  let resolveDetail;
-  const detailResponse = new Promise((resolve) => { resolveDetail = resolve; });
-  const calls = [];
-  await runScript(window, async (url) => {
-    calls.push(url);
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) return { ok: true, json: async () => PERIODS };
-    await detailResponse;
-    return { ok: true, json: async () => DETAIL };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
-
-  const search = window.document.getElementById('jdb-ra-search');
-  search.value = 'HND';
-  switchSearchScope(window, 'all');
-  window.document.getElementById('jdb-ra-gsearch').click();
-  for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 2);
-  assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?period=2/.test(url)).length, 1);
-
-  resolveDetail();
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 2);
-  await window.happyDOM.close();
-});
-
-test('a distant period jump re-anchors the stream without loading intermediate periods', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  const jumpPeriods = Array.from({ length: 5 }, (_, index) => ({
-    period: 5 - index,
-    movies_count: 1,
-    views_count: 0,
-    created_at: `2026-08-${String(5 - index).padStart(2, '0')}T00:00:00.000Z`,
-  }));
-  const detailCalls = [];
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) {
-      return { ok: true, json: async () => ({ success: 1, data: { periods: jumpPeriods } }) };
-    }
-    const period = Number(new URL(url).searchParams.get('period'));
-    detailCalls.push(period);
-    return {
-      ok: true,
-      json: async () => ({
-        success: 1,
-        data: {
-          movies: [{
-            id: String(period),
-            number: `TEST-${period}`,
-            title: `影片${period}`,
-            origin_title: `影片${period}`,
-            cover_url: '',
-            score: '4.0',
-            release_date: '2026-08-01',
-          }],
+test(
+  'restored browsing position selects the displayed period and lets users choose the latest',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const storage = createMemoryStorage();
+    storage.setItem('javdb_recommend_last_period', '593');
+    const catalog = [596, 595, 594, 593].map((period) => ({
+      period,
+      movies_count: 1,
+      created_at: '2026-09-21',
+    }));
+    const requests = [];
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        if (url.includes('recommend_periods'))
+          return { ok: true, json: async () => ({ success: 1, data: { periods: catalog } }) };
+        const period = Number(new URL(url).searchParams.get('period'));
+        requests.push(period);
+        return { ok: true, json: async () => DETAIL };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
         },
-      }),
-    };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
-
-  const initialGrid = window.document.querySelector('.jdb-ra-sec .movie-list');
-  initialGrid.classList.add('jav-card-grid', 'javdb-card-grid');
-  initialGrid.style.setProperty('--jav-card-columns', '5');
-  initialGrid.style.setProperty('grid-template-columns', 'repeat(5, minmax(0, 1fr))', 'important');
-  initialGrid.style.setProperty('column-gap', '14px', 'important');
-  initialGrid.style.setProperty('row-gap', '14px', 'important');
-  for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
-
-  const jump = window.document.getElementById('jdb-ra-jump');
-  jump.value = '2';
-  jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  // 骨架卡也带 .item；等真实卡片（a.box）才算加载完成
-  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="2"] .item .box'); i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  assert.deepEqual(detailCalls, [5, 2]);
-  assert.deepEqual(
-    [...window.document.querySelectorAll('.jdb-ra-sec')].map((section) => Number(section.dataset.period)),
-    [2],
-  );
-  assert.equal(
-    window.document.querySelector('.jdb-ra-sec[data-period="2"] .movie-list').style.getPropertyValue('grid-template-columns'),
-    'repeat(5, minmax(0, 1fr))',
-  );
-
-  window.document.getElementById('jdb-ra-prev').click();
-  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="1"] .item .box'); i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  assert.deepEqual(detailCalls, [5, 2, 1]);
-  assert.deepEqual(
-    [...window.document.querySelectorAll('.jdb-ra-sec')].map((section) => Number(section.dataset.period)),
-    [2, 1],
-  );
-
-  jump.value = '5';
-  jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="5"] .item .box'); i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  assert.deepEqual(detailCalls, [5, 2, 1]);
-  assert.deepEqual(
-    [...window.document.querySelectorAll('.jdb-ra-sec')].map((section) => Number(section.dataset.period)),
-    [5],
-  );
-  await window.happyDOM.close();
-});
-
-test('a jump intent preempts a visible sentinel chain while the current period is still loading', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  const jumpPeriods = Array.from({ length: 5 }, (_, index) => ({
-    period: 5 - index,
-    movies_count: 1,
-    views_count: 0,
-    created_at: `2026-08-${String(5 - index).padStart(2, '0')}T00:00:00.000Z`,
-  }));
-  const detailCalls = [];
-  let ioCallback;
-  let releaseFirst;
-  let releaseTarget;
-  const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
-  const targetGate = new Promise((resolve) => { releaseTarget = resolve; });
-  class FakeIO {
-    constructor(callback) { ioCallback = callback; }
-    observe() {}
-    disconnect() {}
-  }
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) {
-      return { ok: true, json: async () => ({ success: 1, data: { periods: jumpPeriods } }) };
+      },
+      storage,
+    );
+    try {
+      const select = window.document.getElementById('jdb-ra-select');
+      assert.equal(window.document.querySelector('.jdb-ra-sec').dataset.period, '593');
+      assert.equal(select.value, '593');
+      select.value = '596';
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+      for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(window.document.querySelector('.jdb-ra-sec').dataset.period, '596');
+      assert.equal(select.value, '596');
+      assert.deepEqual(requests, [593, 596]);
+    } finally {
+      await window.happyDOM.close();
     }
-    const period = Number(new URL(url).searchParams.get('period'));
-    detailCalls.push(period);
-    if (period === 5) await firstGate;
-    if (period === 2) await targetGate;
-    return {
-      ok: true,
-      json: async () => ({ success: 1, data: { movies: [{ ...DETAIL.data.movies[0], id: String(period), number: `TEST-${period}` }] } }),
+  },
+);
+
+test(
+  'release-date metadata omits invalid dates without hiding independent score metadata',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const invalidDetail = {
+      success: 1,
+      data: {
+        period: 2,
+        movies: [
+          { ...DETAIL.data.movies[0], release_date: '2025-02-29' },
+          { ...DETAIL.data.movies[1], release_date: '2026-99-99' },
+        ],
+      },
     };
-  }, { IntersectionObserver: FakeIO });
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        const payload = url.includes('recommend_periods') ? PERIODS : invalidDetail;
+        return { ok: true, json: async () => payload };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
+        },
+      },
+    );
 
-  ioCallback([{ isIntersecting: true }]);
-  const jump = window.document.getElementById('jdb-ra-jump');
-  jump.value = '2';
-  jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  for (let i = 0; i < 100 && !detailCalls.includes(2); i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  assert.deepEqual(detailCalls, [5, 2]);
-  releaseTarget();
-  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="1"] .item'); i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  releaseFirst();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+    const cards = window.document.querySelectorAll('.jdb-ra-sec .item');
+    assert.equal(cards[0].querySelector('.meta').textContent, '4.22');
+    assert.equal(cards[1].querySelector('.meta'), null);
+    await window.happyDOM.close();
+  },
+);
 
-  assert.deepEqual(detailCalls, [5, 2, 1]);
-  assert.deepEqual(
-    [...window.document.querySelectorAll('.jdb-ra-sec')].map((section) => Number(section.dataset.period)),
-    [2, 1],
-  );
-  await window.happyDOM.close();
-});
+test(
+  'the actual bundle renders damaged period metadata as text and preserves third-party body nodes',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const thirdPartyNode = window.document.createElement('aside');
+    thirdPartyNode.id = 'third-party-state';
+    window.document.body.appendChild(thirdPartyNode);
+    const damaged = {
+      success: 1,
+      data: {
+        periods: [
+          {
+            period: 2,
+            movies_count: '<img src=x>',
+            views_count: 0,
+            created_at: '<strong>today</strong>',
+          },
+        ],
+      },
+    };
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        return { ok: true, json: async () => (url.includes('recommend_periods') ? damaged : DETAIL) };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
+        },
+      },
+    );
+
+    const document = window.document;
+    assert.equal(document.getElementById('third-party-state'), thirdPartyNode);
+    assert.equal(document.querySelector('.jdb-ra-ph').textContent, '第 2 期 — · — 部');
+    assert.equal(document.querySelector('.jdb-ra-ph em, .jdb-ra-ph img, .jdb-ra-ph strong'), null);
+    await window.happyDOM.close();
+  },
+);
+
+test(
+  'later period grids follow the column setting applied to the first grid by another userscript',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    let ioCallback = null;
+    class FakeIO {
+      constructor(cb) {
+        ioCallback = cb;
+      }
+      observe() {}
+      disconnect() {}
+    }
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+        return { ok: true, json: async () => payload };
+      },
+      { IntersectionObserver: FakeIO },
+    );
+
+    const firstGrid = window.document.querySelector('.jdb-ra-sec .movie-list');
+    firstGrid.classList.add('jav-card-grid', 'javdb-card-grid');
+    firstGrid.style.setProperty('--jav-card-columns', '5');
+    firstGrid.style.setProperty('grid-template-columns', 'repeat(5, minmax(0, 1fr))', 'important');
+    firstGrid.style.setProperty('column-gap', '14px', 'important');
+    firstGrid.style.setProperty('row-gap', '14px', 'important');
+
+    ioCallback([{ isIntersecting: true }]);
+    for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const grids = [...window.document.querySelectorAll('.jdb-ra-sec .movie-list')];
+    assert.equal(grids.length, 2);
+    for (const grid of grids) {
+      assert.equal(grid.style.getPropertyValue('grid-template-columns'), 'repeat(5, minmax(0, 1fr))');
+      assert.equal(grid.style.getPropertyPriority('grid-template-columns'), 'important');
+      assert.equal(grid.style.getPropertyValue('column-gap'), '14px');
+      assert.equal(grid.style.getPropertyValue('row-gap'), '14px');
+    }
+
+    firstGrid.style.setProperty('--jav-card-columns', '4');
+    firstGrid.style.setProperty('grid-template-columns', 'repeat(4, minmax(0, 1fr))', 'important');
+    for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    for (const grid of grids) {
+      assert.equal(grid.style.getPropertyValue('grid-template-columns'), 'repeat(4, minmax(0, 1fr))');
+    }
+    await window.happyDOM.close();
+  },
+);
+
+test(
+  'layout copying leaves enhanced grids independent and releases only owned inline values on takeover',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    let ioCallback = null;
+    class FakeIO {
+      constructor(callback) {
+        ioCallback = callback;
+      }
+      observe() {}
+      disconnect() {}
+    }
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        return { ok: true, json: async () => (url.includes('recommend_periods') ? PERIODS : DETAIL) };
+      },
+      { IntersectionObserver: FakeIO },
+    );
+
+    const first = window.document.querySelector('.movie-list');
+    first.classList.add('javdb-card-grid');
+    first.dataset.laosijiGrid = '1';
+    first.style.setProperty('grid-template-columns', 'repeat(6, minmax(0, 1fr))', 'important');
+    first.style.setProperty('column-gap', '12px', 'important');
+    first.style.setProperty('row-gap', '16px', 'important');
+    const sourceImage = first.querySelector('img');
+    sourceImage.style.setProperty('object-fit', 'cover', 'important');
+    sourceImage.style.setProperty('object-position', 'right center', 'important');
+    sourceImage.closest('.cover').style.setProperty('aspect-ratio', '380 / 538', 'important');
+
+    ioCallback([{ isIntersecting: true }]);
+    for (let index = 0; index < 20; index += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = window.document.querySelectorAll('.movie-list')[1];
+    assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
+    assert.equal(second.querySelector('img').style.getPropertyValue('object-fit'), 'cover');
+
+    const secondImage = second.querySelector('img');
+    const secondCover = secondImage.closest('.cover');
+    secondImage.style.setProperty('object-position', 'left top', 'important');
+    second.querySelector('.item').dataset.laosijiGridCard = '1';
+    second.querySelector('.item').classList.add('jav-card', 'javdb-grid-card');
+    secondImage.classList.add('jav-card-image', 'javdb-card-image');
+    secondCover.classList.add('jav-card-cover', 'javdb-cover-frame');
+    for (let index = 0; index < 10; index += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(secondImage.style.getPropertyValue('object-fit'), '');
+    assert.equal(secondImage.style.getPropertyValue('object-position'), 'left top');
+    assert.equal(secondCover.style.getPropertyValue('aspect-ratio'), '');
+    assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
+
+    second.style.setProperty('column-gap', '23px', 'important');
+    second.classList.add('javdb-card-grid');
+    second.dataset.laosijiGrid = '1';
+    second.style.setProperty('grid-template-columns', 'repeat(3, minmax(0, 1fr))', 'important');
+    for (let index = 0; index < 10; index += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(3, minmax(0, 1fr))');
+    assert.equal(second.style.getPropertyValue('column-gap'), '23px');
+    assert.equal(first.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
+    await window.happyDOM.close();
+  },
+);
+
+test(
+  'a fresh local cache avoids refetching the period catalog and loaded period details on reopen',
+  { skip: domSkip },
+  async () => {
+    const storage = createMemoryStorage();
+    const firstCalls = [];
+    const firstWindow = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    await runScript(
+      firstWindow,
+      async (url) => {
+        firstCalls.push(url);
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+        return { ok: true, json: async () => payload };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
+        },
+      },
+      storage,
+    );
+
+    assert.equal(firstCalls.filter((url) => url.includes('recommend_periods')).length, 1);
+    assert.equal(firstCalls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 1);
+
+    const secondCalls = [];
+    const secondWindow = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    await runScript(
+      secondWindow,
+      async (url) => {
+        secondCalls.push(url);
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+        return { ok: true, json: async () => payload };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
+        },
+      },
+      storage,
+    );
+
+    assert.equal(secondWindow.document.querySelectorAll('.jdb-ra-sec .item').length, 2);
+    assert.equal(secondWindow.document.querySelector('.jdb-ra-sec .item .meta').textContent, '4.22 · 发售 2026-08-01');
+    assert.equal(secondCalls.filter((url) => url.includes('/api/v1/movies/')).length, 0);
+    assert.equal(secondCalls.filter((url) => url === 'https://javdb.com/').length, 1);
+    firstWindow.close();
+    secondWindow.close();
+  },
+);
+
+test(
+  'stream rendering and full-archive search share one in-flight detail request per period',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    let resolveDetail;
+    const detailResponse = new Promise((resolve) => {
+      resolveDetail = resolve;
+    });
+    const calls = [];
+    await runScript(
+      window,
+      async (url) => {
+        calls.push(url);
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        if (url.includes('recommend_periods')) return { ok: true, json: async () => PERIODS };
+        await detailResponse;
+        return { ok: true, json: async () => DETAIL };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
+        },
+      },
+    );
+
+    const search = window.document.getElementById('jdb-ra-search');
+    search.value = 'HND';
+    switchSearchScope(window, 'all');
+    window.document.getElementById('jdb-ra-gsearch').click();
+    for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 2);
+    assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?period=2/.test(url)).length, 1);
+
+    resolveDetail();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(calls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 2);
+    await window.happyDOM.close();
+  },
+);
+
+test(
+  'a distant period jump re-anchors the stream without loading intermediate periods',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const jumpPeriods = Array.from({ length: 5 }, (_, index) => ({
+      period: 5 - index,
+      movies_count: 1,
+      views_count: 0,
+      created_at: `2026-08-${String(5 - index).padStart(2, '0')}T00:00:00.000Z`,
+    }));
+    const detailCalls = [];
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        if (url.includes('recommend_periods')) {
+          return { ok: true, json: async () => ({ success: 1, data: { periods: jumpPeriods } }) };
+        }
+        const period = Number(new URL(url).searchParams.get('period'));
+        detailCalls.push(period);
+        return {
+          ok: true,
+          json: async () => ({
+            success: 1,
+            data: {
+              movies: [
+                {
+                  id: String(period),
+                  number: `TEST-${period}`,
+                  title: `影片${period}`,
+                  origin_title: `影片${period}`,
+                  cover_url: '',
+                  score: '4.0',
+                  release_date: '2026-08-01',
+                },
+              ],
+            },
+          }),
+        };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
+        },
+      },
+    );
+
+    const initialGrid = window.document.querySelector('.jdb-ra-sec .movie-list');
+    initialGrid.classList.add('jav-card-grid', 'javdb-card-grid');
+    initialGrid.style.setProperty('--jav-card-columns', '5');
+    initialGrid.style.setProperty('grid-template-columns', 'repeat(5, minmax(0, 1fr))', 'important');
+    initialGrid.style.setProperty('column-gap', '14px', 'important');
+    initialGrid.style.setProperty('row-gap', '14px', 'important');
+    for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const jump = window.document.getElementById('jdb-ra-jump');
+    jump.value = '2';
+    jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    // 骨架卡也带 .item；等真实卡片（a.box）才算加载完成
+    for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="2"] .item .box'); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.deepEqual(detailCalls, [5, 2]);
+    assert.deepEqual(
+      [...window.document.querySelectorAll('.jdb-ra-sec')].map((section) => Number(section.dataset.period)),
+      [2],
+    );
+    assert.equal(
+      window.document
+        .querySelector('.jdb-ra-sec[data-period="2"] .movie-list')
+        .style.getPropertyValue('grid-template-columns'),
+      'repeat(5, minmax(0, 1fr))',
+    );
+
+    window.document.getElementById('jdb-ra-prev').click();
+    for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="1"] .item .box'); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.deepEqual(detailCalls, [5, 2, 1]);
+    assert.deepEqual(
+      [...window.document.querySelectorAll('.jdb-ra-sec')].map((section) => Number(section.dataset.period)),
+      [2, 1],
+    );
+
+    jump.value = '5';
+    jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="5"] .item .box'); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.deepEqual(detailCalls, [5, 2, 1]);
+    assert.deepEqual(
+      [...window.document.querySelectorAll('.jdb-ra-sec')].map((section) => Number(section.dataset.period)),
+      [5],
+    );
+    await window.happyDOM.close();
+  },
+);
+
+test(
+  'a jump intent preempts a visible sentinel chain while the current period is still loading',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const jumpPeriods = Array.from({ length: 5 }, (_, index) => ({
+      period: 5 - index,
+      movies_count: 1,
+      views_count: 0,
+      created_at: `2026-08-${String(5 - index).padStart(2, '0')}T00:00:00.000Z`,
+    }));
+    const detailCalls = [];
+    let ioCallback;
+    let releaseFirst;
+    let releaseTarget;
+    const firstGate = new Promise((resolve) => {
+      releaseFirst = resolve;
+    });
+    const targetGate = new Promise((resolve) => {
+      releaseTarget = resolve;
+    });
+    class FakeIO {
+      constructor(callback) {
+        ioCallback = callback;
+      }
+      observe() {}
+      disconnect() {}
+    }
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        if (url.includes('recommend_periods')) {
+          return { ok: true, json: async () => ({ success: 1, data: { periods: jumpPeriods } }) };
+        }
+        const period = Number(new URL(url).searchParams.get('period'));
+        detailCalls.push(period);
+        if (period === 5) await firstGate;
+        if (period === 2) await targetGate;
+        return {
+          ok: true,
+          json: async () => ({
+            success: 1,
+            data: { movies: [{ ...DETAIL.data.movies[0], id: String(period), number: `TEST-${period}` }] },
+          }),
+        };
+      },
+      { IntersectionObserver: FakeIO },
+    );
+
+    ioCallback([{ isIntersecting: true }]);
+    const jump = window.document.getElementById('jdb-ra-jump');
+    jump.value = '2';
+    jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    for (let i = 0; i < 100 && !detailCalls.includes(2); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.deepEqual(detailCalls, [5, 2]);
+    releaseTarget();
+    for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="1"] .item'); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    releaseFirst();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.deepEqual(detailCalls, [5, 2, 1]);
+    assert.deepEqual(
+      [...window.document.querySelectorAll('.jdb-ra-sec')].map((section) => Number(section.dataset.period)),
+      [2, 1],
+    );
+    await window.happyDOM.close();
+  },
+);
 
 test('a failed load does not retry forever or override a newer jump intent', { skip: domSkip }, async () => {
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
@@ -588,22 +729,32 @@ test('a failed load does not retry forever or override a newer jump intent', { s
   }));
   const detailCalls = [];
   const attempts = new Map();
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) {
-      return { ok: true, json: async () => ({ success: 1, data: { periods: jumpPeriods } }) };
-    }
-    const period = Number(new URL(url).searchParams.get('period'));
-    detailCalls.push(period);
-    attempts.set(period, (attempts.get(period) || 0) + 1);
-    if (period === 2 && attempts.get(period) === 1) throw new Error('planned detail failure');
-    return {
-      ok: true,
-      json: async () => ({ success: 1, data: { movies: [{ ...DETAIL.data.movies[0], id: String(period), number: `TEST-${period}` }] } }),
-    };
-  }, {
-    IntersectionObserver: class { observe() {} disconnect() {} },
-  });
+  await runScript(
+    window,
+    async (url) => {
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      if (url.includes('recommend_periods')) {
+        return { ok: true, json: async () => ({ success: 1, data: { periods: jumpPeriods } }) };
+      }
+      const period = Number(new URL(url).searchParams.get('period'));
+      detailCalls.push(period);
+      attempts.set(period, (attempts.get(period) || 0) + 1);
+      if (period === 2 && attempts.get(period) === 1) throw new Error('planned detail failure');
+      return {
+        ok: true,
+        json: async () => ({
+          success: 1,
+          data: { movies: [{ ...DETAIL.data.movies[0], id: String(period), number: `TEST-${period}` }] },
+        }),
+      };
+    },
+    {
+      IntersectionObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+    },
+  );
 
   const jump = window.document.getElementById('jdb-ra-jump');
   jump.value = '2';
@@ -637,63 +788,99 @@ test('an expired catalog stops at the first overlap and reuses the cached tail',
     views_count: 0,
     created_at: '2026-01-01T00:00:00.000Z',
   }));
-  storage.setItem('javdb_recommend_periods_cache_v1', JSON.stringify({
-    version: 1,
-    fetchedAt: now - 7 * 60 * 60 * 1000,
-    fullFetchedAt: now - 24 * 60 * 60 * 1000,
-    periods: cachedPeriods,
-  }));
+  storage.setItem(
+    'javdb_recommend_periods_cache_v1',
+    JSON.stringify({
+      version: 1,
+      fetchedAt: now - 7 * 60 * 60 * 1000,
+      fullFetchedAt: now - 24 * 60 * 60 * 1000,
+      periods: cachedPeriods,
+    }),
+  );
   const remotePage = [{ ...cachedPeriods[0], period: 61 }, ...cachedPeriods.slice(0, 47)];
   const calls = [];
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  await runScript(window, async (url) => {
-    calls.push(url);
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) {
-      const page = Number(new URL(url).searchParams.get('page'));
-      return { ok: true, json: async () => ({ success: 1, data: { periods: page === 1 ? remotePage : [] } }) };
-    }
-    return { ok: true, json: async () => ({ success: 1, data: { movies: [] } }) };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} }, AbortController }, storage);
+  await runScript(
+    window,
+    async (url) => {
+      calls.push(url);
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      if (url.includes('recommend_periods')) {
+        const page = Number(new URL(url).searchParams.get('page'));
+        return { ok: true, json: async () => ({ success: 1, data: { periods: page === 1 ? remotePage : [] } }) };
+      }
+      return { ok: true, json: async () => ({ success: 1, data: { movies: [] } }) };
+    },
+    {
+      IntersectionObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+      AbortController,
+    },
+    storage,
+  );
 
   assert.equal(calls.filter((url) => url.includes('recommend_periods')).length, 1);
   const saved = JSON.parse(storage.getItem('javdb_recommend_periods_cache_v1'));
   assert.equal(saved.periods.length, 61);
-  assert.deepEqual(saved.periods.slice(0, 3).map((item) => item.period), [61, 60, 59]);
+  assert.deepEqual(
+    saved.periods.slice(0, 3).map((item) => item.period),
+    [61, 60, 59],
+  );
   assert.equal(saved.periods.at(-1).period, 1);
   assert.match(window.document.getElementById('jdb-ra-status').textContent, /增量更新/);
   await window.happyDOM.close();
 });
 
-test('a full catalog refresh deduplicates an issue repeated across moving page boundaries', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  const pageOne = Array.from({ length: 48 }, (_, index) => ({
-    period: 100 - index,
-    movies_count: 1,
-    views_count: 0,
-    created_at: '2026-01-01T00:00:00.000Z',
-  }));
-  const pageTwo = [pageOne.at(-1), ...Array.from({ length: 10 }, (_, index) => ({
-    period: 52 - index,
-    movies_count: 1,
-    views_count: 0,
-    created_at: '2025-12-01T00:00:00.000Z',
-  }))];
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) {
-      const page = Number(new URL(url).searchParams.get('page'));
-      return { ok: true, json: async () => ({ success: 1, data: { periods: page === 1 ? pageOne : pageTwo } }) };
-    }
-    return { ok: true, json: async () => ({ success: 1, data: { movies: [] } }) };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} }, AbortController });
+test(
+  'a full catalog refresh deduplicates an issue repeated across moving page boundaries',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const pageOne = Array.from({ length: 48 }, (_, index) => ({
+      period: 100 - index,
+      movies_count: 1,
+      views_count: 0,
+      created_at: '2026-01-01T00:00:00.000Z',
+    }));
+    const pageTwo = [
+      pageOne.at(-1),
+      ...Array.from({ length: 10 }, (_, index) => ({
+        period: 52 - index,
+        movies_count: 1,
+        views_count: 0,
+        created_at: '2025-12-01T00:00:00.000Z',
+      })),
+    ];
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        if (url.includes('recommend_periods')) {
+          const page = Number(new URL(url).searchParams.get('page'));
+          return { ok: true, json: async () => ({ success: 1, data: { periods: page === 1 ? pageOne : pageTwo } }) };
+        }
+        return { ok: true, json: async () => ({ success: 1, data: { movies: [] } }) };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
+        },
+        AbortController,
+      },
+    );
 
-  const optionPeriods = [...window.document.querySelectorAll('#jdb-ra-select option')].map((option) => Number(option.value));
-  assert.equal(optionPeriods.length, 58);
-  assert.equal(new Set(optionPeriods).size, 58);
-  assert.deepEqual(optionPeriods.slice(-3), [45, 44, 43]);
-  await window.happyDOM.close();
-});
+    const optionPeriods = [...window.document.querySelectorAll('#jdb-ra-select option')].map((option) =>
+      Number(option.value),
+    );
+    assert.equal(optionPeriods.length, 58);
+    assert.equal(new Set(optionPeriods).size, 58);
+    assert.deepEqual(optionPeriods.slice(-3), [45, 44, 43]);
+    await window.happyDOM.close();
+  },
+);
 
 test('a completed search index makes the same search local-only after reopen', { skip: domSkip }, async () => {
   const storage = createMemoryStorage();
@@ -706,18 +893,32 @@ test('a completed search index makes the same search local-only after reopen', {
   const openAndSearch = async () => {
     const calls = [];
     const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-    await runScript(window, async (url) => {
-      calls.push(url);
-      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-      if (url.includes('recommend_periods')) {
-        return { ok: true, json: async () => ({ success: 1, data: { periods: searchPeriods } }) };
-      }
-      const period = Number(new URL(url).searchParams.get('period'));
-      return {
-        ok: true,
-        json: async () => ({ success: 1, data: { movies: [{ ...DETAIL.data.movies[0], id: String(period), number: `TEST-${period}` }] } }),
-      };
-    }, { IntersectionObserver: class { observe() {} disconnect() {} }, AbortController }, storage);
+    await runScript(
+      window,
+      async (url) => {
+        calls.push(url);
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        if (url.includes('recommend_periods')) {
+          return { ok: true, json: async () => ({ success: 1, data: { periods: searchPeriods } }) };
+        }
+        const period = Number(new URL(url).searchParams.get('period'));
+        return {
+          ok: true,
+          json: async () => ({
+            success: 1,
+            data: { movies: [{ ...DETAIL.data.movies[0], id: String(period), number: `TEST-${period}` }] },
+          }),
+        };
+      },
+      {
+        IntersectionObserver: class {
+          observe() {}
+          disconnect() {}
+        },
+        AbortController,
+      },
+      storage,
+    );
     window.document.getElementById('jdb-ra-search').value = 'TEST';
     switchSearchScope(window, 'all');
     window.document.getElementById('jdb-ra-gsearch').click();
@@ -731,7 +932,9 @@ test('a completed search index makes the same search local-only after reopen', {
   assert.equal(first.calls.filter((url) => /\/api\/v1\/movies\/recommend\?/.test(url)).length, 3);
   assert.equal(first.window.document.querySelectorAll('.jdb-ra-results .jdb-ra-sec').length, 3);
   assert.deepEqual(
-    [...first.window.document.querySelectorAll('.jdb-ra-results .jdb-ra-ph')].map((heading) => heading.textContent.trim()),
+    [...first.window.document.querySelectorAll('.jdb-ra-results .jdb-ra-ph')].map((heading) =>
+      heading.textContent.trim(),
+    ),
     ['第 3 期', '第 2 期', '第 1 期'],
   );
   await first.window.happyDOM.close();
@@ -749,17 +952,24 @@ test('retryable detail failures stop after bounded exponential retries', { skip:
     if (delay === 500 || delay === 1000) return setTimeout(callback, 0);
     return setTimeout(callback, delay);
   };
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) return { ok: true, json: async () => PERIODS };
-    attempts += 1;
-    if (attempts < 3) return { ok: false, status: 500 };
-    return { ok: true, json: async () => DETAIL };
-  }, {
-    IntersectionObserver: class { observe() {} disconnect() {} },
-    AbortController,
-    setTimeout: fastRetryTimeout,
-  });
+  await runScript(
+    window,
+    async (url) => {
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      if (url.includes('recommend_periods')) return { ok: true, json: async () => PERIODS };
+      attempts += 1;
+      if (attempts < 3) return { ok: false, status: 500 };
+      return { ok: true, json: async () => DETAIL };
+    },
+    {
+      IntersectionObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+      AbortController,
+      setTimeout: fastRetryTimeout,
+    },
+  );
 
   for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec .item'); i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -779,34 +989,51 @@ test('re-anchoring aborts an obsolete detail request with no other consumers', {
   }));
   let aborted = 0;
   let periodFiveAttempts = 0;
-  await runScript(window, async (url, options = {}) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) {
-      return { ok: true, json: async () => ({ success: 1, data: { periods: jumpPeriods } }) };
-    }
-    const period = Number(new URL(url).searchParams.get('period'));
-    if (period === 5) {
-      periodFiveAttempts += 1;
-      if (periodFiveAttempts > 1) {
-        return {
-          ok: true,
-          json: async () => ({ success: 1, data: { movies: [{ ...DETAIL.data.movies[0], id: '5', number: 'TEST-5' }] } }),
-        };
+  await runScript(
+    window,
+    async (url, options = {}) => {
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      if (url.includes('recommend_periods')) {
+        return { ok: true, json: async () => ({ success: 1, data: { periods: jumpPeriods } }) };
       }
-      return new Promise((resolve, reject) => {
-        options.signal.addEventListener('abort', () => {
-          aborted += 1;
-          const error = new Error('aborted');
-          error.name = 'AbortError';
-          reject(error);
-        }, { once: true });
-      });
-    }
-    return {
-      ok: true,
-      json: async () => ({ success: 1, data: { movies: [{ ...DETAIL.data.movies[0], id: '2', number: 'TEST-2' }] } }),
-    };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} }, AbortController });
+      const period = Number(new URL(url).searchParams.get('period'));
+      if (period === 5) {
+        periodFiveAttempts += 1;
+        if (periodFiveAttempts > 1) {
+          return {
+            ok: true,
+            json: async () => ({
+              success: 1,
+              data: { movies: [{ ...DETAIL.data.movies[0], id: '5', number: 'TEST-5' }] },
+            }),
+          };
+        }
+        return new Promise((resolve, reject) => {
+          options.signal.addEventListener(
+            'abort',
+            () => {
+              aborted += 1;
+              const error = new Error('aborted');
+              error.name = 'AbortError';
+              reject(error);
+            },
+            { once: true },
+          );
+        });
+      }
+      return {
+        ok: true,
+        json: async () => ({ success: 1, data: { movies: [{ ...DETAIL.data.movies[0], id: '2', number: 'TEST-2' }] } }),
+      };
+    },
+    {
+      IntersectionObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+      AbortController,
+    },
+  );
 
   const jump = window.document.getElementById('jdb-ra-jump');
   jump.value = '2';
@@ -827,26 +1054,30 @@ test('re-anchoring aborts an obsolete detail request with no other consumers', {
   await window.happyDOM.close();
 });
 
-test('normal pages get a navbar entry pointing at the archive route, without touching the API', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/' });
-  window.document.body.innerHTML =
-    '<nav class="navbar is-fixed-top is-black is-fluid main-nav">' +
-    '<div class="navbar-menu"><div class="navbar-start"></div></div></nav>';
+test(
+  'normal pages get a navbar entry pointing at the archive route, without touching the API',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/' });
+    window.document.body.innerHTML =
+      '<nav class="navbar is-fixed-top is-black is-fluid main-nav">' +
+      '<div class="navbar-menu"><div class="navbar-start"></div></div></nav>';
 
-  let fetchCalled = false;
-  await runScript(window, async () => {
-    fetchCalled = true;
-    return { ok: true, json: async () => PERIODS };
-  });
+    let fetchCalled = false;
+    await runScript(window, async () => {
+      fetchCalled = true;
+      return { ok: true, json: async () => PERIODS };
+    });
 
-  const doc = window.document;
-  const entry = doc.querySelector('nav.main-nav .navbar-start a[href="/recommend-archive"]');
-  assert.ok(entry);
-  assert.equal(entry.textContent, '佳片推荐');
-  assert.equal(fetchCalled, false);
-  assert.equal(doc.querySelector('.jdb-ra'), null);
-  await window.happyDOM.close();
-});
+    const doc = window.document;
+    const entry = doc.querySelector('nav.main-nav .navbar-start a[href="/recommend-archive"]');
+    assert.ok(entry);
+    assert.equal(entry.textContent, '佳片推荐');
+    assert.equal(fetchCalled, false);
+    assert.equal(doc.querySelector('.jdb-ra'), null);
+    await window.happyDOM.close();
+  },
+);
 
 /* ---------- Phase 3：图标 / 分段搜索 / 骨架屏 / 封面占位 / 窄屏工具栏 ---------- */
 
@@ -855,15 +1086,27 @@ test('toolbar icons are inline Lucide SVGs and the source carries no emoji icons
   for (const emoji of ['🔍', '◀', '▶', '★', '←']) {
     assert.equal(source.includes(emoji), false, `source still contains ${emoji}`);
   }
-  const viewSource = await readFile(new URL('../src/userscripts/javdb-recommend/javdb-recommend-view.lib.js', import.meta.url), 'utf8');
+  const viewSource = await readFile(
+    new URL('../src/userscripts/javdb-recommend/javdb-recommend-view.lib.js', import.meta.url),
+    'utf8',
+  );
   assert.match(viewSource, /vendored from Lucide/);
 
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
-    return { ok: true, json: async () => payload };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+  await runScript(
+    window,
+    async (url) => {
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+      return { ok: true, json: async () => payload };
+    },
+    {
+      IntersectionObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+    },
+  );
 
   const doc = window.document;
   assert.ok(doc.querySelector('.jdb-ra-hd .home svg.jdb-ra-icon'));
@@ -879,11 +1122,20 @@ test('toolbar icons are inline Lucide SVGs and the source carries no emoji icons
 
 test('the segmented control disambiguates loaded-filter from full-archive search', { skip: domSkip }, async () => {
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
-    return { ok: true, json: async () => payload };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+  await runScript(
+    window,
+    async (url) => {
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+      return { ok: true, json: async () => payload };
+    },
+    {
+      IntersectionObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+    },
+  );
 
   const doc = window.document;
   const radios = [...doc.querySelectorAll('input[name="jdb-ra-scope"]')];
@@ -903,8 +1155,7 @@ test('the segmented control disambiguates loaded-filter from full-archive search
   // 过滤激活时切到「全部期数」：撤销过滤，提示显式触发
   switchSearchScope(window, 'all');
   assert.match(doc.getElementById('jdb-ra-status').textContent, /在全部期数中搜索/);
-  const visible = [...doc.querySelectorAll('.jdb-ra-stream .item')]
-    .filter((item) => item.style.display !== 'none');
+  const visible = [...doc.querySelectorAll('.jdb-ra-stream .item')].filter((item) => item.style.display !== 'none');
   assert.equal(visible.length, 2);
 
   // 全期模式下输入不做即时过滤
@@ -935,13 +1186,24 @@ test('the segmented control disambiguates loaded-filter from full-archive search
 test('period sections render skeleton cards while loading and swap in real cards', { skip: domSkip }, async () => {
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
   let resolveDetail;
-  const detailGate = new Promise((resolve) => { resolveDetail = resolve; });
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    if (url.includes('recommend_periods')) return { ok: true, json: async () => PERIODS };
-    await detailGate;
-    return { ok: true, json: async () => DETAIL };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+  const detailGate = new Promise((resolve) => {
+    resolveDetail = resolve;
+  });
+  await runScript(
+    window,
+    async (url) => {
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      if (url.includes('recommend_periods')) return { ok: true, json: async () => PERIODS };
+      await detailGate;
+      return { ok: true, json: async () => DETAIL };
+    },
+    {
+      IntersectionObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+    },
+  );
 
   const doc = window.document;
   // 详情未返回：期区块里是与卡片同宽高比的骨架占位
@@ -962,11 +1224,20 @@ test('period sections render skeleton cards while loading and swap in real cards
 
 test('a failed cover image is replaced by a labelled placeholder instead of a hole', { skip: domSkip }, async () => {
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
-  await runScript(window, async (url) => {
-    if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
-    const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
-    return { ok: true, json: async () => payload };
-  }, { IntersectionObserver: class { observe() {} disconnect() {} } });
+  await runScript(
+    window,
+    async (url) => {
+      if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+      const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+      return { ok: true, json: async () => payload };
+    },
+    {
+      IntersectionObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+    },
+  );
 
   const doc = window.document;
   const img = doc.querySelector('.jdb-ra-sec .item .cover img');

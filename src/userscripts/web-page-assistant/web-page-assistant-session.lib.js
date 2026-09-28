@@ -6,7 +6,15 @@ import { createRefreshRuntime } from './web-page-assistant-refresh.lib.js';
 // storage write is pending. Every write is applied to the latest stored
 // settings, so other tabs' saves survive; their change events refresh the
 // in-memory copy between writes.
-function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker, ready = () => Promise.resolve(), onChange = () => {} }) {
+function createWebPageAssistantSession({
+  keys,
+  storage,
+  clock,
+  reload,
+  unlocker,
+  ready = () => Promise.resolve(),
+  onChange = () => {},
+}) {
   let settings = Settings.emptySettings();
   let lifecycle = 'idle';
   let applicationError = null;
@@ -18,7 +26,9 @@ function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker,
   let changedWhileStarting = false;
   let refreshQueued = false;
   let finishDisposed;
-  const disposed = new Promise((resolve) => { finishDisposed = resolve; });
+  const disposed = new Promise((resolve) => {
+    finishDisposed = resolve;
+  });
   const runtime = createRefreshRuntime({
     minIntervalMs: Settings.MIN_INTERVAL_MS,
     tickMs: 1000,
@@ -30,15 +40,26 @@ function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker,
   });
 
   function getState() {
-    return JSON.parse(JSON.stringify({
-      lifecycle, settings, refresh: runtime.getState(), appliedUnlocker, applicationError, applicationErrors,
-      matchedRefresh: Settings.resolveActiveRefreshSetting(settings, keys),
-      matchedUnlocker: Settings.resolveActiveUnlockerSetting(settings, keys),
-    }));
+    return JSON.parse(
+      JSON.stringify({
+        lifecycle,
+        settings,
+        refresh: runtime.getState(),
+        appliedUnlocker,
+        applicationError,
+        applicationErrors,
+        matchedRefresh: Settings.resolveActiveRefreshSetting(settings, keys),
+        matchedUnlocker: Settings.resolveActiveUnlockerSetting(settings, keys),
+      }),
+    );
   }
   function emit(kind, area = null) {
     if (lifecycle === 'disposed') return;
-    try { onChange(getState(), { kind, area }); } catch { /* observers cannot fail commands */ }
+    try {
+      onChange(getState(), { kind, area });
+    } catch {
+      /* observers cannot fail commands */
+    }
   }
   function result(code = null, persisted = false, scope = null) {
     return { ok: !code, code, persisted, scope, state: getState() };
@@ -61,7 +82,11 @@ function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker,
         if (capability === 'refresh') runtime.stop();
         else {
           appliedUnlocker = null;
-          try { unlocker.uninstall(); } catch { /* preserve the original application error */ }
+          try {
+            unlocker.uninstall();
+          } catch {
+            /* preserve the original application error */
+          }
         }
       }
     }
@@ -76,7 +101,7 @@ function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker,
     ];
   }
   function combinedArea(areas) {
-    return areas.length > 1 ? 'all' : areas[0] ?? null;
+    return areas.length > 1 ? 'all' : (areas[0] ?? null);
   }
   function adoptStoredSettings(latest) {
     const next = Settings.normalizeSettings(latest);
@@ -89,12 +114,16 @@ function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker,
   function refreshFromStorage() {
     if (refreshQueued) return;
     refreshQueued = true;
-    queue = queue.then(async () => {
-      refreshQueued = false;
-      if (lifecycle !== 'ready') return;
-      const latest = await storage.readSettings();
-      if (lifecycle === 'ready') adoptStoredSettings(latest);
-    }).catch(() => { /* keep the current copy; the next write rereads storage */ });
+    queue = queue
+      .then(async () => {
+        refreshQueued = false;
+        if (lifecycle !== 'ready') return;
+        const latest = await storage.readSettings();
+        if (lifecycle === 'ready') adoptStoredSettings(latest);
+      })
+      .catch(() => {
+        /* keep the current copy; the next write rereads storage */
+      });
   }
   function handleStorageChange() {
     if (lifecycle === 'starting') changedWhileStarting = true;
@@ -107,7 +136,9 @@ function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker,
     emit('lifecycle');
     try {
       unsubscribeStorage = storage.subscribeSettings?.(handleStorageChange) || null;
-    } catch { /* change events only shorten staleness; writes still reread storage */ }
+    } catch {
+      /* change events only shorten staleness; writes still reread storage */
+    }
     const initialize = async () => {
       try {
         const [loaded] = await Promise.all([storage.readSettings(), ready()]);
@@ -152,7 +183,9 @@ function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker,
       change = (latest) => Settings.deleteRefreshSetting(latest, scope, key);
     } else return result('invalid-input');
     let next;
-    try { next = Settings.normalizeSettings(await storage.updateSettings(change)); } catch (error) {
+    try {
+      next = Settings.normalizeSettings(await storage.updateSettings(change));
+    } catch (error) {
       if (lifecycle === 'disposed') return result('disposed');
       return { ...result('storage-failed'), message: String(error?.message || error) };
     }
@@ -174,18 +207,29 @@ function createWebPageAssistantSession({ keys, storage, clock, reload, unlocker,
     // Capture caller input now, but derive the next settings at execution time.
     const captured = JSON.parse(JSON.stringify(command || {}));
     let started = false;
-    const pending = queue.then(() => { started = true; return write(captured); });
+    const pending = queue.then(() => {
+      started = true;
+      return write(captured);
+    });
     queue = pending.catch(() => {});
-    return Promise.race([pending, disposed.then(() => started ? pending : result('disposed'))]);
+    return Promise.race([pending, disposed.then(() => (started ? pending : result('disposed')))]);
   }
   function dispose() {
     if (lifecycle === 'disposed') return;
     lifecycle = 'disposed';
-    try { unsubscribeStorage?.(); } catch { /* disposal still terminates the session */ }
+    try {
+      unsubscribeStorage?.();
+    } catch {
+      /* disposal still terminates the session */
+    }
     unsubscribeStorage = null;
     runtime.stop();
     appliedUnlocker = null;
-    try { unlocker.uninstall(); } catch { /* disposal still terminates the session */ }
+    try {
+      unlocker.uninstall();
+    } catch {
+      /* disposal still terminates the session */
+    }
     finishDisposed();
   }
   return { start, dispatch, getState, dispose };

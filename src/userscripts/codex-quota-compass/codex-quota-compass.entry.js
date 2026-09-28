@@ -29,7 +29,11 @@ import { createQuotaCompassTranslator } from './codex-quota-compass-i18n.lib.js'
 import * as CoreLib from './codex-quota-compass-core.lib.js';
 import { createQuotaRuntime, createDefaultQuotaRuntimeConfig } from './codex-quota-compass-runtime.lib.js';
 import { createSnapshotArchiveStoragePort } from './codex-quota-compass-storage.lib.js';
-import { normalizeSnapshotArchive, mergeSnapshotArchives, createSnapshotArchiveStore } from './codex-quota-compass-archive.lib.js';
+import {
+  normalizeSnapshotArchive,
+  mergeSnapshotArchives,
+  createSnapshotArchiveStore,
+} from './codex-quota-compass-archive.lib.js';
 import { createRemoteSyncClient } from './codex-quota-compass-remote-sync.lib.js';
 import { createQuotaApplication } from './codex-quota-compass-application.lib.js';
 import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quota-compass-panel-controller.lib.js';
@@ -56,15 +60,18 @@ import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quo
   const remoteSyncClient = createRemoteSyncClient({ archiveStore });
   let panel;
   const application = createQuotaApplication({
-    runtime: { run: () => createQuotaRuntime({
-      config: createDefaultQuotaRuntimeConfig({ DEBUG: window[DEBUG_KEY] === true }),
-      coreLib: CoreLib,
-      fetchImpl: fetch.bind(globalThis),
-      location: globalThis.location,
-      now: () => Date.now(),
-      formatLocalTime: (ms) => new Date(ms).toLocaleString(),
-      getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || '未知',
-    }).run() },
+    runtime: {
+      run: () =>
+        createQuotaRuntime({
+          config: createDefaultQuotaRuntimeConfig({ DEBUG: window[DEBUG_KEY] === true }),
+          coreLib: CoreLib,
+          fetchImpl: fetch.bind(globalThis),
+          location: globalThis.location,
+          now: () => Date.now(),
+          formatLocalTime: (ms) => new Date(ms).toLocaleString(),
+          getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || '未知',
+        }).run(),
+    },
     archiveStore,
     remoteSync: remoteSyncClient,
     archiveChanges: archiveStoragePort,
@@ -74,19 +81,28 @@ import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quo
         window[RUNNING_KEY] = true;
         return true;
       },
-      release() { window[RUNNING_KEY] = false; },
+      release() {
+        window[RUNNING_KEY] = false;
+      },
     },
     onChange: (snapshot) => panel?.update(snapshot),
   });
   panel = createQuotaPanelController({
-    application, document, window, storage: localStorage, t,
+    application,
+    document,
+    window,
+    storage: localStorage,
+    t,
     files: createBrowserQuotaFiles({ document, window, t }),
     onRefreshSettled(outcome) {
       if (outcome.status === 'error' || outcome.status === 'skipped') {
         console.error(`[${SCRIPT_NAME}] Failed.`, outcome.error || outcome.reason);
       } else if (window[DEBUG_KEY] === true) {
         window[LAST_RESULT_KEY] = outcome.result;
-        console.log(`[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`, outcome.result);
+        console.log(
+          `[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`,
+          outcome.result,
+        );
       } else {
         console.info(`[${SCRIPT_NAME}] Finished.`);
       }
@@ -95,11 +111,21 @@ import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quo
   panel.update(application.getState());
 
   if (typeof GM_registerMenuCommand === 'function') {
-    GM_registerMenuCommand(t('menuRun'), () => { void panel.dispatch({ type: 'refresh', open: true }); });
-    GM_registerMenuCommand(t('menuRemoteConfigure'), () => { void panel.dispatch({ type: 'open', view: 'archive' }); });
-    GM_registerMenuCommand(t('menuRemoteSync'), () => { void panel.dispatch({ type: 'sync' }); });
-    GM_registerMenuCommand(t('menuExport'), () => { void panel.dispatch({ type: 'export-archive' }); });
-    GM_registerMenuCommand(t('menuImport'), () => { void panel.dispatch({ type: 'import-archive' }); });
+    GM_registerMenuCommand(t('menuRun'), () => {
+      void panel.dispatch({ type: 'refresh', open: true });
+    });
+    GM_registerMenuCommand(t('menuRemoteConfigure'), () => {
+      void panel.dispatch({ type: 'open', view: 'archive' });
+    });
+    GM_registerMenuCommand(t('menuRemoteSync'), () => {
+      void panel.dispatch({ type: 'sync' });
+    });
+    GM_registerMenuCommand(t('menuExport'), () => {
+      void panel.dispatch({ type: 'export-archive' });
+    });
+    GM_registerMenuCommand(t('menuImport'), () => {
+      void panel.dispatch({ type: 'import-archive' });
+    });
   }
   void application.start();
   window.addEventListener('pagehide', (event) => {
@@ -109,9 +135,15 @@ import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quo
     }
   });
 
-  if (location.hostname === 'chatgpt.com' && location.pathname === '/codex/cloud/settings/analytics' && location.hash === '#usage') {
+  if (
+    location.hostname === 'chatgpt.com' &&
+    location.pathname === '/codex/cloud/settings/analytics' &&
+    location.hash === '#usage'
+  ) {
     console.info(`[${SCRIPT_NAME}] Ready. Click the floating button to calculate usage.`);
   } else {
-    console.info(`[${SCRIPT_NAME}] Open https://chatgpt.com/codex/cloud/settings/analytics#usage or use the floating button / Tampermonkey menu to run.`);
+    console.info(
+      `[${SCRIPT_NAME}] Open https://chatgpt.com/codex/cloud/settings/analytics#usage or use the floating button / Tampermonkey menu to run.`,
+    );
   }
 })();

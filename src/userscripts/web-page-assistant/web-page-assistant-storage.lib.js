@@ -160,7 +160,11 @@ function createWebPageAssistantStoragePort(adapters) {
       }
       return () => {
         for (const cleanup of cleanups) {
-          try { cleanup(); } catch { /* unsubscribing is best effort during unload */ }
+          try {
+            cleanup();
+          } catch {
+            /* unsubscribing is best effort during unload */
+          }
         }
       };
     },

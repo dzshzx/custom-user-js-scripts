@@ -2,8 +2,12 @@ import { planRemoteSyncSave } from './codex-quota-compass-remote-sync.lib.js';
 
 // One page instance owns complete operations and their public, credential-free view.
 function createQuotaApplication({
-  runtime, archiveStore, remoteSync, archiveChanges,
-  clock = globalThis, runGuard = { acquire: () => true, release() {} },
+  runtime,
+  archiveStore,
+  remoteSync,
+  archiveChanges,
+  clock = globalThis,
+  runGuard = { acquire: () => true, release() {} },
   onChange = () => {},
 }) {
   let disposed = false;
@@ -16,18 +20,30 @@ function createQuotaApplication({
   let latestRefresh;
   let localRevision = 0;
   const state = {
-    lifecycle: 'idle', result: null, calculationError: null,
-    archiveSummary: null, ledgerCost: null, importReport: null,
-    syncStatus: null, storageBackend: null, remoteState: 'idle',
+    lifecycle: 'idle',
+    result: null,
+    calculationError: null,
+    archiveSummary: null,
+    ledgerCost: null,
+    importReport: null,
+    syncStatus: null,
+    storageBackend: null,
+    remoteState: 'idle',
     operations: { run: false, sync: false },
     errors: { calculation: null, persistence: null, sync: null, projection: null, settings: null },
   };
   const getState = () => structuredClone(state);
   function notify() {
     if (disposed) return;
-    try { onChange(getState()); } catch { /* Observers cannot change an operation result. */ }
+    try {
+      onChange(getState());
+    } catch {
+      /* Observers cannot change an operation result. */
+    }
   }
-  function errorMessage(error) { return error?.message || String(error); }
+  function errorMessage(error) {
+    return error?.message || String(error);
+  }
   function clearTimer() {
     if (timer !== null) clock.clearTimeout(timer);
     timer = null;
@@ -35,7 +51,10 @@ function createQuotaApplication({
   function schedule() {
     if (disposed || syncing || state.remoteState === 'unknown') return;
     clearTimer();
-    timer = clock.setTimeout(() => { timer = null; void sync(); }, 5000);
+    timer = clock.setTimeout(() => {
+      timer = null;
+      void sync();
+    }, 5000);
   }
   function changedLocally() {
     localRevision += 1;
@@ -94,16 +113,26 @@ function createQuotaApplication({
         state.syncStatus = result.settings;
         state.remoteState = result.status === 'synced' ? 'synced' : 'idle';
         state.errors.sync = null;
-        outcome = { status: result.status === 'synced' ? 'ok' : 'skipped', reason: result.status, completed: result.status === 'synced' ? ['sync'] : [] };
+        outcome = {
+          status: result.status === 'synced' ? 'ok' : 'skipped',
+          reason: result.status,
+          completed: result.status === 'synced' ? ['sync'] : [],
+        };
       } catch (error) {
         state.errors.sync = errorMessage(error);
         if (error?.phase === 'persistence') state.errors.persistence = errorMessage(error);
         state.remoteState = error?.remoteState || 'failed';
-        outcome = { status: error?.localMerged ? 'partial' : 'error', completed: error?.localMerged ? ['local-merge'] : [], error: state.errors.sync, remoteState: state.remoteState };
+        outcome = {
+          status: error?.localMerged ? 'partial' : 'error',
+          completed: error?.localMerged ? ['local-merge'] : [],
+          error: state.errors.sync,
+          remoteState: state.remoteState,
+        };
       }
       // A successful local merge remains visible even when the remote write failed.
       const refreshed = await refresh();
-      if (!refreshed && outcome.status === 'ok') outcome = { ...outcome, status: 'partial', error: state.errors.projection };
+      if (!refreshed && outcome.status === 'ok')
+        outcome = { ...outcome, status: 'partial', error: state.errors.projection };
       await readSyncStatus();
       return outcome;
     })().finally(() => {
@@ -140,7 +169,12 @@ function createQuotaApplication({
         return { status: 'partial', result, completed: ['calculation'], error: state.errors.persistence };
       }
       const refreshed = await refresh();
-      return { status: refreshed ? 'ok' : 'partial', result, completed: ['calculation', 'persistence', ...(refreshed ? ['projection'] : [])], ...(refreshed ? {} : { error: state.errors.projection }) };
+      return {
+        status: refreshed ? 'ok' : 'partial',
+        result,
+        completed: ['calculation', 'persistence', ...(refreshed ? ['projection'] : [])],
+        ...(refreshed ? {} : { error: state.errors.projection }),
+      };
     })().finally(() => {
       runGuard.release();
       running = null;
@@ -157,7 +191,12 @@ function createQuotaApplication({
       state.errors.persistence = null;
       changedLocally();
       const refreshed = await refresh();
-      return { status: refreshed ? 'ok' : 'partial', completed: ['persistence', ...(refreshed ? ['projection'] : [])], report: imported.report, ...(refreshed ? {} : { error: state.errors.projection }) };
+      return {
+        status: refreshed ? 'ok' : 'partial',
+        completed: ['persistence', ...(refreshed ? ['projection'] : [])],
+        report: imported.report,
+        ...(refreshed ? {} : { error: state.errors.projection }),
+      };
     } catch (error) {
       state.errors.persistence = errorMessage(error);
       notify();
@@ -190,16 +229,18 @@ function createQuotaApplication({
     if (started) return started;
     if (disposed) return Promise.resolve({ status: 'skipped', reason: 'disposed' });
     state.lifecycle = 'starting';
-    unsubscribe = archiveChanges?.subscribeToChanges?.(() => {
-      // Self notifications need no network work. Revision checks coalesce stale reads.
-      if (!disposed) void refresh();
-    }) || (() => {});
+    unsubscribe =
+      archiveChanges?.subscribeToChanges?.(() => {
+        // Self notifications need no network work. Revision checks coalesce stale reads.
+        if (!disposed) void refresh();
+      }) || (() => {});
     started = (async () => {
       const [refreshed] = await Promise.all([refresh(), readSyncStatus()]);
       if (disposed) return { status: 'skipped', reason: 'disposed' };
       state.lifecycle = 'ready';
       notify();
-      if (state.remoteState === 'unknown') return { status: 'skipped', reason: 'remote-state-unknown', completed: ['start'] };
+      if (state.remoteState === 'unknown')
+        return { status: 'skipped', reason: 'remote-state-unknown', completed: ['start'] };
       if (refreshed && state.syncStatus?.enabled && state.syncStatus?.configured) return sync();
       return { status: refreshed ? 'ok' : 'partial', completed: ['start'] };
     })();
@@ -213,7 +254,16 @@ function createQuotaApplication({
     clearTimer();
     unsubscribe();
   }
-  return { start, run, importArchive, exportArchive: () => archiveStore.buildExportDocument(), configureSync, sync, getState, dispose };
+  return {
+    start,
+    run,
+    importArchive,
+    exportArchive: () => archiveStore.buildExportDocument(),
+    configureSync,
+    sync,
+    getState,
+    dispose,
+  };
 }
 
 export { createQuotaApplication };

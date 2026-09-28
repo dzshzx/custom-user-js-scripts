@@ -25,17 +25,23 @@ for (const file of inventory.files) {
   }
 }
 for (const record of inventory.records) {
-  for (const script of [record.metadataOwner, record.entry && record.bridge, record.entry && record.dist].filter(Boolean)) {
+  for (const script of [record.metadataOwner, record.entry && record.bridge, record.entry && record.dist].filter(
+    Boolean,
+  )) {
     if (!script.metadata) continue;
     const expected = record.dist?.path || script.path;
     const download = firstMetadataValue(script.metadata, '@downloadURL');
     const update = firstMetadataValue(script.metadata, '@updateURL');
     if (!download || !update) {
-      report(script.path, `missing @downloadURL/@updateURL (must point both at their own raw path, ending with /${expected})`);
+      report(
+        script.path,
+        `missing @downloadURL/@updateURL (must point both at their own raw path, ending with /${expected})`,
+      );
       continue;
     }
     if (download !== update) report(script.path, '@downloadURL and @updateURL differ');
-    if (!download.endsWith(`/${expected}`)) report(script.path, `@downloadURL must end with /${expected} (the script's own path)`);
+    if (!download.endsWith(`/${expected}`))
+      report(script.path, `@downloadURL must end with /${expected} (the script's own path)`);
   }
 }
 const installables = inventory.files.filter((file) => file.path.endsWith('.user.js'));

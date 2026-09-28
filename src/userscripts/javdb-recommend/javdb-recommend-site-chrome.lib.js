@@ -40,11 +40,17 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
   let ownedNavbarClass = false;
   let ownedTheme = null;
   let resolveDisposed;
-  const disposedSignal = new Promise(resolve => { resolveDisposed = resolve; });
+  const disposedSignal = new Promise((resolve) => {
+    resolveDisposed = resolve;
+  });
 
   function publish(result) {
     if (!disposed) {
-      try { onChange(result); } catch (error) { /* presentation observers cannot change the outcome */ }
+      try {
+        onChange(result);
+      } catch (error) {
+        /* presentation observers cannot change the outcome */
+      }
     }
     return result;
   }
@@ -59,8 +65,14 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     return new Promise((resolve, reject) => {
       const timeout = timer.setTimeout(() => reject(timeoutError()), wait);
       Promise.resolve(promise).then(
-        value => { timer.clearTimeout(timeout); resolve(value); },
-        error => { timer.clearTimeout(timeout); reject(error); },
+        (value) => {
+          timer.clearTimeout(timeout);
+          resolve(value);
+        },
+        (error) => {
+          timer.clearTimeout(timeout);
+          reject(error);
+        },
       );
       disposedSignal.then(() => {
         timer.clearTimeout(timeout);
@@ -74,9 +86,9 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
   }
 
   function cleanupResources() {
-    ownedListeners.splice(0).forEach(remove => remove());
-    ownedLinks.splice(0).forEach(link => link.remove());
-    ownedEntries.splice(0).forEach(entry => entry.remove());
+    ownedListeners.splice(0).forEach((remove) => remove());
+    ownedLinks.splice(0).forEach((link) => link.remove());
+    ownedEntries.splice(0).forEach((entry) => entry.remove());
     if (ownedNavigation) ownedNavigation.remove();
     ownedNavigation = null;
     if (probe) probe.remove();
@@ -101,15 +113,19 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
   }
 
   function applicableStyles(homeDocument) {
-    return [...homeDocument.querySelectorAll('link[rel~="stylesheet"][href]')].filter(link => {
+    return [...homeDocument.querySelectorAll('link[rel~="stylesheet"][href]')].filter((link) => {
       const media = String(link.getAttribute('media') || '').trim();
       if (!media || media.toLowerCase() === 'all') return true;
-      try { return !window.matchMedia || window.matchMedia(media).matches; } catch (error) { return false; }
+      try {
+        return !window.matchMedia || window.matchMedia(media).matches;
+      } catch (error) {
+        return false;
+      }
     });
   }
 
   function prepareStyles(styles, homepageBase) {
-    return styles.map(source => {
+    return styles.map((source) => {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = new window.URL(source.getAttribute('href'), homepageBase).href;
@@ -157,18 +173,22 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     const boxStyle = window.getComputedStyle(nodes.box);
     const navReady = navStyle.display === 'flex' || parseFloat(navStyle.minHeight) > 0;
     const buttonReady = /flex/.test(buttonStyle.display) || parseFloat(buttonStyle.paddingLeft) > 4;
-    const boxReady = boxStyle.boxShadow && boxStyle.boxShadow !== 'none' || parseFloat(boxStyle.paddingTop) > 0;
+    const boxReady = (boxStyle.boxShadow && boxStyle.boxShadow !== 'none') || parseFloat(boxStyle.paddingTop) > 0;
     probe.remove();
     probe = null;
     return Boolean(navReady && buttonReady && boxReady);
   }
 
   function absolutizeNavigation(navigation, homepageBase) {
-    navigation.querySelectorAll('[href]').forEach(node => {
-      try { node.setAttribute('href', new window.URL(node.getAttribute('href'), homepageBase).href); } catch (error) {}
+    navigation.querySelectorAll('[href]').forEach((node) => {
+      try {
+        node.setAttribute('href', new window.URL(node.getAttribute('href'), homepageBase).href);
+      } catch (error) {}
     });
-    navigation.querySelectorAll('[src]').forEach(node => {
-      try { node.setAttribute('src', new window.URL(node.getAttribute('src'), homepageBase).href); } catch (error) {}
+    navigation.querySelectorAll('[src]').forEach((node) => {
+      try {
+        node.setAttribute('src', new window.URL(node.getAttribute('src'), homepageBase).href);
+      } catch (error) {}
     });
   }
 
@@ -181,12 +201,12 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
       navigation.dataset.jdbRaSiteChrome = 'navigation';
       absolutizeNavigation(navigation, homepageBase);
       const root = document.querySelector('.jdb-ra');
-      const page = root && root.closest('[data-jdb-ra-page]') || root;
+      const page = (root && root.closest('[data-jdb-ra-page]')) || root;
       document.body.insertBefore(navigation, page || document.body.firstChild);
       ownedNavigation = navigation;
     }
-    navigation.querySelectorAll('[data-target]').forEach(button => {
-      const click = event => {
+    navigation.querySelectorAll('[data-target]').forEach((button) => {
+      const click = (event) => {
         event.preventDefault();
         const target = document.getElementById(button.getAttribute('data-target'));
         button.classList.toggle('is-active');
@@ -212,9 +232,12 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     try {
       const homepageUrl = new window.URL('/', baseUrl).href;
       if (window.AbortController) fetchController = new window.AbortController();
-      const response = await byDeadline(fetch(homepageUrl, fetchController ? { signal: fetchController.signal } : undefined));
+      const response = await byDeadline(
+        fetch(homepageUrl, fetchController ? { signal: fetchController.signal } : undefined),
+      );
       if (disposed) return notifyDisposed();
-      if (!response || !response.ok) return publish(diagnostic('homepage-fetch', { httpStatus: response && response.status }));
+      if (!response || !response.ok)
+        return publish(diagnostic('homepage-fetch', { httpStatus: response && response.status }));
       const html = await byDeadline(response.text());
       if (disposed) return notifyDisposed();
       const homeDocument = new window.DOMParser().parseFromString(html, 'text/html');
@@ -223,7 +246,7 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
       const styles = applicableStyles(homeDocument);
       if (!styles.length) return publish(diagnostic('no-stylesheets'));
       const prepared = prepareStyles(styles, homepageBase);
-      await byDeadline(Promise.all(prepared.map(item => item.loaded)));
+      await byDeadline(Promise.all(prepared.map((item) => item.loaded)));
       if (disposed) return notifyDisposed();
       prepared.forEach(({ link, intendedMedia }) => {
         if (intendedMedia) link.media = intendedMedia;
@@ -240,7 +263,10 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
         document.documentElement.classList.add('jdb-ra-native');
         ownedNativeClass = true;
       }
-      if (document.body.querySelector('nav.main-nav') && !document.documentElement.classList.contains('has-navbar-fixed-top')) {
+      if (
+        document.body.querySelector('nav.main-nav') &&
+        !document.documentElement.classList.contains('has-navbar-fixed-top')
+      ) {
         document.documentElement.classList.add('has-navbar-fixed-top');
         ownedNavbarClass = true;
       }
@@ -252,9 +278,12 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
       return publish({ status: 'native', reason: 'ready', stylesheets: prepared.length });
     } catch (error) {
       if (disposed) return notifyDisposed();
-      const reason = error && error.code === 'timeout'
-        ? 'timeout'
-        : /^stylesheet failed:/.test(String(error && error.message)) ? 'stylesheet-error' : 'homepage-fetch';
+      const reason =
+        error && error.code === 'timeout'
+          ? 'timeout'
+          : /^stylesheet failed:/.test(String(error && error.message))
+            ? 'stylesheet-error'
+            : 'homepage-fetch';
       cleanupResources();
       return publish(diagnostic(reason));
     }

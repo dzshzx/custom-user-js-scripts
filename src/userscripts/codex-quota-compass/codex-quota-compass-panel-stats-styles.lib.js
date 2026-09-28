@@ -192,6 +192,4 @@ function createQuotaPanelStatsStyles(rootId) {
     `;
 }
 
-export {
-  createQuotaPanelStatsStyles,
-};
+export { createQuotaPanelStatsStyles };

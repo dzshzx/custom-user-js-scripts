@@ -11,10 +11,7 @@ import {
   toUserMessage,
 } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.js';
 
-const distPath = path.resolve(
-  import.meta.dirname,
-  '../dist/feishu-preview-image-export.user.js',
-);
+const distPath = path.resolve(import.meta.dirname, '../dist/feishu-preview-image-export.user.js');
 const distSource = await readFile(distPath, 'utf8');
 
 const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -122,7 +119,10 @@ function boot({ gmDownload } = {}) {
 
 test('dist registers the export menu command', { skip: domSkip }, () => {
   const { menuCalls } = boot();
-  assert.deepEqual(menuCalls.map((call) => call.label), ['导出当前飞书主图']);
+  assert.deepEqual(
+    menuCalls.map((call) => call.label),
+    ['导出当前飞书主图'],
+  );
 });
 
 test('dist shows an info toast when no exportable image exists', { skip: domSkip }, async () => {
@@ -138,7 +138,9 @@ test('dist shows an info toast when no exportable image exists', { skip: domSkip
   assert.equal(toast.dataset.tone, 'info');
   assert.match(toast.textContent, /当前页面没有找到可导出的主图/);
   // token 与 toast 样式一次性安装
-  assert.ok(window.document.getElementById('feishu-pie-root-style').textContent.includes('--wk-accent: oklch(55% 0.15 250)'));
+  assert.ok(
+    window.document.getElementById('feishu-pie-root-style').textContent.includes('--wk-accent: oklch(55% 0.15 250)'),
+  );
   // The toast leaves a real happy-dom auto-dismiss setTimeout (4s) pending;
   // node:test's mock.timers can't reach it (happy-dom binds its own timer
   // globals at module load, before any mock is installed), so abort it the

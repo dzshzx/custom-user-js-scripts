@@ -55,20 +55,35 @@ test('buildTokenCss rejects values that could break out of the CSS block', () =>
 
 test('resolveTheme prefers the host probe result over the media query', () => {
   withStubbedMatchMedia({ matches: true }, () => {
-    assert.equal(resolveTheme(() => 'light'), 'light');
-    assert.equal(resolveTheme(() => 'dark'), 'dark');
+    assert.equal(
+      resolveTheme(() => 'light'),
+      'light',
+    );
+    assert.equal(
+      resolveTheme(() => 'dark'),
+      'dark',
+    );
   });
   withStubbedMatchMedia({ matches: false }, () => {
-    assert.equal(resolveTheme(() => 'dark'), 'dark');
+    assert.equal(
+      resolveTheme(() => 'dark'),
+      'dark',
+    );
   });
 });
 
 test('resolveTheme falls back to matchMedia when the probe fails or returns null', () => {
   withStubbedMatchMedia({ matches: true }, () => {
-    assert.equal(resolveTheme(() => null), 'dark');
-    assert.equal(resolveTheme(() => {
-      throw new Error('no host');
-    }), 'dark');
+    assert.equal(
+      resolveTheme(() => null),
+      'dark',
+    );
+    assert.equal(
+      resolveTheme(() => {
+        throw new Error('no host');
+      }),
+      'dark',
+    );
   });
   withStubbedMatchMedia({ matches: false }, () => {
     assert.equal(resolveTheme(), 'light');

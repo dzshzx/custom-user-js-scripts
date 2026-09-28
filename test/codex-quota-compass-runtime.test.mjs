@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as CoreLib from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js';
-import { createDefaultQuotaRuntimeConfig, createQuotaRuntime } from '../src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js';
+import {
+  createDefaultQuotaRuntimeConfig,
+  createQuotaRuntime,
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js';
 
 function jsonResponse(body, options = {}) {
   return {
@@ -102,15 +105,18 @@ test('createQuotaRuntime runs quota calculation through injected browser adapter
   assert.equal(result.时区诊断.浏览器本地时区, 'Asia/Shanghai');
   assert.equal(result.主7天窗口_上次重置至今.汇总.累计Credits, 10);
   assert.equal(result.主7天窗口_上次重置至今.反推周额度.反推周总Credits_包含重置日, 25);
-  assert.deepEqual(calls.map((call) => call.path), [
-    '/api/auth/session',
-    '/backend-api/wham/usage',
-    '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-24&end_date=2026-05-31&group_by=day',
-    '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
-    '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
-    '/backend-api/wham/usage/daily-token-usage-breakdown?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
-    '/backend-api/wham/rate-limit-reset-credits',
-  ]);
+  assert.deepEqual(
+    calls.map((call) => call.path),
+    [
+      '/api/auth/session',
+      '/backend-api/wham/usage',
+      '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-24&end_date=2026-05-31&group_by=day',
+      '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
+      '/backend-api/wham/analytics/daily-workspace-usage-counts?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
+      '/backend-api/wham/usage/daily-token-usage-breakdown?start_date=2026-05-01&end_date=2026-05-31&group_by=day',
+      '/backend-api/wham/rate-limit-reset-credits',
+    ],
+  );
   assert.equal(calls[1].options.headers.authorization, `Bearer ${token}`);
   assert.equal(calls[2].options.credentials, 'include');
   assert.deepEqual(result.近30天.模型汇总, [
@@ -127,12 +133,15 @@ test('createQuotaRuntime preserves 401 recovery guidance without leaking token v
     location: { hostname: 'chatgpt.com' },
     fetchImpl: async (path) => {
       if (path === '/backend-api/wham/usage') {
-        return jsonResponse({}, {
-          ok: false,
-          status: 401,
-          statusText: 'Unauthorized',
-          text: 'private body',
-        });
+        return jsonResponse(
+          {},
+          {
+            ok: false,
+            status: 401,
+            statusText: 'Unauthorized',
+            text: 'private body',
+          },
+        );
       }
 
       return jsonResponse({});
@@ -162,9 +171,6 @@ test('createQuotaRuntime rejects non-chatgpt hosts before fetching', async () =>
     },
   });
 
-  await assert.rejects(
-    () => runtime.run(),
-    /请在 chatgpt\.com 页面运行/,
-  );
+  await assert.rejects(() => runtime.run(), /请在 chatgpt\.com 页面运行/);
   assert.deepEqual(calls, []);
 });

@@ -7,6 +7,8 @@ export async function loadTestPlaywright() {
     if (manifest.version !== '1.61.1') throw new Error('Expected playwright@1.61.1');
     return await import('../node_modules/playwright/index.mjs');
   } catch (cause) {
-    throw new Error('Browser tests require project playwright@1.61.1. Run npm ci, then npm run test:prepare.', { cause });
+    throw new Error('Browser tests require project playwright@1.61.1. Run npm ci, then npm run test:prepare.', {
+      cause,
+    });
   }
 }

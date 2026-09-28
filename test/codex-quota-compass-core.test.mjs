@@ -227,9 +227,7 @@ test('createQuotaCalculator aggregates rolling model summaries from daily token 
           },
           {
             date: '2026-05-30',
-            models: [
-              { model: 'gpt-5.6-sol', speed: 'standard', credits: 20 },
-            ],
+            models: [{ model: 'gpt-5.6-sol', speed: 'standard', credits: 20 }],
           },
         ],
         units: 'percent',
@@ -271,9 +269,10 @@ test('createQuotaCalculator surfaces rate limit reset credits with detail rows',
     config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
     formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
     getBrowserTimeZone: () => 'Asia/Shanghai',
-    fetchUsage: async () => newShapeUsageFixture({
-      rate_limit_reset_credits: { available_count: 3, applicable_available_count: 0 },
-    }),
+    fetchUsage: async () =>
+      newShapeUsageFixture({
+        rate_limit_reset_credits: { available_count: 3, applicable_available_count: 0 },
+      }),
     fetchDailyUsage: async (startDate) => emptyDailyFixture(startDate),
     fetchRateLimitResetCredits: async () => ({
       credits: [
@@ -310,9 +309,10 @@ test('createQuotaCalculator keeps reset credit counts when the detail fetch fail
     config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
     formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
     getBrowserTimeZone: () => 'Asia/Shanghai',
-    fetchUsage: async () => newShapeUsageFixture({
-      rate_limit_reset_credits: { available_count: 3, applicable_available_count: 0 },
-    }),
+    fetchUsage: async () =>
+      newShapeUsageFixture({
+        rate_limit_reset_credits: { available_count: 3, applicable_available_count: 0 },
+      }),
     fetchDailyUsage: async (startDate) => emptyDailyFixture(startDate),
     fetchRateLimitResetCredits: async () => {
       throw new Error('HTTP 503 Service Unavailable');

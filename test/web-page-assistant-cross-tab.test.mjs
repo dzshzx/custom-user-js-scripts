@@ -8,7 +8,10 @@ import { createWebPageAssistantSession } from '../src/userscripts/web-page-assis
 const STORAGE_KEY = 'pageAutoRefreshTimerSettings';
 const FALLBACK_KEY = `__${STORAGE_KEY}`;
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
-const settle = () => new Promise((resolve) => { setTimeout(resolve, 5); });
+const settle = () =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 5);
+  });
 
 // One GM storage shared by every tab of the script, as a userscript manager
 // keeps it. Change listeners fire asynchronously with remote=true in the other
@@ -57,8 +60,12 @@ function createSharedLocalStorage() {
     tab() {
       const handlers = new Set();
       const target = {
-        addEventListener(type, handler) { if (type === 'storage') handlers.add(handler); },
-        removeEventListener(type, handler) { handlers.delete(handler); },
+        addEventListener(type, handler) {
+          if (type === 'storage') handlers.add(handler);
+        },
+        removeEventListener(type, handler) {
+          handlers.delete(handler);
+        },
         handlers,
       };
       targets.add(target);
@@ -100,16 +107,29 @@ function openTab({ gm, local, keys = { pageKey: 'https://a.test/one', siteKey: '
     storage,
     clock: {
       now: () => time,
-      setInterval: (handler) => { const id = Symbol('timer'); timers.set(id, handler); return id; },
+      setInterval: (handler) => {
+        const id = Symbol('timer');
+        timers.set(id, handler);
+        return id;
+      },
       clearInterval: (id) => timers.delete(id),
     },
     reload() {},
-    unlocker: { install() { installs++; }, uninstall() {} },
+    unlocker: {
+      install() {
+        installs++;
+      },
+      uninstall() {},
+    },
   });
   return {
     session,
-    advance(ms) { time += ms; },
-    get installs() { return installs; },
+    advance(ms) {
+      time += ms;
+    },
+    get installs() {
+      return installs;
+    },
     state: () => session.getState(),
   };
 }

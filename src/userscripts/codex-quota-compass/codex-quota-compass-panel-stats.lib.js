@@ -20,8 +20,12 @@ function normalizePeriod(period) {
 // shell's event delegation routes back to the entry.
 function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
   const { t, sectionHtml, tableHtml, escapeHtml } = helpers;
-  if (typeof t !== 'function' || typeof sectionHtml !== 'function'
-    || typeof tableHtml !== 'function' || typeof escapeHtml !== 'function') {
+  if (
+    typeof t !== 'function' ||
+    typeof sectionHtml !== 'function' ||
+    typeof tableHtml !== 'function' ||
+    typeof escapeHtml !== 'function'
+  ) {
     throw new Error(`${LIB_NAME}.buildStatsView requires t/sectionHtml/tableHtml/escapeHtml helpers.`);
   }
 
@@ -40,7 +44,9 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
     ];
     return `
       <div class="cqc-stats-tabs" role="group" aria-label="${escapeHtml(t('tabStats'))}">
-        ${items.map(([id, key]) => `
+        ${items
+          .map(
+            ([id, key]) => `
           <button
             type="button"
             class="cqc-stats-tab${activePeriod === id ? ' is-active' : ''}"
@@ -48,7 +54,9 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
             data-period="${escapeHtml(id)}"
             aria-pressed="${activePeriod === id ? 'true' : 'false'}"
           >${escapeHtml(t(key))}</button>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </div>
     `;
   }
@@ -70,10 +78,12 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
     if (!days.length) return '';
     const max = Math.max(...days.map((row) => Number(row.usd) || 0));
     if (!(max > 0)) return '';
-    const bars = days.map((row) => {
-      const percent = Math.max(2, Math.round(((Number(row.usd) || 0) / max) * 100));
-      return `<span class="cqc-stats-chart-bar" style="height: ${percent}%"></span>`;
-    }).join('');
+    const bars = days
+      .map((row) => {
+        const percent = Math.max(2, Math.round(((Number(row.usd) || 0) / max) * 100));
+        return `<span class="cqc-stats-chart-bar" style="height: ${percent}%"></span>`;
+      })
+      .join('');
     return `<div class="cqc-stats-chart" aria-hidden="true">${bars}</div>`;
   }
 
@@ -85,13 +95,13 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
     }));
     return mapped.length
       ? tableHtml(mapped, {
-        columns: [
-          { key: 'date', labelKey: 'statsColumnDate', priority: 'primary' },
-          { key: 'credits', labelKey: 'statsColumnCredits' },
-          { key: 'usd', labelKey: 'statsColumnUsd' },
-        ],
-        limit: mapped.length,
-      })
+          columns: [
+            { key: 'date', labelKey: 'statsColumnDate', priority: 'primary' },
+            { key: 'credits', labelKey: 'statsColumnCredits' },
+            { key: 'usd', labelKey: 'statsColumnUsd' },
+          ],
+          limit: mapped.length,
+        })
       : emptyHtml();
   }
 
@@ -112,7 +122,9 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
     if (!items.length) return emptyHtml();
     return `
       <div class="cqc-stats-list">
-        ${items.map((item) => `
+        ${items
+          .map(
+            (item) => `
           <button
             type="button"
             class="cqc-stats-row"
@@ -125,7 +137,9 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
             <span class="cqc-stats-row-usd">$${escapeHtml(usd(item.usd))}</span>
             <span class="cqc-stats-row-credits">${escapeHtml(String(round(item.credits)))} Credits</span>
           </button>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </div>
     `;
   }
@@ -141,15 +155,22 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
   function weekBody() {
     const week = cost.week || {};
     const current = week.current
-      ? estimateLineHtml(t('statsPeriodWeek'), `${week.current.from} ~ ${week.current.to}`, week.current.credits, week.current.usd)
+      ? estimateLineHtml(
+          t('statsPeriodWeek'),
+          `${week.current.from} ~ ${week.current.to}`,
+          week.current.credits,
+          week.current.usd,
+        )
       : '';
-    const list = drillableListHtml((week.blocks || []).map((block) => ({
-      from: block.from,
-      to: block.to,
-      label: `${block.from} ~ ${block.to}`,
-      usd: block.usd,
-      credits: block.credits,
-    })));
+    const list = drillableListHtml(
+      (week.blocks || []).map((block) => ({
+        from: block.from,
+        to: block.to,
+        label: `${block.from} ~ ${block.to}`,
+        usd: block.usd,
+        credits: block.credits,
+      })),
+    );
     return sectionHtml(t('statsPeriodWeek'), current + list);
   }
 
@@ -158,13 +179,15 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
     const current = month.current
       ? estimateLineHtml(t('statsPeriodMonth'), month.current.month, month.current.credits, month.current.usd)
       : '';
-    const list = drillableListHtml((month.rows || []).map((row) => ({
-      from: row.from,
-      to: row.to,
-      label: row.month,
-      usd: row.usd,
-      credits: row.credits,
-    })));
+    const list = drillableListHtml(
+      (month.rows || []).map((row) => ({
+        from: row.from,
+        to: row.to,
+        label: row.month,
+        usd: row.usd,
+        credits: row.credits,
+      })),
+    );
     return sectionHtml(t('statsPeriodMonth'), current + list);
   }
 
@@ -201,7 +224,4 @@ function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
   return periodTabsHtml() + chartHtml() + rollingLiveHtml() + body;
 }
 
-export {
-  PERIODS,
-  buildStatsView,
-};
+export { PERIODS, buildStatsView };

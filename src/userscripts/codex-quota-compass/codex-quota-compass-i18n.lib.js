@@ -235,13 +235,15 @@ const messages = {
     remoteSyncEnabledTitle: 'GitHub Gist Sync Enabled',
     remoteSyncEnabledDetail: 'Location: {endpoint}. Last synced: {lastSyncedAt}.',
     remoteSyncMissingTitle: 'GitHub Gist Sync Needs Configuration',
-    remoteSyncMissingDetail: 'Save a GitHub token; the gist can be created automatically, or you can paste an existing gist ID.',
+    remoteSyncMissingDetail:
+      'Save a GitHub token; the gist can be created automatically, or you can paste an existing gist ID.',
     remoteSyncErrorTitle: 'GitHub Gist Sync Failed',
     remoteSyncErrorDetail: 'Location: {endpoint}. Error: {error}',
     syncBannerGmTitle: 'Userscript Manager Local Storage',
     syncBannerGmDetail: 'Using {backend}. Configure GitHub Gist sync for cross-device sync.',
     syncBannerLocalTitle: 'Current device local archive',
-    syncBannerLocalDetail: 'Using {backend} fallback; personal usage history will not automatically sync to other devices.',
+    syncBannerLocalDetail:
+      'Using {backend} fallback; personal usage history will not automatically sync to other devices.',
     syncBannerPendingTitle: 'Archive status pending',
     syncBannerPendingDetail: 'Open or refresh stats to load Snapshot Archive status.',
     loadingTitle: 'Calculating Codex usage',
@@ -321,9 +323,7 @@ function createQuotaCompassTranslator(options = {}) {
   const activeLocale = resolveLocale({ ...options, defaultLocale });
 
   function t(key, variables = {}) {
-    const template = messages[activeLocale]?.[key]
-      || messages[defaultLocale]?.[key]
-      || key;
+    const template = messages[activeLocale]?.[key] || messages[defaultLocale]?.[key] || key;
     return Object.entries(variables).reduce(
       (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
       template,
@@ -336,9 +336,4 @@ function createQuotaCompassTranslator(options = {}) {
   };
 }
 
-export {
-  DEFAULT_LOCALE,
-  messages,
-  resolveLocale,
-  createQuotaCompassTranslator,
-};
+export { DEFAULT_LOCALE, messages, resolveLocale, createQuotaCompassTranslator };

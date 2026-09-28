@@ -531,7 +531,4 @@ function installQuotaPanelRendererStyles(documentObject, rootId) {
   documentObject.head.append(style);
 }
 
-export {
-  createQuotaPanelRendererStyles,
-  installQuotaPanelRendererStyles,
-};
+export { createQuotaPanelRendererStyles, installQuotaPanelRendererStyles };

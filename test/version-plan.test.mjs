@@ -87,7 +87,9 @@ async function gitWrapper({ advanceMarker, advanceRef, pushMarker } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'userscript-git-wrapper-'));
   const wrapper = path.join(root, 'git');
   const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
-  await writeFile(wrapper, `#!/usr/bin/env bash
+  await writeFile(
+    wrapper,
+    `#!/usr/bin/env bash
 set -euo pipefail
 if [[ "\${1:-}" == "remote" && "\${2:-}" == "get-url" && "\${3:-}" == "origin" ]]; then
   echo git@github.com:Dzshzx/Example.git
@@ -104,7 +106,8 @@ if [[ "\${1:-}" == "push" && " $* " == *" --force-with-lease="* && -n "\${ADVANC
   touch "$ADVANCE_MARKER"
 fi
 exec "$REAL_GIT" "$@"
-`);
+`,
+  );
   await chmod(wrapper, 0o755);
   return {
     env: {
@@ -130,7 +133,10 @@ test('an exact next patch passes', async () => {
   await commitVersion(fixture, '1.2.4');
   const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD', '--json');
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout).transitions.map(({ kind }) => kind), ['patch']);
+  assert.deepEqual(
+    JSON.parse(result.stdout).transitions.map(({ kind }) => kind),
+    ['patch'],
+  );
 });
 
 test('plan proposes a target without editing files and actual metadata reproduces it', async () => {
@@ -140,7 +146,10 @@ test('plan proposes a target without editing files and actual metadata reproduce
   const proposed = runPlan(fixture.root, 'plan', '--target', `${identity}=1.3.0`, '--json');
   assert.equal(proposed.status, 0, proposed.stderr);
   const proposal = JSON.parse(proposed.stdout);
-  assert.deepEqual(proposal.transitions.map(({ kind }) => kind), ['minor']);
+  assert.deepEqual(
+    proposal.transitions.map(({ kind }) => kind),
+    ['minor'],
+  );
   assert.equal(await readFile(fixture.script, 'utf8'), before);
 
   await commitVersion(fixture, '1.3.0');
@@ -151,16 +160,10 @@ test('plan proposes a target without editing files and actual metadata reproduce
   const unknown = runPlan(fixture.root, 'plan', '--target', 'unknown=1.3.0');
   assert.equal(unknown.status, 1);
   assert.match(unknown.stderr, /unknown install identity/);
-  const duplicate = runPlan(
-    fixture.root,
-    'plan', '--target', `${identity}=1.3.0`, '--target', `${identity}=1.4.0`,
-  );
+  const duplicate = runPlan(fixture.root, 'plan', '--target', `${identity}=1.3.0`, '--target', `${identity}=1.4.0`);
   assert.equal(duplicate.status, 1);
   assert.match(duplicate.stderr, /duplicate --target/);
-  const executionOverride = runPlan(
-    fixture.root,
-    'check', '--target-ref', 'HEAD', '--target', `${identity}=1.3.0`,
-  );
+  const executionOverride = runPlan(fixture.root, 'check', '--target-ref', 'HEAD', '--target', `${identity}=1.3.0`);
   assert.equal(executionOverride.status, 1);
   assert.match(executionOverride.stderr, /does not accept --target overrides/);
 });
@@ -174,7 +177,9 @@ test('check --help does not require a target ref', () => {
 test('version comparison rejects integers that would lose precision', async () => {
   const fixture = await fixtureRepository('1.2.9007199254740993');
   const proposed = runPlan(
-    fixture.root, 'plan', '--target',
+    fixture.root,
+    'plan',
+    '--target',
     'https://example.test/userscripts :: Fixture=1.2.9007199254740992',
   );
   assert.equal(proposed.status, 1);
@@ -182,12 +187,19 @@ test('version comparison rejects integers that would lose precision', async () =
 });
 
 test('minor, major, and skipped-patch transitions pass without approval', async () => {
-  for (const [target, kind] of [['1.3.0', 'minor'], ['2.0.0', 'major'], ['1.2.5', 'patch']]) {
+  for (const [target, kind] of [
+    ['1.3.0', 'minor'],
+    ['2.0.0', 'major'],
+    ['1.2.5', 'patch'],
+  ]) {
     const fixture = await fixtureRepository();
     await commitVersion(fixture, target);
     const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD', '--json');
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(JSON.parse(result.stdout).transitions.map((transition) => transition.kind), [kind]);
+    assert.deepEqual(
+      JSON.parse(result.stdout).transitions.map((transition) => transition.kind),
+      [kind],
+    );
   }
 });
 
@@ -283,7 +295,10 @@ test('candidate entry pushes a minor without any confirmation argument', async (
     env: wrapper.env,
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(git(fixture.bareRoot, 'for-each-ref', '--format=%(objectname)', 'refs/heads/candidate/'), new RegExp(sha));
+  assert.match(
+    git(fixture.bareRoot, 'for-each-ref', '--format=%(objectname)', 'refs/heads/candidate/'),
+    new RegExp(sha),
+  );
 });
 
 test('trusted promote gate rejects a downgrade without moving master', async () => {
@@ -328,7 +343,9 @@ test('trusted promote reads malicious candidate inventory modules as data only',
   git(fixture.root, 'checkout', fixture.baseline, '--', 'scripts');
   const wrapper = await gitWrapper();
   const result = spawnSync('bash', ['scripts/promote-version-plan.sh', candidate], {
-    cwd: fixture.root, encoding: 'utf8', env: wrapper.env,
+    cwd: fixture.root,
+    encoding: 'utf8',
+    env: wrapper.env,
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /older than immutable published baseline/);
@@ -350,8 +367,13 @@ test('five-identity fixed plan survives single-file to entry migration unchanged
   for (const [id, name, version] of entries) {
     const dir = path.join(fixture.root, 'src/userscripts', id);
     await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, `${id}.user.js`), metadata(version, name)
-      .replace('https://example.test/userscripts', 'https://github.com/dzshzx/custom-user-js-scripts'));
+    await writeFile(
+      path.join(dir, `${id}.user.js`),
+      metadata(version, name).replace(
+        'https://example.test/userscripts',
+        'https://github.com/dzshzx/custom-user-js-scripts',
+      ),
+    );
   }
   git(fixture.root, 'add', '.');
   git(fixture.root, 'commit', '-m', 'fixed five-identity baseline');
@@ -366,14 +388,23 @@ test('five-identity fixed plan survives single-file to entry migration unchanged
   assert.equal(result.status, 0, result.stderr);
   const after = JSON.parse(result.stdout);
   assert.deepEqual(after, before);
-  assert.deepEqual(after.transitions, entries.map(([, name, version]) => ({
-    baseline: version, namespace: `https://github.com/dzshzx/custom-user-js-scripts :: ${name}`, target: version, kind: 'unchanged',
-  })));
+  assert.deepEqual(
+    after.transitions,
+    entries.map(([, name, version]) => ({
+      baseline: version,
+      namespace: `https://github.com/dzshzx/custom-user-js-scripts :: ${name}`,
+      target: version,
+      kind: 'unchanged',
+    })),
+  );
 });
 
 test('version plan requires a real entry even when lint can accept a historical URL pair', async () => {
   const fixture = await fixtureRepository();
-  const content = metadata('1.2.3').replace('// ==/UserScript==', '// @downloadURL https://example.test/dist/fixture.user.js\n// ==/UserScript==');
+  const content = metadata('1.2.3').replace(
+    '// ==/UserScript==',
+    '// @downloadURL https://example.test/dist/fixture.user.js\n// ==/UserScript==',
+  );
   await writeFile(fixture.script, content);
   await mkdir(path.join(fixture.root, 'dist'));
   await writeFile(path.join(fixture.root, 'dist/fixture.user.js'), content);

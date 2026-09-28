@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-import { applyActiveView, readSyncFormValues, isSyncFormEditing } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js';
+import {
+  applyActiveView,
+  readSyncFormValues,
+  isSyncFormEditing,
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js';
 
 function contentWith(window, html) {
   const node = window.document.createElement('div');
@@ -12,13 +16,16 @@ function contentWith(window, html) {
 
 test('applyActiveView swaps the details body and highlights the active tab', { skip: domSkip }, () => {
   const window = createDomWindow();
-  const contentNode = contentWith(window, `
+  const contentNode = contentWith(
+    window,
+    `
     <div class="cqc-tabs">
       <button class="cqc-tab is-active" data-view="details">D</button>
       <button class="cqc-tab" data-view="archive">A</button>
     </div>
     <div class="cqc-details">old body</div>
-  `);
+  `,
+  );
 
   const active = applyActiveView(contentNode, { activePanelView: 'archive', html: '<p>new body</p>' });
 
@@ -34,24 +41,30 @@ test('applyActiveView tolerates a null content node and a missing details node',
 
   assert.equal(applyActiveView(null, { activePanelView: 'history' }), 'history');
 
-  const tabsOnly = contentWith(window, `
+  const tabsOnly = contentWith(
+    window,
+    `
     <div class="cqc-tabs">
       <button class="cqc-tab" data-view="details">D</button>
     </div>
-  `);
+  `,
+  );
   assert.doesNotThrow(() => applyActiveView(tabsOnly, { activePanelView: 'details', html: '<p>x</p>' }));
   assert.equal(tabsOnly.querySelector('.cqc-tab').classList.contains('is-active'), true);
 });
 
 test('readSyncFormValues reads token, gist id, and enabled state', { skip: domSkip }, () => {
   const window = createDomWindow();
-  const contentNode = contentWith(window, `
+  const contentNode = contentWith(
+    window,
+    `
     <div class="cqc-sync-form" data-sync-form>
       <input data-field="token" type="password">
       <input data-field="gistId" type="text">
       <input data-field="enabled" type="checkbox">
     </div>
-  `);
+  `,
+  );
   contentNode.querySelector('[data-field="token"]').value = 'ghp_x';
   contentNode.querySelector('[data-field="gistId"]').value = 'gist-1';
   contentNode.querySelector('[data-field="enabled"]').checked = true;
@@ -72,13 +85,16 @@ test('readSyncFormValues returns null when no sync form is rendered', { skip: do
 
 test('isSyncFormEditing is true only for a focused field inside the sync form', { skip: domSkip }, () => {
   const window = createDomWindow();
-  const contentNode = contentWith(window, `
+  const contentNode = contentWith(
+    window,
+    `
     <div class="cqc-sync-form" data-sync-form>
       <input data-field="token" type="password">
       <button type="button" data-action="save-remote-sync">Save</button>
     </div>
     <button class="outside">elsewhere</button>
-  `);
+  `,
+  );
   const input = contentNode.querySelector('[data-field="token"]');
   const saveButton = contentNode.querySelector('[data-action="save-remote-sync"]');
   const outsideButton = contentNode.querySelector('.outside');

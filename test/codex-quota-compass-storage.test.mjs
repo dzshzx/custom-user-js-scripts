@@ -41,10 +41,12 @@ test('createSnapshotArchiveStoragePort prefers GM storage for read and write', a
   await port.write({ snapshots: [{ snapshotId: 'gm-2' }] });
 
   assert.equal(archive.snapshots[0].snapshotId, 'gm-1');
-  assert.deepEqual(writes, [{
-    key: DEFAULT_ARCHIVE_KEY,
-    archive: { snapshots: [{ snapshotId: 'gm-2' }] },
-  }]);
+  assert.deepEqual(writes, [
+    {
+      key: DEFAULT_ARCHIVE_KEY,
+      archive: { snapshots: [{ snapshotId: 'gm-2' }] },
+    },
+  ]);
   assert.deepEqual(port.getBackendInfo(), { id: 'gm', label: 'GM storage' });
 });
 
@@ -99,11 +101,16 @@ test('createSnapshotArchiveStoragePort merges fallback archive into GM storage w
 
   const archive = await port.read();
 
-  assert.deepEqual(archive.snapshots.map((snapshot) => snapshot.snapshotId), ['gm-1', 'local-1']);
-  assert.deepEqual(writes, [{
-    key: DEFAULT_ARCHIVE_KEY,
-    archive: { snapshots: [{ snapshotId: 'gm-1' }, { snapshotId: 'local-1' }] },
-  }]);
+  assert.deepEqual(
+    archive.snapshots.map((snapshot) => snapshot.snapshotId),
+    ['gm-1', 'local-1'],
+  );
+  assert.deepEqual(writes, [
+    {
+      key: DEFAULT_ARCHIVE_KEY,
+      archive: { snapshots: [{ snapshotId: 'gm-1' }, { snapshotId: 'local-1' }] },
+    },
+  ]);
   assert.deepEqual(port.getBackendInfo(), { id: 'gm', label: 'GM storage' });
 });
 
@@ -120,7 +127,7 @@ test('createSnapshotArchiveStoragePort normalizes legacy fallback archive before
     },
     localStorage,
     normalizeArchive(archive) {
-      return Array.isArray(archive) ? { snapshots: archive } : (archive || { snapshots: [] });
+      return Array.isArray(archive) ? { snapshots: archive } : archive || { snapshots: [] };
     },
     mergeArchives(primaryArchive, incomingArchive) {
       return {
@@ -134,10 +141,12 @@ test('createSnapshotArchiveStoragePort normalizes legacy fallback archive before
   const archive = await port.read();
 
   assert.deepEqual(archive, { snapshots: [legacySnapshot] });
-  assert.deepEqual(writes, [{
-    key: DEFAULT_ARCHIVE_KEY,
-    archive: { snapshots: [legacySnapshot] },
-  }]);
+  assert.deepEqual(writes, [
+    {
+      key: DEFAULT_ARCHIVE_KEY,
+      archive: { snapshots: [legacySnapshot] },
+    },
+  ]);
   assert.deepEqual(port.getBackendInfo(), { id: 'gm', label: 'GM storage' });
 });
 

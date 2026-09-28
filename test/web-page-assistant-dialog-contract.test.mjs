@@ -105,11 +105,13 @@ test('dialog contract shapes page and site settings into a view model', () => {
 
 test('dialog contract reads unlocker form intent from role selectors', () => {
   const contract = createDialogContract();
-  const setting = contract.readUnlockerFormSetting(createFakeDialog([
-    contract.roles.unlockerEnabled,
-    contract.roles.unlockerCopy,
-    contract.roles.unlockerBeforeUnload,
-  ]));
+  const setting = contract.readUnlockerFormSetting(
+    createFakeDialog([
+      contract.roles.unlockerEnabled,
+      contract.roles.unlockerCopy,
+      contract.roles.unlockerBeforeUnload,
+    ]),
+  );
 
   assert.equal(setting.enabled, true);
   assert.equal(setting.allowSelection, false);

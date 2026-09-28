@@ -70,7 +70,13 @@ codex-quota-compass-snapshot-archive.v1.json
   "exportedAt": "2026-06-19T00:00:00.000Z",
   "snapshotCount": 0,
   "ledger": {
-    "2026-06-18": { "date": "2026-06-18", "credits": 3402.93, "usd": 136.12, "settled": true, "settledAt": "2026-06-19T00:15:00.000Z" }
+    "2026-06-18": {
+      "date": "2026-06-18",
+      "credits": 3402.93,
+      "usd": 136.12,
+      "settled": true,
+      "settledAt": "2026-06-19T00:15:00.000Z"
+    }
   },
   "snapshots": []
 }

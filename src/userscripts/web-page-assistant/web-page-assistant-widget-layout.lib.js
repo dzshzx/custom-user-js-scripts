@@ -13,9 +13,8 @@ function createWidgetLayoutRuntime(adapters) {
     constants,
     scriptName = 'Web Page Assistant',
   } = adapters;
-  const clearTimer = typeof clearTimeoutAdapter === 'function'
-    ? clearTimeoutAdapter
-    : (timer) => globalThis.clearTimeout(timer);
+  const clearTimer =
+    typeof clearTimeoutAdapter === 'function' ? clearTimeoutAdapter : (timer) => globalThis.clearTimeout(timer);
   let widget = null;
   let widgetButton = null;
   let position = null;
@@ -93,21 +92,13 @@ function createWidgetLayoutRuntime(adapters) {
     );
     const panelHeight = panel.offsetHeight;
     const maxLeft = Math.max(constants.safeMargin, viewport.width - panelWidth - constants.safeMargin);
-    const panelLeft = clampNumber(
-      widgetRect.right - panelWidth,
-      constants.safeMargin,
-      maxLeft,
-    );
+    const panelLeft = clampNumber(widgetRect.right - panelWidth, constants.safeMargin, maxLeft);
 
     const aboveTop = widgetRect.top - panelHeight - constants.panelGap;
     const belowTop = widgetRect.top + constants.widgetHeight + constants.panelGap;
     const maxTop = Math.max(constants.safeMargin, viewport.height - panelHeight - constants.safeMargin);
     const shouldPlaceBelow = aboveTop < constants.safeMargin && belowTop <= maxTop;
-    const panelTop = clampNumber(
-      shouldPlaceBelow ? belowTop : aboveTop,
-      constants.safeMargin,
-      maxTop,
-    );
+    const panelTop = clampNumber(shouldPlaceBelow ? belowTop : aboveTop, constants.safeMargin, maxTop);
     const placement = {
       left: Math.round(panelLeft - widgetRect.left),
       top: Math.round(panelTop - widgetRect.top),
@@ -300,6 +291,4 @@ function createWidgetLayoutRuntime(adapters) {
   };
 }
 
-export {
-  createWidgetLayoutRuntime,
-};
+export { createWidgetLayoutRuntime };

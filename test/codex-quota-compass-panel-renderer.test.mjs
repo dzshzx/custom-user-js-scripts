@@ -72,14 +72,8 @@ function createRenderer() {
 test('renderer module imports statistics styles before renderer styles', () => {
   // The module graph (not a flat @require order) now enforces this: the renderer
   // lib imports its own styles, which in turn import the statistics styles.
-  assert.equal(
-    rendererLibContent.includes(`from './codex-quota-compass-panel-renderer-styles.lib.js'`),
-    true,
-  );
-  assert.equal(
-    rendererStylesLibContent.includes(`from './codex-quota-compass-panel-stats-styles.lib.js'`),
-    true,
-  );
+  assert.equal(rendererLibContent.includes(`from './codex-quota-compass-panel-renderer-styles.lib.js'`), true);
+  assert.equal(rendererStylesLibContent.includes(`from './codex-quota-compass-panel-stats-styles.lib.js'`), true);
 });
 
 test('installable metadata and Snapshot Archive version stay synchronized', () => {
@@ -103,83 +97,84 @@ test('renderLoading and renderError return escaped panel states', () => {
 
 test('renderResult renders hero, secondary metrics, tabs, archive actions, and active view', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult({
-    heroMetric: {
-      id: 'remainingUsdIncludingReset',
-      type: 'credit',
-      labelKey: 'metricRemainingUsdIncludingReset',
-      usd: 4.25,
-      resetHours: 26.5,
-    },
-    secondaryMetrics: [
-      { id: 'remainingUsdExcludingReset', type: 'credit', labelKey: 'metricRemainingUsdExcludingReset', usd: 3.5 },
-      { id: 'sevenDayUsedPercent', type: 'value', labelKey: 'metricSevenDayUsedPercent', value: '40%' },
-    ],
-    tabs: [
-      { id: 'details', labelKey: 'tabDetails' },
-      { id: 'archive', labelKey: 'tabArchiveWorkspace' },
-    ],
-    syncBanner: {
-      tone: 'success',
-      titleKey: 'syncBannerGmTitle',
-      detailKey: 'syncBannerGmDetail',
-      backendLabel: 'GM storage',
-    },
-    archive: {
-      isLoaded: true,
-      snapshotCount: 2,
-      earliestCapturedAt: '2026-06-01T00:00:00.000Z',
-      latestCapturedAt: '2026-06-02T00:00:00.000Z',
-      storageBackend: { label: 'GM storage' },
-      recentSnapshots: [
-        {
-          capturedAt: '2026-06-02T00:00:00.000Z',
-          snapshotId: '<snapshot-2>',
-          monthlyCredits: 12,
-          weeklyUsedPercent: 30,
-        },
+  const rendered = renderer.renderResult(
+    {
+      heroMetric: {
+        id: 'remainingUsdIncludingReset',
+        type: 'credit',
+        labelKey: 'metricRemainingUsdIncludingReset',
+        usd: 4.25,
+        resetHours: 26.5,
+      },
+      secondaryMetrics: [
+        { id: 'remainingUsdExcludingReset', type: 'credit', labelKey: 'metricRemainingUsdExcludingReset', usd: 3.5 },
+        { id: 'sevenDayUsedPercent', type: 'value', labelKey: 'metricSevenDayUsedPercent', value: '40%' },
       ],
-      importReport: { added: 1, skipped: 0, invalid: 0 },
-    },
-    views: {
-      details: {
-        kind: 'sections',
-        sections: [
-          {
-            type: 'metrics',
-            metrics: [
-              { id: 'monthTotal', type: 'credit', label: 'Month total', usd: 10 },
-            ],
-          },
-          {
-            type: 'dataView',
-            id: 'details-table',
-            titleKey: 'sectionDailyQuery',
-            rows: [{ date: '2026-06-01', credits: 3 }],
-            columns: [
-              { key: 'date', label: 'Date', priority: 'primary' },
-              { key: 'credits', label: 'Credits', priority: 'primary' },
-            ],
-          },
-        ],
+      tabs: [
+        { id: 'details', labelKey: 'tabDetails' },
+        { id: 'archive', labelKey: 'tabArchiveWorkspace' },
+      ],
+      syncBanner: {
+        tone: 'success',
+        titleKey: 'syncBannerGmTitle',
+        detailKey: 'syncBannerGmDetail',
+        backendLabel: 'GM storage',
       },
       archive: {
-        kind: 'archiveWorkspace',
-        sections: [
-          { type: 'syncBanner' },
-          { type: 'archiveSummary' },
-          { type: 'note', noteKey: 'transferNote' },
+        isLoaded: true,
+        snapshotCount: 2,
+        earliestCapturedAt: '2026-06-01T00:00:00.000Z',
+        latestCapturedAt: '2026-06-02T00:00:00.000Z',
+        storageBackend: { label: 'GM storage' },
+        recentSnapshots: [
           {
-            type: 'actions',
-            actions: [
-              { action: 'export-archive', labelKey: 'archiveExportAction' },
-              { action: 'import-archive', labelKey: 'archiveImportAction' },
-            ],
+            capturedAt: '2026-06-02T00:00:00.000Z',
+            snapshotId: '<snapshot-2>',
+            monthlyCredits: 12,
+            weeklyUsedPercent: 30,
           },
         ],
+        importReport: { added: 1, skipped: 0, invalid: 0 },
+      },
+      views: {
+        details: {
+          kind: 'sections',
+          sections: [
+            {
+              type: 'metrics',
+              metrics: [{ id: 'monthTotal', type: 'credit', label: 'Month total', usd: 10 }],
+            },
+            {
+              type: 'dataView',
+              id: 'details-table',
+              titleKey: 'sectionDailyQuery',
+              rows: [{ date: '2026-06-01', credits: 3 }],
+              columns: [
+                { key: 'date', label: 'Date', priority: 'primary' },
+                { key: 'credits', label: 'Credits', priority: 'primary' },
+              ],
+            },
+          ],
+        },
+        archive: {
+          kind: 'archiveWorkspace',
+          sections: [
+            { type: 'syncBanner' },
+            { type: 'archiveSummary' },
+            { type: 'note', noteKey: 'transferNote' },
+            {
+              type: 'actions',
+              actions: [
+                { action: 'export-archive', labelKey: 'archiveExportAction' },
+                { action: 'import-archive', labelKey: 'archiveImportAction' },
+              ],
+            },
+          ],
+        },
       },
     },
-  }, { activePanelView: 'archive' });
+    { activePanelView: 'archive' },
+  );
 
   assert.equal(rendered.activePanelView, 'archive');
   // Hero block: large remaining-USD value with the reset countdown sub-line.
@@ -213,25 +208,28 @@ test('hero block omits the reset sub-line when no reset window is known', () => 
 
 test('details metrics section renders the demoted metric grid', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult({
-    heroMetric: { id: 'h', type: 'credit', label: 'Remaining', usd: 1 },
-    secondaryMetrics: [],
-    tabs: [{ id: 'details', labelKey: 'tabDetails' }],
-    views: {
-      details: {
-        kind: 'sections',
-        sections: [
-          {
-            type: 'metrics',
-            metrics: [
-              { id: 'monthTotal', type: 'credit', label: 'Month total', usd: 10 },
-              { id: 'resetCountdown', type: 'reset', hours: 2.5 },
-            ],
-          },
-        ],
+  const rendered = renderer.renderResult(
+    {
+      heroMetric: { id: 'h', type: 'credit', label: 'Remaining', usd: 1 },
+      secondaryMetrics: [],
+      tabs: [{ id: 'details', labelKey: 'tabDetails' }],
+      views: {
+        details: {
+          kind: 'sections',
+          sections: [
+            {
+              type: 'metrics',
+              metrics: [
+                { id: 'monthTotal', type: 'credit', label: 'Month total', usd: 10 },
+                { id: 'resetCountdown', type: 'reset', hours: 2.5 },
+              ],
+            },
+          ],
+        },
       },
     },
-  }, { activePanelView: 'details' });
+    { activePanelView: 'details' },
+  );
 
   assert.match(rendered.html, /Month total/);
   assert.match(rendered.html, /\$10\.0/);
@@ -281,29 +279,32 @@ test('truncated data views offer an expand toggle instead of the debug hint', ()
 
 test('renderResult renders an inline sync form seeded from remote sync status', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult({
-    heroMetric: null,
-    secondaryMetrics: [],
-    tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
-    remoteSyncStatus: {
-      enabled: true,
-      configured: true,
-      hasToken: true,
-      gistId: '<my-gist>',
-      lastSyncedAt: '2026-06-13T10:00:00.000Z',
-      lastError: '',
-    },
-    archive: { isLoaded: false },
-    views: {
-      archive: {
-        kind: 'archiveWorkspace',
-        sections: [
-          { type: 'syncForm' },
-          { type: 'actions', actions: [{ action: 'export-archive', labelKey: 'archiveExportAction' }] },
-        ],
+  const rendered = renderer.renderResult(
+    {
+      heroMetric: null,
+      secondaryMetrics: [],
+      tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
+      remoteSyncStatus: {
+        enabled: true,
+        configured: true,
+        hasToken: true,
+        gistId: '<my-gist>',
+        lastSyncedAt: '2026-06-13T10:00:00.000Z',
+        lastError: '',
+      },
+      archive: { isLoaded: false },
+      views: {
+        archive: {
+          kind: 'archiveWorkspace',
+          sections: [
+            { type: 'syncForm' },
+            { type: 'actions', actions: [{ action: 'export-archive', labelKey: 'archiveExportAction' }] },
+          ],
+        },
       },
     },
-  }, { activePanelView: 'archive' });
+    { activePanelView: 'archive' },
+  );
 
   assert.match(rendered.html, /data-sync-form/);
   assert.match(rendered.html, /data-field="token"/);
@@ -321,30 +322,34 @@ test('renderResult renders an inline sync form seeded from remote sync status', 
 test('renderResult formats the last synced time through the injected timestamp formatter', () => {
   const seen = [];
   const renderer = createQuotaPanelRenderer({
-    t: (key, variables = {}) => (key === 'remoteSyncLastSynced' ? `Last synced: ${variables.lastSyncedAt}` : t(key, variables)),
+    t: (key, variables = {}) =>
+      key === 'remoteSyncLastSynced' ? `Last synced: ${variables.lastSyncedAt}` : t(key, variables),
     debugKey: '__debugKey',
     formatTimestamp: (value) => {
       seen.push(value);
       return 'LOCAL-TIME';
     },
   });
-  const rendered = renderer.renderResult({
-    heroMetric: null,
-    secondaryMetrics: [],
-    tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
-    remoteSyncStatus: {
-      enabled: true,
-      configured: true,
-      hasToken: true,
-      gistId: '',
-      lastSyncedAt: '2026-06-13T10:00:00.000Z',
-      lastError: '',
+  const rendered = renderer.renderResult(
+    {
+      heroMetric: null,
+      secondaryMetrics: [],
+      tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
+      remoteSyncStatus: {
+        enabled: true,
+        configured: true,
+        hasToken: true,
+        gistId: '',
+        lastSyncedAt: '2026-06-13T10:00:00.000Z',
+        lastError: '',
+      },
+      archive: { isLoaded: false },
+      views: {
+        archive: { kind: 'archiveWorkspace', sections: [{ type: 'syncForm' }] },
+      },
     },
-    archive: { isLoaded: false },
-    views: {
-      archive: { kind: 'archiveWorkspace', sections: [{ type: 'syncForm' }] },
-    },
-  }, { activePanelView: 'archive' });
+    { activePanelView: 'archive' },
+  );
 
   assert.deepEqual(seen, ['2026-06-13T10:00:00.000Z']);
   assert.match(rendered.html, /Last synced: LOCAL-TIME/);
@@ -353,17 +358,21 @@ test('renderResult formats the last synced time through the injected timestamp f
 test('renderResult reformats a valid ISO sync time by default and keeps junk verbatim', () => {
   function renderSyncForm(lastSyncedAt) {
     const renderer = createQuotaPanelRenderer({
-      t: (key, variables = {}) => (key === 'remoteSyncLastSynced' ? `Last synced: ${variables.lastSyncedAt}` : t(key, variables)),
+      t: (key, variables = {}) =>
+        key === 'remoteSyncLastSynced' ? `Last synced: ${variables.lastSyncedAt}` : t(key, variables),
       debugKey: '__debugKey',
     });
-    return renderer.renderResult({
-      heroMetric: null,
-    secondaryMetrics: [],
-      tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
-      remoteSyncStatus: { enabled: true, configured: true, hasToken: true, gistId: '', lastSyncedAt, lastError: '' },
-      archive: { isLoaded: false },
-      views: { archive: { kind: 'archiveWorkspace', sections: [{ type: 'syncForm' }] } },
-    }, { activePanelView: 'archive' }).html;
+    return renderer.renderResult(
+      {
+        heroMetric: null,
+        secondaryMetrics: [],
+        tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
+        remoteSyncStatus: { enabled: true, configured: true, hasToken: true, gistId: '', lastSyncedAt, lastError: '' },
+        archive: { isLoaded: false },
+        views: { archive: { kind: 'archiveWorkspace', sections: [{ type: 'syncForm' }] } },
+      },
+      { activePanelView: 'archive' },
+    ).html;
   }
 
   // A valid ISO timestamp is localized, so the raw UTC string is not shown.
@@ -386,22 +395,25 @@ test('renderResult localizes archive captured timestamps through the formatter',
       return `LOCAL(${value})`;
     },
   });
-  const rendered = renderer.renderResult({
-    heroMetric: null,
-    secondaryMetrics: [],
-    tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
-    archive: {
-      isLoaded: true,
-      snapshotCount: 2,
-      earliestCapturedAt: '2026-06-01T00:00:00.000Z',
-      latestCapturedAt: '2026-06-02T00:00:00.000Z',
-      storageBackend: { label: 'GM storage' },
-      recentSnapshots: [
-        { capturedAt: '2026-06-03T00:00:00.000Z', snapshotId: 's3', monthlyCredits: 12, weeklyUsedPercent: 30 },
-      ],
+  const rendered = renderer.renderResult(
+    {
+      heroMetric: null,
+      secondaryMetrics: [],
+      tabs: [{ id: 'archive', labelKey: 'tabArchiveWorkspace' }],
+      archive: {
+        isLoaded: true,
+        snapshotCount: 2,
+        earliestCapturedAt: '2026-06-01T00:00:00.000Z',
+        latestCapturedAt: '2026-06-02T00:00:00.000Z',
+        storageBackend: { label: 'GM storage' },
+        recentSnapshots: [
+          { capturedAt: '2026-06-03T00:00:00.000Z', snapshotId: 's3', monthlyCredits: 12, weeklyUsedPercent: 30 },
+        ],
+      },
+      views: { archive: { kind: 'archiveWorkspace', sections: [{ type: 'archiveSummary' }] } },
     },
-    views: { archive: { kind: 'archiveWorkspace', sections: [{ type: 'archiveSummary' }] } },
-  }, { activePanelView: 'archive' });
+    { activePanelView: 'archive' },
+  );
 
   assert.ok(seen.includes('2026-06-01T00:00:00.000Z'));
   assert.ok(seen.includes('2026-06-02T00:00:00.000Z'));
@@ -413,20 +425,23 @@ test('renderResult localizes archive captured timestamps through the formatter',
 
 test('renderResult falls back to first tab when active view is unavailable', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult({
-    heroMetric: null,
-    secondaryMetrics: [],
-    tabs: [
-      { id: 'details', labelKey: 'tabDetails' },
-      { id: 'stats', labelKey: 'tabStats' },
-    ],
-    views: {
-      details: {
-        kind: 'sections',
-        sections: [],
+  const rendered = renderer.renderResult(
+    {
+      heroMetric: null,
+      secondaryMetrics: [],
+      tabs: [
+        { id: 'details', labelKey: 'tabDetails' },
+        { id: 'stats', labelKey: 'tabStats' },
+      ],
+      views: {
+        details: {
+          kind: 'sections',
+          sections: [],
+        },
       },
     },
-  }, { activePanelView: 'missing' });
+    { activePanelView: 'missing' },
+  );
 
   assert.equal(rendered.activePanelView, 'details');
 });
@@ -476,7 +491,14 @@ test('stats view renders cost dimensions, a live rolling line, and drillable row
         current: { month: '2026-06', credits: 250, usd: 10 },
         rows: [{ month: '2026-05', from: '2026-05-01', to: '2026-05-31', credits: 100, usd: 4 }],
       },
-      all: { totalCredits: 300, totalUsd: 12, coverDays: 5, fromDate: '2026-06-02', toDate: '2026-06-02', rows: [{ date: '2026-06-02', credits: 200, usd: 8 }] },
+      all: {
+        totalCredits: 300,
+        totalUsd: 12,
+        coverDays: 5,
+        fromDate: '2026-06-02',
+        toDate: '2026-06-02',
+        rows: [{ date: '2026-06-02', credits: 200, usd: 8 }],
+      },
       allDays: [{ date: '2026-06-02', credits: 200, usd: 8 }],
     },
     views: { stats: { id: 'stats', kind: 'stats' } },

@@ -276,6 +276,4 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
   documentObject.documentElement.append(style);
 }
 
-export {
-  installAssistantDialogStyles,
-};
+export { installAssistantDialogStyles };

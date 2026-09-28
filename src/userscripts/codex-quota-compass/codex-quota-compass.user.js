@@ -491,11 +491,7 @@
   }
   function ymdUTC(value) {
     const date = new Date(value);
-    return [
-      date.getUTCFullYear(),
-      pad2(date.getUTCMonth() + 1),
-      pad2(date.getUTCDate())
-    ].join("-");
+    return [date.getUTCFullYear(), pad2(date.getUTCMonth() + 1), pad2(date.getUTCDate())].join("-");
   }
   function ymdLocal(value) {
     const date = new Date(value);
@@ -524,13 +520,7 @@
     const absolute = Math.abs(offsetMinutes);
     return `UTC${sign}${pad2(Math.floor(absolute / 60))}:${pad2(absolute % 60)}`;
   }
-  function buildQuotaSnapshotResult({
-    config,
-    diagnostics,
-    windows,
-    periods,
-    resetCredits = null
-  }) {
+  function buildQuotaSnapshotResult({ config, diagnostics, windows, periods, resetCredits = null }) {
     const rollingLabel = `近${config.ROLLING_DAYS}天`;
     return {
       配置: {
@@ -585,12 +575,7 @@
     const addDaysForApi = (ms, days) => config.DATE_BUCKET_MODE === "utc" ? ms + days * dayMs : addDaysLocalMs(ms, days);
     const firstDayOfMonthForApi = (ms) => config.DATE_BUCKET_MODE === "utc" ? firstDayOfMonthUTC(ms) : firstDayOfMonthLocal(ms);
     const fmtUTC = (ms) => new Date(ms).toISOString().replace("T", " ").replace(".000Z", " UTC");
-    function windowIdentity({
-      key,
-      label,
-      backendField,
-      sourceName = ""
-    }) {
+    function windowIdentity({ key, label, backendField, sourceName = "" }) {
       return { key, label, backendField, sourceName };
     }
     const SEVEN_DAY_CLASS_MIN_SECONDS = 6 * 86400;
@@ -640,11 +625,16 @@
       const sevenDayEntry = findMainSevenDayEntry(usage);
       for (const entry of mainWindowEntries(usage)) {
         const isSevenDay = entry.field === sevenDayEntry?.field;
-        windows.push(parseWindow(windowIdentity({
-          key: isSevenDay ? MAIN_SEVEN_DAY_WINDOW_KEY2 : MAIN_PRIMARY_WINDOW_KEY,
-          label: isSevenDay ? "主限制 - 7天窗口" : "主限制 - 5小时窗口",
-          backendField: entry.field
-        }), entry.row));
+        windows.push(
+          parseWindow(
+            windowIdentity({
+              key: isSevenDay ? MAIN_SEVEN_DAY_WINDOW_KEY2 : MAIN_PRIMARY_WINDOW_KEY,
+              label: isSevenDay ? "主限制 - 7天窗口" : "主限制 - 5小时窗口",
+              backendField: entry.field
+            }),
+            entry.row
+          )
+        );
       }
       for (const item of usage?.additional_rate_limits ?? []) {
         const name = item.limit_name || item.metered_feature || "额外限制";
@@ -652,12 +642,17 @@
           const row = item?.rate_limit?.[field];
           if (!row) continue;
           const isSevenDay = isSevenDayClassWindow(row);
-          windows.push(parseWindow(windowIdentity({
-            key: additionalWindowKey(name, isSevenDay ? "sevenDayWindow" : "primaryWindow"),
-            label: `${name} - ${isSevenDay ? "7天窗口" : "5小时窗口"}`,
-            backendField: field,
-            sourceName: name
-          }), row));
+          windows.push(
+            parseWindow(
+              windowIdentity({
+                key: additionalWindowKey(name, isSevenDay ? "sevenDayWindow" : "primaryWindow"),
+                label: `${name} - ${isSevenDay ? "7天窗口" : "5小时窗口"}`,
+                backendField: field,
+                sourceName: name
+              }),
+              row
+            )
+          );
         }
       }
       return windows;
@@ -803,12 +798,7 @@
       const { _windowStartMs, _resetAtMs, _serverNowMs, ...visible } = windowRow;
       return visible;
     }
-    function buildWeeklyEstimate({
-      mainSecondary,
-      sinceResetRows,
-      sinceResetSummary,
-      sinceResetStartDate
-    }) {
+    function buildWeeklyEstimate({ mainSecondary, sinceResetRows, sinceResetSummary, sinceResetStartDate }) {
       const usedPercent = toNumber(mainSecondary.已用百分比);
       const usedRatio = usedPercent / 100;
       const includedCredits = toNumber(sinceResetSummary.累计Credits);
@@ -857,11 +847,14 @@
       if (!sevenDayEntry) {
         throw new Error("rate_limit 的 primary/secondary_window 均不含 7 天级别窗口，无法反推主限制 - 7天窗口。");
       }
-      const mainSecondary = parseWindow(windowIdentity({
-        key: MAIN_SEVEN_DAY_WINDOW_KEY2,
-        label: "主限制 - 7天窗口",
-        backendField: sevenDayEntry.field
-      }), sevenDayEntry.row);
+      const mainSecondary = parseWindow(
+        windowIdentity({
+          key: MAIN_SEVEN_DAY_WINDOW_KEY2,
+          label: "主限制 - 7天窗口",
+          backendField: sevenDayEntry.field
+        }),
+        sevenDayEntry.row
+      );
       const apiNowMs = mainSecondary._serverNowMs || now();
       const apiTodayDate = ymdForApi(apiNowMs);
       const endExclusiveDate = ymdForApi(addDaysForApi(apiNowMs, 1));
@@ -1103,7 +1096,12 @@ ${text.slice(0, 800)}`);
     let backendInfo = STORAGE_BACKENDS.pending;
     let mirrorDegraded = false;
     function gmBackendInfo() {
-      return mirrorDegraded ? { ...STORAGE_BACKENDS.gm, label: "GM storage (mirror unavailable)", degraded: true, mirrorError: "Snapshot Archive mirror write failed." } : STORAGE_BACKENDS.gm;
+      return mirrorDegraded ? {
+        ...STORAGE_BACKENDS.gm,
+        label: "GM storage (mirror unavailable)",
+        degraded: true,
+        mirrorError: "Snapshot Archive mirror write failed."
+      } : STORAGE_BACKENDS.gm;
     }
     async function readFromGmStorage() {
       const gmGetValue = options.gmGetValue || (typeof GM_getValue === "function" ? GM_getValue : null);
@@ -1451,10 +1449,24 @@ ${text.slice(0, 800)}`);
       const { from, to } = utcMonthRange(month, nowMs);
       if (i === 0) {
         const raw = sumRangeRaw(ledger, { from, to });
-        current = { month, from, to, totalCredits: round2(raw.totalCredits), totalUsd: round2(raw.totalUsd), settled: false };
+        current = {
+          month,
+          from,
+          to,
+          totalCredits: round2(raw.totalCredits),
+          totalUsd: round2(raw.totalUsd),
+          settled: false
+        };
       } else {
         const agg = aggregateMonth(ledger, month, { nowMs, buffer });
-        months.push({ month, from, to, totalCredits: round2(agg.totalCredits), totalUsd: round2(agg.totalUsd), settled: true });
+        months.push({
+          month,
+          from,
+          to,
+          totalCredits: round2(agg.totalCredits),
+          totalUsd: round2(agg.totalUsd),
+          settled: true
+        });
       }
     }
     return { current, months };
@@ -1521,9 +1533,7 @@ ${text.slice(0, 800)}`);
       return value.map(sanitizeValue);
     }
     if (isPlainObject2(value)) {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)])
-      );
+      return Object.fromEntries(Object.entries(value).map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)]));
     }
     if (value instanceof Date) return value.toISOString();
     if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -1646,9 +1656,7 @@ ${text.slice(0, 800)}`);
   }
   function mergeSnapshots(currentArchive, incomingSnapshots) {
     const archive = normalizeSnapshotArchive(currentArchive);
-    const existingIds = new Set(
-      archive.snapshots.map((snapshot) => snapshot.snapshotId).filter(Boolean)
-    );
+    const existingIds = new Set(archive.snapshots.map((snapshot) => snapshot.snapshotId).filter(Boolean));
     const existingFallbackKeys = new Set(
       archive.snapshots.filter((snapshot) => !snapshot.snapshotId).map(snapshotFallbackKey)
     );
@@ -1694,7 +1702,10 @@ ${text.slice(0, 800)}`);
     const normalized = normalizeSnapshotArchive(archive);
     function stable(value) {
       if (Array.isArray(value)) return value.map(stable);
-      if (isPlainObject2(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+      if (isPlainObject2(value))
+        return Object.fromEntries(
+          Object.keys(value).sort().map((key) => [key, stable(value[key])])
+        );
       return value;
     }
     return JSON.stringify(stable({ ledger: normalized.ledger, snapshots: normalized.snapshots }));
@@ -1748,11 +1759,14 @@ ${text.slice(0, 800)}`);
     return Number.isFinite(parsed) ? parsed : 0;
   }
   function sumRows(rows) {
-    return rows.reduce((acc, row) => {
-      acc.totalCredits += toNumber3(row?.credits ?? row?.Credits);
-      acc.totalUsd += toNumber3(row?.usd ?? row?.折算USD);
-      return acc;
-    }, { totalCredits: 0, totalUsd: 0 });
+    return rows.reduce(
+      (acc, row) => {
+        acc.totalCredits += toNumber3(row?.credits ?? row?.Credits);
+        acc.totalUsd += toNumber3(row?.usd ?? row?.折算USD);
+        return acc;
+      },
+      { totalCredits: 0, totalUsd: 0 }
+    );
   }
   function createSnapshotArchiveQuery(archive) {
     const normalized = normalizeSnapshotArchive(archive);
@@ -1937,15 +1951,17 @@ ${text.slice(0, 800)}`);
       }
     };
     let queue = Promise.resolve();
-    return Object.fromEntries(Object.entries(operations).map(([name, operation]) => [
-      name,
-      (...args) => {
-        const result = queue.then(() => operation(...args));
-        queue = result.catch(() => {
-        });
-        return result;
-      }
-    ]));
+    return Object.fromEntries(
+      Object.entries(operations).map(([name, operation]) => [
+        name,
+        (...args) => {
+          const result = queue.then(() => operation(...args));
+          queue = result.catch(() => {
+          });
+          return result;
+        }
+      ])
+    );
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js
@@ -2150,7 +2166,9 @@ ${text.slice(0, 800)}`);
     return Boolean(gist?.files?.[filename]);
   }
   function pickArchiveGist(gists, filename) {
-    return (Array.isArray(gists) ? gists : []).find((gist) => gist?.description === GIST_DESCRIPTION && gistHasArchiveFile(gist, filename)) || null;
+    return (Array.isArray(gists) ? gists : []).find(
+      (gist) => gist?.description === GIST_DESCRIPTION && gistHasArchiveFile(gist, filename)
+    ) || null;
   }
   function validateArchiveDocument(documentObject) {
     if (documentObject?.format !== EXPORT_FORMAT || !SUPPORTED_IMPORT_VERSIONS.has(documentObject?.version)) {
@@ -2165,11 +2183,13 @@ ${text.slice(0, 800)}`);
       if (!file.raw_url) {
         throw new Error("GitHub Gist archive file is truncated and has no raw URL.");
       }
-      return validateArchiveDocument(await requestJson({
-        method: "GET",
-        url: file.raw_url,
-        headers: { Accept: "application/json" }
-      }));
+      return validateArchiveDocument(
+        await requestJson({
+          method: "GET",
+          url: file.raw_url,
+          headers: { Accept: "application/json" }
+        })
+      );
     }
     const content = String(file.content || "").trim();
     if (!content) return createEmptyExportDocument(now());
@@ -2411,7 +2431,9 @@ ${text.slice(0, 800)}`);
         if (error?.superseded) return supersededResult(error.latest);
         const unknown = remoteWritePending && !error?.status;
         const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
-        const message = await markSyncFailure(settings, failure).catch(() => "GitHub Gist sync failed; status could not be saved.");
+        const message = await markSyncFailure(settings, failure).catch(
+          () => "GitHub Gist sync failed; status could not be saved."
+        );
         throw Object.assign(new Error(message), {
           localMerged,
           phase,
@@ -2558,15 +2580,25 @@ ${text.slice(0, 800)}`);
           state.syncStatus = result.settings;
           state.remoteState = result.status === "synced" ? "synced" : "idle";
           state.errors.sync = null;
-          outcome = { status: result.status === "synced" ? "ok" : "skipped", reason: result.status, completed: result.status === "synced" ? ["sync"] : [] };
+          outcome = {
+            status: result.status === "synced" ? "ok" : "skipped",
+            reason: result.status,
+            completed: result.status === "synced" ? ["sync"] : []
+          };
         } catch (error) {
           state.errors.sync = errorMessage(error);
           if (error?.phase === "persistence") state.errors.persistence = errorMessage(error);
           state.remoteState = error?.remoteState || "failed";
-          outcome = { status: error?.localMerged ? "partial" : "error", completed: error?.localMerged ? ["local-merge"] : [], error: state.errors.sync, remoteState: state.remoteState };
+          outcome = {
+            status: error?.localMerged ? "partial" : "error",
+            completed: error?.localMerged ? ["local-merge"] : [],
+            error: state.errors.sync,
+            remoteState: state.remoteState
+          };
         }
         const refreshed = await refresh();
-        if (!refreshed && outcome.status === "ok") outcome = { ...outcome, status: "partial", error: state.errors.projection };
+        if (!refreshed && outcome.status === "ok")
+          outcome = { ...outcome, status: "partial", error: state.errors.projection };
         await readSyncStatus();
         return outcome;
       })().finally(() => {
@@ -2603,7 +2635,12 @@ ${text.slice(0, 800)}`);
           return { status: "partial", result, completed: ["calculation"], error: state.errors.persistence };
         }
         const refreshed = await refresh();
-        return { status: refreshed ? "ok" : "partial", result, completed: ["calculation", "persistence", ...refreshed ? ["projection"] : []], ...refreshed ? {} : { error: state.errors.projection } };
+        return {
+          status: refreshed ? "ok" : "partial",
+          result,
+          completed: ["calculation", "persistence", ...refreshed ? ["projection"] : []],
+          ...refreshed ? {} : { error: state.errors.projection }
+        };
       })().finally(() => {
         runGuard.release();
         running = null;
@@ -2620,7 +2657,12 @@ ${text.slice(0, 800)}`);
         state.errors.persistence = null;
         changedLocally();
         const refreshed = await refresh();
-        return { status: refreshed ? "ok" : "partial", completed: ["persistence", ...refreshed ? ["projection"] : []], report: imported.report, ...refreshed ? {} : { error: state.errors.projection } };
+        return {
+          status: refreshed ? "ok" : "partial",
+          completed: ["persistence", ...refreshed ? ["projection"] : []],
+          report: imported.report,
+          ...refreshed ? {} : { error: state.errors.projection }
+        };
       } catch (error) {
         state.errors.persistence = errorMessage(error);
         notify();
@@ -2662,7 +2704,8 @@ ${text.slice(0, 800)}`);
         if (disposed) return { status: "skipped", reason: "disposed" };
         state.lifecycle = "ready";
         notify();
-        if (state.remoteState === "unknown") return { status: "skipped", reason: "remote-state-unknown", completed: ["start"] };
+        if (state.remoteState === "unknown")
+          return { status: "skipped", reason: "remote-state-unknown", completed: ["start"] };
         if (refreshed && state.syncStatus?.enabled && state.syncStatus?.configured) return sync();
         return { status: refreshed ? "ok" : "partial", completed: ["start"] };
       })();
@@ -2676,7 +2719,16 @@ ${text.slice(0, 800)}`);
       clearTimer();
       unsubscribe();
     }
-    return { start, run, importArchive, exportArchive: () => archiveStore.buildExportDocument(), configureSync, sync, getState, dispose };
+    return {
+      start,
+      run,
+      importArchive,
+      exportArchive: () => archiveStore.buildExportDocument(),
+      configureSync,
+      sync,
+      getState,
+      dispose
+    };
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-view-model.lib.js
@@ -2799,29 +2851,45 @@ ${text.slice(0, 800)}`);
   }) {
     return [
       { type: "metrics", titleKey: "sectionKeyMetrics", metrics: detailMetrics },
-      dataView("details-weekly-estimate", "sectionWeeklyEstimate", [weekly], [
-        dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
-        dataColumn("剩余比例小数", { labelKey: "columnRemainingRatio", priority: "secondary" }),
-        dataColumn("包含重置日_已用折算USD", { labelKey: "columnIncludedResetUsd", priority: "primary" }),
-        dataColumn("反推周总USD_包含重置日", { labelKey: "columnIncludedResetTotalUsd", priority: "primary" }),
-        dataColumn("剩余USD_包含重置日口径", { labelKey: "columnIncludedResetRemainingUsd", priority: "primary" }),
-        dataColumn("包含重置日_已用Credits", { labelKey: "columnIncludedResetUsedCredits", priority: "secondary" }),
-        dataColumn("剩余Credits_包含重置日口径", { labelKey: "columnIncludedResetRemainingCredits", priority: "secondary" }),
-        dataColumn("排除重置日_已用折算USD", { labelKey: "columnExcludedResetUsedUsd", priority: "secondary" }),
-        dataColumn("剩余USD_排除重置日口径", { labelKey: "columnExcludedResetRemainingUsd", priority: "secondary" }),
-        dataColumn("排除重置日_已用Credits", { labelKey: "columnExcludedResetUsedCredits", priority: "debug" }),
-        dataColumn("剩余Credits_排除重置日口径", { labelKey: "columnExcludedResetRemainingCredits", priority: "debug" }),
-        dataColumn("误差说明", { labelKey: "columnErrorNote", priority: "debug", wrap: true })
-      ]),
-      dataView("details-range-summary", "sectionRangeSummary", [sinceReset, month, rolling], [
-        dataColumn("范围", { labelKey: "columnRange", priority: "primary", wrap: true }),
-        dataColumn("累计折算USD", { labelKey: "columnTotalUsd", priority: "primary" }),
-        dataColumn("累计Credits", { labelKey: "columnTotalCredits", priority: "primary" }),
-        dataColumn("返回日期桶数", { labelKey: "columnBucketCount", priority: "secondary" }),
-        dataColumn("累计Token", { labelKey: "columnTotalTokens", priority: "debug" }),
-        dataColumn("累计线程数", { labelKey: "columnTotalThreads", priority: "debug" }),
-        dataColumn("累计轮数", { labelKey: "columnTotalTurns", priority: "debug" })
-      ]),
+      dataView(
+        "details-weekly-estimate",
+        "sectionWeeklyEstimate",
+        [weekly],
+        [
+          dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
+          dataColumn("剩余比例小数", { labelKey: "columnRemainingRatio", priority: "secondary" }),
+          dataColumn("包含重置日_已用折算USD", { labelKey: "columnIncludedResetUsd", priority: "primary" }),
+          dataColumn("反推周总USD_包含重置日", { labelKey: "columnIncludedResetTotalUsd", priority: "primary" }),
+          dataColumn("剩余USD_包含重置日口径", { labelKey: "columnIncludedResetRemainingUsd", priority: "primary" }),
+          dataColumn("包含重置日_已用Credits", { labelKey: "columnIncludedResetUsedCredits", priority: "secondary" }),
+          dataColumn("剩余Credits_包含重置日口径", {
+            labelKey: "columnIncludedResetRemainingCredits",
+            priority: "secondary"
+          }),
+          dataColumn("排除重置日_已用折算USD", { labelKey: "columnExcludedResetUsedUsd", priority: "secondary" }),
+          dataColumn("剩余USD_排除重置日口径", { labelKey: "columnExcludedResetRemainingUsd", priority: "secondary" }),
+          dataColumn("排除重置日_已用Credits", { labelKey: "columnExcludedResetUsedCredits", priority: "debug" }),
+          dataColumn("剩余Credits_排除重置日口径", {
+            labelKey: "columnExcludedResetRemainingCredits",
+            priority: "debug"
+          }),
+          dataColumn("误差说明", { labelKey: "columnErrorNote", priority: "debug", wrap: true })
+        ]
+      ),
+      dataView(
+        "details-range-summary",
+        "sectionRangeSummary",
+        [sinceReset, month, rolling],
+        [
+          dataColumn("范围", { labelKey: "columnRange", priority: "primary", wrap: true }),
+          dataColumn("累计折算USD", { labelKey: "columnTotalUsd", priority: "primary" }),
+          dataColumn("累计Credits", { labelKey: "columnTotalCredits", priority: "primary" }),
+          dataColumn("返回日期桶数", { labelKey: "columnBucketCount", priority: "secondary" }),
+          dataColumn("累计Token", { labelKey: "columnTotalTokens", priority: "debug" }),
+          dataColumn("累计线程数", { labelKey: "columnTotalThreads", priority: "debug" }),
+          dataColumn("累计轮数", { labelKey: "columnTotalTurns", priority: "debug" })
+        ]
+      ),
       dataView("details-windows", "sectionWindows", windows, [
         dataColumn("名称", { labelKey: "columnName", priority: "primary", wrap: true }),
         dataColumn("已用百分比", { labelKey: "columnUsedPercent", priority: "primary" }),
@@ -2837,11 +2905,17 @@ ${text.slice(0, 800)}`);
         dataColumn("Credits", { labelKey: "columnCredits", priority: "secondary" }),
         dataColumn("折算USD", { labelKey: "statsColumnUsd", priority: "secondary" })
       ]),
-      dataView("details-reset-credits", "sectionResetCredits", resetCredits?.明细, [
-        dataColumn("标题", { labelKey: "columnTitle", priority: "primary", wrap: true }),
-        dataColumn("状态", { labelKey: "columnStatus", priority: "secondary" }),
-        dataColumn("过期时间_本地", { labelKey: "columnExpiresLocal", priority: "primary", truncate: true })
-      ], { emptyKey: "resetCreditsEmpty" })
+      dataView(
+        "details-reset-credits",
+        "sectionResetCredits",
+        resetCredits?.明细,
+        [
+          dataColumn("标题", { labelKey: "columnTitle", priority: "primary", wrap: true }),
+          dataColumn("状态", { labelKey: "columnStatus", priority: "secondary" }),
+          dataColumn("过期时间_本地", { labelKey: "columnExpiresLocal", priority: "primary", truncate: true })
+        ],
+        { emptyKey: "resetCreditsEmpty" }
+      )
     ];
   }
   function createPanelViews({
@@ -3854,7 +3928,8 @@ ${text.slice(0, 800)}`);
       ];
       return `
       <div class="cqc-stats-tabs" role="group" aria-label="${escapeHtml3(t("tabStats"))}">
-        ${items.map(([id, key]) => `
+        ${items.map(
+        ([id, key]) => `
           <button
             type="button"
             class="cqc-stats-tab${activePeriod === id ? " is-active" : ""}"
@@ -3862,7 +3937,8 @@ ${text.slice(0, 800)}`);
             data-period="${escapeHtml3(id)}"
             aria-pressed="${activePeriod === id ? "true" : "false"}"
           >${escapeHtml3(t(key))}</button>
-        `).join("")}
+        `
+      ).join("")}
       </div>
     `;
     }
@@ -3912,7 +3988,8 @@ ${text.slice(0, 800)}`);
       if (!items.length) return emptyHtml();
       return `
       <div class="cqc-stats-list">
-        ${items.map((item) => `
+        ${items.map(
+        (item) => `
           <button
             type="button"
             class="cqc-stats-row"
@@ -3925,7 +4002,8 @@ ${text.slice(0, 800)}`);
             <span class="cqc-stats-row-usd">$${escapeHtml3(usd(item.usd))}</span>
             <span class="cqc-stats-row-credits">${escapeHtml3(String(round(item.credits)))} Credits</span>
           </button>
-        `).join("")}
+        `
+      ).join("")}
       </div>
     `;
     }
@@ -3936,26 +4014,35 @@ ${text.slice(0, 800)}`);
     }
     function weekBody() {
       const week = cost.week || {};
-      const current = week.current ? estimateLineHtml(t("statsPeriodWeek"), `${week.current.from} ~ ${week.current.to}`, week.current.credits, week.current.usd) : "";
-      const list = drillableListHtml((week.blocks || []).map((block) => ({
-        from: block.from,
-        to: block.to,
-        label: `${block.from} ~ ${block.to}`,
-        usd: block.usd,
-        credits: block.credits
-      })));
+      const current = week.current ? estimateLineHtml(
+        t("statsPeriodWeek"),
+        `${week.current.from} ~ ${week.current.to}`,
+        week.current.credits,
+        week.current.usd
+      ) : "";
+      const list = drillableListHtml(
+        (week.blocks || []).map((block) => ({
+          from: block.from,
+          to: block.to,
+          label: `${block.from} ~ ${block.to}`,
+          usd: block.usd,
+          credits: block.credits
+        }))
+      );
       return sectionHtml(t("statsPeriodWeek"), current + list);
     }
     function monthBody() {
       const month = cost.month || {};
       const current = month.current ? estimateLineHtml(t("statsPeriodMonth"), month.current.month, month.current.credits, month.current.usd) : "";
-      const list = drillableListHtml((month.rows || []).map((row) => ({
-        from: row.from,
-        to: row.to,
-        label: row.month,
-        usd: row.usd,
-        credits: row.credits
-      })));
+      const list = drillableListHtml(
+        (month.rows || []).map((row) => ({
+          from: row.from,
+          to: row.to,
+          label: row.month,
+          usd: row.usd,
+          credits: row.credits
+        }))
+      );
       return sectionHtml(t("statsPeriodMonth"), current + list);
     }
     function allBody() {
@@ -3992,7 +4079,8 @@ ${text.slice(0, 800)}`);
   }
   function formatValue(value) {
     if (value === null || value === void 0 || value === "") return "-";
-    if (typeof value === "number") return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(void 0, { maximumFractionDigits: 6 });
+    if (typeof value === "number")
+      return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(void 0, { maximumFractionDigits: 6 });
     return String(value);
   }
   function safeRows(rows, limit = 12) {
@@ -4012,17 +4100,24 @@ ${text.slice(0, 800)}`);
     }
     function normalizeDataColumns(rows, columns) {
       if (Array.isArray(columns) && columns.length) {
-        return columns.map((column) => typeof column === "string" ? { key: column, label: column, priority: "secondary", compact: true } : {
-          key: column.key || column.label || "",
-          label: column.label || column.key || "",
-          labelKey: column.labelKey || "",
-          priority: column.priority || "secondary",
-          truncate: Boolean(column.truncate),
-          wrap: Boolean(column.wrap),
-          compact: column.compact !== false
-        }).filter((column) => column.key);
+        return columns.map(
+          (column) => typeof column === "string" ? { key: column, label: column, priority: "secondary", compact: true } : {
+            key: column.key || column.label || "",
+            label: column.label || column.key || "",
+            labelKey: column.labelKey || "",
+            priority: column.priority || "secondary",
+            truncate: Boolean(column.truncate),
+            wrap: Boolean(column.wrap),
+            compact: column.compact !== false
+          }
+        ).filter((column) => column.key);
       }
-      return [...new Set(rows.flatMap((row) => Object.keys(row || {})))].map((key) => ({ key, label: key, priority: "secondary", compact: true }));
+      return [...new Set(rows.flatMap((row) => Object.keys(row || {})))].map((key) => ({
+        key,
+        label: key,
+        priority: "secondary",
+        compact: true
+      }));
     }
     function columnLabel(column) {
       return column.labelKey ? t(column.labelKey) : column.label;
@@ -4039,11 +4134,7 @@ ${text.slice(0, 800)}`);
     }
     function compactValueHtml(row, column) {
       const value = formatValue(row?.[column.key]);
-      const classes = [
-        "cqc-compact-value",
-        column.truncate ? "is-truncated" : "",
-        column.wrap ? "is-wrappable" : ""
-      ].filter(Boolean).join(" ");
+      const classes = ["cqc-compact-value", column.truncate ? "is-truncated" : "", column.wrap ? "is-wrappable" : ""].filter(Boolean).join(" ");
       const title = column.truncate ? ` title="${escapeHtml(value)}"` : "";
       return `
       <div class="cqc-compact-field">
@@ -4065,11 +4156,13 @@ ${text.slice(0, 800)}`);
       const head = columns.map((column) => `<th>${escapeHtml(columnLabel(column))}</th>`).join("");
       const body = visibleRows.map((row) => `<tr>${columns.map((column) => dataCellHtml(row, column)).join("")}</tr>`).join("");
       const compactColumns = columns.filter((column) => column.compact && column.priority !== "debug");
-      const compact = visibleRows.map((row) => `
+      const compact = visibleRows.map(
+        (row) => `
         <dl class="cqc-compact-row">
           ${compactColumns.map((column) => compactValueHtml(row, column)).join("")}
         </dl>
-      `).join("");
+      `
+      ).join("");
       const toggle = expandable ? `<div class="cqc-table-note"><button type="button" class="cqc-table-expand" data-action="toggle-rows" data-view-id="${escapeHtml(view.id || "")}" data-expanded="${expanded ? "true" : "false"}">${escapeHtml(expanded ? t("tableShowLess") : t("tableShowAll", { total: rows.length }))}</button></div>` : "";
       return `
       <div class="cqc-data-view" data-view-id="${escapeHtml(view.id || "")}" data-compact="${view.compactOnMobile === false ? "false" : "true"}">
@@ -4225,9 +4318,11 @@ ${text.slice(0, 800)}`);
     function detailActionsHtml(actions) {
       return `
       <div class="cqc-detail-footnote">
-        ${actions.map((item) => `
+        ${actions.map(
+        (item) => `
           <button type="button" data-action="${escapeHtml(item.action)}">${escapeHtml(item.label)}</button>
-        `).join("")}
+        `
+      ).join("")}
       </div>
     `;
     }
@@ -4247,40 +4342,46 @@ ${text.slice(0, 800)}`);
         t("archiveMonthlyCredits"),
         t("archiveWeeklyUsedPercent")
       ];
-      const overview = dataViewHtml({
-        id: "archive-overview",
-        rows: [
-          {
-            [overviewColumns[0]]: model.snapshotCount,
-            [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
-            [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
-            [overviewColumns[3]]: model.storageBackend?.label || "-"
-          }
-        ],
-        columns: overviewColumns.map((column) => ({
-          key: column,
-          label: column,
-          priority: column === t("archiveSnapshotCount") ? "primary" : "secondary",
-          truncate: column !== t("archiveSnapshotCount")
-        })),
-        limit: 1
-      }, state);
+      const overview = dataViewHtml(
+        {
+          id: "archive-overview",
+          rows: [
+            {
+              [overviewColumns[0]]: model.snapshotCount,
+              [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
+              [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
+              [overviewColumns[3]]: model.storageBackend?.label || "-"
+            }
+          ],
+          columns: overviewColumns.map((column) => ({
+            key: column,
+            label: column,
+            priority: column === t("archiveSnapshotCount") ? "primary" : "secondary",
+            truncate: column !== t("archiveSnapshotCount")
+          })),
+          limit: 1
+        },
+        state
+      );
       const recentSnapshots = safeRows(model.recentSnapshots || [], 5);
-      const recent = recentSnapshots.length ? dataViewHtml({
-        id: "archive-recent",
-        rows: recentSnapshots.map((row) => ({
-          [recentColumns[0]]: displayTimestamp(row.capturedAt),
-          [recentColumns[1]]: row.snapshotId,
-          [recentColumns[2]]: row.monthlyCredits,
-          [recentColumns[3]]: row.weeklyUsedPercent
-        })),
-        columns: recentColumns.map((column) => ({
-          key: column,
-          label: column,
-          priority: column === t("archiveSnapshotId") ? "primary" : "secondary",
-          truncate: column === t("archiveSnapshotId") || column === t("archiveCapturedAt")
-        }))
-      }, state) : `<div class="cqc-empty">${escapeHtml(t("archiveNoSnapshot"))}</div>`;
+      const recent = recentSnapshots.length ? dataViewHtml(
+        {
+          id: "archive-recent",
+          rows: recentSnapshots.map((row) => ({
+            [recentColumns[0]]: displayTimestamp(row.capturedAt),
+            [recentColumns[1]]: row.snapshotId,
+            [recentColumns[2]]: row.monthlyCredits,
+            [recentColumns[3]]: row.weeklyUsedPercent
+          })),
+          columns: recentColumns.map((column) => ({
+            key: column,
+            label: column,
+            priority: column === t("archiveSnapshotId") ? "primary" : "secondary",
+            truncate: column === t("archiveSnapshotId") || column === t("archiveCapturedAt")
+          }))
+        },
+        state
+      ) : `<div class="cqc-empty">${escapeHtml(t("archiveNoSnapshot"))}</div>`;
       const importReport = model.importReport ? `<div class="cqc-table-note">${escapeHtml(t("archiveLatestImport", { added: model.importReport.added, skipped: model.importReport.skipped, invalid: model.importReport.invalid }))}</div>` : "";
       return `${overview}${importReport}${recent}`;
     }
@@ -4298,14 +4399,16 @@ ${text.slice(0, 800)}`);
       ];
       return `
       <div class="cqc-tabs">
-        ${tabs.map((tab) => `
+        ${tabs.map(
+        (tab) => `
           <button
             type="button"
             class="cqc-tab${activePanelView === tab.id ? " is-active" : ""}"
             data-action="switch-view"
             data-view="${escapeHtml(tab.id)}"
           >${escapeHtml(tab.labelKey ? t(tab.labelKey) : tab.label)}</button>
-        `).join("")}
+        `
+      ).join("")}
       </div>
     `;
     }
@@ -5729,9 +5832,10 @@ ${root} :focus-visible {
           finish({ status: "cancelled" });
         }
         function focused() {
-          if (pickerActive) focusTimer = window2.setTimeout(() => {
-            if (!settled && !input.files?.length) cancelled();
-          }, 250);
+          if (pickerActive)
+            focusTimer = window2.setTimeout(() => {
+              if (!settled && !input.files?.length) cancelled();
+            }, 250);
         }
         function changed() {
           pickerActive = false;
@@ -5946,7 +6050,11 @@ ${root} :focus-visible {
             if (outcome.status === "error") notice(t("runFailed", { error: outcome.error }), "error");
           } else {
             presentation = "snapshot";
-            foregroundStatus(sequence, outcome.status === "partial" ? "statusFailed" : "statusUpdated", outcome.status === "partial" ? "error" : "success");
+            foregroundStatus(
+              sequence,
+              outcome.status === "partial" ? "statusFailed" : "statusUpdated",
+              outcome.status === "partial" ? "error" : "success"
+            );
             if (outcome.status === "partial") notice(t("saveArchiveFailed", { error: outcome.error }), "error");
           }
           commitPresentation();
@@ -5970,9 +6078,14 @@ ${root} :focus-visible {
         foregroundStatus(sequence, "statusLoading", "loading");
         const outcome = await application.sync();
         if (!disposed) {
-          if (outcome.status === "error" || outcome.status === "partial") notice(t("remoteSyncFailed", { error: outcome.error }), "error");
+          if (outcome.status === "error" || outcome.status === "partial")
+            notice(t("remoteSyncFailed", { error: outcome.error }), "error");
           else if (outcome.status === "skipped") notice(t("remoteSyncSkipped", { status: outcome.reason }), "info");
-          foregroundStatus(sequence, outcome.status === "error" || outcome.status === "partial" ? "statusFailed" : "statusUpdated", outcome.status === "error" || outcome.status === "partial" ? "error" : "success");
+          foregroundStatus(
+            sequence,
+            outcome.status === "error" || outcome.status === "partial" ? "statusFailed" : "statusUpdated",
+            outcome.status === "error" || outcome.status === "partial" ? "error" : "success"
+          );
         }
         return outcome;
       });
@@ -5994,15 +6107,21 @@ ${root} :focus-visible {
           commitPresentation();
         }
         if (outcome.reason === "token-required") notice(t("remoteSyncTokenRequired"), "error");
-        else if (outcome.status === "error" || outcome.status === "partial") notice(t("remoteSyncFailed", { error: outcome.error || outcome.reason }), "error");
-        foregroundStatus(sequence, outcome.status === "ok" ? "statusUpdated" : "statusFailed", outcome.status === "ok" ? "success" : "error");
+        else if (outcome.status === "error" || outcome.status === "partial")
+          notice(t("remoteSyncFailed", { error: outcome.error || outcome.reason }), "error");
+        foregroundStatus(
+          sequence,
+          outcome.status === "ok" ? "statusUpdated" : "statusFailed",
+          outcome.status === "ok" ? "success" : "error"
+        );
         return outcome;
       });
     }
     function importArchive() {
       return once("import-archive", async () => {
         const picked = await files.chooseText({ signal: abortFiles.signal });
-        if (disposed || picked?.status === "cancelled" || picked == null) return { status: "skipped", reason: disposed ? "disposed" : "cancelled", completed: [] };
+        if (disposed || picked?.status === "cancelled" || picked == null)
+          return { status: "skipped", reason: disposed ? "disposed" : "cancelled", completed: [] };
         let imported;
         try {
           imported = JSON.parse(picked.text);
@@ -6029,7 +6148,12 @@ ${root} :focus-visible {
         try {
           await files.downloadText(EXPORT_NAME, JSON.stringify(exported, null, 2));
         } catch (error) {
-          const outcome = { status: "error", completed: ["export"], stage: "download", error: error?.message || String(error) };
+          const outcome = {
+            status: "error",
+            completed: ["export"],
+            stage: "download",
+            error: error?.message || String(error)
+          };
           notice(t("exportFailed", { error: outcome.error }), "error");
           return outcome;
         }
@@ -6115,7 +6239,11 @@ ${root} :focus-visible {
       if (action === "stats-drill") {
         const node = target.closest("[data-from]");
         if (node?.dataset.from && node?.dataset.to) {
-          statsDrill = { from: node.dataset.from, to: node.dataset.to, label: node.dataset.label || `${node.dataset.from} ~ ${node.dataset.to}` };
+          statsDrill = {
+            from: node.dataset.from,
+            to: node.dataset.to,
+            label: node.dataset.label || `${node.dataset.from} ~ ${node.dataset.to}`
+          };
           rerenderActive();
         }
       }
@@ -6174,15 +6302,17 @@ ${root} :focus-visible {
     const remoteSyncClient = createRemoteSyncClient({ archiveStore });
     let panel;
     const application = createQuotaApplication({
-      runtime: { run: () => createQuotaRuntime({
-        config: createDefaultQuotaRuntimeConfig({ DEBUG: window[DEBUG_KEY] === true }),
-        coreLib: codex_quota_compass_core_lib_exports,
-        fetchImpl: fetch.bind(globalThis),
-        location: globalThis.location,
-        now: () => Date.now(),
-        formatLocalTime: (ms) => new Date(ms).toLocaleString(),
-        getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || "未知"
-      }).run() },
+      runtime: {
+        run: () => createQuotaRuntime({
+          config: createDefaultQuotaRuntimeConfig({ DEBUG: window[DEBUG_KEY] === true }),
+          coreLib: codex_quota_compass_core_lib_exports,
+          fetchImpl: fetch.bind(globalThis),
+          location: globalThis.location,
+          now: () => Date.now(),
+          formatLocalTime: (ms) => new Date(ms).toLocaleString(),
+          getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || "未知"
+        }).run()
+      },
       archiveStore,
       remoteSync: remoteSyncClient,
       archiveChanges: archiveStoragePort,
@@ -6210,7 +6340,10 @@ ${root} :focus-visible {
           console.error(`[${SCRIPT_NAME}] Failed.`, outcome.error || outcome.reason);
         } else if (window[DEBUG_KEY] === true) {
           window[LAST_RESULT_KEY] = outcome.result;
-          console.log(`[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`, outcome.result);
+          console.log(
+            `[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`,
+            outcome.result
+          );
         } else {
           console.info(`[${SCRIPT_NAME}] Finished.`);
         }
@@ -6244,7 +6377,9 @@ ${root} :focus-visible {
     if (location.hostname === "chatgpt.com" && location.pathname === "/codex/cloud/settings/analytics" && location.hash === "#usage") {
       console.info(`[${SCRIPT_NAME}] Ready. Click the floating button to calculate usage.`);
     } else {
-      console.info(`[${SCRIPT_NAME}] Open https://chatgpt.com/codex/cloud/settings/analytics#usage or use the floating button / Tampermonkey menu to run.`);
+      console.info(
+        `[${SCRIPT_NAME}] Open https://chatgpt.com/codex/cloud/settings/analytics#usage or use the floating button / Tampermonkey menu to run.`
+      );
     }
   })();
 })();

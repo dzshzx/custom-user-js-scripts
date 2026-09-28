@@ -21,11 +21,7 @@ function lastItem(items) {
 
 function ymdUTC(value) {
   const date = new Date(value);
-  return [
-    date.getUTCFullYear(),
-    pad2(date.getUTCMonth() + 1),
-    pad2(date.getUTCDate()),
-  ].join('-');
+  return [date.getUTCFullYear(), pad2(date.getUTCMonth() + 1), pad2(date.getUTCDate())].join('-');
 }
 
 function ymdLocal(value) {
@@ -51,10 +47,10 @@ function firstDayOfMonthLocal(value) {
 }
 
 function tokenTotal(row = {}) {
-  return toNumber(row.text_total_tokens)
-    || toNumber(row.cached_text_input_tokens)
-      + toNumber(row.uncached_text_input_tokens)
-      + toNumber(row.text_output_tokens);
+  return (
+    toNumber(row.text_total_tokens) ||
+    toNumber(row.cached_text_input_tokens) + toNumber(row.uncached_text_input_tokens) + toNumber(row.text_output_tokens)
+  );
 }
 
 function utcOffsetLabel(value) {
@@ -64,13 +60,7 @@ function utcOffsetLabel(value) {
   return `UTC${sign}${pad2(Math.floor(absolute / 60))}:${pad2(absolute % 60)}`;
 }
 
-function buildQuotaSnapshotResult({
-  config,
-  diagnostics,
-  windows,
-  periods,
-  resetCredits = null,
-}) {
+function buildQuotaSnapshotResult({ config, diagnostics, windows, periods, resetCredits = null }) {
   const rollingLabel = `近${config.ROLLING_DAYS}天`;
   return {
     配置: {
@@ -96,12 +86,8 @@ function buildQuotaSnapshotResult({
       汇总: periods.rolling.summary,
       每日明细: periods.rolling.rows,
       客户端汇总: periods.rolling.clients,
-      ...(periods.rolling.modelSummaries
-        ? { 模型汇总: periods.rolling.modelSummaries }
-        : {}),
-      ...(periods.rolling.modelSummaryError
-        ? { 模型汇总错误: periods.rolling.modelSummaryError }
-        : {}),
+      ...(periods.rolling.modelSummaries ? { 模型汇总: periods.rolling.modelSummaries } : {}),
+      ...(periods.rolling.modelSummaryError ? { 模型汇总错误: periods.rolling.modelSummaryError } : {}),
     },
   };
 }
@@ -114,9 +100,7 @@ function createQuotaCalculator({
   fetchRateLimitResetCredits = null,
   now = () => Date.now(),
   formatLocalTime = (ms) => new Date(ms).toLocaleString(),
-  getBrowserTimeZone = () => (
-    globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || '未知'
-  ),
+  getBrowserTimeZone = () => globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || '未知',
 }) {
   if (!config || typeof config !== 'object') {
     throw new Error('Codex quota calculator requires config.');
@@ -129,27 +113,14 @@ function createQuotaCalculator({
   }
 
   const dayMs = 24 * 60 * 60 * 1000;
-  const ymdForApi = (ms) => (
-    config.DATE_BUCKET_MODE === 'utc' ? ymdUTC(ms) : ymdLocal(ms)
-  );
-  const addDaysForApi = (ms, days) => (
-    config.DATE_BUCKET_MODE === 'utc'
-      ? ms + days * dayMs
-      : addDaysLocalMs(ms, days)
-  );
-  const firstDayOfMonthForApi = (ms) => (
-    config.DATE_BUCKET_MODE === 'utc'
-      ? firstDayOfMonthUTC(ms)
-      : firstDayOfMonthLocal(ms)
-  );
+  const ymdForApi = (ms) => (config.DATE_BUCKET_MODE === 'utc' ? ymdUTC(ms) : ymdLocal(ms));
+  const addDaysForApi = (ms, days) =>
+    config.DATE_BUCKET_MODE === 'utc' ? ms + days * dayMs : addDaysLocalMs(ms, days);
+  const firstDayOfMonthForApi = (ms) =>
+    config.DATE_BUCKET_MODE === 'utc' ? firstDayOfMonthUTC(ms) : firstDayOfMonthLocal(ms);
   const fmtUTC = (ms) => new Date(ms).toISOString().replace('T', ' ').replace('.000Z', ' UTC');
 
-  function windowIdentity({
-    key,
-    label,
-    backendField,
-    sourceName = '',
-  }) {
+  function windowIdentity({ key, label, backendField, sourceName = '' }) {
     return { key, label, backendField, sourceName };
   }
 
@@ -168,11 +139,12 @@ function createQuotaCalculator({
   }
 
   function findMainSevenDayEntry(usage) {
-    return mainWindowEntries(usage)
-      .filter((entry) => isSevenDayClassWindow(entry.row))
-      .sort((left, right) => (
-        toNumber(right.row.limit_window_seconds) - toNumber(left.row.limit_window_seconds)
-      ))[0] ?? null;
+    return (
+      mainWindowEntries(usage)
+        .filter((entry) => isSevenDayClassWindow(entry.row))
+        .sort((left, right) => toNumber(right.row.limit_window_seconds) - toNumber(left.row.limit_window_seconds))[0] ??
+      null
+    );
   }
 
   function additionalWindowKey(name, suffix) {
@@ -215,11 +187,16 @@ function createQuotaCalculator({
     const sevenDayEntry = findMainSevenDayEntry(usage);
     for (const entry of mainWindowEntries(usage)) {
       const isSevenDay = entry.field === sevenDayEntry?.field;
-      windows.push(parseWindow(windowIdentity({
-        key: isSevenDay ? MAIN_SEVEN_DAY_WINDOW_KEY : MAIN_PRIMARY_WINDOW_KEY,
-        label: isSevenDay ? '主限制 - 7天窗口' : '主限制 - 5小时窗口',
-        backendField: entry.field,
-      }), entry.row));
+      windows.push(
+        parseWindow(
+          windowIdentity({
+            key: isSevenDay ? MAIN_SEVEN_DAY_WINDOW_KEY : MAIN_PRIMARY_WINDOW_KEY,
+            label: isSevenDay ? '主限制 - 7天窗口' : '主限制 - 5小时窗口',
+            backendField: entry.field,
+          }),
+          entry.row,
+        ),
+      );
     }
     for (const item of usage?.additional_rate_limits ?? []) {
       const name = item.limit_name || item.metered_feature || '额外限制';
@@ -227,12 +204,17 @@ function createQuotaCalculator({
         const row = item?.rate_limit?.[field];
         if (!row) continue;
         const isSevenDay = isSevenDayClassWindow(row);
-        windows.push(parseWindow(windowIdentity({
-          key: additionalWindowKey(name, isSevenDay ? 'sevenDayWindow' : 'primaryWindow'),
-          label: `${name} - ${isSevenDay ? '7天窗口' : '5小时窗口'}`,
-          backendField: field,
-          sourceName: name,
-        }), row));
+        windows.push(
+          parseWindow(
+            windowIdentity({
+              key: additionalWindowKey(name, isSevenDay ? 'sevenDayWindow' : 'primaryWindow'),
+              label: `${name} - ${isSevenDay ? '7天窗口' : '5小时窗口'}`,
+              backendField: field,
+              sourceName: name,
+            }),
+            row,
+          ),
+        );
       }
     }
     return windows;
@@ -339,9 +321,7 @@ function createQuotaCalculator({
         速度: row.速度,
         Credits: roundNumber(row.Credits * scale, 2),
         折算USD: roundNumber(row.Credits * scale * config.USD_PER_CREDIT, 2),
-        占比百分比: totalRelative > 0
-          ? roundNumber((row.Credits / totalRelative) * 100, 1)
-          : 0,
+        占比百分比: totalRelative > 0 ? roundNumber((row.Credits / totalRelative) * 100, 1) : 0,
       }))
       .sort((left, right) => right.Credits - left.Credits || right.占比百分比 - left.占比百分比);
   }
@@ -366,9 +346,7 @@ function createQuotaCalculator({
       .map((credit) => ({
         标题: credit?.title || credit?.reset_type || '-',
         状态: credit?.status || '-',
-        过期时间_本地: credit?.expires_at
-          ? formatLocalTime(Date.parse(credit.expires_at))
-          : '-',
+        过期时间_本地: credit?.expires_at ? formatLocalTime(Date.parse(credit.expires_at)) : '-',
       }));
   }
 
@@ -418,12 +396,7 @@ function createQuotaCalculator({
     return visible;
   }
 
-  function buildWeeklyEstimate({
-    mainSecondary,
-    sinceResetRows,
-    sinceResetSummary,
-    sinceResetStartDate,
-  }) {
+  function buildWeeklyEstimate({ mainSecondary, sinceResetRows, sinceResetSummary, sinceResetStartDate }) {
     const usedPercent = toNumber(mainSecondary.已用百分比);
     const usedRatio = usedPercent / 100;
     const includedCredits = toNumber(sinceResetSummary.累计Credits);
@@ -465,7 +438,8 @@ function createQuotaCalculator({
       剩余USD_包含重置日口径: roundNumber(remainingWithResetDay * config.USD_PER_CREDIT, 2),
       剩余Credits_排除重置日口径: roundNumber(remainingWithoutResetDay, 2),
       剩余USD_排除重置日口径: roundNumber(remainingWithoutResetDay * config.USD_PER_CREDIT, 2),
-      误差说明: 'daily analytics 只能按天聚合，不能切到具体小时分钟；实际值通常介于“排除重置日”和“包含重置日”之间。used_percent 也是整数，存在四舍五入或截断误差。',
+      误差说明:
+        'daily analytics 只能按天聚合，不能切到具体小时分钟；实际值通常介于“排除重置日”和“包含重置日”之间。used_percent 也是整数，存在四舍五入或截断误差。',
     };
   }
 
@@ -478,11 +452,14 @@ function createQuotaCalculator({
       throw new Error('rate_limit 的 primary/secondary_window 均不含 7 天级别窗口，无法反推主限制 - 7天窗口。');
     }
 
-    const mainSecondary = parseWindow(windowIdentity({
-      key: MAIN_SEVEN_DAY_WINDOW_KEY,
-      label: '主限制 - 7天窗口',
-      backendField: sevenDayEntry.field,
-    }), sevenDayEntry.row);
+    const mainSecondary = parseWindow(
+      windowIdentity({
+        key: MAIN_SEVEN_DAY_WINDOW_KEY,
+        label: '主限制 - 7天窗口',
+        backendField: sevenDayEntry.field,
+      }),
+      sevenDayEntry.row,
+    );
     const apiNowMs = mainSecondary._serverNowMs || now();
     const apiTodayDate = ymdForApi(apiNowMs);
     const endExclusiveDate = ymdForApi(addDaysForApi(apiNowMs, 1));
@@ -570,7 +547,4 @@ function createQuotaCalculator({
   return { run };
 }
 
-export {
-  buildQuotaSnapshotResult,
-  createQuotaCalculator,
-};
+export { buildQuotaSnapshotResult, createQuotaCalculator };

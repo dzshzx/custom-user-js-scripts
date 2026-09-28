@@ -77,7 +77,8 @@ import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-
     }
 
     const progress = activeToaster.showProgress({ message: '正在导出主图…' });
-    runtime.exportMainImage()
+    runtime
+      .exportMainImage()
       .then((result) => {
         if (result) {
           progress.done(`已导出 ${result.filename}`);

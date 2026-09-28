@@ -27,8 +27,138 @@
     function rol(x, c) {
       return (x << c | x >>> 32 - c) >>> 0;
     }
-    var K = [3614090360, 3905402710, 606105819, 3250441966, 4118548399, 1200080426, 2821735955, 4249261313, 1770035416, 2336552879, 4294925233, 2304563134, 1804603682, 4254626195, 2792965006, 1236535329, 4129170786, 3225465664, 643717713, 3921069994, 3593408605, 38016083, 3634488961, 3889429448, 568446438, 3275163606, 4107603335, 1163531501, 2850285829, 4243563512, 1735328473, 2368359562, 4294588738, 2272392833, 1839030562, 4259657740, 2763975236, 1272893353, 4139469664, 3200236656, 681279174, 3936430074, 3572445317, 76029189, 3654602809, 3873151461, 530742520, 3299628645, 4096336452, 1126891415, 2878612391, 4237533241, 1700485571, 2399980690, 4293915773, 2240044497, 1873313359, 4264355552, 2734768916, 1309151649, 4149444226, 3174756917, 718787259, 3951481745];
-    var S = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21];
+    var K = [
+      3614090360,
+      3905402710,
+      606105819,
+      3250441966,
+      4118548399,
+      1200080426,
+      2821735955,
+      4249261313,
+      1770035416,
+      2336552879,
+      4294925233,
+      2304563134,
+      1804603682,
+      4254626195,
+      2792965006,
+      1236535329,
+      4129170786,
+      3225465664,
+      643717713,
+      3921069994,
+      3593408605,
+      38016083,
+      3634488961,
+      3889429448,
+      568446438,
+      3275163606,
+      4107603335,
+      1163531501,
+      2850285829,
+      4243563512,
+      1735328473,
+      2368359562,
+      4294588738,
+      2272392833,
+      1839030562,
+      4259657740,
+      2763975236,
+      1272893353,
+      4139469664,
+      3200236656,
+      681279174,
+      3936430074,
+      3572445317,
+      76029189,
+      3654602809,
+      3873151461,
+      530742520,
+      3299628645,
+      4096336452,
+      1126891415,
+      2878612391,
+      4237533241,
+      1700485571,
+      2399980690,
+      4293915773,
+      2240044497,
+      1873313359,
+      4264355552,
+      2734768916,
+      1309151649,
+      4149444226,
+      3174756917,
+      718787259,
+      3951481745
+    ];
+    var S = [
+      7,
+      12,
+      17,
+      22,
+      7,
+      12,
+      17,
+      22,
+      7,
+      12,
+      17,
+      22,
+      7,
+      12,
+      17,
+      22,
+      5,
+      9,
+      14,
+      20,
+      5,
+      9,
+      14,
+      20,
+      5,
+      9,
+      14,
+      20,
+      5,
+      9,
+      14,
+      20,
+      4,
+      11,
+      16,
+      23,
+      4,
+      11,
+      16,
+      23,
+      4,
+      11,
+      16,
+      23,
+      4,
+      11,
+      16,
+      23,
+      6,
+      10,
+      15,
+      21,
+      6,
+      10,
+      15,
+      21,
+      6,
+      10,
+      15,
+      21,
+      6,
+      10,
+      15,
+      21
+    ];
     var bytes = [], i;
     for (i = 0; i < s.length; i++) bytes.push(s.charCodeAt(i) & 255);
     var lenBits = s.length * 8 >>> 0;
@@ -42,7 +172,8 @@
     var a0 = 1732584193, b0 = 4023233417, c0 = 2562383102, d0 = 271733878;
     for (var o = 0; o < bytes.length; o += 64) {
       var M = new Array(16);
-      for (var j = 0; j < 16; j++) M[j] = (bytes[o + j * 4] | bytes[o + j * 4 + 1] << 8 | bytes[o + j * 4 + 2] << 16 | bytes[o + j * 4 + 3] << 24) >>> 0;
+      for (var j = 0; j < 16; j++)
+        M[j] = (bytes[o + j * 4] | bytes[o + j * 4 + 1] << 8 | bytes[o + j * 4 + 2] << 16 | bytes[o + j * 4 + 3] << 24) >>> 0;
       var A = a0, B = b0, C = c0, D = d0;
       for (var k = 0; k < 64; k++) {
         var F, g;
@@ -130,9 +261,10 @@
             signal: controller?.signal || signal
           });
           if (signal?.aborted) throw cancelled();
-          if (!response.ok) throw Object.assign(new Error("HTTP " + response.status), {
-            retryable: response.status === 408 || response.status === 429 || response.status >= 500
-          });
+          if (!response.ok)
+            throw Object.assign(new Error("HTTP " + response.status), {
+              retryable: response.status === 408 || response.status === 429 || response.status >= 500
+            });
           const body = await response.json();
           if (signal?.aborted) throw cancelled();
           if (body.success !== 1) throw new Error(body.message || "接口返回错误");
@@ -144,7 +276,8 @@
           signal?.removeEventListener("abort", abort);
         }
         if (signal?.aborted) throw cancelled();
-        if (attempt === 3 || !(failure.retryable || failure.name === "TypeError" || failure.name === "AbortError")) throw failure;
+        if (attempt === 3 || !(failure.retryable || failure.name === "TypeError" || failure.name === "AbortError"))
+          throw failure;
         await delay(500 * 2 ** (attempt - 1), signal, timers);
       }
     };
@@ -156,8 +289,17 @@
   var INDEX = "javdb_recommend_search_index_v1_";
   var HOUR = 36e5;
   var MONTH = 30 * 24 * HOUR;
-  var unique = (list) => [...new Map(list.slice().reverse().map((item) => [item.period, item])).values()].reverse();
-  var project = (movie) => Object.fromEntries(["id", "number", "title", "origin_title", "cover_url", "score", "release_date"].map((key) => [key, movie[key] || ""]));
+  var unique = (list) => [
+    ...new Map(
+      list.slice().reverse().map((item) => [item.period, item])
+    ).values()
+  ].reverse();
+  var project = (movie) => Object.fromEntries(
+    ["id", "number", "title", "origin_title", "cover_url", "score", "release_date"].map((key) => [
+      key,
+      movie[key] || ""
+    ])
+  );
   function createArchiveData({ storage, request, now = Date.now, timers = globalThis }) {
     let periods2 = [], generation = 0, disposed = false, catalogWork = null, activeSearch = null;
     const memory = /* @__PURE__ */ new Map(), requests = /* @__PURE__ */ new Map(), liveLeases = /* @__PURE__ */ new Set();
@@ -234,7 +376,11 @@
           const incremental = usable && now() - (cached.fullFetchedAt || cached.fetchedAt) < MONTH;
           let list = [];
           for (let page = 1; ; page++) {
-            const response = await request("/api/v1/movies/recommend_periods", { page, limit: 48 }, { signal: aborter.signal });
+            const response = await request(
+              "/api/v1/movies/recommend_periods",
+              { page, limit: 48 },
+              { signal: aborter.signal }
+            );
             check(epoch);
             const batch = response.periods || [];
             list = unique(list.concat(batch));
@@ -248,7 +394,11 @@
             }
             if (overlap >= 0 || batch.length !== 48) {
               periods2 = overlap >= 0 ? unique(list.concat(cached.periods.slice(overlap + 1))) : list;
-              write(CATALOG, { fetchedAt: now(), fullFetchedAt: overlap >= 0 ? cached.fullFetchedAt || cached.fetchedAt : now(), periods: periods2 });
+              write(CATALOG, {
+                fetchedAt: now(),
+                fullFetchedAt: overlap >= 0 ? cached.fullFetchedAt || cached.fetchedAt : now(),
+                periods: periods2
+              });
               return { periods: periods2.slice(), degraded: false, source: overlap >= 0 ? "已增量更新" : "已完整更新" };
             }
           }
@@ -338,18 +488,32 @@
         }
       };
       liveLeases.add(lease);
-      lease.promise.then(() => liveLeases.delete(lease), () => liveLeases.delete(lease));
+      lease.promise.then(
+        () => liveLeases.delete(lease),
+        () => liveLeases.delete(lease)
+      );
       return lease;
     }
     function search({ query, onUpdate } = {}) {
       activeSearch?.cancel();
       const epoch = generation, aborter = controller(), leases = /* @__PURE__ */ new Set();
       let stopped = disposed, cursor = 0;
-      const result = { status: "complete", completed: 0, total: periods2.length, hits: 0, hitPeriods: 0, failed: 0, degraded: 0, groups: [] };
+      const result = {
+        status: "complete",
+        completed: 0,
+        total: periods2.length,
+        hits: 0,
+        hitPeriods: 0,
+        failed: 0,
+        degraded: 0,
+        groups: []
+      };
       const missing = [], q = String(query || "").trim().toLowerCase();
       const cancelledSearch = () => stopped || disposed || epoch !== generation;
       const report = (period, index2, entry) => {
-        const movies = entry.movies.filter((movie) => (movie.number + " " + (movie.title || "") + " " + (movie.origin_title || "")).toLowerCase().includes(q));
+        const movies = entry.movies.filter(
+          (movie) => (movie.number + " " + (movie.title || "") + " " + (movie.origin_title || "")).toLowerCase().includes(q)
+        );
         result.completed++;
         if (entry.degraded) result.degraded++;
         let group;
@@ -372,14 +536,15 @@
         done: null
       };
       job.done = Promise.resolve().then(async () => {
-        if (!cancelledSearch()) periods2.slice().forEach((item, i) => {
-          const local = memory.get(item.period) || diskEntries[item.period];
-          const entry = index(item.period) || (fresh(local, item.period) ? local : null);
-          if (entry) {
-            saveIndex(item.period, entry);
-            report(item.period, i, entry);
-          } else missing.push({ period: item.period, index: i });
-        });
+        if (!cancelledSearch())
+          periods2.slice().forEach((item, i) => {
+            const local = memory.get(item.period) || diskEntries[item.period];
+            const entry = index(item.period) || (fresh(local, item.period) ? local : null);
+            if (entry) {
+              saveIndex(item.period, entry);
+              report(item.period, i, entry);
+            } else missing.push({ period: item.period, index: i });
+          });
         async function worker() {
           while (!cancelledSearch() && cursor < missing.length) {
             const item = missing[cursor++], lease = acquire(item.period, { purpose: "search", diskEntries });
@@ -497,15 +662,17 @@
     return match ? SITE_IMAGE_HOST + match[0] : source;
   }
   function movieSignature(movies) {
-    return JSON.stringify((Array.isArray(movies) ? movies : []).map((movie) => [
-      movie && movie.id,
-      movie && movie.number,
-      movie && movie.title,
-      movie && movie.origin_title,
-      movie && movie.cover_url,
-      movie && movie.score,
-      movie && movie.release_date
-    ]));
+    return JSON.stringify(
+      (Array.isArray(movies) ? movies : []).map((movie) => [
+        movie && movie.id,
+        movie && movie.number,
+        movie && movie.title,
+        movie && movie.origin_title,
+        movie && movie.cover_url,
+        movie && movie.score,
+        movie && movie.release_date
+      ])
+    );
   }
   function appendCard({ document: document2, grid, baseUrl, movie }) {
     const item = document2.createElement("div");
@@ -887,9 +1054,12 @@
       try {
         const homepageUrl = new window2.URL("/", baseUrl).href;
         if (window2.AbortController) fetchController = new window2.AbortController();
-        const response = await byDeadline(fetch2(homepageUrl, fetchController ? { signal: fetchController.signal } : void 0));
+        const response = await byDeadline(
+          fetch2(homepageUrl, fetchController ? { signal: fetchController.signal } : void 0)
+        );
         if (disposed) return notifyDisposed();
-        if (!response || !response.ok) return publish(diagnostic("homepage-fetch", { httpStatus: response && response.status }));
+        if (!response || !response.ok)
+          return publish(diagnostic("homepage-fetch", { httpStatus: response && response.status }));
         const html = await byDeadline(response.text());
         if (disposed) return notifyDisposed();
         const homeDocument = new window2.DOMParser().parseFromString(html, "text/html");
@@ -951,7 +1121,7 @@
   // src/userscripts/javdb-recommend/javdb-recommend-view.lib.js
   var BASE = location.origin;
   var ICON_PATHS2 = {
-    "search": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     "chevron-left": '<path d="m15 18-6-6 6-6"/>',
     "chevron-right": '<path d="m9 18 6-6-6-6"/>',
     "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'
@@ -1090,14 +1260,17 @@
       if (!owned) return;
       Object.keys(owned).forEach(function(name) {
         var record = owned[name];
-        if (el.style.getPropertyValue(name) !== record.writtenValue || el.style.getPropertyPriority(name) !== record.writtenPriority) return;
+        if (el.style.getPropertyValue(name) !== record.writtenValue || el.style.getPropertyPriority(name) !== record.writtenPriority)
+          return;
         if (record.previousValue) el.style.setProperty(name, record.previousValue, record.previousPriority);
         else el.style.removeProperty(name);
       });
       copiedGridStyles.delete(el);
     }
     function releaseCopiedCardStyles(root) {
-      root.querySelectorAll('.jav-card-cover,.javdb-cover-frame,.jav-card-image,.javdb-card-image,.item[data-laosiji-grid-card="1"] .cover,.item[data-laosiji-grid-card="1"] img').forEach(function(node) {
+      root.querySelectorAll(
+        '.jav-card-cover,.javdb-cover-frame,.jav-card-image,.javdb-card-image,.item[data-laosiji-grid-card="1"] .cover,.item[data-laosiji-grid-card="1"] img'
+      ).forEach(function(node) {
         releaseCopiedStyles(node);
       });
     }
@@ -1180,7 +1353,8 @@
         setCopiedStyle(list, "row-gap", lastCompatibleGridLayout.rowGap);
         list.querySelectorAll('.item:not([data-laosiji-grid-card="1"]) .cover img').forEach(function(image2) {
           if (lastCompatibleGridLayout.objectFit) setCopiedStyle(image2, "object-fit", lastCompatibleGridLayout.objectFit);
-          if (lastCompatibleGridLayout.objectPosition) setCopiedStyle(image2, "object-position", lastCompatibleGridLayout.objectPosition);
+          if (lastCompatibleGridLayout.objectPosition)
+            setCopiedStyle(image2, "object-position", lastCompatibleGridLayout.objectPosition);
           var cover2 = image2.closest(".cover");
           if (cover2 && lastCompatibleGridLayout.aspectRatio && lastCompatibleGridLayout.aspectRatio !== "auto") {
             setCopiedStyle(cover2, "aspect-ratio", lastCompatibleGridLayout.aspectRatio);
@@ -1212,9 +1386,13 @@
     function loadPeriods() {
       if (disposed) return;
       setStatus("加载期数列表中…");
-      data.loadCatalog({ onProgress: (count) => {
-        if (!disposed) setStatus("加载期数列表… 已获取 " + count + " 期");
-      } }).then((result) => finish(result.periods, result.degraded ? "期数目录更新失败，使用本地缓存" : "期数目录：" + result.source)).catch((error) => {
+      data.loadCatalog({
+        onProgress: (count) => {
+          if (!disposed) setStatus("加载期数列表… 已获取 " + count + " 期");
+        }
+      }).then(
+        (result) => finish(result.periods, result.degraded ? "期数目录更新失败，使用本地缓存" : "期数目录：" + result.source)
+      ).catch((error) => {
         if (!disposed) setStatus("期数列表加载失败：" + error.message + "（可点击“刷新期数”重试）");
       });
     }
@@ -1313,10 +1491,13 @@
         appendNext();
       });
       if (typeof IntersectionObserver !== "undefined") {
-        streamIntersectionObserver = new IntersectionObserver(function(entries) {
-          sentinelVisible = entries[0].isIntersecting;
-          if (sentinelVisible) appendNext();
-        }, { rootMargin: "600px" });
+        streamIntersectionObserver = new IntersectionObserver(
+          function(entries) {
+            sentinelVisible = entries[0].isIntersecting;
+            if (sentinelVisible) appendNext();
+          },
+          { rootMargin: "600px" }
+        );
         streamIntersectionObserver.observe(sentinel);
       }
       appendNext();
@@ -1358,7 +1539,9 @@
       load.then(function() {
         if (navigation !== navigationGeneration) return;
         if (loadedSections[period]) {
-          setStatus(readyText() + (loadedSections[period].element.dataset.degraded === "true" ? " · 详情更新失败，使用本地缓存" : ""));
+          setStatus(
+            readyText() + (loadedSections[period].element.dataset.degraded === "true" ? " · 详情更新失败，使用本地缓存" : "")
+          );
           scrollToPeriod(period);
         }
       });
@@ -1497,16 +1680,21 @@
       });
       resultSections = [];
       resultsEl.replaceChildren();
-      activeSearch = data.search({ query: q, onUpdate: (update) => {
-        if (generation !== searchGeneration) return;
-        if (update.group) appendSearchGroup(update.group.period, update.group.index, update.group.movies);
-        setStatus("索引补全 " + update.completed + "/" + update.total + " 期 · 命中 " + update.hits + " 部");
-      } });
+      activeSearch = data.search({
+        query: q,
+        onUpdate: (update) => {
+          if (generation !== searchGeneration) return;
+          if (update.group) appendSearchGroup(update.group.period, update.group.index, update.group.movies);
+          setStatus("索引补全 " + update.completed + "/" + update.total + " 期 · 命中 " + update.hits + " 部");
+        }
+      });
       activeSearch.done.then((result) => {
         if (disposed || generation !== searchGeneration) return;
         searching = false;
         btnEl.textContent = "全期搜索";
-        setStatus((result.status === "partial" ? "搜索部分完成 · 失败 " + result.failed + " 期 · " : result.status === "cancelled" ? "搜索已停止 · " : "搜索完成 · ") + "命中 " + result.hits + " 部（" + result.hitPeriods + " 期）" + (result.degraded ? " · 使用旧缓存 " + result.degraded + " 期" : ""));
+        setStatus(
+          (result.status === "partial" ? "搜索部分完成 · 失败 " + result.failed + " 期 · " : result.status === "cancelled" ? "搜索已停止 · " : "搜索完成 · ") + "命中 " + result.hits + " 部（" + result.hitPeriods + " 期）" + (result.degraded ? " · 使用旧缓存 " + result.degraded + " 期" : "")
+        );
         if (!result.hits) {
           var empty = document.createElement("div");
           empty.className = "jdb-ra-empty";

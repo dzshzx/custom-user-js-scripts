@@ -182,8 +182,4 @@ function applyTheme(root, { detectHost, observeHost = false } = {}) {
   };
 }
 
-export {
-  applyTheme,
-  buildTokenCss,
-  resolveTheme,
-};
+export { applyTheme, buildTokenCss, resolveTheme };

@@ -41,12 +41,8 @@ function createFixtureResult(overrides = {}) {
       反推周额度: {
         已用百分比: 42,
       },
-      每日明细: [
-        { 日期桶: '2026-05-30', Credits: 10.5, 折算USD: 0.42 },
-      ],
-      客户端汇总: [
-        { 客户端: 'chatgpt-web', Credits: 10.5, 折算USD: 0.42 },
-      ],
+      每日明细: [{ 日期桶: '2026-05-30', Credits: 10.5, 折算USD: 0.42 }],
+      客户端汇总: [{ 客户端: 'chatgpt-web', Credits: 10.5, 折算USD: 0.42 }],
     },
     本月初至今: {
       汇总: {
@@ -158,15 +154,18 @@ test('two device Snapshot Archives converge after exchanging Snapshot Exports', 
   });
 
   await deviceAStore.saveSnapshot(createFixtureResult(), { capturedAt: '2026-05-30T10:00:00.000Z' });
-  await deviceBStore.saveSnapshot(createFixtureResult({
-    本月初至今: {
-      ...createFixtureResult().本月初至今,
-      汇总: {
-        ...createFixtureResult().本月初至今.汇总,
-        累计Credits: 456,
+  await deviceBStore.saveSnapshot(
+    createFixtureResult({
+      本月初至今: {
+        ...createFixtureResult().本月初至今,
+        汇总: {
+          ...createFixtureResult().本月初至今.汇总,
+          累计Credits: 456,
+        },
       },
-    },
-  }), { capturedAt: '2026-05-31T10:00:00.000Z' });
+    }),
+    { capturedAt: '2026-05-31T10:00:00.000Z' },
+  );
 
   const exportA = await deviceAStore.buildExportDocument();
   const exportB = await deviceBStore.buildExportDocument();
@@ -380,13 +379,37 @@ test('migrateArchive folds legacy snapshots into a one-row-per-date ledger (loss
   const raw = {
     schemaVersion: 1,
     snapshots: [
-      snapshotWithDays('s1', '2026-06-13T09:00:00.000Z', [['2026-06-11', 1000], ['2026-06-12', 2000], ['2026-06-13', 30]]),
-      snapshotWithDays('s2', '2026-06-13T12:00:00.000Z', [['2026-06-11', 1000], ['2026-06-12', 2000], ['2026-06-13', 60]]),
-      snapshotWithDays('s3', '2026-06-13T15:00:00.000Z', [['2026-06-11', 1000], ['2026-06-12', 2000], ['2026-06-13', 90]]),
-      snapshotWithDays('s4', '2026-06-14T01:00:00.000Z', [['2026-06-13', 90], ['2026-06-14', 5]]),
-      snapshotWithDays('s5', '2026-06-14T10:00:00.000Z', [['2026-06-13', 90], ['2026-06-14', 40]]),
-      snapshotWithDays('s6', '2026-06-15T01:00:00.000Z', [['2026-06-14', 40], ['2026-06-15', 7]]),
-      snapshotWithDays('s7', '2026-06-15T10:00:00.000Z', [['2026-06-14', 40], ['2026-06-15', 88]]),
+      snapshotWithDays('s1', '2026-06-13T09:00:00.000Z', [
+        ['2026-06-11', 1000],
+        ['2026-06-12', 2000],
+        ['2026-06-13', 30],
+      ]),
+      snapshotWithDays('s2', '2026-06-13T12:00:00.000Z', [
+        ['2026-06-11', 1000],
+        ['2026-06-12', 2000],
+        ['2026-06-13', 60],
+      ]),
+      snapshotWithDays('s3', '2026-06-13T15:00:00.000Z', [
+        ['2026-06-11', 1000],
+        ['2026-06-12', 2000],
+        ['2026-06-13', 90],
+      ]),
+      snapshotWithDays('s4', '2026-06-14T01:00:00.000Z', [
+        ['2026-06-13', 90],
+        ['2026-06-14', 5],
+      ]),
+      snapshotWithDays('s5', '2026-06-14T10:00:00.000Z', [
+        ['2026-06-13', 90],
+        ['2026-06-14', 40],
+      ]),
+      snapshotWithDays('s6', '2026-06-15T01:00:00.000Z', [
+        ['2026-06-14', 40],
+        ['2026-06-15', 7],
+      ]),
+      snapshotWithDays('s7', '2026-06-15T10:00:00.000Z', [
+        ['2026-06-14', 40],
+        ['2026-06-15', 88],
+      ]),
     ],
   };
   const now = Date.parse('2026-06-16T02:00:00.000Z'); // all dates settled
@@ -394,7 +417,13 @@ test('migrateArchive folds legacy snapshots into a one-row-per-date ledger (loss
   const migrated = migrateArchive(raw, now);
 
   // one row per distinct date, with the final/max value — no loss
-  assert.deepEqual(Object.keys(migrated.ledger).sort(), ['2026-06-11', '2026-06-12', '2026-06-13', '2026-06-14', '2026-06-15']);
+  assert.deepEqual(Object.keys(migrated.ledger).sort(), [
+    '2026-06-11',
+    '2026-06-12',
+    '2026-06-13',
+    '2026-06-14',
+    '2026-06-15',
+  ]);
   assert.equal(migrated.ledger['2026-06-13'].credits, 90);
   assert.equal(migrated.ledger['2026-06-14'].credits, 40);
   assert.equal(migrated.ledger['2026-06-15'].credits, 88);
@@ -428,7 +457,10 @@ test('repeated same-day saves do not multiply ledger rows or exceed the snapshot
   };
   const store = createSnapshotArchiveStore({
     read: async () => raw,
-    write: async (next) => { raw = next; return next; },
+    write: async (next) => {
+      raw = next;
+      return next;
+    },
     now: () => '2026-06-05T12:00:00.000Z', // both dates settled
     createId: () => `snap-${(seq += 1)}`,
     scriptVersion: '0.3.1',
@@ -439,7 +471,11 @@ test('repeated same-day saves do not multiply ledger rows or exceed the snapshot
   }
 
   const dump = normalizeSnapshotArchive(raw);
-  assert.deepEqual(Object.keys(dump.ledger).sort(), ['2026-06-01', '2026-06-02'], 'ledger rows == distinct dates, not 7x');
+  assert.deepEqual(
+    Object.keys(dump.ledger).sort(),
+    ['2026-06-01', '2026-06-02'],
+    'ledger rows == distinct dates, not 7x',
+  );
   assert.equal(dump.ledger['2026-06-02'].credits, 200);
   assert.equal(dump.snapshots.length, 5, 'snapshots capped at 5 regardless of save count');
 

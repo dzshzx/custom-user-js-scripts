@@ -30,7 +30,10 @@ test('floating shell routes a button click to the toggle action', { skip: domSki
 
   window.document.querySelector('.cqc-button').click();
 
-  assert.deepEqual(actions.map((entry) => entry.action), ['toggle']);
+  assert.deepEqual(
+    actions.map((entry) => entry.action),
+    ['toggle'],
+  );
 });
 
 test('floating shell routes the header close button to the close action', { skip: domSkip }, () => {
@@ -39,7 +42,10 @@ test('floating shell routes the header close button to the close action', { skip
 
   window.document.querySelector('[data-action="close"]').click();
 
-  assert.deepEqual(actions.map((entry) => entry.action), ['close']);
+  assert.deepEqual(
+    actions.map((entry) => entry.action),
+    ['close'],
+  );
 });
 
 test('floating shell delegates tab and sync-form actions from rendered content', { skip: domSkip }, () => {
@@ -62,7 +68,10 @@ test('floating shell delegates tab and sync-form actions from rendered content',
   contentNode.querySelector('[data-action="switch-view"]').click();
   contentNode.querySelector('[data-action="save-remote-sync"]').click();
 
-  assert.deepEqual(actions.map((entry) => entry.action), ['switch-view', 'save-remote-sync']);
+  assert.deepEqual(
+    actions.map((entry) => entry.action),
+    ['switch-view', 'save-remote-sync'],
+  );
   assert.equal(actions[0].view, 'archive');
 });
 

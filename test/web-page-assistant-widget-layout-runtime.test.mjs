@@ -331,7 +331,10 @@ test('reattach clears old hover callbacks before binding the next widget', () =>
   staleHover();
   assert.equal(oldWidget.classList.contains('is-expanded'), false);
   assert.equal(nextWidget.classList.contains('is-expanded'), false);
-  assert.equal([...oldWidget.listeners.values()].every((handlers) => handlers.size === 0), true);
+  assert.equal(
+    [...oldWidget.listeners.values()].every((handlers) => handlers.size === 0),
+    true,
+  );
 });
 
 test('reattach releases pointer capture and dispose removes the active binding', () => {
@@ -352,6 +355,12 @@ test('reattach releases pointer capture and dispose removes the active binding',
   harness.runtime.attach(nextWidget, nextButton);
   assert.equal(oldButton.hasPointerCapture(9), false);
   harness.runtime.dispose();
-  assert.equal([...nextWidget.listeners.values()].every((handlers) => handlers.size === 0), true);
-  assert.equal([...nextButton.listeners.values()].every((handlers) => handlers.size === 0), true);
+  assert.equal(
+    [...nextWidget.listeners.values()].every((handlers) => handlers.size === 0),
+    true,
+  );
+  assert.equal(
+    [...nextButton.listeners.values()].every((handlers) => handlers.size === 0),
+    true,
+  );
 });

@@ -220,7 +220,4 @@ function createShellStyles(rootId) {
   `;
 }
 
-export {
-  createShellStyles,
-  LIB_NAME as name,
-};
+export { createShellStyles, LIB_NAME as name };

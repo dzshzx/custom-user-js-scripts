@@ -51,28 +51,32 @@ function coverUrl(value) {
 }
 
 function movieSignature(movies) {
-  return JSON.stringify((Array.isArray(movies) ? movies : []).map(movie => [
-    movie && movie.id,
-    movie && movie.number,
-    movie && movie.title,
-    movie && movie.origin_title,
-    movie && movie.cover_url,
-    movie && movie.score,
-    movie && movie.release_date,
-  ]));
+  return JSON.stringify(
+    (Array.isArray(movies) ? movies : []).map((movie) => [
+      movie && movie.id,
+      movie && movie.number,
+      movie && movie.title,
+      movie && movie.origin_title,
+      movie && movie.cover_url,
+      movie && movie.score,
+      movie && movie.release_date,
+    ]),
+  );
 }
 
 function appendCard({ document, grid, baseUrl, movie }) {
   const item = document.createElement('div');
   item.className = 'item';
   item.dataset.jdbRaCard = '1';
-  const number = String(movie && movie.number || '');
-  const title = String(movie && (movie.title || movie.origin_title) || '');
-  item.dataset.q = `${number} ${String(movie && movie.title || '')} ${String(movie && movie.origin_title || '')}`.toLowerCase();
+  const number = String((movie && movie.number) || '');
+  const title = String((movie && (movie.title || movie.origin_title)) || '');
+  item.dataset.q =
+    `${number} ${String((movie && movie.title) || '')} ${String((movie && movie.origin_title) || '')}`.toLowerCase();
 
   const anchor = document.createElement('a');
   anchor.className = 'box';
-  anchor.href = String(baseUrl || '').replace(/\/$/, '') + '/v/' + encodeURIComponent(String(movie && movie.id || ''));
+  anchor.href =
+    String(baseUrl || '').replace(/\/$/, '') + '/v/' + encodeURIComponent(String((movie && movie.id) || ''));
   anchor.target = '_blank';
   anchor.rel = 'noopener';
   anchor.title = title;
@@ -166,10 +170,12 @@ export function createPeriodSection({ document, baseUrl, period, mode = 'browse'
 
   function filter(nextQuery) {
     if (disposed) return 0;
-    query = String(nextQuery || '').trim().toLowerCase();
+    query = String(nextQuery || '')
+      .trim()
+      .toLowerCase();
     let hits = 0;
     const cards = grid.querySelectorAll(':scope > .item[data-jdb-ra-card="1"]');
-    cards.forEach(card => {
+    cards.forEach((card) => {
       const match = !query || String(card.dataset.q || '').includes(query);
       if (match) {
         card.removeAttribute('data-jdb-ra-filtered');
@@ -202,7 +208,7 @@ export function createPeriodSection({ document, baseUrl, period, mode = 'browse'
       empty.textContent = '本期没有影片';
       grid.appendChild(empty);
     } else {
-      movies.forEach(movie => appendCard({ document, grid, baseUrl, movie: movie || {} }));
+      movies.forEach((movie) => appendCard({ document, grid, baseUrl, movie: movie || {} }));
     }
     filter(query);
     return true;

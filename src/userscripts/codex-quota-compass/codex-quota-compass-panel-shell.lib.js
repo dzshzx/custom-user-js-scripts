@@ -99,9 +99,7 @@ function createFloatingPanelShell({
 
     const style = documentObject.createElement('style');
     style.id = `${rootId}-shell-style`;
-    style.textContent = [tokenCss, shell.cssText, createShellStyles(rootId)]
-      .filter(Boolean)
-      .join('\n\n');
+    style.textContent = [tokenCss, shell.cssText, createShellStyles(rootId)].filter(Boolean).join('\n\n');
     documentObject.head.append(style);
   }
 
@@ -132,9 +130,9 @@ function createFloatingPanelShell({
       panelMaxHeight: 760,
       storage: storage?.getItem
         ? {
-          get: (key) => storage.getItem(key),
-          set: (key, value) => storage.setItem(key, value),
-        }
+            get: (key) => storage.getItem(key),
+            set: (key, value) => storage.setItem(key, value),
+          }
         : storage,
       positionKey,
       defaultPosition: DEFAULT_BUTTON_POSITION,
@@ -202,7 +200,4 @@ function createFloatingPanelShell({
   return api;
 }
 
-export {
-  createFloatingPanelShell,
-  detectHostTheme,
-};
+export { createFloatingPanelShell, detectHostTheme };

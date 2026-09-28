@@ -28,16 +28,16 @@ async function createWorkspace(files, distFiles = {}) {
   const srcDir = path.join(workspace, 'src');
   await mkdir(srcDir);
 
-  await Promise.all(Object.entries(files).map(([name, content]) => (
-    writeFile(path.join(srcDir, name), content, 'utf8')
-  )));
+  await Promise.all(
+    Object.entries(files).map(([name, content]) => writeFile(path.join(srcDir, name), content, 'utf8')),
+  );
 
   if (Object.keys(distFiles).length) {
     const distDir = path.join(workspace, 'dist');
     await mkdir(distDir);
-    await Promise.all(Object.entries(distFiles).map(([name, content]) => (
-      writeFile(path.join(distDir, name), content, 'utf8')
-    )));
+    await Promise.all(
+      Object.entries(distFiles).map(([name, content]) => writeFile(path.join(distDir, name), content, 'utf8')),
+    );
   }
 
   return workspace;
@@ -91,10 +91,7 @@ test('check-userscripts rejects duplicate update URLs', async () => {
 
 test('check-userscripts accepts a bridge/dist pair sharing identity and URLs', async () => {
   const { bridge, dist } = bridgePair('paired');
-  const workspace = await createWorkspace(
-    { 'paired.user.js': bridge },
-    { 'paired.user.js': dist },
-  );
+  const workspace = await createWorkspace({ 'paired.user.js': bridge }, { 'paired.user.js': dist });
 
   const result = runLint(workspace);
 
@@ -117,10 +114,7 @@ test('check-userscripts rejects a bridge whose content differs from its dist fil
 
 test('check-userscripts rejects a dist file without a bridge file', async () => {
   const { dist } = bridgePair('orphan-dist');
-  const workspace = await createWorkspace(
-    {},
-    { 'orphan-dist.user.js': dist },
-  );
+  const workspace = await createWorkspace({}, { 'orphan-dist.user.js': dist });
 
   const result = runLint(workspace);
 

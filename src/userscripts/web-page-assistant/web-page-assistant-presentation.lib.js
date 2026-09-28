@@ -12,9 +12,7 @@ function isCoarsePointer(windowObject = globalThis.window) {
   try {
     const matchMedia = windowObject?.matchMedia;
     if (typeof matchMedia === 'function') {
-      return Boolean(
-        matchMedia.call(windowObject, '(hover: none), (pointer: coarse)').matches,
-      );
+      return Boolean(matchMedia.call(windowObject, '(hover: none), (pointer: coarse)').matches);
     }
   } catch {
     // Fall through to the hover-capable default.
@@ -23,12 +21,7 @@ function isCoarsePointer(windowObject = globalThis.window) {
 }
 
 function createPageAssistantDialogContract(adapters) {
-  const {
-    settingsContract,
-    defaultUnlockerSetting,
-    formatInterval,
-    defaultIntervalMs,
-  } = adapters;
+  const { settingsContract, defaultUnlockerSetting, formatInterval, defaultIntervalMs } = adapters;
   const tabs = { refresh: 'refresh', unlocker: 'unlocker' };
   const roles = {
     status: 'status',
@@ -83,19 +76,18 @@ function createPageAssistantDialogContract(adapters) {
 
   function createViewModel(input) {
     const nextTab = normalizeTab(input.preferredTab, input.activeTab);
-    const selectedScope = input.preferredScope
-      || input.activeRefreshMatch?.scope
-      || input.activeUnlockerMatch?.scope
-      || 'page';
+    const selectedScope =
+      input.preferredScope || input.activeRefreshMatch?.scope || input.activeUnlockerMatch?.scope || 'page';
     const pageSetting = settingsContract.getRefreshSetting(input.settings, 'page', input.pageKey);
     const siteSetting = settingsContract.getRefreshSetting(input.settings, 'site', input.siteKey);
     const pageUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, 'page', input.pageKey);
     const siteUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, 'site', input.siteKey);
     const scopedUnlockerSetting = selectedScope === 'site' ? siteUnlockerSetting : pageUnlockerSetting;
     const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
-    const customInterval = defaultInterval % (60 * 1000) === 0
-      ? { value: String(defaultInterval / (60 * 1000)), unit: 'minutes' }
-      : { value: String(Math.round(defaultInterval / 1000)), unit: 'seconds' };
+    const customInterval =
+      defaultInterval % (60 * 1000) === 0
+        ? { value: String(defaultInterval / (60 * 1000)), unit: 'minutes' }
+        : { value: String(Math.round(defaultInterval / 1000)), unit: 'seconds' };
 
     return {
       message: input.message || '',
@@ -152,9 +144,11 @@ function createPageAssistantDialogContract(adapters) {
     dialogNode.querySelector(roleSelector(roles.unlockerEnabled)).checked = model.unlockerFormSetting.enabled;
     dialogNode.querySelector(roleSelector(roles.unlockerSelection)).checked = model.unlockerFormSetting.allowSelection;
     dialogNode.querySelector(roleSelector(roles.unlockerCopy)).checked = model.unlockerFormSetting.allowCopy;
-    dialogNode.querySelector(roleSelector(roles.unlockerContextMenu)).checked = model.unlockerFormSetting.allowContextMenu;
+    dialogNode.querySelector(roleSelector(roles.unlockerContextMenu)).checked =
+      model.unlockerFormSetting.allowContextMenu;
     dialogNode.querySelector(roleSelector(roles.unlockerDrag)).checked = model.unlockerFormSetting.allowDrag;
-    dialogNode.querySelector(roleSelector(roles.unlockerBeforeUnload)).checked = model.unlockerFormSetting.suppressBeforeUnload;
+    dialogNode.querySelector(roleSelector(roles.unlockerBeforeUnload)).checked =
+      model.unlockerFormSetting.suppressBeforeUnload;
     dialogNode.querySelector(actionSelector(actions.deleteUnlockerPage)).disabled = !model.pageUnlockerSetting;
     dialogNode.querySelector(actionSelector(actions.deleteUnlockerSite)).disabled = !model.siteUnlockerSetting;
     dialogNode.querySelector(roleSelector(model.focusRole))?.focus();
@@ -186,7 +180,6 @@ function createPageAssistantDialogContract(adapters) {
   };
 }
 
-
 function createWidgetElement({ documentObject, model }) {
   if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
   if (!model) throw new Error(`${LIB_NAME}: widget model is required.`);
@@ -211,11 +204,15 @@ function createWidgetElement({ documentObject, model }) {
       </div>
       ${enabled ? '<div class="part-widget-countdown" data-part-role="countdown" aria-hidden="true">--:--</div>' : ''}
       <div class="part-muted" data-part-role="widget-summary"></div>
-      ${enabled ? `
+      ${
+        enabled
+          ? `
       <div class="part-widget-actions">
         <button type="button" class="part-button" data-part-action="toggle-pause"></button>
         <button type="button" class="part-button" data-variant="danger" data-part-action="disable-active">停用</button>
-      </div>` : ''}
+      </div>`
+          : ''
+      }
     </div>
     <span class="part-sr-only" role="status" data-part-role="widget-status"></span>
   `;
@@ -375,9 +372,4 @@ function createDialogElement({ documentObject, model }) {
   return dialog;
 }
 
-export {
-  createPageAssistantDialogContract,
-  createWidgetElement,
-  createDialogElement,
-  isCoarsePointer,
-};
+export { createPageAssistantDialogContract, createWidgetElement, createDialogElement, isCoarsePointer };

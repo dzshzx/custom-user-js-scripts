@@ -41,10 +41,7 @@ test('settings contract library exposes the stable interface', () => {
 });
 
 test('entry module imports the settings library', () => {
-  assert.equal(
-    entryContent.includes(`from './web-page-assistant-settings.lib.js'`),
-    true,
-  );
+  assert.equal(entryContent.includes(`from './web-page-assistant-settings.lib.js'`), true);
   assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START'), false);
 });
 
@@ -97,23 +94,35 @@ test('settings contract builds default unlocker settings', () => {
 });
 
 test('settings contract resolves only active unlocker capabilities', () => {
-  const inactive = libraryContract.setUnlockerSetting(null, 'site', siteKey, {
-    enabled: true,
-    allowSelection: false,
-    allowCopy: false,
-    allowContextMenu: false,
-    allowDrag: false,
-    suppressBeforeUnload: false,
-  }, 1);
+  const inactive = libraryContract.setUnlockerSetting(
+    null,
+    'site',
+    siteKey,
+    {
+      enabled: true,
+      allowSelection: false,
+      allowCopy: false,
+      allowContextMenu: false,
+      allowDrag: false,
+      suppressBeforeUnload: false,
+    },
+    1,
+  );
   const activeSite = libraryContract.resolveActiveUnlockerSetting(inactive, { pageKey, siteKey });
 
   assert.equal(libraryContract.hasUnlockerAction(inactive.unlocker.sites[siteKey]), false);
   assert.equal(activeSite, null);
 
-  const activePage = libraryContract.setUnlockerSetting(inactive, 'page', pageKey, {
-    enabled: true,
-    allowCopy: true,
-  }, 2);
+  const activePage = libraryContract.setUnlockerSetting(
+    inactive,
+    'page',
+    pageKey,
+    {
+      enabled: true,
+      allowCopy: true,
+    },
+    2,
+  );
   const active = libraryContract.resolveActiveUnlockerSetting(activePage, { pageKey, siteKey });
 
   assert.equal(active.scope, 'page');

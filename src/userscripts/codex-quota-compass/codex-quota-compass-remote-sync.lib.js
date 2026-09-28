@@ -61,9 +61,7 @@ function normalizeSettings(rawSettings) {
     token,
     gistId: normalizeGistId(source.gistId),
     filename: normalizeFilename(source.filename),
-    clientId: typeof source.clientId === 'string' && source.clientId.trim()
-      ? source.clientId
-      : createClientId(),
+    clientId: typeof source.clientId === 'string' && source.clientId.trim() ? source.clientId : createClientId(),
     lastSyncedAt: typeof source.lastSyncedAt === 'string' ? source.lastSyncedAt : '',
     lastError: typeof source.lastError === 'string' ? source.lastError : '',
   };
@@ -114,17 +112,15 @@ function createGmSettingsStore(options = {}) {
 }
 
 function createFetchJsonRequester(options = {}) {
-  const fetchImpl = options.fetchImpl
-    || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
+  const fetchImpl =
+    options.fetchImpl || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
   if (typeof fetchImpl !== 'function') {
     throw new Error('fetch is required for GitHub Gist sync.');
   }
 
   return async function requestJson({ method, url, headers = {}, body, timeout = 15000 }) {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timeoutId = controller
-      ? globalThis.setTimeout(() => controller.abort(), timeout)
-      : null;
+    const timeoutId = controller ? globalThis.setTimeout(() => controller.abort(), timeout) : null;
 
     try {
       const response = await fetchImpl(url, {
@@ -201,9 +197,7 @@ function createGmJsonRequester(options = {}) {
 }
 
 function createJsonRequester(options = {}) {
-  return getGmXmlHttpRequest(options)
-    ? createGmJsonRequester(options)
-    : createFetchJsonRequester(options);
+  return getGmXmlHttpRequest(options) ? createGmJsonRequester(options) : createFetchJsonRequester(options);
 }
 
 function createArchiveExportDocument(archive, exportedAt) {
@@ -230,7 +224,11 @@ function publicStatus(settings) {
     hasToken: Boolean(settings.token),
     lastSyncedAt: settings.lastSyncedAt,
     lastError: settings.token ? settings.lastError.split(settings.token).join('[redacted]') : settings.lastError,
-    remoteState: settings.lastError?.startsWith(UNKNOWN_WRITE_PREFIX) ? 'unknown' : (settings.lastError ? 'failed' : 'idle'),
+    remoteState: settings.lastError?.startsWith(UNKNOWN_WRITE_PREFIX)
+      ? 'unknown'
+      : settings.lastError
+        ? 'failed'
+        : 'idle',
   };
 }
 
@@ -248,9 +246,11 @@ function gistHasArchiveFile(gist, filename) {
 }
 
 function pickArchiveGist(gists, filename) {
-  return (Array.isArray(gists) ? gists : [])
-    .find((gist) => gist?.description === GIST_DESCRIPTION && gistHasArchiveFile(gist, filename))
-    || null;
+  return (
+    (Array.isArray(gists) ? gists : []).find(
+      (gist) => gist?.description === GIST_DESCRIPTION && gistHasArchiveFile(gist, filename),
+    ) || null
+  );
 }
 
 function validateArchiveDocument(documentObject) {
@@ -268,11 +268,13 @@ async function archiveDocumentFromGist(gist, filename, now, requestJson) {
       throw new Error('GitHub Gist archive file is truncated and has no raw URL.');
     }
 
-    return validateArchiveDocument(await requestJson({
-      method: 'GET',
-      url: file.raw_url,
-      headers: { Accept: 'application/json' },
-    }));
+    return validateArchiveDocument(
+      await requestJson({
+        method: 'GET',
+        url: file.raw_url,
+        headers: { Accept: 'application/json' },
+      }),
+    );
   }
 
   const content = String(file.content || '').trim();
@@ -317,9 +319,10 @@ const GIST_MAX_PAGES = 10;
 
 function createGitHubGistApi({ requestJson, token, filename }) {
   function listGistsPage(page) {
-    const url = page <= 1
-      ? `${GITHUB_API_BASE}/gists?per_page=${GIST_PAGE_SIZE}`
-      : `${GITHUB_API_BASE}/gists?per_page=${GIST_PAGE_SIZE}&page=${page}`;
+    const url =
+      page <= 1
+        ? `${GITHUB_API_BASE}/gists?per_page=${GIST_PAGE_SIZE}`
+        : `${GITHUB_API_BASE}/gists?per_page=${GIST_PAGE_SIZE}&page=${page}`;
     return requestJson({ method: 'GET', url, headers: gitHubHeaders(token) });
   }
 
@@ -432,11 +435,13 @@ function createRemoteSyncClient({
   // sync or change the token, Gist or file while requests are in flight; the
   // stored settings then win and this sync's outcome is discarded.
   function isSameSyncTarget(started, latest) {
-    return latest.enabled
-      && Boolean(latest.token)
-      && latest.token === started.token
-      && latest.gistId === started.gistId
-      && latest.filename === started.filename;
+    return (
+      latest.enabled &&
+      Boolean(latest.token) &&
+      latest.token === started.token &&
+      latest.gistId === started.gistId &&
+      latest.filename === started.filename
+    );
   }
 
   function supersededError(latest) {
@@ -554,9 +559,7 @@ function createRemoteSyncClient({
       const remoteNeedsUpdate = !sameArchiveContent(mergedDocument, remoteNormalized);
       if (remoteNeedsUpdate) await assertSyncTargetCurrent(settings);
       remoteWritePending = remoteNeedsUpdate;
-      const updatedGist = remoteNeedsUpdate
-        ? await gistApi.updateGist(gist.id, imported.archive, now())
-        : gist;
+      const updatedGist = remoteNeedsUpdate ? await gistApi.updateGist(gist.id, imported.archive, now()) : gist;
       remoteWritePending = false;
       const savedSettings = await saveSyncOutcome(settings, {
         gistId: updatedGist.id || gist.id,
@@ -577,7 +580,9 @@ function createRemoteSyncClient({
       if (error?.superseded) return supersededResult(error.latest);
       const unknown = remoteWritePending && !error?.status;
       const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
-      const message = await markSyncFailure(settings, failure).catch(() => 'GitHub Gist sync failed; status could not be saved.');
+      const message = await markSyncFailure(settings, failure).catch(
+        () => 'GitHub Gist sync failed; status could not be saved.',
+      );
       throw Object.assign(new Error(message), {
         localMerged,
         phase,

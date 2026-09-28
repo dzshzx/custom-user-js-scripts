@@ -13,9 +13,21 @@ function createUnlockerRuntime(adapters) {
     { option: 'allowSelection', label: '选择文本', target: getDocumentTarget, type: 'selectstart', handler: stopEvent },
     { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'copy', handler: stopEvent },
     { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'cut', handler: stopEvent },
-    { option: 'allowContextMenu', label: '右键菜单', target: getDocumentTarget, type: 'contextmenu', handler: stopEvent },
+    {
+      option: 'allowContextMenu',
+      label: '右键菜单',
+      target: getDocumentTarget,
+      type: 'contextmenu',
+      handler: stopEvent,
+    },
     { option: 'allowDrag', label: '拖拽', target: getDocumentTarget, type: 'dragstart', handler: stopEvent },
-    { option: 'suppressBeforeUnload', label: '离开提示', target: getWindowTarget, type: 'beforeunload', handler: stopBeforeUnload },
+    {
+      option: 'suppressBeforeUnload',
+      label: '离开提示',
+      target: getWindowTarget,
+      type: 'beforeunload',
+      handler: stopBeforeUnload,
+    },
   ];
   let cleanupStack = [];
 
@@ -88,6 +100,4 @@ function createUnlockerRuntime(adapters) {
   };
 }
 
-export {
-  createUnlockerRuntime,
-};
+export { createUnlockerRuntime };

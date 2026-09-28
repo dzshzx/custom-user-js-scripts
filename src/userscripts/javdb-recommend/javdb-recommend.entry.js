@@ -20,22 +20,21 @@ import { createRequest } from './javdb-recommend-request.lib.js';
 import { createArchiveData } from './javdb-recommend-data.lib.js';
 import { bootArchivePage } from './javdb-recommend-view.lib.js';
 const ROUTE = '/recommend-archive';
-  function injectNavEntry() {
-    var start = document.querySelector('nav.main-nav .navbar-start');
-    if (!start || start.querySelector('a[href="' + ROUTE + '"]')) return;
-    var a = document.createElement('a');
-    a.className = 'navbar-item';
-    a.href = ROUTE;
-    a.title = '浏览佳片推荐全部历史期数';
-    a.textContent = '佳片推荐';
-    start.appendChild(a);
-  }
-
+function injectNavEntry() {
+  var start = document.querySelector('nav.main-nav .navbar-start');
+  if (!start || start.querySelector('a[href="' + ROUTE + '"]')) return;
+  var a = document.createElement('a');
+  a.className = 'navbar-item';
+  a.href = ROUTE;
+  a.title = '浏览佳片推荐全部历史期数';
+  a.textContent = '佳片推荐';
+  start.appendChild(a);
+}
 
 if (location.pathname.replace(/\/+$/, '') === ROUTE) {
   const data = createArchiveData({ storage: localStorage, request: createRequest({ base: location.origin }) });
   const view = bootArchivePage(data);
-  window.addEventListener('pagehide', event => {
+  window.addEventListener('pagehide', (event) => {
     if (!event.persisted) {
       view.dispose();
       data.dispose();

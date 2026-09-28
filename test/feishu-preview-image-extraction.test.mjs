@@ -4,12 +4,7 @@ import assert from 'node:assert/strict';
 import { readPreviewImage } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js';
 import { loadTestPlaywright } from '../scripts/test-playwright.mjs';
 
-function image({
-  src = '',
-  currentSrc = '',
-  width = 200,
-  height = 100,
-} = {}) {
+function image({ src = '', currentSrc = '', width = 200, height = 100 } = {}) {
   return {
     src,
     currentSrc,
@@ -75,19 +70,22 @@ test('data URL profiles keep their historical payload and invalid-format behavio
   const invalid = environment([image({ src: 'data:image/png;charset=utf-8;base64,aGk=', width: 300 })]);
   await assert.rejects(
     readPreviewImage({ profile: 'userscript-v1' }, invalid),
-    (error) => error.message === 'Unsupported data URL format'
-      && error.code === 'FEISHU_IMAGE_INVALID_DATA_URL'
-      && error.phase === 'data-url',
+    (error) =>
+      error.message === 'Unsupported data URL format' &&
+      error.code === 'FEISHU_IMAGE_INVALID_DATA_URL' &&
+      error.phase === 'data-url',
   );
   assert.deepEqual(await readPreviewImage({ profile: 'cli-v1' }, invalid), {
     kind: 'empty',
     reason: 'invalid-data-url',
   });
 
-  const unusualPayload = environment([image({
-    src: 'data:image/PNG;base64,not-standard-but-non-empty',
-    width: 300,
-  })]);
+  const unusualPayload = environment([
+    image({
+      src: 'data:image/PNG;base64,not-standard-but-non-empty',
+      width: 300,
+    }),
+  ]);
   assert.equal(
     (await readPreviewImage({ profile: 'cli-v1' }, unusualPayload)).payload.data,
     'not-standard-but-non-empty',
@@ -169,9 +167,10 @@ test('empty source and read failures preserve profile behavior and diagnostics',
   });
   await assert.rejects(
     readPreviewImage({ profile: 'userscript-v1' }, empty),
-    (error) => error.message === 'Image source is empty'
-      && error.code === 'FEISHU_IMAGE_SOURCE_EMPTY'
-      && error.phase === 'source',
+    (error) =>
+      error.message === 'Image source is empty' &&
+      error.code === 'FEISHU_IMAGE_SOURCE_EMPTY' &&
+      error.phase === 'source',
   );
   assert.equal((await readPreviewImage({ profile: 'cli-v1' }, empty)).payload.data, 'AQ==');
 
@@ -180,19 +179,21 @@ test('empty source and read failures preserve profile behavior and diagnostics',
   });
   await assert.rejects(
     readPreviewImage({ profile: 'cli-v1' }, failed),
-    (error) => error.message === 'Failed to fetch image: 403 Forbidden'
-      && error.code === 'FEISHU_IMAGE_FETCH_FAILED'
-      && error.phase === 'fetch',
+    (error) =>
+      error.message === 'Failed to fetch image: 403 Forbidden' &&
+      error.code === 'FEISHU_IMAGE_FETCH_FAILED' &&
+      error.phase === 'fetch',
   );
 
   const rejected = environment([image({ src: 'image.png', width: 300 })], {
-    fetchImpl: async () => { throw new Error('network stopped'); },
+    fetchImpl: async () => {
+      throw new Error('network stopped');
+    },
   });
   await assert.rejects(
     readPreviewImage({ profile: 'cli-v1' }, rejected),
-    (error) => error.message === 'network stopped'
-      && error.code === 'FEISHU_IMAGE_FETCH_FAILED'
-      && error.phase === 'fetch',
+    (error) =>
+      error.message === 'network stopped' && error.code === 'FEISHU_IMAGE_FETCH_FAILED' && error.phase === 'fetch',
   );
 });
 
@@ -211,22 +212,24 @@ test('blob, arrayBuffer and encoding failures keep their phase', async () => {
   });
   await assert.rejects(
     readPreviewImage({ profile: 'userscript-v1' }, userscriptEnv),
-    (error) => error.message === 'reader stopped'
-      && error.code === 'FEISHU_IMAGE_BLOB_READ_FAILED'
-      && error.phase === 'blob-read',
+    (error) =>
+      error.message === 'reader stopped' &&
+      error.code === 'FEISHU_IMAGE_BLOB_READ_FAILED' &&
+      error.phase === 'blob-read',
   );
 
   const blobFailure = environment([image({ src: 'image.png', width: 300 })], {
     fetchImpl: async () => ({
       ok: true,
-      blob: async () => { throw new Error('blob stopped'); },
+      blob: async () => {
+        throw new Error('blob stopped');
+      },
     }),
   });
   await assert.rejects(
     readPreviewImage({ profile: 'userscript-v1' }, blobFailure),
-    (error) => error.message === 'blob stopped'
-      && error.code === 'FEISHU_IMAGE_BLOB_READ_FAILED'
-      && error.phase === 'blob-read',
+    (error) =>
+      error.message === 'blob stopped' && error.code === 'FEISHU_IMAGE_BLOB_READ_FAILED' && error.phase === 'blob-read',
   );
 
   const cliEnv = environment([image({ src: 'image.png', width: 300 })], {
@@ -235,27 +238,31 @@ test('blob, arrayBuffer and encoding failures keep their phase', async () => {
       headers: { get: () => null },
       arrayBuffer: async () => Uint8Array.from([1]).buffer,
     }),
-    btoaImpl: () => { throw new Error('encoder stopped'); },
+    btoaImpl: () => {
+      throw new Error('encoder stopped');
+    },
   });
   await assert.rejects(
     readPreviewImage({ profile: 'cli-v1' }, cliEnv),
-    (error) => error.message === 'encoder stopped'
-      && error.code === 'FEISHU_IMAGE_ENCODE_FAILED'
-      && error.phase === 'encode',
+    (error) =>
+      error.message === 'encoder stopped' && error.code === 'FEISHU_IMAGE_ENCODE_FAILED' && error.phase === 'encode',
   );
 
   const arrayBufferFailure = environment([image({ src: 'image.png', width: 300 })], {
     fetchImpl: async () => ({
       ok: true,
       headers: { get: () => null },
-      arrayBuffer: async () => { throw new Error('buffer stopped'); },
+      arrayBuffer: async () => {
+        throw new Error('buffer stopped');
+      },
     }),
   });
   await assert.rejects(
     readPreviewImage({ profile: 'cli-v1' }, arrayBufferFailure),
-    (error) => error.message === 'buffer stopped'
-      && error.code === 'FEISHU_IMAGE_BLOB_READ_FAILED'
-      && error.phase === 'blob-read',
+    (error) =>
+      error.message === 'buffer stopped' &&
+      error.code === 'FEISHU_IMAGE_BLOB_READ_FAILED' &&
+      error.phase === 'blob-read',
   );
 });
 
@@ -280,10 +287,7 @@ test('unknown profile and mode reject before reading the environment', () => {
 test('imported function survives serialization without module-scope closures', async () => {
   const serialized = (0, eval)(`(${readPreviewImage.toString()})`);
   const env = environment([image({ src: 'data:image/png;base64,Ynl0ZXM=', width: 300 })]);
-  assert.deepEqual(
-    await serialized({ profile: 'cli-v1' }, env),
-    await readPreviewImage({ profile: 'cli-v1' }, env),
-  );
+  assert.deepEqual(await serialized({ profile: 'cli-v1' }, env), await readPreviewImage({ profile: 'cli-v1' }, env));
 });
 
 test('real Playwright page.evaluate matches the direct result', async () => {

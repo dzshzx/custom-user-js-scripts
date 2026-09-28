@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, createMemoryStorage, domSkip } from './helpers/dom-env.mjs';
 
-import { createFloatingPanelShell, detectHostTheme } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js';
+import {
+  createFloatingPanelShell,
+  detectHostTheme,
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js';
 
 const POSITION_KEY = 'codexQuotaCompassButtonPosition';
 const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -38,7 +38,7 @@ out where script-owned pages differ.
 ## Typography
 
 - Use a system UI font stack such as `system-ui, -apple-system, "Segoe UI",
-  sans-serif`.
+sans-serif`.
 - Keep product UI type scales tight. Data labels, buttons, and table text need
   clarity more than dramatic hierarchy.
 - Reserve large type for key values only when it helps scanning. Do not turn

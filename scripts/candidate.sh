@@ -10,27 +10,39 @@ wait=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-wait) wait=0 ;;
-    --timeout) timeout="$2"; shift ;;
-    -h|--help) sed -n '2,5p' "$0"; exit 0 ;;
-    *) echo "unknown argument: $1" >&2; exit 2 ;;
+    --timeout)
+      timeout="$2"
+      shift
+      ;;
+    -h | --help)
+      sed -n '2,5p' "$0"
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
   shift
 done
 
-die() { echo "candidate: $*" >&2; exit 1; }
+die() {
+  echo "candidate: $*" >&2
+  exit 1
+}
 
 [ -z "$(git status --porcelain --untracked-files=all)" ] || die "a candidate requires a clean committed checkout"
 branch="$(git symbolic-ref --quiet --short HEAD || true)"
 case "$branch" in
-  master|candidate/*|"") die "run from a development branch, not '${branch:-detached HEAD}'" ;;
+  master | candidate/* | "") die "run from a development branch, not '${branch:-detached HEAD}'" ;;
 esac
 git fetch -q origin master
 sha="$(git rev-parse HEAD)"
 git merge-base --is-ancestor origin/master "$sha" || die "rebase onto origin/master first"
 [ "$sha" != "$(git rev-parse origin/master)" ] || die "HEAD is already master; nothing to promote"
 
-node scripts/version-plan.mjs check --base-ref origin/master --target-ref "$sha" \
-  || die "version plan is invalid"
+node scripts/version-plan.mjs check --base-ref origin/master --target-ref "$sha" ||
+  die "version plan is invalid"
 
 suffix="$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
 candidate="candidate/${sha:0:12}-${suffix}"

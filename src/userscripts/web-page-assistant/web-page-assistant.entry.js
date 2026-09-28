@@ -77,7 +77,8 @@ import { createWebPageAssistantView } from './web-page-assistant-view.lib.js';
     gmSetValue: typeof GM_setValue === 'function' ? GM_setValue : null,
     gmRegisterMenuCommand: typeof GM_registerMenuCommand === 'function' ? GM_registerMenuCommand : null,
     gmAddValueChangeListener: typeof GM_addValueChangeListener === 'function' ? GM_addValueChangeListener : null,
-    gmRemoveValueChangeListener: typeof GM_removeValueChangeListener === 'function' ? GM_removeValueChangeListener : null,
+    gmRemoveValueChangeListener:
+      typeof GM_removeValueChangeListener === 'function' ? GM_removeValueChangeListener : null,
     gmApi: typeof GM !== 'undefined' ? GM : null,
     localStorageAdapter: localStorage,
     eventTarget: window,
@@ -102,10 +103,7 @@ import { createWebPageAssistantView } from './web-page-assistant-view.lib.js';
   });
 
   let widgetPosition = null;
-  const interfaceReady = Promise.all([
-    storage.readWidgetPosition(),
-    documentReady(),
-  ]).then(([position]) => {
+  const interfaceReady = Promise.all([storage.readWidgetPosition(), documentReady()]).then(([position]) => {
     widgetPosition = position;
   });
   let view;

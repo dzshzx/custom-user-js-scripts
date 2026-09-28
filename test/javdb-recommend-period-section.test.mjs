@@ -4,15 +4,17 @@ import assert from 'node:assert/strict';
 import { createPeriodSection } from '../src/userscripts/javdb-recommend/javdb-recommend-period-section.lib.js';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-const MOVIES = [{
-  id: '1',
-  number: 'ABC-001',
-  title: '标题',
-  origin_title: 'Title',
-  cover_url: 'https://example.test/covers/a.jpg',
-  score: '4.5',
-  release_date: '2026-09-01',
-}];
+const MOVIES = [
+  {
+    id: '1',
+    number: 'ABC-001',
+    title: '标题',
+    origin_title: 'Title',
+    cover_url: 'https://example.test/covers/a.jpg',
+    score: '4.5',
+    release_date: '2026-09-01',
+  },
+];
 
 test('period metadata is always text and malformed fields use placeholders', { skip: domSkip }, () => {
   const window = createDomWindow();
@@ -50,7 +52,7 @@ test('updates preserve the section and grid and identical content keeps decorate
   const card = grid.querySelector('.item');
   card.classList.add('third-party-decoration');
   card.appendChild(window.document.createElement('button'));
-  assert.equal(handle.update({ movies: MOVIES.map(movie => ({ ...movie })), degraded: true }), false);
+  assert.equal(handle.update({ movies: MOVIES.map((movie) => ({ ...movie })), degraded: true }), false);
 
   assert.equal(handle.element, section);
   assert.equal(section.querySelector('.movie-list'), grid);

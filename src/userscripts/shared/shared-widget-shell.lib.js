@@ -14,7 +14,9 @@ function isDockSide(value) {
 }
 
 function appendClasses(el, classes) {
-  const list = String(classes ?? '').split(/\s+/).filter(Boolean);
+  const list = String(classes ?? '')
+    .split(/\s+/)
+    .filter(Boolean);
   if (list.length) el.classList.add(...list);
 }
 
@@ -154,15 +156,18 @@ function createWidgetShell({
     throw new Error('shared-widget-shell: root must expose ownerDocument.');
   }
   const windowObject = documentObject.defaultView ?? globalThis.window ?? globalThis;
-  const scheduleTimeout = typeof windowObject.setTimeout === 'function'
-    ? windowObject.setTimeout.bind(windowObject)
-    : (callback, ms) => setTimeout(callback, ms);
-  const cancelTimeout = typeof windowObject.clearTimeout === 'function'
-    ? windowObject.clearTimeout.bind(windowObject)
-    : (timer) => clearTimeout(timer);
-  const requestFrame = typeof windowObject.requestAnimationFrame === 'function'
-    ? windowObject.requestAnimationFrame.bind(windowObject)
-    : (callback) => scheduleTimeout(callback, 16);
+  const scheduleTimeout =
+    typeof windowObject.setTimeout === 'function'
+      ? windowObject.setTimeout.bind(windowObject)
+      : (callback, ms) => setTimeout(callback, ms);
+  const cancelTimeout =
+    typeof windowObject.clearTimeout === 'function'
+      ? windowObject.clearTimeout.bind(windowObject)
+      : (timer) => clearTimeout(timer);
+  const requestFrame =
+    typeof windowObject.requestAnimationFrame === 'function'
+      ? windowObject.requestAnimationFrame.bind(windowObject)
+      : (callback) => scheduleTimeout(callback, 16);
 
   const buttonEl = documentObject.createElement('button');
   buttonEl.type = 'button';
@@ -222,9 +227,7 @@ function createWidgetShell({
     const { width } = measureButton();
     const clamped = clampPosition(0, top);
     return {
-      left: dockSide === 'right'
-        ? windowObject.innerWidth - DOCK_OFFSET - width
-        : DOCK_OFFSET,
+      left: dockSide === 'right' ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
       top: clamped.top,
     };
   }
@@ -307,9 +310,7 @@ function createWidgetShell({
     const aboveTop = position.top - height - PANEL_GAP;
     const fitsBelow = belowTop + height <= windowObject.innerHeight - safe;
     const maxTop = Math.max(safe, windowObject.innerHeight - height - safe);
-    const top = fitsBelow
-      ? Math.min(belowTop, maxTop)
-      : Math.min(Math.max(safe, aboveTop), maxTop);
+    const top = fitsBelow ? Math.min(belowTop, maxTop) : Math.min(Math.max(safe, aboveTop), maxTop);
 
     panelEl.style.left = `${Math.round(left)}px`;
     panelEl.style.top = `${Math.round(top)}px`;
@@ -490,6 +491,4 @@ function createWidgetShell({
   };
 }
 
-export {
-  createWidgetShell,
-};
+export { createWidgetShell };

@@ -461,7 +461,9 @@ ${root} :focus-visible {
         area,
         index
       };
-    }).filter((item) => profile === "userscript-v1" ? item.width > 0 && item.height > 0 && item.area >= 2e4 : item.area > 2e4).sort((left, right) => right.area - left.area || left.index - right.index).map(({ index: _index, ...item }) => item);
+    }).filter(
+      (item) => profile === "userscript-v1" ? item.width > 0 && item.height > 0 && item.area >= 2e4 : item.area > 2e4
+    ).sort((left, right) => right.area - left.area || left.index - right.index).map(({ index: _index, ...item }) => item);
     if (mode === "inspect") {
       return { kind: "candidates", items };
     }
@@ -472,11 +474,7 @@ ${root} :focus-visible {
       const target = items[0];
       const source = target.src;
       if (profile === "userscript-v1" && !source) {
-        throw attachDiagnostic(
-          new Error("Image source is empty"),
-          "FEISHU_IMAGE_SOURCE_EMPTY",
-          "source"
-        );
+        throw attachDiagnostic(new Error("Image source is empty"), "FEISHU_IMAGE_SOURCE_EMPTY", "source");
       }
       if (source.startsWith("data:")) {
         const match = source.match(/^data:([^;]+);base64,(.+)$/);
@@ -484,11 +482,7 @@ ${root} :focus-visible {
           if (profile === "cli-v1") {
             return { kind: "empty", reason: "invalid-data-url" };
           }
-          throw attachDiagnostic(
-            new Error("Unsupported data URL format"),
-            "FEISHU_IMAGE_INVALID_DATA_URL",
-            "data-url"
-          );
+          throw attachDiagnostic(new Error("Unsupported data URL format"), "FEISHU_IMAGE_INVALID_DATA_URL", "data-url");
         }
         return {
           kind: "image",
@@ -501,11 +495,7 @@ ${root} :focus-visible {
       }
       const fetcher = environment.fetchImpl || host.fetch?.bind(host);
       if (typeof fetcher !== "function") {
-        throw attachDiagnostic(
-          new Error("fetch unavailable"),
-          "FEISHU_IMAGE_FETCH_FAILED",
-          "fetch"
-        );
+        throw attachDiagnostic(new Error("fetch unavailable"), "FEISHU_IMAGE_FETCH_FAILED", "fetch");
       }
       let response;
       try {
@@ -611,21 +601,14 @@ ${root} :focus-visible {
     }
     return `导出失败：${text}`;
   }
-  function createImageExportRuntime({
-    documentObject,
-    fetchImpl,
-    gmDownload
-  } = {}) {
+  function createImageExportRuntime({ documentObject, fetchImpl, gmDownload } = {}) {
     if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
     function getDocumentTitle() {
       const raw = documentObject.title.replace(/\s*-\s*飞书云文档\s*$/u, "").trim();
       return sanitizeFilePart(raw, "feishu-image");
     }
     function getVisibleImages() {
-      return readPreviewImage(
-        { profile: "userscript-v1", mode: "inspect" },
-        { documentObject }
-      ).items;
+      return readPreviewImage({ profile: "userscript-v1", mode: "inspect" }, { documentObject }).items;
     }
     function fallbackDownload(url, filename) {
       const anchor = documentObject.createElement("a");

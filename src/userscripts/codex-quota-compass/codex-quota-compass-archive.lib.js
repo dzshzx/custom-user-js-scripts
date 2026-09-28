@@ -28,9 +28,7 @@ function sanitizeValue(value) {
   }
 
   if (isPlainObject(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)]),
-    );
+    return Object.fromEntries(Object.entries(value).map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)]));
   }
 
   if (value instanceof Date) return value.toISOString();
@@ -55,12 +53,8 @@ function normalizeDailyRows(rows) {
 function normalizeSnapshot(input) {
   if (!isPlainObject(input)) return null;
 
-  const snapshotId = typeof input.snapshotId === 'string' && input.snapshotId.trim()
-    ? input.snapshotId.trim()
-    : null;
-  const capturedAt = typeof input.capturedAt === 'string' && input.capturedAt.trim()
-    ? input.capturedAt
-    : null;
+  const snapshotId = typeof input.snapshotId === 'string' && input.snapshotId.trim() ? input.snapshotId.trim() : null;
+  const capturedAt = typeof input.capturedAt === 'string' && input.capturedAt.trim() ? input.capturedAt : null;
 
   if (!capturedAt) return null;
 
@@ -79,7 +73,9 @@ function normalizeSnapshot(input) {
 function normalizeSnapshotArchive(rawArchive) {
   const archiveObject = Array.isArray(rawArchive)
     ? { snapshots: rawArchive }
-    : (isPlainObject(rawArchive) ? rawArchive : {});
+    : isPlainObject(rawArchive)
+      ? rawArchive
+      : {};
 
   const snapshots = Array.isArray(archiveObject.snapshots)
     ? archiveObject.snapshots.map(normalizeSnapshot).filter(Boolean)
@@ -118,9 +114,7 @@ function migrateArchive(rawArchive, nowMs = Date.now()) {
 function cycleStartDateFromArchive(archive) {
   const snapshots = normalizeSnapshotArchive(archive).snapshots;
   const latest = snapshots[snapshots.length - 1];
-  const win = Array.isArray(latest?.windowSnapshot)
-    ? latest.windowSnapshot.find(isMainSevenDayWindow)
-    : null;
+  const win = Array.isArray(latest?.windowSnapshot) ? latest.windowSnapshot.find(isMainSevenDayWindow) : null;
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(win?.['本轮开始_UTC'] || ''));
   return match ? match[1] : null;
 }
@@ -149,14 +143,18 @@ function summarizeSnapshotArchive(archive) {
     snapshotCount: normalized.snapshots.length,
     earliestCapturedAt: first?.capturedAt || null,
     latestCapturedAt: last?.capturedAt || null,
-    recentSnapshots: normalized.snapshots.slice(-5).reverse().map((snapshot) => ({
-      snapshotId: snapshot.snapshotId,
-      capturedAt: snapshot.capturedAt,
-      scriptVersion: snapshot.scriptVersion,
-      rollingLabel: Object.values(snapshot.periodSummaries || {}).find((period) => period?.periodKey === 'rolling')?.label || '',
-      monthlyCredits: snapshot.periodSummaries?.monthToDate?.totalCredits ?? null,
-      weeklyUsedPercent: snapshot.periodSummaries?.sinceReset?.usedPercent ?? null,
-    })),
+    recentSnapshots: normalized.snapshots
+      .slice(-5)
+      .reverse()
+      .map((snapshot) => ({
+        snapshotId: snapshot.snapshotId,
+        capturedAt: snapshot.capturedAt,
+        scriptVersion: snapshot.scriptVersion,
+        rollingLabel:
+          Object.values(snapshot.periodSummaries || {}).find((period) => period?.periodKey === 'rolling')?.label || '',
+        monthlyCredits: snapshot.periodSummaries?.monthToDate?.totalCredits ?? null,
+        weeklyUsedPercent: snapshot.periodSummaries?.sinceReset?.usedPercent ?? null,
+      })),
   };
 }
 
@@ -191,9 +189,7 @@ function createQuotaSnapshot({ result, capturedAt, scriptVersion, snapshotId }) 
 
 function mergeSnapshots(currentArchive, incomingSnapshots) {
   const archive = normalizeSnapshotArchive(currentArchive);
-  const existingIds = new Set(
-    archive.snapshots.map((snapshot) => snapshot.snapshotId).filter(Boolean),
-  );
+  const existingIds = new Set(archive.snapshots.map((snapshot) => snapshot.snapshotId).filter(Boolean));
   const existingFallbackKeys = new Set(
     archive.snapshots.filter((snapshot) => !snapshot.snapshotId).map(snapshotFallbackKey),
   );
@@ -247,7 +243,12 @@ function archiveContentKey(archive) {
   const normalized = normalizeSnapshotArchive(archive);
   function stable(value) {
     if (Array.isArray(value)) return value.map(stable);
-    if (isPlainObject(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+    if (isPlainObject(value))
+      return Object.fromEntries(
+        Object.keys(value)
+          .sort()
+          .map((key) => [key, stable(value[key])]),
+      );
     return value;
   }
   return JSON.stringify(stable({ ledger: normalized.ledger, snapshots: normalized.snapshots }));
@@ -288,9 +289,11 @@ function buildSnapshotExportDocument(archive, exportedAt) {
 }
 
 function previewImportArchiveDocument(currentArchive, documentObject, nowMs = Date.now()) {
-  if (!isPlainObject(documentObject)
-    || documentObject.format !== EXPORT_FORMAT
-    || !SUPPORTED_EXPORT_VERSIONS.has(documentObject.version)) {
+  if (
+    !isPlainObject(documentObject) ||
+    documentObject.format !== EXPORT_FORMAT ||
+    !SUPPORTED_EXPORT_VERSIONS.has(documentObject.version)
+  ) {
     throw new Error('Unsupported Snapshot Export document.');
   }
 
@@ -313,11 +316,14 @@ function toNumber(value) {
 }
 
 function sumRows(rows) {
-  return rows.reduce((acc, row) => {
-    acc.totalCredits += toNumber(row?.credits ?? row?.Credits);
-    acc.totalUsd += toNumber(row?.usd ?? row?.折算USD);
-    return acc;
-  }, { totalCredits: 0, totalUsd: 0 });
+  return rows.reduce(
+    (acc, row) => {
+      acc.totalCredits += toNumber(row?.credits ?? row?.Credits);
+      acc.totalUsd += toNumber(row?.usd ?? row?.折算USD);
+      return acc;
+    },
+    { totalCredits: 0, totalUsd: 0 },
+  );
 }
 
 function createSnapshotArchiveQuery(archive) {
@@ -443,7 +449,10 @@ function createSnapshotArchiveStore({
   read,
   write,
   now = () => new Date().toISOString(),
-  createId = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
+  createId = () =>
+    globalThis.crypto?.randomUUID
+      ? globalThis.crypto.randomUUID()
+      : `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
   scriptVersion = '',
 }) {
   if (typeof read !== 'function' || typeof write !== 'function') {
@@ -545,14 +554,16 @@ function createSnapshotArchiveStore({
   // All reads (including adapter migrations) and mutations share one local queue.
   // Operations call private implementations, never their queued public siblings.
   let queue = Promise.resolve();
-  return Object.fromEntries(Object.entries(operations).map(([name, operation]) => [
-    name,
-    (...args) => {
-      const result = queue.then(() => operation(...args));
-      queue = result.catch(() => {});
-      return result;
-    },
-  ]));
+  return Object.fromEntries(
+    Object.entries(operations).map(([name, operation]) => [
+      name,
+      (...args) => {
+        const result = queue.then(() => operation(...args));
+        queue = result.catch(() => {});
+        return result;
+      },
+    ]),
+  );
 }
 
 export {

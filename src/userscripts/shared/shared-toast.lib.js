@@ -221,6 +221,4 @@ function createToaster({ root } = {}) {
   };
 }
 
-export {
-  createToaster,
-};
+export { createToaster };

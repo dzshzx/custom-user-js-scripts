@@ -63,31 +63,29 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
   assert.equal(model.remoteSyncStatus.endpoint, 'GitHub Gist gist-1');
   assert.equal(model.archiveHealth.snapshotCount, 1);
   assert.equal(model.archiveHealth.hasSnapshots, true);
-  assert.deepEqual(model.transfer.actions.map((action) => action.action), [
-    'export-archive',
-    'import-archive',
-  ]);
-  assert.deepEqual(model.tabs.map((tab) => tab.id), ['details', 'stats', 'archive']);
-  assert.equal(model.views.stats.kind, 'stats');
-  assert.equal(model.tabs.some((tab) => tab.id === 'transfer'), false);
-  assert.equal(model.views.details.sections[3].id, 'details-windows');
-  assert.equal(
-    model.views.details.sections[3].columns.find((column) => column.key === '本轮开始_本地').truncate,
-    true,
+  assert.deepEqual(
+    model.transfer.actions.map((action) => action.action),
+    ['export-archive', 'import-archive'],
   );
-  assert.deepEqual(model.views.archive.actionIds, [
-    'export-archive',
-    'import-archive',
-  ]);
+  assert.deepEqual(
+    model.tabs.map((tab) => tab.id),
+    ['details', 'stats', 'archive'],
+  );
+  assert.equal(model.views.stats.kind, 'stats');
+  assert.equal(
+    model.tabs.some((tab) => tab.id === 'transfer'),
+    false,
+  );
+  assert.equal(model.views.details.sections[3].id, 'details-windows');
+  assert.equal(model.views.details.sections[3].columns.find((column) => column.key === '本轮开始_本地').truncate, true);
+  assert.deepEqual(model.views.archive.actionIds, ['export-archive', 'import-archive']);
   assert.equal(model.views.archive.sections[0].type, 'syncForm');
   assert.equal(model.remoteSyncStatus.gistId, 'gist-1');
   assert.equal(model.views.details.sections[0].type, 'metrics');
-  assert.deepEqual(model.views.details.sections[0].metrics.map((metric) => metric.id), [
-    'weeklyTotalIncludingReset',
-    'weeklyTotalExcludingReset',
-    'sinceResetTotal',
-    'monthTotal',
-  ]);
+  assert.deepEqual(
+    model.views.details.sections[0].metrics.map((metric) => metric.id),
+    ['weeklyTotalIncludingReset', 'weeklyTotalExcludingReset', 'sinceResetTotal', 'monthTotal'],
+  );
   assert.deepEqual(model.heroMetric, {
     id: 'remainingUsdIncludingReset',
     type: 'credit',
@@ -96,16 +94,14 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     usd: undefined,
     resetHours: 12,
   });
-  assert.deepEqual(model.secondaryMetrics.map((metric) => metric.id), [
-    'remainingUsdExcludingReset',
-    'sevenDayUsedPercent',
-  ]);
-  assert.deepEqual(model.detailMetrics.map((metric) => metric.id), [
-    'weeklyTotalIncludingReset',
-    'weeklyTotalExcludingReset',
-    'sinceResetTotal',
-    'monthTotal',
-  ]);
+  assert.deepEqual(
+    model.secondaryMetrics.map((metric) => metric.id),
+    ['remainingUsdExcludingReset', 'sevenDayUsedPercent'],
+  );
+  assert.deepEqual(
+    model.detailMetrics.map((metric) => metric.id),
+    ['weeklyTotalIncludingReset', 'weeklyTotalExcludingReset', 'sinceResetTotal', 'monthTotal'],
+  );
   for (const metric of [model.heroMetric, ...model.secondaryMetrics, ...model.detailMetrics]) {
     assert.equal(Object.hasOwn(metric, 'credits'), false, `${metric.id} exposes secondary credits`);
     assert.equal(Object.hasOwn(metric, 'hint'), false, `${metric.id} exposes secondary hint`);
@@ -141,7 +137,10 @@ test('createQuotaPanelViewModel marks localStorage archive as local-only sync', 
   assert.equal(model.syncBanner.titleKey, 'syncBannerLocalTitle');
   assert.equal(model.archiveHealth.hasSnapshots, false);
   assert.equal(model.transfer.syncStatus.localOnly, true);
-  assert.equal(model.tabs.some((tab) => tab.id === 'archive'), true);
+  assert.equal(
+    model.tabs.some((tab) => tab.id === 'archive'),
+    true,
+  );
   assert.equal(model.views.archive.kind, 'archiveWorkspace');
 });
 
@@ -150,17 +149,24 @@ test('panel mobile regression contract gives every tab content and compact long 
     result: buildQuotaSnapshotResult({
       config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
       diagnostics: {},
-      windows: [{
-        窗口Key: 'main.sevenDayWindow',
-        名称: '主限制 - 7天窗口',
-        本轮开始_本地: '2026/05/30 18:00:00',
-        下次重置_本地: '2026/06/06 18:00:00',
-        距离重置小时: 12,
-      }],
+      windows: [
+        {
+          窗口Key: 'main.sevenDayWindow',
+          名称: '主限制 - 7天窗口',
+          本轮开始_本地: '2026/05/30 18:00:00',
+          下次重置_本地: '2026/06/06 18:00:00',
+          距离重置小时: 12,
+        },
+      ],
       periods: {
         sinceReset: {
           summary: { 范围: '上次重置至今近似 2026-05-30 ~ 2026-06-06', 累计Credits: 20, 累计折算USD: 0.8 },
-          weeklyEstimate: { 已用百分比: 40, 包含重置日_已用折算USD: 0.8, 反推周总USD_包含重置日: 2, 剩余USD_包含重置日口径: 1.2 },
+          weeklyEstimate: {
+            已用百分比: 40,
+            包含重置日_已用折算USD: 0.8,
+            反推周总USD_包含重置日: 2,
+            剩余USD_包含重置日口径: 1.2,
+          },
           rows: [],
           clients: [],
         },
@@ -172,10 +178,12 @@ test('panel mobile regression contract gives every tab content and compact long 
       snapshotCount: 1,
       earliestCapturedAt: '2026-05-30T10:00:00.000Z',
       latestCapturedAt: '2026-05-30T10:00:00.000Z',
-      recentSnapshots: [{
-        snapshotId: '60497965-2364-4e37-ace5-long-snapshot-id',
-        capturedAt: '2026-05-30T10:00:00.000Z',
-      }],
+      recentSnapshots: [
+        {
+          snapshotId: '60497965-2364-4e37-ace5-long-snapshot-id',
+          capturedAt: '2026-05-30T10:00:00.000Z',
+        },
+      ],
     },
     storageBackend: { id: 'gm', label: 'GM storage' },
     syncStatus: {
@@ -203,7 +211,10 @@ test('panel mobile regression contract gives every tab content and compact long 
     .filter((section) => section.type === 'dataView');
 
   assert.ok(dataViews.length > 0);
-  assert.equal(dataViews.every((section) => section.compactOnMobile !== false), true);
+  assert.equal(
+    dataViews.every((section) => section.compactOnMobile !== false),
+    true,
+  );
   assert.equal(
     dataViews.some((section) => section.columns.some((column) => column.truncate || column.wrap)),
     true,
@@ -312,5 +323,8 @@ test('createQuotaPanelViewModel omits the reset credit metric for legacy results
 
   const model = createQuotaPanelViewModel({ result });
 
-  assert.equal(model.detailMetrics.some((metric) => metric.id === 'resetCreditsAvailable'), false);
+  assert.equal(
+    model.detailMetrics.some((metric) => metric.id === 'resetCreditsAvailable'),
+    false,
+  );
 });

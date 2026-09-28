@@ -41,8 +41,4 @@ function isSyncFormEditing(contentNode, activeElement) {
   return activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA';
 }
 
-export {
-  applyActiveView,
-  readSyncFormValues,
-  isSyncFormEditing,
-};
+export { applyActiveView, readSyncFormValues, isSyncFormEditing };

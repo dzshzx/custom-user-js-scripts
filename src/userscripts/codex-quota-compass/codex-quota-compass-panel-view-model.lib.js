@@ -123,33 +123,56 @@ function dataView(id, titleKey, rows, columns, options = {}) {
 }
 
 function createDetailsSections({
-  weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits, detailMetrics,
+  weekly,
+  sinceReset,
+  month,
+  rolling,
+  windows,
+  modelSummaries,
+  resetCredits,
+  detailMetrics,
 }) {
   return [
     { type: 'metrics', titleKey: 'sectionKeyMetrics', metrics: detailMetrics },
-    dataView('details-weekly-estimate', 'sectionWeeklyEstimate', [weekly], [
-      dataColumn('已用百分比', { labelKey: 'columnUsedPercent', priority: 'primary' }),
-      dataColumn('剩余比例小数', { labelKey: 'columnRemainingRatio', priority: 'secondary' }),
-      dataColumn('包含重置日_已用折算USD', { labelKey: 'columnIncludedResetUsd', priority: 'primary' }),
-      dataColumn('反推周总USD_包含重置日', { labelKey: 'columnIncludedResetTotalUsd', priority: 'primary' }),
-      dataColumn('剩余USD_包含重置日口径', { labelKey: 'columnIncludedResetRemainingUsd', priority: 'primary' }),
-      dataColumn('包含重置日_已用Credits', { labelKey: 'columnIncludedResetUsedCredits', priority: 'secondary' }),
-      dataColumn('剩余Credits_包含重置日口径', { labelKey: 'columnIncludedResetRemainingCredits', priority: 'secondary' }),
-      dataColumn('排除重置日_已用折算USD', { labelKey: 'columnExcludedResetUsedUsd', priority: 'secondary' }),
-      dataColumn('剩余USD_排除重置日口径', { labelKey: 'columnExcludedResetRemainingUsd', priority: 'secondary' }),
-      dataColumn('排除重置日_已用Credits', { labelKey: 'columnExcludedResetUsedCredits', priority: 'debug' }),
-      dataColumn('剩余Credits_排除重置日口径', { labelKey: 'columnExcludedResetRemainingCredits', priority: 'debug' }),
-      dataColumn('误差说明', { labelKey: 'columnErrorNote', priority: 'debug', wrap: true }),
-    ]),
-    dataView('details-range-summary', 'sectionRangeSummary', [sinceReset, month, rolling], [
-      dataColumn('范围', { labelKey: 'columnRange', priority: 'primary', wrap: true }),
-      dataColumn('累计折算USD', { labelKey: 'columnTotalUsd', priority: 'primary' }),
-      dataColumn('累计Credits', { labelKey: 'columnTotalCredits', priority: 'primary' }),
-      dataColumn('返回日期桶数', { labelKey: 'columnBucketCount', priority: 'secondary' }),
-      dataColumn('累计Token', { labelKey: 'columnTotalTokens', priority: 'debug' }),
-      dataColumn('累计线程数', { labelKey: 'columnTotalThreads', priority: 'debug' }),
-      dataColumn('累计轮数', { labelKey: 'columnTotalTurns', priority: 'debug' }),
-    ]),
+    dataView(
+      'details-weekly-estimate',
+      'sectionWeeklyEstimate',
+      [weekly],
+      [
+        dataColumn('已用百分比', { labelKey: 'columnUsedPercent', priority: 'primary' }),
+        dataColumn('剩余比例小数', { labelKey: 'columnRemainingRatio', priority: 'secondary' }),
+        dataColumn('包含重置日_已用折算USD', { labelKey: 'columnIncludedResetUsd', priority: 'primary' }),
+        dataColumn('反推周总USD_包含重置日', { labelKey: 'columnIncludedResetTotalUsd', priority: 'primary' }),
+        dataColumn('剩余USD_包含重置日口径', { labelKey: 'columnIncludedResetRemainingUsd', priority: 'primary' }),
+        dataColumn('包含重置日_已用Credits', { labelKey: 'columnIncludedResetUsedCredits', priority: 'secondary' }),
+        dataColumn('剩余Credits_包含重置日口径', {
+          labelKey: 'columnIncludedResetRemainingCredits',
+          priority: 'secondary',
+        }),
+        dataColumn('排除重置日_已用折算USD', { labelKey: 'columnExcludedResetUsedUsd', priority: 'secondary' }),
+        dataColumn('剩余USD_排除重置日口径', { labelKey: 'columnExcludedResetRemainingUsd', priority: 'secondary' }),
+        dataColumn('排除重置日_已用Credits', { labelKey: 'columnExcludedResetUsedCredits', priority: 'debug' }),
+        dataColumn('剩余Credits_排除重置日口径', {
+          labelKey: 'columnExcludedResetRemainingCredits',
+          priority: 'debug',
+        }),
+        dataColumn('误差说明', { labelKey: 'columnErrorNote', priority: 'debug', wrap: true }),
+      ],
+    ),
+    dataView(
+      'details-range-summary',
+      'sectionRangeSummary',
+      [sinceReset, month, rolling],
+      [
+        dataColumn('范围', { labelKey: 'columnRange', priority: 'primary', wrap: true }),
+        dataColumn('累计折算USD', { labelKey: 'columnTotalUsd', priority: 'primary' }),
+        dataColumn('累计Credits', { labelKey: 'columnTotalCredits', priority: 'primary' }),
+        dataColumn('返回日期桶数', { labelKey: 'columnBucketCount', priority: 'secondary' }),
+        dataColumn('累计Token', { labelKey: 'columnTotalTokens', priority: 'debug' }),
+        dataColumn('累计线程数', { labelKey: 'columnTotalThreads', priority: 'debug' }),
+        dataColumn('累计轮数', { labelKey: 'columnTotalTurns', priority: 'debug' }),
+      ],
+    ),
     dataView('details-windows', 'sectionWindows', windows, [
       dataColumn('名称', { labelKey: 'columnName', priority: 'primary', wrap: true }),
       dataColumn('已用百分比', { labelKey: 'columnUsedPercent', priority: 'primary' }),
@@ -165,16 +188,30 @@ function createDetailsSections({
       dataColumn('Credits', { labelKey: 'columnCredits', priority: 'secondary' }),
       dataColumn('折算USD', { labelKey: 'statsColumnUsd', priority: 'secondary' }),
     ]),
-    dataView('details-reset-credits', 'sectionResetCredits', resetCredits?.明细, [
-      dataColumn('标题', { labelKey: 'columnTitle', priority: 'primary', wrap: true }),
-      dataColumn('状态', { labelKey: 'columnStatus', priority: 'secondary' }),
-      dataColumn('过期时间_本地', { labelKey: 'columnExpiresLocal', priority: 'primary', truncate: true }),
-    ], { emptyKey: 'resetCreditsEmpty' }),
+    dataView(
+      'details-reset-credits',
+      'sectionResetCredits',
+      resetCredits?.明细,
+      [
+        dataColumn('标题', { labelKey: 'columnTitle', priority: 'primary', wrap: true }),
+        dataColumn('状态', { labelKey: 'columnStatus', priority: 'secondary' }),
+        dataColumn('过期时间_本地', { labelKey: 'columnExpiresLocal', priority: 'primary', truncate: true }),
+      ],
+      { emptyKey: 'resetCreditsEmpty' },
+    ),
   ];
 }
 
 function createPanelViews({
-  weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits, transfer, detailMetrics,
+  weekly,
+  sinceReset,
+  month,
+  rolling,
+  windows,
+  modelSummaries,
+  resetCredits,
+  transfer,
+  detailMetrics,
 }) {
   const tabs = [
     { id: 'details', labelKey: 'tabDetails' },
@@ -195,7 +232,14 @@ function createPanelViews({
         labelKey: 'tabDetails',
         kind: 'sections',
         sections: createDetailsSections({
-          weekly, sinceReset, month, rolling, windows, modelSummaries, resetCredits, detailMetrics,
+          weekly,
+          sinceReset,
+          month,
+          rolling,
+          windows,
+          modelSummaries,
+          resetCredits,
+          detailMetrics,
         }),
       },
       archive: {
@@ -359,11 +403,11 @@ function createQuotaPanelViewModel({
   const mainSevenDayWindow = snapshotAccess.mainSevenDayWindow;
   const recentSnapshots = Array.isArray(archiveSummary?.recentSnapshots)
     ? archiveSummary.recentSnapshots.slice(0, 5).map((row) => ({
-      capturedAt: row?.capturedAt || '-',
-      snapshotId: row?.snapshotId || 'legacy',
-      monthlyCredits: row?.monthlyCredits,
-      weeklyUsedPercent: row?.weeklyUsedPercent,
-    }))
+        capturedAt: row?.capturedAt || '-',
+        snapshotId: row?.snapshotId || 'legacy',
+        monthlyCredits: row?.monthlyCredits,
+        weeklyUsedPercent: row?.weeklyUsedPercent,
+      }))
     : [];
   const normalizedSyncStatus = normalizePanelSyncStatus(syncStatus, storageBackend);
   const normalizedRemoteSyncStatus = normalizeRemoteSyncStatus(remoteSyncStatus);
@@ -437,6 +481,4 @@ function createQuotaPanelViewModel({
   };
 }
 
-export {
-  createQuotaPanelViewModel,
-};
+export { createQuotaPanelViewModel };

@@ -104,12 +104,15 @@ test('all period shows a settled total and a flat list, no drill rows', () => {
 });
 
 test('drill filters allDays to the selected range and hides the live line', () => {
-  const html = buildStatsView({
-    cost: COST,
-    rolling: ROLLING,
-    period: 'week',
-    drill: { from: '2026-06-08', to: '2026-06-14', label: '2026-06-08 ~ 2026-06-14' },
-  }, helpers);
+  const html = buildStatsView(
+    {
+      cost: COST,
+      rolling: ROLLING,
+      period: 'week',
+      drill: { from: '2026-06-08', to: '2026-06-14', label: '2026-06-08 ~ 2026-06-14' },
+    },
+    helpers,
+  );
 
   assert.match(html, /data-action="stats-drill-back"/);
   assert.match(html, /2026-06-08 ~ 2026-06-14/);
@@ -135,12 +138,15 @@ test('summary views render a 30-day settled USD bar chart, drills and empty stat
   assert.equal((day.match(/cqc-stats-chart-bar/g) || []).length, 3);
   assert.match(day, /style="height: 100%"/);
 
-  const drill = buildStatsView({
-    cost: COST,
-    rolling: ROLLING,
-    period: 'week',
-    drill: { from: '2026-06-08', to: '2026-06-14', label: 'range' },
-  }, helpers);
+  const drill = buildStatsView(
+    {
+      cost: COST,
+      rolling: ROLLING,
+      period: 'week',
+      drill: { from: '2026-06-08', to: '2026-06-14', label: 'range' },
+    },
+    helpers,
+  );
   assert.doesNotMatch(drill, /cqc-stats-chart/);
 
   assert.doesNotMatch(buildStatsView({ cost: null, period: 'day' }, helpers), /cqc-stats-chart/);
@@ -160,11 +166,14 @@ test('period controls expose a single perceivable selected state', () => {
 
 test('statistics controls and focus treatment survive DOM rendering', { skip: domSkip }, () => {
   const window = createDomWindow();
-  window.document.body.innerHTML = buildStatsView({
-    cost: COST,
-    rolling: ROLLING,
-    period: 'week',
-  }, helpers);
+  window.document.body.innerHTML = buildStatsView(
+    {
+      cost: COST,
+      rolling: ROLLING,
+      period: 'week',
+    },
+    helpers,
+  );
 
   const periodButtons = [...window.document.querySelectorAll('[data-action="switch-stats-period"]')];
   const selected = periodButtons.filter((button) => button.getAttribute('aria-pressed') === 'true');

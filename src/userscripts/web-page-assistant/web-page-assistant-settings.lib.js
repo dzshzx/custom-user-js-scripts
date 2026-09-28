@@ -83,9 +83,7 @@ function normalizeScopedSettings(value, normalizer) {
 function normalizeSettings(value) {
   const next = emptySettings();
   const source = isRecord(value) ? value : {};
-  const refreshSource = isRecord(source.refresh)
-    ? source.refresh
-    : { pages: source.pages, sites: source.sites };
+  const refreshSource = isRecord(source.refresh) ? source.refresh : { pages: source.pages, sites: source.sites };
   const unlockerSource = isRecord(source.unlocker) ? source.unlocker : {};
 
   next.refresh = normalizeScopedSettings(refreshSource, normalizeRefreshSetting);
@@ -96,14 +94,12 @@ function normalizeSettings(value) {
 
 function hasUnlockerAction(setting) {
   return Boolean(
-    setting?.enabled
-      && (
-        setting.allowSelection
-        || setting.allowCopy
-        || setting.allowContextMenu
-        || setting.allowDrag
-        || setting.suppressBeforeUnload
-      ),
+    setting?.enabled &&
+    (setting.allowSelection ||
+      setting.allowCopy ||
+      setting.allowContextMenu ||
+      setting.allowDrag ||
+      setting.suppressBeforeUnload),
   );
 }
 

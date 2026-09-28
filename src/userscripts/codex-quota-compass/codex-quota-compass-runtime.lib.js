@@ -27,11 +27,7 @@ function findAccessToken(input, depth = 0) {
   if (!input || typeof input !== 'object' || depth > 8) return '';
 
   for (const [key, value] of Object.entries(input)) {
-    if (
-      typeof value === 'string'
-      && /access/i.test(key)
-      && looksLikeJwt(value)
-    ) {
+    if (typeof value === 'string' && /access/i.test(key) && looksLikeJwt(value)) {
       return value;
     }
 
@@ -68,9 +64,7 @@ function createQuotaRuntime({
   location = globalThis.location,
   now = () => Date.now(),
   formatLocalTime = (ms) => new Date(ms).toLocaleString(),
-  getBrowserTimeZone = () => (
-    globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || '未知'
-  ),
+  getBrowserTimeZone = () => globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || '未知',
 } = {}) {
   if (!coreLib?.createQuotaCalculator) {
     throw new Error('CodexQuotaCompassCoreLib calculator is unavailable.');
@@ -137,26 +131,23 @@ function createQuotaRuntime({
       });
     }
 
-    return coreLib.createQuotaCalculator({
-      config,
-      fetchUsage: () => apiGet(config.USAGE_PATH),
-      fetchDailyUsage: (startDate, endExclusiveDate) => (
-        apiGet(`${config.DAILY_USAGE_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`)
-      ),
-      fetchDailyTokenBreakdown: (startDate, endExclusiveDate) => (
-        apiGet(`${config.DAILY_TOKEN_BREAKDOWN_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`)
-      ),
-      fetchRateLimitResetCredits: () => apiGet(config.RESET_CREDITS_PATH),
-      now,
-      formatLocalTime,
-      getBrowserTimeZone,
-    }).run();
+    return coreLib
+      .createQuotaCalculator({
+        config,
+        fetchUsage: () => apiGet(config.USAGE_PATH),
+        fetchDailyUsage: (startDate, endExclusiveDate) =>
+          apiGet(`${config.DAILY_USAGE_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`),
+        fetchDailyTokenBreakdown: (startDate, endExclusiveDate) =>
+          apiGet(`${config.DAILY_TOKEN_BREAKDOWN_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`),
+        fetchRateLimitResetCredits: () => apiGet(config.RESET_CREDITS_PATH),
+        now,
+        formatLocalTime,
+        getBrowserTimeZone,
+      })
+      .run();
   }
 
   return { run };
 }
 
-export {
-  createDefaultQuotaRuntimeConfig,
-  createQuotaRuntime,
-};
+export { createDefaultQuotaRuntimeConfig, createQuotaRuntime };

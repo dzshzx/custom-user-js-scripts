@@ -3,7 +3,9 @@ import { readPreviewImage } from './feishu-preview-image-export-extraction.lib.j
 const LIB_NAME = 'FeishuPreviewImageExportLogicLib';
 
 function sanitizeFilePart(value, fallback) {
-  const text = String(value || '').trim().replace(/[\\/:*?"<>|]+/g, '-');
+  const text = String(value || '')
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-');
   return text || fallback;
 }
 
@@ -39,11 +41,7 @@ function toUserMessage(error) {
   return `导出失败：${text}`;
 }
 
-function createImageExportRuntime({
-  documentObject,
-  fetchImpl,
-  gmDownload,
-} = {}) {
+function createImageExportRuntime({ documentObject, fetchImpl, gmDownload } = {}) {
   if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
   function getDocumentTitle() {
     const raw = documentObject.title.replace(/\s*-\s*飞书云文档\s*$/u, '').trim();
@@ -51,10 +49,7 @@ function createImageExportRuntime({
   }
 
   function getVisibleImages() {
-    return readPreviewImage(
-      { profile: 'userscript-v1', mode: 'inspect' },
-      { documentObject },
-    ).items;
+    return readPreviewImage({ profile: 'userscript-v1', mode: 'inspect' }, { documentObject }).items;
   }
 
   function fallbackDownload(url, filename) {
@@ -110,9 +105,4 @@ function createImageExportRuntime({
   };
 }
 
-export {
-  createImageExportRuntime,
-  extensionFromMime,
-  sanitizeFilePart,
-  toUserMessage,
-};
+export { createImageExportRuntime, extensionFromMime, sanitizeFilePart, toUserMessage };

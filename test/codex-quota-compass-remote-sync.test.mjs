@@ -13,12 +13,12 @@ import {
   normalizeSettings,
   planRemoteSyncSave,
 } from '../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js';
-import { createSnapshotArchiveStore, normalizeSnapshotArchive } from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js';
+import {
+  createSnapshotArchiveStore,
+  normalizeSnapshotArchive,
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js';
 
-const distPath = path.resolve(
-  import.meta.dirname,
-  '../dist/codex-quota-compass.user.js',
-);
+const distPath = path.resolve(import.meta.dirname, '../dist/codex-quota-compass.user.js');
 const distContent = await readFile(distPath, 'utf8');
 
 function createSnapshot(snapshotId, capturedAt, totalCredits = 1) {
@@ -173,16 +173,18 @@ test('syncNow finds existing archive gist, merges remote archive locally, and pa
     requestJson: async (request) => {
       requests.push(request);
       if (request.method === 'GET' && request.url === `${GITHUB_API_BASE}/gists?per_page=100`) {
-        return [{
-          id: 'gist-1',
-          description: GIST_DESCRIPTION,
-          files: {
-            [GIST_FILENAME]: {
-              filename: GIST_FILENAME,
-              truncated: false,
+        return [
+          {
+            id: 'gist-1',
+            description: GIST_DESCRIPTION,
+            files: {
+              [GIST_FILENAME]: {
+                filename: GIST_FILENAME,
+                truncated: false,
+              },
             },
           },
-        }];
+        ];
       }
       if (request.method === 'GET' && request.url === `${GITHUB_API_BASE}/gists/gist-1`) {
         return createGist({ id: 'gist-1', snapshots: [remoteSnapshot] });
@@ -260,11 +262,10 @@ test('syncNow reads truncated archive files from the gist raw URL before patchin
   const result = await client.syncNow();
 
   assert.equal(result.status, 'synced');
-  assert.deepEqual(requests.map((request) => request.url), [
-    `${GITHUB_API_BASE}/gists/gist-1`,
-    rawUrl,
-    `${GITHUB_API_BASE}/gists/gist-1`,
-  ]);
+  assert.deepEqual(
+    requests.map((request) => request.url),
+    [`${GITHUB_API_BASE}/gists/gist-1`, rawUrl, `${GITHUB_API_BASE}/gists/gist-1`],
+  );
   assert.deepEqual(result.localReport, { added: 1, skipped: 0, invalid: 0 });
   assert.deepEqual(
     archive.dump().snapshots.map((snapshot) => snapshot.snapshotId),
@@ -300,7 +301,10 @@ test('syncNow creates a secret gist when no archive gist exists', async () => {
   assert.equal(result.remoteReport.created, true);
   assert.equal(result.settings.gistId, 'created-gist');
   assert.equal(settingsStore.dump().gistId, 'created-gist');
-  assert.deepEqual(requests.map((request) => request.method), ['GET', 'POST']);
+  assert.deepEqual(
+    requests.map((request) => request.method),
+    ['GET', 'POST'],
+  );
 });
 
 test('syncNow skips disabled or missing-token settings without network calls', async () => {
@@ -351,7 +355,9 @@ test('syncNow paginates the gist list instead of creating a duplicate archive gi
       requests.push(request);
       if (request.url === `${GITHUB_API_BASE}/gists?per_page=100`) return firstPage;
       if (request.url === `${GITHUB_API_BASE}/gists?per_page=100&page=2`) {
-        return [{ id: 'gist-2', description: GIST_DESCRIPTION, files: { [GIST_FILENAME]: { filename: GIST_FILENAME } } }];
+        return [
+          { id: 'gist-2', description: GIST_DESCRIPTION, files: { [GIST_FILENAME]: { filename: GIST_FILENAME } } },
+        ];
       }
       if (request.url === `${GITHUB_API_BASE}/gists/gist-2` && request.method === 'GET') {
         return createGist({ id: 'gist-2', snapshots: [remoteSnapshot] });
@@ -368,11 +374,14 @@ test('syncNow paginates the gist list instead of creating a duplicate archive gi
   assert.equal(result.status, 'synced');
   assert.equal(result.remoteReport.created, false);
   assert.equal(result.settings.gistId, 'gist-2');
-  assert.equal(requests.some((request) => request.method === 'POST'), false);
-  assert.deepEqual(requests.slice(0, 2).map((request) => request.url), [
-    `${GITHUB_API_BASE}/gists?per_page=100`,
-    `${GITHUB_API_BASE}/gists?per_page=100&page=2`,
-  ]);
+  assert.equal(
+    requests.some((request) => request.method === 'POST'),
+    false,
+  );
+  assert.deepEqual(
+    requests.slice(0, 2).map((request) => request.url),
+    [`${GITHUB_API_BASE}/gists?per_page=100`, `${GITHUB_API_BASE}/gists?per_page=100&page=2`],
+  );
 });
 
 test('syncNow recovers from a stale gist id by rediscovering the archive gist', async () => {
@@ -391,7 +400,9 @@ test('syncNow recovers from a stale gist id by rediscovering the archive gist', 
         throw Object.assign(new Error('GitHub Gist was not found (HTTP 404).'), { status: 404 });
       }
       if (request.url === `${GITHUB_API_BASE}/gists?per_page=100`) {
-        return [{ id: 'gist-7', description: GIST_DESCRIPTION, files: { [GIST_FILENAME]: { filename: GIST_FILENAME } } }];
+        return [
+          { id: 'gist-7', description: GIST_DESCRIPTION, files: { [GIST_FILENAME]: { filename: GIST_FILENAME } } },
+        ];
       }
       if (request.url === `${GITHUB_API_BASE}/gists/gist-7` && request.method === 'GET') {
         return createGist({ id: 'gist-7', snapshots: [remoteSnapshot] });
@@ -433,23 +444,28 @@ test('syncNow skips patching the gist when the remote already holds every local 
   assert.equal(result.status, 'synced');
   assert.equal(result.remoteReport.updated, false);
   assert.equal(requests.length, 1);
-  assert.equal(requests.some((request) => request.method === 'PATCH'), false);
+  assert.equal(
+    requests.some((request) => request.method === 'PATCH'),
+    false,
+  );
 });
 
 test('syncNow pushes a settled ledger day the remote lacks even when snapshot counts match', async () => {
   // Local archive: snapshots equal to the remote's, but the local ledger holds an
   // extra settled day. A snapshot-count gate would miss this; the content gate must push it.
-  const sharedSnapshots = ['a', 'b', 'c', 'd', 'e'].map((id, index) => createSnapshot(
-    id,
-    `2026-06-1${index}T10:00:00.000Z`,
-    100 + index,
-  ));
+  const sharedSnapshots = ['a', 'b', 'c', 'd', 'e'].map((id, index) =>
+    createSnapshot(id, `2026-06-1${index}T10:00:00.000Z`, 100 + index),
+  );
   const archive = createMemoryArchiveStore({
     schemaVersion: 2,
     snapshots: sharedSnapshots.map((snapshot) => ({ ...snapshot })),
     ledger: {
       '2026-06-09': {
-        date: '2026-06-09', credits: 999, usd: 39.96, settled: true, settledAt: '2026-06-10T00:20:00.000Z',
+        date: '2026-06-09',
+        credits: 999,
+        usd: 39.96,
+        settled: true,
+        settledAt: '2026-06-10T00:20:00.000Z',
       },
     },
   });
@@ -472,7 +488,9 @@ test('syncNow pushes a settled ledger day the remote lacks even when snapshot co
         return {
           id: 'gist-1',
           description: GIST_DESCRIPTION,
-          files: { [GIST_FILENAME]: { filename: GIST_FILENAME, truncated: false, content: JSON.stringify(remoteDocument) } },
+          files: {
+            [GIST_FILENAME]: { filename: GIST_FILENAME, truncated: false, content: JSON.stringify(remoteDocument) },
+          },
         };
       }
       if (request.method === 'PATCH' && request.url === `${GITHUB_API_BASE}/gists/gist-1`) {
@@ -511,20 +529,14 @@ test('syncNow records request failures in settings and rethrows a clear error', 
 });
 
 test('planRemoteSyncSave rejects enabling sync without any token', () => {
-  const decision = planRemoteSyncSave(
-    { token: '', gistId: '', enabled: true },
-    { hasToken: false },
-  );
+  const decision = planRemoteSyncSave({ token: '', gistId: '', enabled: true }, { hasToken: false });
 
   assert.equal(decision.ok, false);
   assert.equal(decision.reason, 'token-required');
 });
 
 test('planRemoteSyncSave enables with a fresh token and requests an immediate sync', () => {
-  const decision = planRemoteSyncSave(
-    { token: '  ghp_fresh  ', gistId: '', enabled: true },
-    { hasToken: false },
-  );
+  const decision = planRemoteSyncSave({ token: '  ghp_fresh  ', gistId: '', enabled: true }, { hasToken: false });
 
   assert.equal(decision.ok, true);
   assert.equal(decision.patch.enabled, true);
@@ -533,10 +545,7 @@ test('planRemoteSyncSave enables with a fresh token and requests an immediate sy
 });
 
 test('planRemoteSyncSave keeps the stored token when the token field is left blank', () => {
-  const decision = planRemoteSyncSave(
-    { token: '', gistId: 'gist-9', enabled: true },
-    { hasToken: true },
-  );
+  const decision = planRemoteSyncSave({ token: '', gistId: 'gist-9', enabled: true }, { hasToken: true });
 
   assert.equal(decision.ok, true);
   assert.equal(Object.hasOwn(decision.patch, 'token'), false);
@@ -544,10 +553,7 @@ test('planRemoteSyncSave keeps the stored token when the token field is left bla
 });
 
 test('planRemoteSyncSave disabling never triggers a follow-up sync', () => {
-  const decision = planRemoteSyncSave(
-    { token: '', gistId: 'gist-9', enabled: false },
-    { hasToken: true },
-  );
+  const decision = planRemoteSyncSave({ token: '', gistId: 'gist-9', enabled: false }, { hasToken: true });
 
   assert.equal(decision.ok, true);
   assert.equal(decision.patch.enabled, false);
@@ -555,16 +561,10 @@ test('planRemoteSyncSave disabling never triggers a follow-up sync', () => {
 });
 
 test('planRemoteSyncSave trims the gist id and keeps it as an explicit patch field', () => {
-  const trimmed = planRemoteSyncSave(
-    { token: 'ghp_x', gistId: '  gist-trim  ', enabled: true },
-    { hasToken: false },
-  );
+  const trimmed = planRemoteSyncSave({ token: 'ghp_x', gistId: '  gist-trim  ', enabled: true }, { hasToken: false });
   assert.equal(trimmed.patch.gistId, 'gist-trim');
 
-  const blank = planRemoteSyncSave(
-    { token: 'ghp_x', gistId: '   ', enabled: true },
-    { hasToken: false },
-  );
+  const blank = planRemoteSyncSave({ token: 'ghp_x', gistId: '   ', enabled: true }, { hasToken: false });
   assert.equal(blank.patch.gistId, '');
 });
 
@@ -573,7 +573,9 @@ test('planRemoteSyncSave trims the gist id and keeps it as an explicit patch fie
 function createTwoTabSync({ initialSettings, archive = createMemoryArchiveStore(), respond, onRequest }) {
   const settingsStore = createMemorySettingsStore(initialSettings);
   const requests = [];
-  const noNetwork = async () => { throw new Error('tab B makes no requests'); };
+  const noNetwork = async () => {
+    throw new Error('tab B makes no requests');
+  };
   const tabB = createRemoteSyncClient({ archiveStore: archive.store, settingsStore, requestJson: noNetwork });
   const tabA = createRemoteSyncClient({
     archiveStore: archive.store,
@@ -590,9 +592,10 @@ function createTwoTabSync({ initialSettings, archive = createMemoryArchiveStore(
 
 const gistUrl = (id) => `${GITHUB_API_BASE}/gists/${id}`;
 const isPush = (request) => request.method === 'PATCH' || request.method === 'POST';
-const localArchive = () => createMemoryArchiveStore({
-  snapshots: [createSnapshot('local-snapshot', '2026-06-13T10:00:00.000Z', 10)],
-});
+const localArchive = () =>
+  createMemoryArchiveStore({
+    snapshots: [createSnapshot('local-snapshot', '2026-06-13T10:00:00.000Z', 10)],
+  });
 
 test('syncNow does not push or re-enable when another tab disables sync mid-request', async () => {
   const { tabA, settingsStore, requests } = createTwoTabSync({
@@ -643,9 +646,8 @@ test('a completed push keeps the token and gist another tab saved during the pus
       if (request.method === 'PATCH' && request.url === gistUrl('gist-1')) return createGist({ id: 'gist-1' });
       throw new Error(`unexpected request ${request.method} ${request.url}`);
     },
-    onRequest: (request, tabB) => (
-      request.method === 'PATCH' ? tabB.configure({ token: 'new-token', gistId: 'gist-9' }) : null
-    ),
+    onRequest: (request, tabB) =>
+      request.method === 'PATCH' ? tabB.configure({ token: 'new-token', gistId: 'gist-9' }) : null,
   });
 
   const result = await tabA.syncNow();
@@ -685,14 +687,19 @@ test('a failed sync neither restores a disabled state nor an old token', async (
   ]) {
     const { tabA, settingsStore } = createTwoTabSync({
       initialSettings: { enabled: true, token: 'old-token', gistId: 'gist-1' },
-      respond: () => { throw new Error('server unavailable for old-token'); },
+      respond: () => {
+        throw new Error('server unavailable for old-token');
+      },
       onRequest: (request, tabB) => tabB.configure(patch),
     });
 
-    await assert.rejects(() => tabA.syncNow(), (error) => {
-      assert.equal(error.message, 'server unavailable for [redacted]');
-      return true;
-    });
+    await assert.rejects(
+      () => tabA.syncNow(),
+      (error) => {
+        assert.equal(error.message, 'server unavailable for [redacted]');
+        return true;
+      },
+    );
     assert.equal(settingsStore.dump().enabled, expected.enabled);
     assert.equal(settingsStore.dump().token, expected.token);
     assert.equal(settingsStore.dump().lastError, '');
@@ -702,7 +709,9 @@ test('a failed sync neither restores a disabled state nor an old token', async (
 test('a failed sync of an unchanged target records a redacted error', async () => {
   const { tabA, settingsStore } = createTwoTabSync({
     initialSettings: { enabled: true, token: 'old-token', gistId: 'gist-1' },
-    respond: () => { throw new Error('server unavailable for old-token'); },
+    respond: () => {
+      throw new Error('server unavailable for old-token');
+    },
   });
 
   await assert.rejects(() => tabA.syncNow(), /server unavailable for \[redacted\]/);
