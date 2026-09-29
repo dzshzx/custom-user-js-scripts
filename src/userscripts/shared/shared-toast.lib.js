@@ -1,3 +1,4 @@
+import { h, render } from 'preact';
 import { iconSvg } from './shared-icons.lib.js';
 
 const TOAST_LIMIT = 3;
@@ -97,6 +98,32 @@ const TOAST_CSS = `
 }
 `.trim();
 
+// Rendering is a pure function of the toast list; the imperative API below only
+// mutates that list and re-renders synchronously (preact's top-level render()
+// commits before returning), so callers still get live DOM nodes back.
+function ToastItem({ toast }) {
+  const iconName = TONE_ICONS[toast.tone];
+  const iconClass = toast.tone === 'progress' ? 'wk-toast-icon wk-spin' : 'wk-toast-icon';
+  return h(
+    'div',
+    {
+      className: toast.leaving ? 'wk-toast is-leaving' : 'wk-toast',
+      'data-tone': toast.tone,
+      'data-toast-id': toast.id,
+    },
+    h('span', {
+      className: iconClass,
+      hidden: !iconName,
+      dangerouslySetInnerHTML: { __html: iconName ? iconSvg(iconName) : '' },
+    }),
+    h('span', { className: 'wk-toast-message' }, toast.message),
+  );
+}
+
+function ToastList({ toasts }) {
+  return toasts.map((toast) => h(ToastItem, { key: toast.id, toast }));
+}
+
 function createToaster({ root } = {}) {
   if (!root?.append) {
     throw new Error('shared-toast: createToaster requires a root element.');
@@ -106,12 +133,33 @@ function createToaster({ root } = {}) {
     throw new Error('shared-toast: root must expose ownerDocument.');
   }
   const timers = new Set();
+  let toasts = [];
+  let nextId = 1;
+  let destroyed = false;
 
   const container = documentObject.createElement('div');
   container.className = 'wk-toasts';
   container.setAttribute('role', 'status');
   container.setAttribute('aria-live', 'polite');
   root.append(container);
+
+  function commit(nextToasts) {
+    if (destroyed) return;
+    toasts = nextToasts;
+    render(h(ToastList, { toasts }), container);
+  }
+
+  function patch(id, changes) {
+    commit(toasts.map((toast) => (toast.id === id ? { ...toast, ...changes } : toast)));
+  }
+
+  function has(id) {
+    return toasts.some((toast) => toast.id === id);
+  }
+
+  function nodeFor(id) {
+    return container.querySelector(`[data-toast-id="${id}"]`);
+  }
 
   function schedule(callback, delay) {
     const timer = setTimeout(() => {
@@ -121,82 +169,47 @@ function createToaster({ root } = {}) {
     timers.add(timer);
   }
 
-  function dismiss(toast) {
-    if (!toast.parentNode) return;
-    toast.classList.add('is-leaving');
-    schedule(() => toast.remove(), EXIT_ANIMATION_MS);
+  function dismiss(id) {
+    if (!has(id)) return;
+    patch(id, { leaving: true });
+    schedule(() => commit(toasts.filter((toast) => toast.id !== id)), EXIT_ANIMATION_MS);
   }
 
-  function enforceLimit() {
-    while (container.children.length > TOAST_LIMIT) {
-      container.firstElementChild?.remove();
-    }
+  function add({ message, tone }) {
+    const id = nextId;
+    nextId += 1;
+    // Oldest toasts beyond the limit are dropped immediately.
+    commit([...toasts, { id, tone, message: String(message ?? ''), leaving: false }].slice(-TOAST_LIMIT));
+    return id;
   }
 
-  function setTone(toast, tone) {
-    toast.dataset.tone = tone;
-    const iconNode = toast.querySelector('.wk-toast-icon');
-    const iconName = TONE_ICONS[tone];
-    if (iconName) {
-      iconNode.innerHTML = iconSvg(iconName);
-      iconNode.classList.toggle('wk-spin', tone === 'progress');
-      iconNode.hidden = false;
-    } else {
-      iconNode.innerHTML = '';
-      iconNode.classList.remove('wk-spin');
-      iconNode.hidden = true;
-    }
-  }
-
-  function setMessage(toast, message) {
-    toast.querySelector('.wk-toast-message').textContent = String(message ?? '');
-  }
-
-  function buildToast({ message, tone }) {
-    const toast = documentObject.createElement('div');
-    toast.className = 'wk-toast';
-    const iconNode = documentObject.createElement('span');
-    iconNode.className = 'wk-toast-icon';
-    const messageNode = documentObject.createElement('span');
-    messageNode.className = 'wk-toast-message';
-    toast.append(iconNode, messageNode);
-    setTone(toast, tone);
-    setMessage(toast, message);
-    return toast;
-  }
-
-  function autoDismiss(toast, duration) {
+  function autoDismiss(id, duration) {
     if (Number.isFinite(duration) && duration > 0) {
-      schedule(() => dismiss(toast), duration);
+      schedule(() => dismiss(id), duration);
     }
   }
 
   function show({ message, tone = 'info', duration } = {}) {
     const resolvedTone = ['success', 'error', 'info'].includes(tone) ? tone : 'info';
-    const toast = buildToast({ message, tone: resolvedTone });
-    container.append(toast);
-    enforceLimit();
-    autoDismiss(toast, duration ?? (resolvedTone === 'error' ? ERROR_DURATION_MS : DEFAULT_DURATION_MS));
-    return toast;
+    const id = add({ message, tone: resolvedTone });
+    autoDismiss(id, duration ?? (resolvedTone === 'error' ? ERROR_DURATION_MS : DEFAULT_DURATION_MS));
+    return nodeFor(id);
   }
 
   function showProgress({ message } = {}) {
-    const toast = buildToast({ message, tone: 'progress' });
-    container.append(toast);
-    enforceLimit();
+    const id = add({ message, tone: 'progress' });
 
     let settled = false;
     function settle(tone, nextMessage, duration) {
       if (settled) return;
       settled = true;
-      if (nextMessage != null) setMessage(toast, nextMessage);
-      setTone(toast, tone);
-      autoDismiss(toast, duration);
+      patch(id, nextMessage != null ? { tone, message: String(nextMessage) } : { tone });
+      autoDismiss(id, duration);
     }
 
     return {
       update(nextMessage) {
-        if (!settled) setMessage(toast, nextMessage);
+        if (!settled) patch(id, { message: String(nextMessage ?? '') });
       },
       done(successMessage) {
         settle('success', successMessage, DEFAULT_DURATION_MS);
@@ -210,6 +223,8 @@ function createToaster({ root } = {}) {
   function destroy() {
     for (const timer of timers) clearTimeout(timer);
     timers.clear();
+    render(null, container);
+    destroyed = true;
     container.remove();
   }
 
@@ -221,4 +236,4 @@ function createToaster({ root } = {}) {
   };
 }
 
-export { createToaster };
+export { ToastList, createToaster };

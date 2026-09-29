@@ -5,7 +5,7 @@ import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 import { createToaster } from '../src/userscripts/shared/shared-toast.lib.js';
 
 function setup() {
-  const window = createDomWindow();
+  const window = createDomWindow({ globalDocument: true });
   const root = window.document.createElement('div');
   window.document.body.append(root);
   const toaster = createToaster({ root });
@@ -104,4 +104,23 @@ test('destroy removes the container and clears pending timers', { skip: domSkip 
   // is nothing left to wait for here.
   assert.equal(root.querySelector('.wk-toasts'), null);
   assert.equal(container.isConnected, false);
+});
+
+test('ToastList renders tone, icon, and leaving state as static markup', async () => {
+  const { h } = await import('preact');
+  const { renderToString } = await import('preact-render-to-string');
+  const { ToastList } = await import('../src/userscripts/shared/shared-toast.lib.js');
+  const html = renderToString(
+    h(ToastList, {
+      toasts: [
+        { id: 1, tone: 'info', message: 'Plain <b>', leaving: false },
+        { id: 2, tone: 'progress', message: 'Working', leaving: true },
+      ],
+    }),
+  );
+  assert.match(html, /class="wk-toast" data-tone="info"/);
+  assert.match(html, /Plain &lt;b>/);
+  assert.match(html, /class="wk-toast is-leaving" data-tone="progress"/);
+  assert.match(html, /wk-toast-icon wk-spin/);
+  assert.match(html, /wk-icon-loader/);
 });

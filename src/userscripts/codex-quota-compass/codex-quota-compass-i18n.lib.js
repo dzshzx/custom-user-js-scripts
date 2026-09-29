@@ -280,7 +280,7 @@ const messages = {
     archiveWeeklyUsedPercent: '7-day Used Percent',
     archiveStorageBackend: 'Storage Backend',
     tableNoData: 'No data · hit Refresh in the panel header to recalculate',
-    tableShowAll: 'Show all {total} rows',
+    tableShowAll: { one: 'Show all {total} row', other: 'Show all {total} rows' },
     tableShowLess: 'Show less',
     resetCountdown: 'Reset in',
     heroResetSubline: 'Resets in {duration}',
@@ -295,7 +295,7 @@ const messages = {
     remoteSyncTokenRequired: 'A GitHub token is required to enable Gist sync.',
     remoteSyncSkipped: 'Gist sync skipped: {status}',
     remoteSyncFailed: 'Gist sync failed: {error}',
-    exportDone: 'Export complete: {count} snapshots.',
+    exportDone: { one: 'Export complete: {count} snapshot.', other: 'Export complete: {count} snapshots.' },
     importDone: 'Import complete: {added} added, {skipped} skipped, {invalid} invalid.',
     importPartial: 'Archive imported, but the updated statistics could not be read: {error}',
     syncPortUnavailable: 'Snapshot sync port is unavailable.',
@@ -322,8 +322,22 @@ function createQuotaCompassTranslator(options = {}) {
   const defaultLocale = options.defaultLocale || DEFAULT_LOCALE;
   const activeLocale = resolveLocale({ ...options, defaultLocale });
 
+  const pluralRules = new Intl.PluralRules(activeLocale);
+
+  // Plural messages are `{ one, other, ... }` objects keyed by Intl.PluralRules
+  // categories, selected by the numeric `count` (or `total`) variable.
+  function selectForm(entry, variables) {
+    if (!entry || typeof entry !== 'object') return entry;
+    const quantity = Number(variables.count ?? variables.total);
+    const category = Number.isFinite(quantity) ? pluralRules.select(quantity) : 'other';
+    return entry[category] ?? entry.other;
+  }
+
   function t(key, variables = {}) {
-    const template = messages[activeLocale]?.[key] || messages[defaultLocale]?.[key] || key;
+    const template =
+      selectForm(messages[activeLocale]?.[key], variables) ||
+      selectForm(messages[defaultLocale]?.[key], variables) ||
+      key;
     return Object.entries(variables).reduce(
       (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
       template,
