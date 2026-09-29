@@ -1,7 +1,7 @@
 import { createQuotaPanelViewModel } from './codex-quota-compass-panel-view-model.lib.js';
-import { createQuotaPanelRenderer } from './codex-quota-compass-panel-renderer.lib.js';
-import { createFloatingPanelShell } from './codex-quota-compass-panel-shell.lib.js';
-import { applyActiveView, isSyncFormEditing, readSyncFormValues } from './codex-quota-compass-panel-dom.lib.js';
+import { render } from 'preact';
+import { createQuotaPanelRenderer } from './codex-quota-compass-panel-renderer.lib.jsx';
+import { createFloatingPanelShell } from './codex-quota-compass-panel-shell.lib.jsx';
 import { buildTokenCss } from '../shared/shared-tokens.lib.js';
 import { createToaster } from '../shared/shared-toast.lib.jsx';
 
@@ -129,9 +129,10 @@ function createQuotaPanelController({ application, document, window, storage, t,
   let activePanelView = 'details';
   let activeStatsPeriod = 'day';
   let statsDrill = null;
-  let viewModel = null;
-  let dirty = false;
-  let deferred = false;
+  // Sync form draft: null until the user edits the form. It survives every
+  // background refresh; only a completed save of the same edit revision in
+  // the same form generation, or leaving the view, discards it.
+  let syncDraft = null;
   let formGeneration = 0;
   let editRevision = 0;
   let foreground = 0;
@@ -178,9 +179,6 @@ function createQuotaPanelController({ application, document, window, storage, t,
     document.head.append(style);
   }
 
-  function protectedForm() {
-    return dirty || isSyncFormEditing(content, document.activeElement);
-  }
   function renderState(overrides = {}) {
     return { activePanelView, statsPeriod: activeStatsPeriod, statsDrill, expandedViews, ...overrides };
   }
@@ -194,48 +192,40 @@ function createQuotaPanelController({ application, document, window, storage, t,
       importReport: snapshot.importReport,
       storageBackend: backend,
       syncStatus: createSnapshotSyncStatus(backend),
-      remoteSyncStatus: snapshot.syncStatus,
+      remoteSyncStatus: snapshot.errors?.sync
+        ? { ...snapshot.syncStatus, lastError: snapshot.errors.sync }
+        : snapshot.syncStatus,
     });
   }
-  function safeStatus() {
-    const status = snapshot?.syncStatus || {};
-    const node = content?.querySelector('.cqc-sync-form-status');
-    if (!node) return;
-    const error = snapshot?.errors?.sync || status.lastError;
-    node.textContent = error
-      ? t('remoteSyncStatusError', { error })
-      : status.lastSyncedAt
-        ? t('remoteSyncLastSynced', { lastSyncedAt: new Date(status.lastSyncedAt).toLocaleString() })
-        : t('remoteSyncNeverSynced');
-    node.dataset.tone = error ? 'error' : 'muted';
+  function setSyncDraft(next) {
+    if (disposed) return;
+    syncDraft = next;
+    editRevision++;
+    commitPresentation();
   }
   function commitPresentation() {
     if (disposed || !content) return;
-    if (protectedForm()) {
-      deferred = true;
-      safeStatus();
-      return;
-    }
-    deferred = false;
-    const next =
-      presentation === 'loading'
-        ? renderer.renderLoading()
-        : presentation === 'error'
-          ? renderer.renderError(presentationError)
-          : (viewModel = createViewModel())
-            ? renderer.renderResult(viewModel, renderState()).html
-            : '';
-    if (content.innerHTML !== next) {
-      content.innerHTML = next;
-      formGeneration++;
-    }
+    const viewModel = createViewModel();
+    if (viewModel) activePanelView = renderer.normalizeActivePanelView(viewModel, activePanelView);
+    // Loading and error states never unmount a sync form holding a draft; the
+    // button status line and toasts carry that outcome instead.
+    const shown = presentation !== 'snapshot' && syncDraft && viewModel ? 'snapshot' : presentation;
+    render(
+      <renderer.Panel
+        presentation={shown}
+        error={presentationError}
+        viewModel={viewModel}
+        state={renderState()}
+        form={{ draft: syncDraft, onDraft: setSyncDraft }}
+      />,
+      content,
+    );
     shell.schedulePanelResize();
   }
   function update(nextSnapshot) {
     if (disposed) return;
     snapshot = nextSnapshot;
-    if (presentation === 'snapshot') commitPresentation();
-    else if (protectedForm()) safeStatus();
+    commitPresentation();
   }
   function notice(message, tone = 'info') {
     if (!disposed) toaster?.show({ message, tone });
@@ -348,19 +338,19 @@ function createQuotaPanelController({ application, document, window, storage, t,
   }
   function saveSettings() {
     return once('save-remote-sync', async () => {
-      const values = readSyncFormValues(content);
-      if (!values) return { status: 'skipped', reason: 'form-unavailable', completed: [] };
+      if (!content?.querySelector('[data-sync-form]'))
+        return { status: 'skipped', reason: 'form-unavailable', completed: [] };
+      const status = snapshot?.syncStatus || {};
+      const values = syncDraft || { token: '', gistId: status.gistId || '', enabled: Boolean(status.enabled) };
       const generation = formGeneration;
       const revision = editRevision;
       const sequence = ++foreground;
       const outcome = await application.configureSync(values);
       if (disposed) return outcome;
       if (outcome.completed?.includes('settings') && generation === formGeneration && revision === editRevision) {
-        dirty = false;
         // The committed token must leave the DOM. A new edit or form owns its
         // own value and cannot be cleared by this completion.
-        const token = content?.querySelector('[data-field="token"]');
-        if (token) token.value = '';
+        syncDraft = null;
         presentation = 'snapshot';
         commitPresentation();
       }
@@ -431,28 +421,14 @@ function createQuotaPanelController({ application, document, window, storage, t,
     return Promise.resolve({ status: 'skipped', reason: 'unknown-command', completed: [] });
   }
   function rerenderActive(nextView) {
-    if (disposed || !content || !viewModel) return;
-    if ((!nextView || nextView === activePanelView) && protectedForm()) {
-      deferred = true;
-      safeStatus();
-      return;
-    }
+    if (disposed || !content) return;
     if (nextView && nextView !== activePanelView) {
-      dirty = false;
-      deferred = false;
+      syncDraft = null;
       formGeneration++;
       statsDrill = null;
       activePanelView = nextView;
     }
-    if (deferred) {
-      presentation = 'snapshot';
-      commitPresentation();
-    }
-    viewModel = createViewModel() || viewModel;
-    const rendered = renderer.renderActiveView(viewModel, renderState());
-    activePanelView = applyActiveView(content, rendered);
-    formGeneration++;
-    shell.schedulePanelResize();
+    commitPresentation();
   }
   function handleAction(action, event) {
     if (disposed || action === 'toggle') return;
@@ -510,28 +486,12 @@ function createQuotaPanelController({ application, document, window, storage, t,
       rerenderActive();
     }
   }
-  function edited(event) {
-    if (event.target?.closest?.('[data-sync-form]')) {
-      dirty = true;
-      editRevision++;
-    }
-  }
-  function focusEnded() {
-    window.queueMicrotask(() => {
-      if (deferred && !protectedForm()) commitPresentation();
-    });
-  }
-  content?.addEventListener('input', edited);
-  content?.addEventListener('change', edited);
-  content?.addEventListener('focusout', focusEnded);
   function dispose() {
     if (disposed) return;
     disposed = true;
     abortFiles.abort();
     files.dispose?.();
-    content?.removeEventListener('input', edited);
-    content?.removeEventListener('change', edited);
-    content?.removeEventListener('focusout', focusEnded);
+    if (content) render(null, content);
     toaster?.destroy?.();
     shell.destroy();
   }

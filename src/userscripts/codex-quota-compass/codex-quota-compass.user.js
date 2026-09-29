@@ -4274,6 +4274,291 @@ ${text.slice(0, 800)}`);
     };
   }
 
+  // node_modules/preact/dist/preact.module.js
+  var n;
+  var l;
+  var u;
+  var t;
+  var i;
+  var r;
+  var o;
+  var e;
+  var f;
+  var c;
+  var a;
+  var s;
+  var h;
+  var p;
+  var v;
+  var y;
+  var d = {};
+  var w = [];
+  var _ = /acit|ex(?:s|g|n|p|$)|rph|grid|ows|mnc|ntw|ine[ch]|zoo|^ord|itera/i;
+  var g = Array.isArray;
+  function m(n2, l3) {
+    for (var u4 in l3) n2[u4] = l3[u4];
+    return n2;
+  }
+  function b(n2) {
+    n2 && n2.parentNode && n2.parentNode.removeChild(n2);
+  }
+  function k(l3, u4, t3) {
+    var i3, r3, o3, e3 = {};
+    for (o3 in u4) "key" == o3 ? i3 = u4[o3] : "ref" == o3 ? r3 = u4[o3] : e3[o3] = u4[o3];
+    if (arguments.length > 2 && (e3.children = arguments.length > 3 ? n.call(arguments, 2) : t3), "function" == typeof l3 && null != l3.defaultProps) for (o3 in l3.defaultProps) void 0 === e3[o3] && (e3[o3] = l3.defaultProps[o3]);
+    return x(l3, e3, i3, r3, null);
+  }
+  function x(n2, t3, i3, r3, o3) {
+    var e3 = { type: n2, props: t3, key: i3, ref: r3, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: null == o3 ? ++u : o3, __i: -1, __u: 0 };
+    return null == o3 && null != l.vnode && l.vnode(e3), e3;
+  }
+  function S(n2) {
+    return n2.children;
+  }
+  function C(n2, l3) {
+    this.props = n2, this.context = l3;
+  }
+  function $(n2, l3) {
+    if (null == l3) return n2.__ ? $(n2.__, n2.__i + 1) : null;
+    for (var u4; l3 < n2.__k.length; l3++) if (null != (u4 = n2.__k[l3]) && null != u4.__e) return u4.__e;
+    return "function" == typeof n2.type ? $(n2) : null;
+  }
+  function I(n2) {
+    if (n2.__P && n2.__d) {
+      var u4 = n2.__v, t3 = u4.__e, i3 = [], r3 = [], o3 = m({}, u4);
+      o3.__v = u4.__v + 1, l.vnode && l.vnode(o3), q(n2.__P, o3, u4, n2.__n, n2.__P.namespaceURI, 32 & u4.__u ? [t3] : null, i3, null == t3 ? $(u4) : t3, !!(32 & u4.__u), r3), o3.__v = u4.__v, o3.__.__k[o3.__i] = o3, D(i3, o3, r3), u4.__e = u4.__ = null, o3.__e != t3 && P(o3);
+    }
+  }
+  function P(n2) {
+    if (null != (n2 = n2.__) && null != n2.__c) return n2.__e = n2.__c.base = null, n2.__k.some(function(l3) {
+      if (null != l3 && null != l3.__e) return n2.__e = n2.__c.base = l3.__e;
+    }), P(n2);
+  }
+  function A(n2) {
+    (!n2.__d && (n2.__d = true) && i.push(n2) && !H.__r++ || r != l.debounceRendering) && ((r = l.debounceRendering) || o)(H);
+  }
+  function H() {
+    try {
+      for (var n2, l3 = 1; i.length; ) i.length > l3 && i.sort(e), n2 = i.shift(), l3 = i.length, I(n2);
+    } finally {
+      i.length = H.__r = 0;
+    }
+  }
+  function L(n2, l3, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
+    var s3, h2, p3, v3, y2, _2, g2 = t3 && t3.__k || w, m3 = l3.length;
+    for (f4 = T(u4, l3, g2, f4, m3), s3 = 0; s3 < m3; s3++) null != (p3 = u4.__k[s3]) && (h2 = -1 != p3.__i && g2[p3.__i] || d, p3.__i = s3, _2 = q(n2, p3, h2, i3, r3, o3, e3, f4, c3, a3), v3 = p3.__e, p3.ref && h2.ref != p3.ref && (h2.ref && J(h2.ref, null, p3), a3.push(p3.ref, p3.__c || v3, p3)), null == y2 && null != v3 && (y2 = v3), 4 & p3.__u ? (f4 = j(p3, f4, n2), h2.__e && (h2.__e = null)) : "function" == typeof p3.type && void 0 !== _2 ? f4 = _2 : v3 && (f4 = v3.nextSibling), p3.__u &= -7);
+    return u4.__e = y2, f4;
+  }
+  function T(n2, l3, u4, t3, i3) {
+    var r3, o3, e3, f4, c3, a3 = u4.length, s3 = a3, h2 = 0;
+    for (n2.__k = new Array(i3), r3 = 0; r3 < i3; r3++) null != (o3 = l3[r3]) && "boolean" != typeof o3 && "function" != typeof o3 ? ("string" == typeof o3 || "number" == typeof o3 || "bigint" == typeof o3 || o3.constructor == String ? o3 = n2.__k[r3] = x(null, o3, null, null, null) : g(o3) ? o3 = n2.__k[r3] = x(S, { children: o3 }, null, null, null) : void 0 === o3.constructor && o3.__b > 0 ? o3 = n2.__k[r3] = x(o3.type, o3.props, o3.key, o3.ref ? o3.ref : null, o3.__v) : n2.__k[r3] = o3, f4 = r3 + h2, o3.__ = n2, o3.__b = n2.__b + 1, e3 = null, -1 != (c3 = o3.__i = O(o3, u4, f4, s3)) && (s3--, (e3 = u4[c3]) && (e3.__u |= 2)), null == e3 || null == e3.__v ? (-1 == c3 && (i3 > a3 ? h2-- : i3 < a3 && h2++), "function" != typeof o3.type && (o3.__u |= 4)) : c3 != f4 && (c3 == f4 - 1 ? h2-- : c3 == f4 + 1 ? h2++ : (c3 > f4 ? h2-- : h2++, o3.__u |= 4))) : n2.__k[r3] = null;
+    if (s3) for (r3 = 0; r3 < a3; r3++) null != (e3 = u4[r3]) && 0 == (2 & e3.__u) && (e3.__e == t3 && (t3 = $(e3)), K(e3, e3));
+    return t3;
+  }
+  function j(n2, l3, u4) {
+    var t3, i3;
+    if ("function" == typeof n2.type) {
+      for (t3 = n2.__k, i3 = 0; t3 && i3 < t3.length; i3++) t3[i3] && (t3[i3].__ = n2, l3 = j(t3[i3], l3, u4));
+      return l3;
+    }
+    n2.__e != l3 && (l3 && n2.type && !l3.parentNode && (l3 = $(n2)), l3 = u4.insertBefore(n2.__e, l3 || null));
+    do {
+      l3 = l3 && l3.nextSibling;
+    } while (null != l3 && 8 == l3.nodeType);
+    return l3;
+  }
+  function F(n2, l3) {
+    return l3 = l3 || [], null == n2 || "boolean" == typeof n2 || (g(n2) ? n2.some(function(n3) {
+      F(n3, l3);
+    }) : l3.push(n2)), l3;
+  }
+  function O(n2, l3, u4, t3) {
+    var i3, r3, o3, e3 = n2.key, f4 = n2.type, c3 = l3[u4], a3 = null != c3 && 0 == (2 & c3.__u);
+    if (null === c3 && null == e3 || a3 && e3 == c3.key && f4 == c3.type) return u4;
+    if (t3 > (a3 ? 1 : 0)) {
+      for (i3 = u4 - 1, r3 = u4 + 1; i3 >= 0 || r3 < l3.length; ) if (null != (c3 = l3[o3 = i3 >= 0 ? i3-- : r3++]) && 0 == (2 & c3.__u) && e3 == c3.key && f4 == c3.type) return o3;
+    }
+    return -1;
+  }
+  function z(n2, l3, u4) {
+    "-" == l3[0] ? n2.setProperty(l3, null == u4 ? "" : u4) : n2[l3] = null == u4 ? "" : "number" != typeof u4 || _.test(l3) ? u4 : u4 + "px";
+  }
+  function N(n2, l3, u4, t3, i3) {
+    var r3, o3;
+    n: if ("style" == l3) if ("string" == typeof u4) n2.style.cssText = u4;
+    else {
+      if ("string" == typeof t3 && (n2.style.cssText = t3 = ""), t3) for (l3 in t3) u4 && l3 in u4 || z(n2.style, l3, "");
+      if (u4) for (l3 in u4) t3 && u4[l3] == t3[l3] || z(n2.style, l3, u4[l3]);
+    }
+    else if ("o" == l3[0] && "n" == l3[1]) r3 = l3 != (l3 = l3.replace(s, "$1")), o3 = l3.toLowerCase(), l3 = o3 in n2 || "onFocusOut" == l3 || "onFocusIn" == l3 ? o3.slice(2) : l3.slice(2), n2.l || (n2.l = {}), n2.l[l3 + r3] = u4, u4 ? t3 ? u4[a] = t3[a] : (u4[a] = h, n2.addEventListener(l3, r3 ? v : p, r3)) : n2.removeEventListener(l3, r3 ? v : p, r3);
+    else {
+      if ("http://www.w3.org/2000/svg" == i3) l3 = l3.replace(/xlink(H|:h)/, "h").replace(/sName$/, "s");
+      else if ("width" != l3 && "height" != l3 && "href" != l3 && "list" != l3 && "form" != l3 && "tabIndex" != l3 && "download" != l3 && "rowSpan" != l3 && "colSpan" != l3 && "role" != l3 && "popover" != l3 && l3 in n2) try {
+        n2[l3] = null == u4 ? "" : u4;
+        break n;
+      } catch (n3) {
+      }
+      "function" == typeof u4 || (null == u4 || false === u4 && "-" != l3[4] ? n2.removeAttribute(l3) : n2.setAttribute(l3, "popover" == l3 && 1 == u4 ? "" : u4));
+    }
+  }
+  function V(n2) {
+    return function(u4) {
+      if (this.l) {
+        var t3 = this.l[u4.type + n2];
+        if (null == u4[c]) u4[c] = h++;
+        else if (u4[c] < t3[a]) return;
+        return t3(l.event ? l.event(u4) : u4);
+      }
+    };
+  }
+  function q(n2, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
+    var s3, h2, p3, v3, y2, d2, _2, k3, x3, M, I2, P2, A2, H2, T3, j3, F2 = u4.type;
+    if (void 0 !== u4.constructor) return null;
+    128 & t3.__u && (c3 = !!(32 & t3.__u), o3 = [f4 = u4.__e = t3.__e]), (s3 = l.__b) && s3(u4);
+    n: if ("function" == typeof F2) {
+      h2 = e3.length;
+      try {
+        if (x3 = u4.props, M = F2.prototype && F2.prototype.render, I2 = (s3 = F2.contextType) && i3[s3.__c], P2 = s3 ? I2 ? I2.props.value : s3.__ : i3, t3.__c ? k3 = (p3 = u4.__c = t3.__c).__ = p3.__E : (M ? u4.__c = p3 = new F2(x3, P2) : (u4.__c = p3 = new C(x3, P2), p3.constructor = F2, p3.render = Q), I2 && I2.sub(p3), p3.state || (p3.state = {}), p3.__n = i3, v3 = p3.__d = true, p3.__h = [], p3._sb = []), M && null == p3.__s && (p3.__s = p3.state), M && null != F2.getDerivedStateFromProps && (p3.__s == p3.state && (p3.__s = m({}, p3.__s)), m(p3.__s, F2.getDerivedStateFromProps(x3, p3.__s))), y2 = p3.props, d2 = p3.state, p3.__v = u4, v3) M && null == F2.getDerivedStateFromProps && null != p3.componentWillMount && p3.componentWillMount(), M && null != p3.componentDidMount && p3.__h.push(p3.componentDidMount);
+        else {
+          if (M && null == F2.getDerivedStateFromProps && x3 !== y2 && null != p3.componentWillReceiveProps && p3.componentWillReceiveProps(x3, P2), u4.__v == t3.__v || !p3.__e && null != p3.shouldComponentUpdate && false === p3.shouldComponentUpdate(x3, p3.__s, P2)) {
+            u4.__v != t3.__v && (p3.props = x3, p3.state = p3.__s, p3.__d = false), u4.__e = t3.__e, u4.__k = t3.__k, u4.__k.some(function(n3) {
+              n3 && (n3.__ = u4);
+            }), w.push.apply(p3.__h, p3._sb), p3._sb = [], p3.__h.length && e3.push(p3), f4 = $(t3);
+            break n;
+          }
+          null != p3.componentWillUpdate && p3.componentWillUpdate(x3, p3.__s, P2), M && null != p3.componentDidUpdate && p3.__h.push(function() {
+            p3.componentDidUpdate(y2, d2, _2);
+          });
+        }
+        if (p3.context = P2, p3.props = x3, p3.__P = n2, p3.__e = false, A2 = l.__r, H2 = 0, M) p3.state = p3.__s, p3.__d = false, A2 && A2(u4), s3 = p3.render(p3.props, p3.state, p3.context), w.push.apply(p3.__h, p3._sb), p3._sb = [];
+        else do {
+          p3.__d = false, A2 && A2(u4), s3 = p3.render(p3.props, p3.state, p3.context), p3.state = p3.__s;
+        } while (p3.__d && ++H2 < 25);
+        p3.state = p3.__s, null != p3.getChildContext && (i3 = m(m({}, i3), p3.getChildContext())), M && !v3 && null != p3.getSnapshotBeforeUpdate && (_2 = p3.getSnapshotBeforeUpdate(y2, d2)), T3 = null != s3 && s3.type === S && null == s3.key ? E(s3.props.children) : s3, f4 = L(n2, g(T3) ? T3 : [T3], u4, t3, i3, r3, o3, e3, f4, c3, a3), p3.base = u4.__e, u4.__u &= -161, p3.__h.length && e3.push(p3), k3 && (p3.__E = p3.__ = null);
+      } catch (n3) {
+        if (e3.length = h2, u4.__v = null, c3 || null != o3) {
+          if (n3.then) {
+            for (u4.__u |= c3 ? 160 : 128; f4 && 8 == f4.nodeType && f4.nextSibling; ) f4 = f4.nextSibling;
+            null != o3 && (o3[o3.indexOf(f4)] = null), u4.__e = f4;
+          } else if (null != o3) for (j3 = o3.length; j3--; ) b(o3[j3]);
+        } else u4.__e = t3.__e;
+        null == u4.__k && (u4.__k = t3.__k || []), n3.then || B(u4), l.__e(n3, u4, t3);
+      }
+    } else null == o3 && u4.__v == t3.__v ? (u4.__k = t3.__k, u4.__e = t3.__e) : f4 = u4.__e = G(t3.__e, u4, t3, i3, r3, o3, e3, c3, a3);
+    return (s3 = l.diffed) && s3(u4), 128 & u4.__u ? void 0 : f4;
+  }
+  function B(n2) {
+    n2 && (n2.__c && (n2.__c.__e = true), n2.__k && n2.__k.some(B));
+  }
+  function D(n2, u4, t3) {
+    for (var i3 = 0; i3 < t3.length; i3++) J(t3[i3], t3[++i3], t3[++i3]);
+    l.__c && l.__c(u4, n2), n2.some(function(u5) {
+      try {
+        n2 = u5.__h, u5.__h = [], n2.some(function(n3) {
+          n3.call(u5);
+        });
+      } catch (n3) {
+        l.__e(n3, u5.__v);
+      }
+    });
+  }
+  function E(n2) {
+    return "object" != typeof n2 || null == n2 || n2.__b > 0 ? n2 : g(n2) ? n2.map(E) : void 0 !== n2.constructor ? null : m({}, n2);
+  }
+  function G(u4, t3, i3, r3, o3, e3, f4, c3, a3) {
+    var s3, h2, p3, v3, y2, w3, _2, m3 = i3.props || d, k3 = t3.props, x3 = t3.type;
+    if ("svg" == x3 ? o3 = "http://www.w3.org/2000/svg" : "math" == x3 ? o3 = "http://www.w3.org/1998/Math/MathML" : o3 || (o3 = "http://www.w3.org/1999/xhtml"), null != e3) {
+      for (s3 = 0; s3 < e3.length; s3++) if ((y2 = e3[s3]) && "setAttribute" in y2 == !!x3 && (x3 ? y2.localName == x3 : 3 == y2.nodeType)) {
+        u4 = y2, e3[s3] = null;
+        break;
+      }
+    }
+    if (null == u4) {
+      if (null == x3) return document.createTextNode(k3);
+      u4 = document.createElementNS(o3, x3, k3.is && k3), c3 && (l.__m && l.__m(t3, e3), c3 = false), e3 = null;
+    }
+    if (null == x3) m3 === k3 || c3 && u4.data == k3 || (u4.data = k3);
+    else {
+      if (e3 = "textarea" == x3 && null != k3.defaultValue ? null : e3 && n.call(u4.childNodes), !c3 && null != e3) for (m3 = {}, s3 = 0; s3 < u4.attributes.length; s3++) m3[(y2 = u4.attributes[s3]).name] = y2.value;
+      for (s3 in m3) y2 = m3[s3], "dangerouslySetInnerHTML" == s3 ? p3 = y2 : "children" == s3 || s3 in k3 || "value" == s3 && "defaultValue" in k3 || "checked" == s3 && "defaultChecked" in k3 || N(u4, s3, null, y2, o3);
+      for (s3 in k3) y2 = k3[s3], "children" == s3 ? v3 = y2 : "dangerouslySetInnerHTML" == s3 ? h2 = y2 : "value" == s3 ? w3 = y2 : "checked" == s3 ? _2 = y2 : c3 && "function" != typeof y2 || m3[s3] === y2 || N(u4, s3, y2, m3[s3], o3);
+      if (h2) c3 || p3 && (h2.__html == p3.__html || h2.__html == u4.innerHTML) || (u4.innerHTML = h2.__html), t3.__k = [];
+      else if (p3 && (u4.innerHTML = ""), L("template" == t3.type ? u4.content : u4, g(v3) ? v3 : [v3], t3, i3, r3, "foreignObject" == x3 ? "http://www.w3.org/1999/xhtml" : o3, e3, f4, e3 ? e3[0] : i3.__k && $(i3, 0), c3, a3), null != e3) for (s3 = e3.length; s3--; ) b(e3[s3]);
+      c3 && "textarea" != x3 || (s3 = "value", "progress" == x3 && null == w3 ? u4.removeAttribute("value") : null != w3 && (w3 !== u4[s3] || "progress" == x3 && !w3 || "option" == x3 && w3 != m3[s3]) && N(u4, s3, w3, m3[s3], o3), s3 = "checked", null != _2 && _2 != u4[s3] && N(u4, s3, _2, m3[s3], o3));
+    }
+    return u4;
+  }
+  function J(n2, u4, t3) {
+    try {
+      if ("function" == typeof n2) {
+        var i3 = "function" == typeof n2.__u;
+        i3 && n2.__u(), i3 && null == u4 || (n2.__u = n2(u4));
+      } else n2.current = u4;
+    } catch (n3) {
+      l.__e(n3, t3);
+    }
+  }
+  function K(n2, u4, t3) {
+    var i3, r3;
+    if (l.unmount && l.unmount(n2), (i3 = n2.ref) && (i3.current && i3.current != n2.__e || J(i3, null, u4)), null != (i3 = n2.__c)) {
+      if (i3.componentWillUnmount) try {
+        i3.componentWillUnmount();
+      } catch (n3) {
+        l.__e(n3, u4);
+      }
+      i3.base = i3.__P = i3.__n = null;
+    }
+    if (i3 = n2.__k) for (r3 = 0; r3 < i3.length; r3++) i3[r3] && K(i3[r3], u4, t3 || "function" != typeof n2.type);
+    t3 || b(n2.__e), n2.__c = n2.__ = n2.__e = void 0;
+  }
+  function Q(n2, l3, u4) {
+    return this.constructor(n2, u4);
+  }
+  function R(u4, t3, i3) {
+    var r3, o3, e3, f4;
+    t3 == document && (t3 = document.documentElement), l.__ && l.__(u4, t3), o3 = (r3 = "function" == typeof i3) ? null : i3 && i3.__k || t3.__k, e3 = [], f4 = [], q(t3, u4 = (!r3 && i3 || t3).__k = k(S, null, [u4]), o3 || d, d, t3.namespaceURI, !r3 && i3 ? [i3] : o3 ? null : t3.firstChild ? n.call(t3.childNodes) : null, e3, !r3 && i3 ? i3 : o3 ? o3.__e : t3.firstChild, r3, f4), D(e3, u4, f4), u4.props.children = null;
+  }
+  function X(n2) {
+    function l3(n3) {
+      var u4, t3;
+      return this.getChildContext || (u4 = /* @__PURE__ */ new Set(), (t3 = {})[l3.__c] = this, this.getChildContext = function() {
+        return t3;
+      }, this.componentWillUnmount = function() {
+        u4 = null;
+      }, this.shouldComponentUpdate = function(n4) {
+        this.props.value != n4.value && u4.forEach(function(n5) {
+          n5.__e = true, A(n5);
+        });
+      }, this.sub = function(n4) {
+        u4.add(n4);
+        var l4 = n4.componentWillUnmount;
+        n4.componentWillUnmount = function() {
+          u4 && u4.delete(n4), l4 && l4.call(n4);
+        };
+      }), n3.children;
+    }
+    return l3.__c = "__cC" + y++, l3.__ = n2, l3.Provider = l3.__l = (l3.Consumer = function(n3, l4) {
+      return n3.children(l4);
+    }).contextType = l3, l3;
+  }
+  n = w.slice, l = { __e: function(n2, l3, u4, t3) {
+    for (var i3, r3, o3; l3 = l3.__; ) if ((i3 = l3.__c) && !i3.__) try {
+      if ((r3 = i3.constructor) && null != r3.getDerivedStateFromError && (i3.setState(r3.getDerivedStateFromError(n2)), o3 = i3.__d), null != i3.componentDidCatch && (i3.componentDidCatch(n2, t3 || {}), o3 = i3.__d), o3) return i3.__E = i3;
+    } catch (l4) {
+      n2 = l4;
+    }
+    throw n2;
+  } }, u = 0, t = function(n2) {
+    return null != n2 && void 0 === n2.constructor;
+  }, C.prototype.setState = function(n2, l3) {
+    var u4;
+    u4 = null != this.__s && this.__s != this.state ? this.__s : this.__s = m({}, this.state), "function" == typeof n2 && (n2 = n2(m({}, u4), this.props)), n2 && m(u4, n2), null != n2 && this.__v && (l3 && this._sb.push(l3), A(this));
+  }, C.prototype.forceUpdate = function(n2) {
+    this.__v && (this.__e = true, n2 && this.__h.push(n2), A(this));
+  }, C.prototype.render = S, i = [], o = "function" == typeof Promise ? Promise.prototype.then.bind(Promise.resolve()) : setTimeout, e = function(n2, l3) {
+    return n2.__v.__b - l3.__v.__b;
+  }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, a = "__a" + f, s = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
+
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js
   var LIB_NAME = "CodexQuotaCompassPanelStatsStylesLib";
   function createQuotaPanelStatsStyles(rootId) {
@@ -4994,9 +5279,26 @@ ${text.slice(0, 800)}`);
     documentObject.head.append(style);
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js
+  // node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js
+  var f2 = 0;
+  function u2(e3, t3, n2, o3, i3, u4) {
+    t3 || (t3 = {});
+    var a3, c3, p3 = t3;
+    if ("ref" in p3) for (c3 in p3 = {}, t3) "ref" == c3 ? a3 = t3[c3] : p3[c3] = t3[c3];
+    var l3 = { type: e3, props: p3, key: n2, ref: a3, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: --f2, __i: -1, __u: 0, __source: i3, __self: u4 };
+    if ("function" == typeof e3 && (a3 = e3.defaultProps)) for (c3 in a3) void 0 === p3[c3] && (p3[c3] = a3[c3]);
+    return l.vnode && l.vnode(l3), l3;
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.jsx
   var LIB_NAME2 = "CodexQuotaCompassPanelStatsLib";
   var PERIODS = ["day", "week", "month", "all"];
+  var PERIOD_TABS = [
+    ["day", "statsPeriodDay"],
+    ["week", "statsPeriodWeek"],
+    ["month", "statsPeriodMonth"],
+    ["all", "statsPeriodAll"]
+  ];
   function round(value) {
     return Math.round(Number(value || 0));
   }
@@ -5006,173 +5308,201 @@ ${text.slice(0, 800)}`);
   function normalizePeriod(period) {
     return PERIODS.includes(period) ? period : "day";
   }
-  function buildStatsView({ cost, rolling, period, drill } = {}, helpers = {}) {
-    const { t: t3, sectionHtml, tableHtml, escapeHtml: escapeHtml3 } = helpers;
-    if (typeof t3 !== "function" || typeof sectionHtml !== "function" || typeof tableHtml !== "function" || typeof escapeHtml3 !== "function") {
-      throw new Error(`${LIB_NAME2}.buildStatsView requires t/sectionHtml/tableHtml/escapeHtml helpers.`);
+  function StatsView({ cost, rolling, period, drill, t: t3, Section, DataTable }) {
+    if (typeof t3 !== "function" || typeof Section !== "function" || typeof DataTable !== "function") {
+      throw new Error(`${LIB_NAME2}.StatsView requires t/Section/DataTable.`);
     }
     const activePeriod = normalizePeriod(period);
-    function emptyHtml() {
-      return `<div class="cqc-empty">${escapeHtml3(t3("statsEmpty"))}</div>`;
+    const empty = /* @__PURE__ */ u2("div", { class: "cqc-empty", children: t3("statsEmpty") });
+    const periodTabs = /* @__PURE__ */ u2("div", { class: "cqc-stats-tabs", role: "group", "aria-label": t3("tabStats"), children: PERIOD_TABS.map(([id, key]) => /* @__PURE__ */ u2(
+      "button",
+      {
+        type: "button",
+        class: `cqc-stats-tab${activePeriod === id ? " is-active" : ""}`,
+        "data-action": "switch-stats-period",
+        "data-period": id,
+        "aria-pressed": activePeriod === id ? "true" : "false",
+        children: t3(key)
+      },
+      id
+    )) });
+    function rollingLive() {
+      if (!rolling) return null;
+      return /* @__PURE__ */ u2("div", { class: "cqc-stats-live cqc-table-note", children: [
+        t3("statsRollingLive"),
+        ": $",
+        usd(rolling["累计折算USD"]),
+        " · ",
+        String(round(rolling["累计Credits"])),
+        " Credits"
+      ] });
     }
-    function periodTabsHtml() {
-      const items = [
-        ["day", "statsPeriodDay"],
-        ["week", "statsPeriodWeek"],
-        ["month", "statsPeriodMonth"],
-        ["all", "statsPeriodAll"]
-      ];
-      return `
-      <div class="cqc-stats-tabs" role="group" aria-label="${escapeHtml3(t3("tabStats"))}">
-        ${items.map(
-        ([id, key]) => `
-          <button
-            type="button"
-            class="cqc-stats-tab${activePeriod === id ? " is-active" : ""}"
-            data-action="switch-stats-period"
-            data-period="${escapeHtml3(id)}"
-            aria-pressed="${activePeriod === id ? "true" : "false"}"
-          >${escapeHtml3(t3(key))}</button>
-        `
-      ).join("")}
-      </div>
-    `;
-    }
-    function rollingLiveHtml() {
-      if (!rolling) return "";
-      const usdValue = usd(rolling["累计折算USD"]);
-      const creditsValue = round(rolling["累计Credits"]);
-      return `<div class="cqc-stats-live cqc-table-note">${escapeHtml3(t3("statsRollingLive"))}: $${escapeHtml3(usdValue)} · ${escapeHtml3(String(creditsValue))} Credits</div>`;
-    }
-    function chartHtml() {
+    function chart() {
       const days = (cost.allDays || []).slice(-30);
-      if (!days.length) return "";
+      if (!days.length) return null;
       const max2 = Math.max(...days.map((row) => Number(row.usd) || 0));
-      if (!(max2 > 0)) return "";
-      const bars = days.map((row) => {
-        const percent = Math.max(2, Math.round((Number(row.usd) || 0) / max2 * 100));
-        return `<span class="cqc-stats-chart-bar" style="height: ${percent}%"></span>`;
-      }).join("");
-      return `<div class="cqc-stats-chart" aria-hidden="true">${bars}</div>`;
+      if (!(max2 > 0)) return null;
+      return /* @__PURE__ */ u2("div", { class: "cqc-stats-chart", "aria-hidden": "true", children: days.map((row, index) => /* @__PURE__ */ u2(
+        "span",
+        {
+          class: "cqc-stats-chart-bar",
+          style: { height: `${Math.max(2, Math.round((Number(row.usd) || 0) / max2 * 100))}%` }
+        },
+        row.date || index
+      )) });
     }
-    function dailyTableHtml(rows) {
+    function dailyTable(rows) {
       const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
         date: row.date,
         credits: round(row.credits),
         usd: usd(row.usd)
       }));
-      return mapped.length ? tableHtml(mapped, {
-        columns: [
-          { key: "date", labelKey: "statsColumnDate", priority: "primary" },
-          { key: "credits", labelKey: "statsColumnCredits" },
-          { key: "usd", labelKey: "statsColumnUsd" }
-        ],
-        limit: mapped.length
-      }) : emptyHtml();
+      return mapped.length ? /* @__PURE__ */ u2(
+        DataTable,
+        {
+          rows: mapped,
+          columns: [
+            { key: "date", labelKey: "statsColumnDate", priority: "primary" },
+            { key: "credits", labelKey: "statsColumnCredits" },
+            { key: "usd", labelKey: "statsColumnUsd" }
+          ],
+          limit: mapped.length
+        }
+      ) : empty;
     }
-    function estimateLineHtml(label, range, creditsValue, usdValue) {
-      return `
-      <div class="cqc-stats-estimate">
-        <span class="cqc-stats-estimate-label">${escapeHtml3(label)}</span>
-        <span class="cqc-stats-estimate-tag">${escapeHtml3(t3("statsEstimate"))}</span>
-        <span class="cqc-stats-estimate-range">${escapeHtml3(range)}</span>
-        <span class="cqc-stats-estimate-figure">$${escapeHtml3(usd(usdValue))} · ${escapeHtml3(String(round(creditsValue)))} Credits</span>
-      </div>
-    `;
+    function estimateLine(label, range, creditsValue, usdValue) {
+      return /* @__PURE__ */ u2("div", { class: "cqc-stats-estimate", children: [
+        /* @__PURE__ */ u2("span", { class: "cqc-stats-estimate-label", children: label }),
+        /* @__PURE__ */ u2("span", { class: "cqc-stats-estimate-tag", children: t3("statsEstimate") }),
+        /* @__PURE__ */ u2("span", { class: "cqc-stats-estimate-range", children: range }),
+        /* @__PURE__ */ u2("span", { class: "cqc-stats-estimate-figure", children: [
+          "$",
+          usd(usdValue),
+          " · ",
+          String(round(creditsValue)),
+          " Credits"
+        ] })
+      ] });
     }
-    function drillableListHtml(items) {
-      if (!items.length) return emptyHtml();
-      return `
-      <div class="cqc-stats-list">
-        ${items.map(
-        (item) => `
-          <button
-            type="button"
-            class="cqc-stats-row"
-            data-action="stats-drill"
-            data-from="${escapeHtml3(item.from)}"
-            data-to="${escapeHtml3(item.to)}"
-            data-label="${escapeHtml3(item.label)}"
-          >
-            <span class="cqc-stats-row-label">${escapeHtml3(item.label)}</span>
-            <span class="cqc-stats-row-usd">$${escapeHtml3(usd(item.usd))}</span>
-            <span class="cqc-stats-row-credits">${escapeHtml3(String(round(item.credits)))} Credits</span>
-          </button>
-        `
-      ).join("")}
-      </div>
-    `;
+    function drillableList(items) {
+      if (!items.length) return empty;
+      return /* @__PURE__ */ u2("div", { class: "cqc-stats-list", children: items.map((item) => /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          class: "cqc-stats-row",
+          "data-action": "stats-drill",
+          "data-from": item.from,
+          "data-to": item.to,
+          "data-label": item.label,
+          children: [
+            /* @__PURE__ */ u2("span", { class: "cqc-stats-row-label", children: item.label }),
+            /* @__PURE__ */ u2("span", { class: "cqc-stats-row-usd", children: [
+              "$",
+              usd(item.usd)
+            ] }),
+            /* @__PURE__ */ u2("span", { class: "cqc-stats-row-credits", children: [
+              String(round(item.credits)),
+              " Credits"
+            ] })
+          ]
+        },
+        `${item.from}~${item.to}`
+      )) });
     }
     function dayBody() {
       const day = cost.day || {};
-      const today = day.today ? estimateLineHtml(t3("costTodayLabel"), day.today.date, day.today.credits, day.today.usd) : "";
-      return sectionHtml(t3("statsPeriodDay"), today + dailyTableHtml(day.rows));
+      return /* @__PURE__ */ u2(Section, { title: t3("statsPeriodDay"), children: [
+        day.today ? estimateLine(t3("costTodayLabel"), day.today.date, day.today.credits, day.today.usd) : null,
+        dailyTable(day.rows)
+      ] });
     }
     function weekBody() {
       const week = cost.week || {};
-      const current = week.current ? estimateLineHtml(
-        t3("statsPeriodWeek"),
-        `${week.current.from} ~ ${week.current.to}`,
-        week.current.credits,
-        week.current.usd
-      ) : "";
-      const list = drillableListHtml(
-        (week.blocks || []).map((block) => ({
-          from: block.from,
-          to: block.to,
-          label: `${block.from} ~ ${block.to}`,
-          usd: block.usd,
-          credits: block.credits
-        }))
-      );
-      return sectionHtml(t3("statsPeriodWeek"), current + list);
+      return /* @__PURE__ */ u2(Section, { title: t3("statsPeriodWeek"), children: [
+        week.current ? estimateLine(
+          t3("statsPeriodWeek"),
+          `${week.current.from} ~ ${week.current.to}`,
+          week.current.credits,
+          week.current.usd
+        ) : null,
+        drillableList(
+          (week.blocks || []).map((block) => ({
+            from: block.from,
+            to: block.to,
+            label: `${block.from} ~ ${block.to}`,
+            usd: block.usd,
+            credits: block.credits
+          }))
+        )
+      ] });
     }
     function monthBody() {
       const month = cost.month || {};
-      const current = month.current ? estimateLineHtml(t3("statsPeriodMonth"), month.current.month, month.current.credits, month.current.usd) : "";
-      const list = drillableListHtml(
-        (month.rows || []).map((row) => ({
-          from: row.from,
-          to: row.to,
-          label: row.month,
-          usd: row.usd,
-          credits: row.credits
-        }))
-      );
-      return sectionHtml(t3("statsPeriodMonth"), current + list);
+      return /* @__PURE__ */ u2(Section, { title: t3("statsPeriodMonth"), children: [
+        month.current ? estimateLine(t3("statsPeriodMonth"), month.current.month, month.current.credits, month.current.usd) : null,
+        drillableList(
+          (month.rows || []).map((row) => ({
+            from: row.from,
+            to: row.to,
+            label: row.month,
+            usd: row.usd,
+            credits: row.credits
+          }))
+        )
+      ] });
     }
     function allBody() {
       const all = cost.all || {};
-      const header = `
-      <div class="cqc-stats-all-total">${escapeHtml3(t3("statsAllTotal"))}: $${escapeHtml3(usd(all.totalUsd))} · ${escapeHtml3(String(round(all.totalCredits)))} Credits</div>
-      <div class="cqc-table-note">${escapeHtml3(t3("statsCoverDays", { days: all.coverDays || 0 }))} · ${escapeHtml3(all.fromDate || "-")} ~ ${escapeHtml3(all.toDate || "-")}</div>
-    `;
-      return sectionHtml(t3("statsPeriodAll"), header + dailyTableHtml(all.rows));
+      return /* @__PURE__ */ u2(Section, { title: t3("statsPeriodAll"), children: [
+        /* @__PURE__ */ u2("div", { class: "cqc-stats-all-total", children: [
+          t3("statsAllTotal"),
+          ": $",
+          usd(all.totalUsd),
+          " · ",
+          String(round(all.totalCredits)),
+          " Credits"
+        ] }),
+        /* @__PURE__ */ u2("div", { class: "cqc-table-note", children: [
+          t3("statsCoverDays", { days: all.coverDays || 0 }),
+          " · ",
+          all.fromDate || "-",
+          " ~ ",
+          all.toDate || "-"
+        ] }),
+        dailyTable(all.rows)
+      ] });
     }
     function drillBody() {
       const rows = (cost.allDays || []).filter((row) => row.date >= drill.from && row.date <= drill.to);
-      const back = `<button type="button" class="cqc-stats-back" data-action="stats-drill-back">${escapeHtml3(t3("statsDrillBack"))}</button>`;
-      const title = `<div class="cqc-stats-drill-title">${escapeHtml3(drill.label || `${drill.from} ~ ${drill.to}`)}</div>`;
-      return `<div class="cqc-stats-drill">${back}${title}${dailyTableHtml(rows)}</div>`;
+      return /* @__PURE__ */ u2("div", { class: "cqc-stats-drill", children: [
+        /* @__PURE__ */ u2("button", { type: "button", class: "cqc-stats-back", "data-action": "stats-drill-back", children: t3("statsDrillBack") }),
+        /* @__PURE__ */ u2("div", { class: "cqc-stats-drill-title", children: drill.label || `${drill.from} ~ ${drill.to}` }),
+        dailyTable(rows)
+      ] });
     }
     if (!cost) {
-      return periodTabsHtml() + emptyHtml();
+      return /* @__PURE__ */ u2(S, { children: [
+        periodTabs,
+        empty
+      ] });
     }
     if (drill && drill.from && drill.to) {
-      return periodTabsHtml() + drillBody();
+      return /* @__PURE__ */ u2(S, { children: [
+        periodTabs,
+        drillBody()
+      ] });
     }
-    let body;
-    if (activePeriod === "week") body = weekBody();
-    else if (activePeriod === "month") body = monthBody();
-    else if (activePeriod === "all") body = allBody();
-    else body = dayBody();
-    return periodTabsHtml() + chartHtml() + rollingLiveHtml() + body;
+    const body = activePeriod === "week" ? weekBody() : activePeriod === "month" ? monthBody() : activePeriod === "all" ? allBody() : dayBody();
+    return /* @__PURE__ */ u2(S, { children: [
+      periodTabs,
+      chart(),
+      rollingLive(),
+      body
+    ] });
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js
-  function escapeHtml(value) {
-    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-  }
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.jsx
   function formatValue(value) {
     if (value === null || value === void 0 || value === "") return "-";
     if (typeof value === "number")
@@ -5182,6 +5512,14 @@ ${text.slice(0, 800)}`);
   function safeRows(rows, limit = 12) {
     return Array.isArray(rows) ? rows.slice(0, limit) : [];
   }
+  function classes(...names) {
+    return names.filter(Boolean).join(" ");
+  }
+  var DEFAULT_TABS = [
+    { id: "details", labelKey: "tabDetails" },
+    { id: "stats", labelKey: "tabStats" },
+    { id: "archive", labelKey: "tabArchiveWorkspace" }
+  ];
   function createQuotaPanelRenderer({ t: t3, formatTimestamp } = {}) {
     if (typeof t3 !== "function") {
       throw new Error("Quota panel renderer requires a translator function.");
@@ -5218,28 +5556,7 @@ ${text.slice(0, 800)}`);
     function columnLabel(column) {
       return column.labelKey ? t3(column.labelKey) : column.label;
     }
-    function dataCellHtml(row, column) {
-      const value = formatValue(row?.[column.key]);
-      const classes = [
-        column.truncate ? "is-truncated" : "",
-        column.wrap ? "is-wrappable" : "",
-        column.priority ? `is-${column.priority}` : ""
-      ].filter(Boolean).join(" ");
-      const title = column.truncate ? ` title="${escapeHtml(value)}"` : "";
-      return `<td class="${escapeHtml(classes)}"${title}>${escapeHtml(value)}</td>`;
-    }
-    function compactValueHtml(row, column) {
-      const value = formatValue(row?.[column.key]);
-      const classes = ["cqc-compact-value", column.truncate ? "is-truncated" : "", column.wrap ? "is-wrappable" : ""].filter(Boolean).join(" ");
-      const title = column.truncate ? ` title="${escapeHtml(value)}"` : "";
-      return `
-      <div class="cqc-compact-field">
-        <dt>${escapeHtml(columnLabel(column))}</dt>
-        <dd class="${escapeHtml(classes)}"${title}>${escapeHtml(value)}</dd>
-      </div>
-    `;
-    }
-    function dataViewHtml(view = {}, state = {}) {
+    function DataView({ view = {}, state = {} }) {
       const rows = Array.isArray(view.rows) ? view.rows : [];
       const limit = view.limit ?? 12;
       const expandable = rows.length > limit;
@@ -5247,46 +5564,79 @@ ${text.slice(0, 800)}`);
       const visibleRows = expanded ? rows : safeRows(rows, limit);
       const columns = normalizeDataColumns(visibleRows, view.columns);
       if (!visibleRows.length || !columns.length) {
-        return `<div class="cqc-empty">${escapeHtml(t3(view.emptyKey || "tableNoData"))}</div>`;
+        return /* @__PURE__ */ u2("div", { class: "cqc-empty", children: t3(view.emptyKey || "tableNoData") });
       }
-      const head = columns.map((column) => `<th>${escapeHtml(columnLabel(column))}</th>`).join("");
-      const body = visibleRows.map((row) => `<tr>${columns.map((column) => dataCellHtml(row, column)).join("")}</tr>`).join("");
       const compactColumns = columns.filter((column) => column.compact && column.priority !== "debug");
-      const compact = visibleRows.map(
-        (row) => `
-        <dl class="cqc-compact-row">
-          ${compactColumns.map((column) => compactValueHtml(row, column)).join("")}
-        </dl>
-      `
-      ).join("");
-      const toggle = expandable ? `<div class="cqc-table-note"><button type="button" class="cqc-table-expand" data-action="toggle-rows" data-view-id="${escapeHtml(view.id || "")}" data-expanded="${expanded ? "true" : "false"}">${escapeHtml(expanded ? t3("tableShowLess") : t3("tableShowAll", { total: rows.length }))}</button></div>` : "";
-      return `
-      <div class="cqc-data-view" data-view-id="${escapeHtml(view.id || "")}" data-compact="${view.compactOnMobile === false ? "false" : "true"}">
-        <div class="cqc-table-wrap cqc-data-table">
-          <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-        </div>
-        <div class="cqc-compact-list">${compact}</div>
-      </div>
-      ${toggle}
-    `;
+      return /* @__PURE__ */ u2(S, { children: [
+        /* @__PURE__ */ u2(
+          "div",
+          {
+            class: "cqc-data-view",
+            "data-view-id": view.id || "",
+            "data-compact": view.compactOnMobile === false ? "false" : "true",
+            children: [
+              /* @__PURE__ */ u2("div", { class: "cqc-table-wrap cqc-data-table", children: /* @__PURE__ */ u2("table", { children: [
+                /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { children: columns.map((column) => /* @__PURE__ */ u2("th", { children: columnLabel(column) }, column.key)) }) }),
+                /* @__PURE__ */ u2("tbody", { children: visibleRows.map((row, index) => /* @__PURE__ */ u2("tr", { children: columns.map((column) => {
+                  const value = formatValue(row?.[column.key]);
+                  return /* @__PURE__ */ u2(
+                    "td",
+                    {
+                      class: classes(
+                        column.truncate && "is-truncated",
+                        column.wrap && "is-wrappable",
+                        column.priority && `is-${column.priority}`
+                      ),
+                      title: column.truncate ? value : void 0,
+                      children: value
+                    },
+                    column.key
+                  );
+                }) }, index)) })
+              ] }) }),
+              /* @__PURE__ */ u2("div", { class: "cqc-compact-list", children: visibleRows.map((row, index) => /* @__PURE__ */ u2("dl", { class: "cqc-compact-row", children: compactColumns.map((column) => {
+                const value = formatValue(row?.[column.key]);
+                return /* @__PURE__ */ u2("div", { class: "cqc-compact-field", children: [
+                  /* @__PURE__ */ u2("dt", { children: columnLabel(column) }),
+                  /* @__PURE__ */ u2(
+                    "dd",
+                    {
+                      class: classes(
+                        "cqc-compact-value",
+                        column.truncate && "is-truncated",
+                        column.wrap && "is-wrappable"
+                      ),
+                      title: column.truncate ? value : void 0,
+                      children: value
+                    }
+                  )
+                ] }, column.key);
+              }) }, index)) })
+            ]
+          }
+        ),
+        expandable ? /* @__PURE__ */ u2("div", { class: "cqc-table-note", children: /* @__PURE__ */ u2(
+          "button",
+          {
+            type: "button",
+            class: "cqc-table-expand",
+            "data-action": "toggle-rows",
+            "data-view-id": view.id || "",
+            "data-expanded": expanded ? "true" : "false",
+            children: expanded ? t3("tableShowLess") : t3("tableShowAll", { total: rows.length })
+          }
+        ) }) : null
+      ] });
     }
-    function tableHtml(rows, options = {}) {
-      return dataViewHtml({
-        id: options.id || "",
-        rows,
-        columns: options.columns,
-        limit: options.limit,
-        compactOnMobile: options.compactOnMobile
-      });
+    function DataTable({ rows, id = "", columns, limit, compactOnMobile }) {
+      return /* @__PURE__ */ u2(DataView, { view: { id, rows, columns, limit, compactOnMobile } });
     }
-    function metricHtml(label, value, hint = "") {
-      return `
-      <div class="cqc-metric">
-        <div class="cqc-metric-label">${escapeHtml(label)}</div>
-        <div class="cqc-metric-value">${escapeHtml(formatValue(value))}</div>
-        ${hint ? `<div class="cqc-metric-hint">${escapeHtml(hint)}</div>` : ""}
-      </div>
-    `;
+    function Metric({ label, value, hint = "" }) {
+      return /* @__PURE__ */ u2("div", { class: "cqc-metric", children: [
+        /* @__PURE__ */ u2("div", { class: "cqc-metric-label", children: label }),
+        /* @__PURE__ */ u2("div", { class: "cqc-metric-value", children: formatValue(value) }),
+        hint ? /* @__PURE__ */ u2("div", { class: "cqc-metric-hint", children: hint }) : null
+      ] });
     }
     function formatMetricDecimal(value) {
       const numericValue = Number(value);
@@ -5310,121 +5660,121 @@ ${text.slice(0, 800)}`);
       if (remainingHours > 0) return t3("durationHoursMinutes", { hours: remainingHours, minutes });
       return t3("durationMinutes", { minutes });
     }
-    function creditMetricHtml(label, usd2) {
-      return metricHtml(label, usdMetricValue(usd2));
-    }
-    function resetMetricHtml(hours) {
-      return metricHtml(t3("resetCountdown"), formatHoursDuration(hours));
-    }
-    function primaryMetricHtml(metric) {
+    function ModelMetric({ metric }) {
       const label = metric?.labelKey ? t3(metric.labelKey) : metric?.label || "-";
-      if (metric?.type === "credit") {
-        return creditMetricHtml(label, metric.usd);
-      }
-      if (metric?.type === "reset") {
-        return resetMetricHtml(metric.hours);
-      }
-      return metricHtml(label, metric?.value);
+      if (metric?.type === "credit") return /* @__PURE__ */ u2(Metric, { label, value: usdMetricValue(metric.usd) });
+      if (metric?.type === "reset")
+        return /* @__PURE__ */ u2(Metric, { label: t3("resetCountdown"), value: formatHoursDuration(metric.hours) });
+      return /* @__PURE__ */ u2(Metric, { label, value: metric?.value });
     }
-    function heroHtml(metric) {
-      if (!metric) return "";
+    function Hero({ metric }) {
+      if (!metric) return null;
       const label = metric.labelKey ? t3(metric.labelKey) : metric.label || "-";
       const value = metric.type === "credit" ? usdMetricValue(metric.usd) : formatValue(metric.value);
       const hours = Number(metric.resetHours);
-      const subline = Number.isFinite(hours) ? `<div class="cqc-hero-sub">${escapeHtml(t3("heroResetSubline", { duration: formatHoursDuration(hours) }))}</div>` : "";
-      return `
-      <section class="cqc-hero">
-        <div class="cqc-hero-label">${escapeHtml(label)}</div>
-        <div class="cqc-hero-value">${escapeHtml(value)}</div>
-        ${subline}
-      </section>
-    `;
+      return /* @__PURE__ */ u2("section", { class: "cqc-hero", children: [
+        /* @__PURE__ */ u2("div", { class: "cqc-hero-label", children: label }),
+        /* @__PURE__ */ u2("div", { class: "cqc-hero-value", children: value }),
+        Number.isFinite(hours) ? /* @__PURE__ */ u2("div", { class: "cqc-hero-sub", children: t3("heroResetSubline", { duration: formatHoursDuration(hours) }) }) : null
+      ] });
     }
-    function secondaryMetricsHtml(metrics) {
+    function Metrics({ metrics, secondary = false }) {
       const list = Array.isArray(metrics) ? metrics : [];
-      if (!list.length) return "";
-      return `<div class="cqc-metrics cqc-metrics-secondary">${list.map(primaryMetricHtml).join("")}</div>`;
+      if (!list.length) return null;
+      return /* @__PURE__ */ u2("div", { class: secondary ? "cqc-metrics cqc-metrics-secondary" : "cqc-metrics", children: list.map((metric, index) => /* @__PURE__ */ u2(ModelMetric, { metric }, metric?.id || index)) });
     }
-    function detailMetricsHtml(metrics) {
-      const list = Array.isArray(metrics) ? metrics : [];
-      if (!list.length) return "";
-      return `<div class="cqc-metrics">${list.map(primaryMetricHtml).join("")}</div>`;
-    }
-    function syncBannerHtml(banner) {
-      if (!banner) return "";
+    function SyncBanner({ banner }) {
+      if (!banner) return null;
       const variables = {
         backend: banner.backendLabel || "-",
         endpoint: banner.endpoint || "-",
         lastSyncedAt: banner.lastSyncedAt || "-",
         error: banner.lastError || "-"
       };
-      return `
-      <div class="cqc-sync-banner" data-tone="${escapeHtml(banner.tone || "muted")}">
-        <strong>${escapeHtml(t3(banner.titleKey, variables))}</strong>
-        <span>${escapeHtml(t3(banner.detailKey, variables))}</span>
-      </div>
-    `;
+      return /* @__PURE__ */ u2("div", { class: "cqc-sync-banner", "data-tone": banner.tone || "muted", children: [
+        /* @__PURE__ */ u2("strong", { children: t3(banner.titleKey, variables) }),
+        /* @__PURE__ */ u2("span", { children: t3(banner.detailKey, variables) })
+      ] });
     }
-    function syncFormHtml(status = {}) {
-      const enabled = Boolean(status.enabled);
+    function SyncForm({ status = {}, draft = null, onDraft = () => {
+    } }) {
+      const enabled = draft ? draft.enabled : Boolean(status.enabled);
       const hasToken = Boolean(status.hasToken);
       const configured = Boolean(status.configured);
-      const gistId = status.gistId || "";
+      const token = draft ? draft.token : "";
+      const gistId = draft ? draft.gistId : status.gistId || "";
       const lastSyncedAt = status.lastSyncedAt || "";
       const lastError = status.lastError || "";
-      const statusLine = lastError ? `<div class="cqc-sync-form-status" data-tone="error">${escapeHtml(t3("remoteSyncStatusError", { error: lastError }))}</div>` : `<div class="cqc-sync-form-status" data-tone="muted">${escapeHtml(lastSyncedAt ? t3("remoteSyncLastSynced", { lastSyncedAt: formatLocalTimestamp(lastSyncedAt) }) : t3("remoteSyncNeverSynced"))}</div>`;
-      const syncNowButton = enabled && configured ? `<button type="button" data-action="sync-remote">${escapeHtml(t3("remoteSyncNowAction"))}</button>` : "";
-      return `
-      <div class="cqc-sync-form" data-sync-form>
-        <div class="cqc-sync-form-title">${escapeHtml(t3("remoteSyncFormTitle"))}</div>
-        <div class="cqc-sync-field">
-          <span class="cqc-sync-field-label">
-            ${escapeHtml(t3("remoteSyncTokenLabel"))}
-            <span class="cqc-sync-field-hint">${escapeHtml(hasToken ? t3("remoteSyncTokenSavedHint") : t3("remoteSyncTokenFieldHint"))}</span>
-          </span>
-          <input type="password" data-field="token" autocomplete="new-password" spellcheck="false" placeholder="${escapeHtml(hasToken ? t3("remoteSyncTokenPlaceholderSet") : t3("remoteSyncTokenPlaceholderNew"))}">
-        </div>
-        <div class="cqc-sync-field">
-          <span class="cqc-sync-field-label">
-            ${escapeHtml(t3("remoteSyncGistIdLabel"))}
-            <span class="cqc-sync-field-hint">${escapeHtml(t3("remoteSyncGistIdFieldHint"))}</span>
-          </span>
-          <input type="text" data-field="gistId" spellcheck="false" value="${escapeHtml(gistId)}" placeholder="${escapeHtml(t3("remoteSyncGistIdPlaceholder"))}">
-        </div>
-        <label class="cqc-sync-toggle">
-          <input type="checkbox" data-field="enabled"${enabled ? " checked" : ""}>
-          ${escapeHtml(t3("remoteSyncEnableLabel"))}
-        </label>
-        ${statusLine}
-        <div class="cqc-sync-form-actions">
-          <button type="button" data-action="save-remote-sync" data-variant="primary">${escapeHtml(t3("remoteSyncSaveAction"))}</button>
-          ${syncNowButton}
-        </div>
-      </div>
-    `;
+      const current = { token, gistId, enabled };
+      const edit = (changes) => onDraft({ ...current, ...changes });
+      return /* @__PURE__ */ u2("div", { class: "cqc-sync-form", "data-sync-form": true, children: [
+        /* @__PURE__ */ u2("div", { class: "cqc-sync-form-title", children: t3("remoteSyncFormTitle") }),
+        /* @__PURE__ */ u2("div", { class: "cqc-sync-field", children: [
+          /* @__PURE__ */ u2("span", { class: "cqc-sync-field-label", children: [
+            t3("remoteSyncTokenLabel"),
+            /* @__PURE__ */ u2("span", { class: "cqc-sync-field-hint", children: hasToken ? t3("remoteSyncTokenSavedHint") : t3("remoteSyncTokenFieldHint") })
+          ] }),
+          /* @__PURE__ */ u2(
+            "input",
+            {
+              type: "password",
+              "data-field": "token",
+              autocomplete: "new-password",
+              spellcheck: false,
+              placeholder: hasToken ? t3("remoteSyncTokenPlaceholderSet") : t3("remoteSyncTokenPlaceholderNew"),
+              value: token,
+              onInput: (event) => edit({ token: event.currentTarget.value })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u2("div", { class: "cqc-sync-field", children: [
+          /* @__PURE__ */ u2("span", { class: "cqc-sync-field-label", children: [
+            t3("remoteSyncGistIdLabel"),
+            /* @__PURE__ */ u2("span", { class: "cqc-sync-field-hint", children: t3("remoteSyncGistIdFieldHint") })
+          ] }),
+          /* @__PURE__ */ u2(
+            "input",
+            {
+              type: "text",
+              "data-field": "gistId",
+              spellcheck: false,
+              placeholder: t3("remoteSyncGistIdPlaceholder"),
+              value: gistId,
+              onInput: (event) => edit({ gistId: event.currentTarget.value })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u2("label", { class: "cqc-sync-toggle", children: [
+          /* @__PURE__ */ u2(
+            "input",
+            {
+              type: "checkbox",
+              "data-field": "enabled",
+              checked: enabled,
+              onChange: (event) => edit({ enabled: event.currentTarget.checked })
+            }
+          ),
+          t3("remoteSyncEnableLabel")
+        ] }),
+        /* @__PURE__ */ u2("div", { class: "cqc-sync-form-status", "data-tone": lastError ? "error" : "muted", children: lastError ? t3("remoteSyncStatusError", { error: lastError }) : lastSyncedAt ? t3("remoteSyncLastSynced", { lastSyncedAt: formatLocalTimestamp(lastSyncedAt) }) : t3("remoteSyncNeverSynced") }),
+        /* @__PURE__ */ u2("div", { class: "cqc-sync-form-actions", children: [
+          /* @__PURE__ */ u2("button", { type: "button", "data-action": "save-remote-sync", "data-variant": "primary", children: t3("remoteSyncSaveAction") }),
+          enabled && configured ? /* @__PURE__ */ u2("button", { type: "button", "data-action": "sync-remote", children: t3("remoteSyncNowAction") }) : null
+        ] })
+      ] });
     }
-    function sectionHtml(title, body) {
-      return `
-      <section class="cqc-section">
-        <h3>${escapeHtml(title)}</h3>
-        ${body}
-      </section>
-    `;
+    function Section({ title, children }) {
+      return /* @__PURE__ */ u2("section", { class: "cqc-section", children: [
+        /* @__PURE__ */ u2("h3", { children: title }),
+        children
+      ] });
     }
-    function detailActionsHtml(actions) {
-      return `
-      <div class="cqc-detail-footnote">
-        ${actions.map(
-        (item) => `
-          <button type="button" data-action="${escapeHtml(item.action)}">${escapeHtml(item.label)}</button>
-        `
-      ).join("")}
-      </div>
-    `;
+    function DetailActions({ actions }) {
+      return /* @__PURE__ */ u2("div", { class: "cqc-detail-footnote", children: actions.map((item) => /* @__PURE__ */ u2("button", { type: "button", "data-action": item.action, children: item.label }, item.action)) });
     }
-    function archiveSummaryHtml(model = {}, state) {
+    function ArchiveSummary({ model = {}, state }) {
       if (!model.isLoaded) {
-        return `<div class="cqc-empty">${escapeHtml(t3("archiveEmpty"))}</div>`;
+        return /* @__PURE__ */ u2("div", { class: "cqc-empty", children: t3("archiveEmpty") });
       }
       const overviewColumns = [
         t3("archiveSnapshotCount"),
@@ -5438,141 +5788,148 @@ ${text.slice(0, 800)}`);
         t3("archiveMonthlyCredits"),
         t3("archiveWeeklyUsedPercent")
       ];
-      const overview = dataViewHtml(
-        {
-          id: "archive-overview",
-          rows: [
-            {
-              [overviewColumns[0]]: model.snapshotCount,
-              [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
-              [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
-              [overviewColumns[3]]: model.storageBackend?.label || "-"
-            }
-          ],
-          columns: overviewColumns.map((column) => ({
-            key: column,
-            label: column,
-            priority: column === t3("archiveSnapshotCount") ? "primary" : "secondary",
-            truncate: column !== t3("archiveSnapshotCount")
-          })),
-          limit: 1
-        },
-        state
-      );
       const recentSnapshots = safeRows(model.recentSnapshots || [], 5);
-      const recent = recentSnapshots.length ? dataViewHtml(
+      return /* @__PURE__ */ u2(S, { children: [
+        /* @__PURE__ */ u2(
+          DataView,
+          {
+            state,
+            view: {
+              id: "archive-overview",
+              rows: [
+                {
+                  [overviewColumns[0]]: model.snapshotCount,
+                  [overviewColumns[1]]: displayTimestamp(model.earliestCapturedAt),
+                  [overviewColumns[2]]: displayTimestamp(model.latestCapturedAt),
+                  [overviewColumns[3]]: model.storageBackend?.label || "-"
+                }
+              ],
+              columns: overviewColumns.map((column) => ({
+                key: column,
+                label: column,
+                priority: column === t3("archiveSnapshotCount") ? "primary" : "secondary",
+                truncate: column !== t3("archiveSnapshotCount")
+              })),
+              limit: 1
+            }
+          }
+        ),
+        model.importReport ? /* @__PURE__ */ u2("div", { class: "cqc-table-note", children: t3("archiveLatestImport", {
+          added: model.importReport.added,
+          skipped: model.importReport.skipped,
+          invalid: model.importReport.invalid
+        }) }) : null,
+        recentSnapshots.length ? /* @__PURE__ */ u2(
+          DataView,
+          {
+            state,
+            view: {
+              id: "archive-recent",
+              rows: recentSnapshots.map((row) => ({
+                [recentColumns[0]]: displayTimestamp(row.capturedAt),
+                [recentColumns[1]]: row.snapshotId,
+                [recentColumns[2]]: row.monthlyCredits,
+                [recentColumns[3]]: row.weeklyUsedPercent
+              })),
+              columns: recentColumns.map((column) => ({
+                key: column,
+                label: column,
+                priority: column === t3("archiveSnapshotId") ? "primary" : "secondary",
+                truncate: column === t3("archiveSnapshotId") || column === t3("archiveCapturedAt")
+              }))
+            }
+          }
+        ) : /* @__PURE__ */ u2("div", { class: "cqc-empty", children: t3("archiveNoSnapshot") })
+      ] });
+    }
+    function PanelTabs({ model, activePanelView }) {
+      const tabs = Array.isArray(model?.tabs) && model.tabs.length ? model.tabs : DEFAULT_TABS;
+      return /* @__PURE__ */ u2("div", { class: "cqc-tabs", children: tabs.map((tab) => /* @__PURE__ */ u2(
+        "button",
         {
-          id: "archive-recent",
-          rows: recentSnapshots.map((row) => ({
-            [recentColumns[0]]: displayTimestamp(row.capturedAt),
-            [recentColumns[1]]: row.snapshotId,
-            [recentColumns[2]]: row.monthlyCredits,
-            [recentColumns[3]]: row.weeklyUsedPercent
-          })),
-          columns: recentColumns.map((column) => ({
-            key: column,
-            label: column,
-            priority: column === t3("archiveSnapshotId") ? "primary" : "secondary",
-            truncate: column === t3("archiveSnapshotId") || column === t3("archiveCapturedAt")
-          }))
+          type: "button",
+          class: `cqc-tab${activePanelView === tab.id ? " is-active" : ""}`,
+          "data-action": "switch-view",
+          "data-view": tab.id,
+          children: tab.labelKey ? t3(tab.labelKey) : tab.label
         },
-        state
-      ) : `<div class="cqc-empty">${escapeHtml(t3("archiveNoSnapshot"))}</div>`;
-      const importReport = model.importReport ? `<div class="cqc-table-note">${escapeHtml(t3("archiveLatestImport", { added: model.importReport.added, skipped: model.importReport.skipped, invalid: model.importReport.invalid }))}</div>` : "";
-      return `${overview}${importReport}${recent}`;
+        tab.id
+      )) });
     }
-    function archiveTransferActionsHtml() {
-      return detailActionsHtml([
-        { action: "export-archive", label: t3("archiveExportAction") },
-        { action: "import-archive", label: t3("archiveImportAction") }
-      ]);
-    }
-    function panelTabsHtml(model, activePanelView) {
-      const tabs = Array.isArray(model?.tabs) && model.tabs.length ? model.tabs : [
-        { id: "details", labelKey: "tabDetails" },
-        { id: "stats", labelKey: "tabStats" },
-        { id: "archive", labelKey: "tabArchiveWorkspace" }
-      ];
-      return `
-      <div class="cqc-tabs">
-        ${tabs.map(
-        (tab) => `
-          <button
-            type="button"
-            class="cqc-tab${activePanelView === tab.id ? " is-active" : ""}"
-            data-action="switch-view"
-            data-view="${escapeHtml(tab.id)}"
-          >${escapeHtml(tab.labelKey ? t3(tab.labelKey) : tab.label)}</button>
-        `
-      ).join("")}
-      </div>
-    `;
-    }
-    function sectionFromModelHtml(section, viewModel, state) {
-      if (!section) return "";
-      if (section.type === "metrics") {
-        return detailMetricsHtml(section.metrics);
-      }
+    function ModelSection({ section, viewModel, state, form }) {
+      if (!section) return null;
+      if (section.type === "metrics") return /* @__PURE__ */ u2(Metrics, { metrics: section.metrics });
       if (section.type === "dataView") {
-        return sectionHtml(t3(section.titleKey), dataViewHtml(section, state));
+        return /* @__PURE__ */ u2(Section, { title: t3(section.titleKey), children: /* @__PURE__ */ u2(DataView, { view: section, state }) });
       }
-      if (section.type === "syncBanner") {
-        return syncBannerHtml(viewModel?.syncBanner);
-      }
+      if (section.type === "syncBanner") return /* @__PURE__ */ u2(SyncBanner, { banner: viewModel?.syncBanner });
       if (section.type === "syncForm") {
-        return syncFormHtml(viewModel?.remoteSyncStatus);
+        return /* @__PURE__ */ u2(SyncForm, { status: viewModel?.remoteSyncStatus, draft: form?.draft, onDraft: form?.onDraft });
       }
       if (section.type === "archiveSummary") {
-        return sectionHtml(t3("sectionArchiveOverview"), archiveSummaryHtml(viewModel?.archive, state));
+        return /* @__PURE__ */ u2(Section, { title: t3("sectionArchiveOverview"), children: /* @__PURE__ */ u2(ArchiveSummary, { model: viewModel?.archive, state }) });
       }
       if (section.type === "note") {
-        return `<div class="cqc-transfer-note">${escapeHtml(t3(section.noteKey || "transferNote"))}</div>`;
+        return /* @__PURE__ */ u2("div", { class: "cqc-transfer-note", children: t3(section.noteKey || "transferNote") });
       }
       if (section.type === "actions") {
         const actions = Array.isArray(section.actions) ? section.actions.map((item) => ({
           action: item.action,
           label: item.labelKey ? t3(item.labelKey) : item.label
         })) : [];
-        return actions.length ? detailActionsHtml(actions) : "";
+        return actions.length ? /* @__PURE__ */ u2(DetailActions, { actions }) : null;
       }
-      return "";
+      return null;
     }
-    function sectionsViewHtml(view, viewModel, state) {
-      return (view?.sections || []).map((section) => sectionFromModelHtml(section, viewModel, state)).join("");
-    }
-    function statsViewHtml(model, state = {}) {
-      return buildStatsView(
+    function SectionsView({ view, viewModel, state, form }) {
+      return (view?.sections || []).map((section, index) => /* @__PURE__ */ u2(
+        ModelSection,
         {
-          cost: model?.cost,
-          rolling: model?.rolling,
-          period: state.statsPeriod,
-          drill: state.statsDrill
+          section,
+          viewModel,
+          state,
+          form
         },
-        { t: t3, sectionHtml, tableHtml, escapeHtml }
-      );
+        `${section?.type}:${section?.id || index}`
+      ));
     }
-    function archiveViewHtml(model, state) {
-      const view = model?.views?.archive;
-      if (view) return sectionsViewHtml(view, model, state);
-      return `
-      ${syncBannerHtml(model?.syncBanner)}
-      ${sectionHtml(t3("sectionArchiveOverview"), archiveSummaryHtml(model?.archive, state))}
-      <div class="cqc-transfer-note">${escapeHtml(t3("transferNote"))}</div>
-      ${archiveTransferActionsHtml()}
-    `;
+    function ArchiveView({ viewModel, state, form }) {
+      const view = viewModel?.views?.archive;
+      if (view) return /* @__PURE__ */ u2(SectionsView, { view, viewModel, state, form });
+      return /* @__PURE__ */ u2(S, { children: [
+        /* @__PURE__ */ u2(SyncBanner, { banner: viewModel?.syncBanner }),
+        /* @__PURE__ */ u2(Section, { title: t3("sectionArchiveOverview"), children: /* @__PURE__ */ u2(ArchiveSummary, { model: viewModel?.archive, state }) }),
+        /* @__PURE__ */ u2("div", { class: "cqc-transfer-note", children: t3("transferNote") }),
+        /* @__PURE__ */ u2(
+          DetailActions,
+          {
+            actions: [
+              { action: "export-archive", label: t3("archiveExportAction") },
+              { action: "import-archive", label: t3("archiveImportAction") }
+            ]
+          }
+        )
+      ] });
     }
-    function activeViewHtml(viewModel, activePanelView, state = {}) {
+    function ActiveView({ viewModel, activePanelView, state = {}, form }) {
       const view = viewModel?.views?.[activePanelView] || viewModel?.views?.details;
-      if (view?.kind === "archiveWorkspace") {
-        return archiveViewHtml(viewModel, state);
-      }
+      if (view?.kind === "archiveWorkspace") return /* @__PURE__ */ u2(ArchiveView, { viewModel, state, form });
       if (view?.kind === "stats") {
-        return statsViewHtml(viewModel, state);
+        return /* @__PURE__ */ u2(
+          StatsView,
+          {
+            cost: viewModel?.cost,
+            rolling: viewModel?.rolling,
+            period: state.statsPeriod,
+            drill: state.statsDrill,
+            t: t3,
+            Section,
+            DataTable
+          }
+        );
       }
-      if (view?.kind === "sections") {
-        return sectionsViewHtml(view, viewModel, state);
-      }
-      return sectionsViewHtml(viewModel?.views?.details, viewModel, state);
+      const sectionsView = view?.kind === "sections" ? view : viewModel?.views?.details;
+      return /* @__PURE__ */ u2(SectionsView, { view: sectionsView, viewModel, state, form });
     }
     function normalizeActivePanelView(viewModel, requestedPanelView) {
       const tabs = Array.isArray(viewModel?.tabs) ? viewModel.tabs : [];
@@ -5581,347 +5938,45 @@ ${text.slice(0, 800)}`);
       }
       return requestedPanelView || "details";
     }
-    function renderResult(viewModel, state = {}) {
+    function Result({ viewModel, state = {}, form }) {
       const activePanelView = normalizeActivePanelView(viewModel, state.activePanelView);
-      const viewBody = activeViewHtml(viewModel, activePanelView, state);
-      return {
-        activePanelView,
-        html: `
-        ${heroHtml(viewModel?.heroMetric)}
-        ${secondaryMetricsHtml(viewModel?.secondaryMetrics)}
-        ${panelTabsHtml(viewModel, activePanelView)}
-        <div class="cqc-details">
-          ${viewBody}
-        </div>
-      `
-      };
+      return /* @__PURE__ */ u2(S, { children: [
+        /* @__PURE__ */ u2(Hero, { metric: viewModel?.heroMetric }),
+        /* @__PURE__ */ u2(Metrics, { metrics: viewModel?.secondaryMetrics, secondary: true }),
+        /* @__PURE__ */ u2(PanelTabs, { model: viewModel, activePanelView }),
+        /* @__PURE__ */ u2("div", { class: "cqc-details", children: /* @__PURE__ */ u2(ActiveView, { viewModel, activePanelView, state, form }) })
+      ] });
     }
-    function renderActiveView(viewModel, state = {}) {
-      const activePanelView = normalizeActivePanelView(viewModel, state.activePanelView);
-      return {
-        activePanelView,
-        html: activeViewHtml(viewModel, activePanelView, state)
-      };
+    function Loading() {
+      return /* @__PURE__ */ u2("div", { class: "cqc-loading", children: [
+        /* @__PURE__ */ u2("div", { class: "cqc-spinner" }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("strong", { children: t3("loadingTitle") }),
+          /* @__PURE__ */ u2("span", { children: t3("loadingHint") })
+        ] })
+      ] });
     }
-    function renderLoading() {
-      return `
-      <div class="cqc-loading">
-        <div class="cqc-spinner"></div>
-        <div>
-          <strong>${escapeHtml(t3("loadingTitle"))}</strong>
-          <span>${escapeHtml(t3("loadingHint"))}</span>
-        </div>
-      </div>
-    `;
+    function ErrorState({ error }) {
+      return /* @__PURE__ */ u2("div", { class: "cqc-error", children: [
+        /* @__PURE__ */ u2("strong", { children: t3("errorTitle") }),
+        /* @__PURE__ */ u2("p", { children: error?.message || error || t3("errorUnknown") }),
+        /* @__PURE__ */ u2("button", { type: "button", class: "cqc-refresh", "data-action": "refresh", children: t3("actionRetry") })
+      ] });
     }
-    function renderError(error) {
-      return `
-      <div class="cqc-error">
-        <strong>${escapeHtml(t3("errorTitle"))}</strong>
-        <p>${escapeHtml(error?.message || error || t3("errorUnknown"))}</p>
-        <button type="button" class="cqc-refresh" data-action="refresh">${escapeHtml(t3("actionRetry"))}</button>
-      </div>
-    `;
+    function Panel({ presentation = "snapshot", error = null, viewModel = null, state = {}, form }) {
+      if (presentation === "loading") return /* @__PURE__ */ u2(Loading, {});
+      if (presentation === "error") return /* @__PURE__ */ u2(ErrorState, { error });
+      if (!viewModel) return null;
+      return /* @__PURE__ */ u2(Result, { viewModel, state, form });
     }
     function installStyles(documentObject, rootId) {
       installQuotaPanelRendererStyles(documentObject, rootId);
     }
-    return {
-      renderResult,
-      renderActiveView,
-      renderLoading,
-      renderError,
-      installStyles
-    };
+    return { Panel, normalizeActivePanelView, installStyles };
   }
-
-  // node_modules/preact/dist/preact.module.js
-  var n;
-  var l;
-  var u;
-  var t;
-  var i;
-  var r;
-  var o;
-  var e;
-  var f;
-  var c;
-  var a;
-  var s;
-  var h;
-  var p;
-  var v;
-  var y;
-  var d = {};
-  var w = [];
-  var _ = /acit|ex(?:s|g|n|p|$)|rph|grid|ows|mnc|ntw|ine[ch]|zoo|^ord|itera/i;
-  var g = Array.isArray;
-  function m(n2, l3) {
-    for (var u4 in l3) n2[u4] = l3[u4];
-    return n2;
-  }
-  function b(n2) {
-    n2 && n2.parentNode && n2.parentNode.removeChild(n2);
-  }
-  function k(l3, u4, t3) {
-    var i3, r3, o3, e3 = {};
-    for (o3 in u4) "key" == o3 ? i3 = u4[o3] : "ref" == o3 ? r3 = u4[o3] : e3[o3] = u4[o3];
-    if (arguments.length > 2 && (e3.children = arguments.length > 3 ? n.call(arguments, 2) : t3), "function" == typeof l3 && null != l3.defaultProps) for (o3 in l3.defaultProps) void 0 === e3[o3] && (e3[o3] = l3.defaultProps[o3]);
-    return x(l3, e3, i3, r3, null);
-  }
-  function x(n2, t3, i3, r3, o3) {
-    var e3 = { type: n2, props: t3, key: i3, ref: r3, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: null == o3 ? ++u : o3, __i: -1, __u: 0 };
-    return null == o3 && null != l.vnode && l.vnode(e3), e3;
-  }
-  function S(n2) {
-    return n2.children;
-  }
-  function C(n2, l3) {
-    this.props = n2, this.context = l3;
-  }
-  function $(n2, l3) {
-    if (null == l3) return n2.__ ? $(n2.__, n2.__i + 1) : null;
-    for (var u4; l3 < n2.__k.length; l3++) if (null != (u4 = n2.__k[l3]) && null != u4.__e) return u4.__e;
-    return "function" == typeof n2.type ? $(n2) : null;
-  }
-  function I(n2) {
-    if (n2.__P && n2.__d) {
-      var u4 = n2.__v, t3 = u4.__e, i3 = [], r3 = [], o3 = m({}, u4);
-      o3.__v = u4.__v + 1, l.vnode && l.vnode(o3), q(n2.__P, o3, u4, n2.__n, n2.__P.namespaceURI, 32 & u4.__u ? [t3] : null, i3, null == t3 ? $(u4) : t3, !!(32 & u4.__u), r3), o3.__v = u4.__v, o3.__.__k[o3.__i] = o3, D(i3, o3, r3), u4.__e = u4.__ = null, o3.__e != t3 && P(o3);
-    }
-  }
-  function P(n2) {
-    if (null != (n2 = n2.__) && null != n2.__c) return n2.__e = n2.__c.base = null, n2.__k.some(function(l3) {
-      if (null != l3 && null != l3.__e) return n2.__e = n2.__c.base = l3.__e;
-    }), P(n2);
-  }
-  function A(n2) {
-    (!n2.__d && (n2.__d = true) && i.push(n2) && !H.__r++ || r != l.debounceRendering) && ((r = l.debounceRendering) || o)(H);
-  }
-  function H() {
-    try {
-      for (var n2, l3 = 1; i.length; ) i.length > l3 && i.sort(e), n2 = i.shift(), l3 = i.length, I(n2);
-    } finally {
-      i.length = H.__r = 0;
-    }
-  }
-  function L(n2, l3, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
-    var s3, h2, p3, v3, y2, _2, g2 = t3 && t3.__k || w, m3 = l3.length;
-    for (f4 = T(u4, l3, g2, f4, m3), s3 = 0; s3 < m3; s3++) null != (p3 = u4.__k[s3]) && (h2 = -1 != p3.__i && g2[p3.__i] || d, p3.__i = s3, _2 = q(n2, p3, h2, i3, r3, o3, e3, f4, c3, a3), v3 = p3.__e, p3.ref && h2.ref != p3.ref && (h2.ref && J(h2.ref, null, p3), a3.push(p3.ref, p3.__c || v3, p3)), null == y2 && null != v3 && (y2 = v3), 4 & p3.__u ? (f4 = j(p3, f4, n2), h2.__e && (h2.__e = null)) : "function" == typeof p3.type && void 0 !== _2 ? f4 = _2 : v3 && (f4 = v3.nextSibling), p3.__u &= -7);
-    return u4.__e = y2, f4;
-  }
-  function T(n2, l3, u4, t3, i3) {
-    var r3, o3, e3, f4, c3, a3 = u4.length, s3 = a3, h2 = 0;
-    for (n2.__k = new Array(i3), r3 = 0; r3 < i3; r3++) null != (o3 = l3[r3]) && "boolean" != typeof o3 && "function" != typeof o3 ? ("string" == typeof o3 || "number" == typeof o3 || "bigint" == typeof o3 || o3.constructor == String ? o3 = n2.__k[r3] = x(null, o3, null, null, null) : g(o3) ? o3 = n2.__k[r3] = x(S, { children: o3 }, null, null, null) : void 0 === o3.constructor && o3.__b > 0 ? o3 = n2.__k[r3] = x(o3.type, o3.props, o3.key, o3.ref ? o3.ref : null, o3.__v) : n2.__k[r3] = o3, f4 = r3 + h2, o3.__ = n2, o3.__b = n2.__b + 1, e3 = null, -1 != (c3 = o3.__i = O(o3, u4, f4, s3)) && (s3--, (e3 = u4[c3]) && (e3.__u |= 2)), null == e3 || null == e3.__v ? (-1 == c3 && (i3 > a3 ? h2-- : i3 < a3 && h2++), "function" != typeof o3.type && (o3.__u |= 4)) : c3 != f4 && (c3 == f4 - 1 ? h2-- : c3 == f4 + 1 ? h2++ : (c3 > f4 ? h2-- : h2++, o3.__u |= 4))) : n2.__k[r3] = null;
-    if (s3) for (r3 = 0; r3 < a3; r3++) null != (e3 = u4[r3]) && 0 == (2 & e3.__u) && (e3.__e == t3 && (t3 = $(e3)), K(e3, e3));
-    return t3;
-  }
-  function j(n2, l3, u4) {
-    var t3, i3;
-    if ("function" == typeof n2.type) {
-      for (t3 = n2.__k, i3 = 0; t3 && i3 < t3.length; i3++) t3[i3] && (t3[i3].__ = n2, l3 = j(t3[i3], l3, u4));
-      return l3;
-    }
-    n2.__e != l3 && (l3 && n2.type && !l3.parentNode && (l3 = $(n2)), l3 = u4.insertBefore(n2.__e, l3 || null));
-    do {
-      l3 = l3 && l3.nextSibling;
-    } while (null != l3 && 8 == l3.nodeType);
-    return l3;
-  }
-  function F(n2, l3) {
-    return l3 = l3 || [], null == n2 || "boolean" == typeof n2 || (g(n2) ? n2.some(function(n3) {
-      F(n3, l3);
-    }) : l3.push(n2)), l3;
-  }
-  function O(n2, l3, u4, t3) {
-    var i3, r3, o3, e3 = n2.key, f4 = n2.type, c3 = l3[u4], a3 = null != c3 && 0 == (2 & c3.__u);
-    if (null === c3 && null == e3 || a3 && e3 == c3.key && f4 == c3.type) return u4;
-    if (t3 > (a3 ? 1 : 0)) {
-      for (i3 = u4 - 1, r3 = u4 + 1; i3 >= 0 || r3 < l3.length; ) if (null != (c3 = l3[o3 = i3 >= 0 ? i3-- : r3++]) && 0 == (2 & c3.__u) && e3 == c3.key && f4 == c3.type) return o3;
-    }
-    return -1;
-  }
-  function z(n2, l3, u4) {
-    "-" == l3[0] ? n2.setProperty(l3, null == u4 ? "" : u4) : n2[l3] = null == u4 ? "" : "number" != typeof u4 || _.test(l3) ? u4 : u4 + "px";
-  }
-  function N(n2, l3, u4, t3, i3) {
-    var r3, o3;
-    n: if ("style" == l3) if ("string" == typeof u4) n2.style.cssText = u4;
-    else {
-      if ("string" == typeof t3 && (n2.style.cssText = t3 = ""), t3) for (l3 in t3) u4 && l3 in u4 || z(n2.style, l3, "");
-      if (u4) for (l3 in u4) t3 && u4[l3] == t3[l3] || z(n2.style, l3, u4[l3]);
-    }
-    else if ("o" == l3[0] && "n" == l3[1]) r3 = l3 != (l3 = l3.replace(s, "$1")), o3 = l3.toLowerCase(), l3 = o3 in n2 || "onFocusOut" == l3 || "onFocusIn" == l3 ? o3.slice(2) : l3.slice(2), n2.l || (n2.l = {}), n2.l[l3 + r3] = u4, u4 ? t3 ? u4[a] = t3[a] : (u4[a] = h, n2.addEventListener(l3, r3 ? v : p, r3)) : n2.removeEventListener(l3, r3 ? v : p, r3);
-    else {
-      if ("http://www.w3.org/2000/svg" == i3) l3 = l3.replace(/xlink(H|:h)/, "h").replace(/sName$/, "s");
-      else if ("width" != l3 && "height" != l3 && "href" != l3 && "list" != l3 && "form" != l3 && "tabIndex" != l3 && "download" != l3 && "rowSpan" != l3 && "colSpan" != l3 && "role" != l3 && "popover" != l3 && l3 in n2) try {
-        n2[l3] = null == u4 ? "" : u4;
-        break n;
-      } catch (n3) {
-      }
-      "function" == typeof u4 || (null == u4 || false === u4 && "-" != l3[4] ? n2.removeAttribute(l3) : n2.setAttribute(l3, "popover" == l3 && 1 == u4 ? "" : u4));
-    }
-  }
-  function V(n2) {
-    return function(u4) {
-      if (this.l) {
-        var t3 = this.l[u4.type + n2];
-        if (null == u4[c]) u4[c] = h++;
-        else if (u4[c] < t3[a]) return;
-        return t3(l.event ? l.event(u4) : u4);
-      }
-    };
-  }
-  function q(n2, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
-    var s3, h2, p3, v3, y2, d2, _2, k3, x3, M, I2, P2, A2, H2, T3, j3, F2 = u4.type;
-    if (void 0 !== u4.constructor) return null;
-    128 & t3.__u && (c3 = !!(32 & t3.__u), o3 = [f4 = u4.__e = t3.__e]), (s3 = l.__b) && s3(u4);
-    n: if ("function" == typeof F2) {
-      h2 = e3.length;
-      try {
-        if (x3 = u4.props, M = F2.prototype && F2.prototype.render, I2 = (s3 = F2.contextType) && i3[s3.__c], P2 = s3 ? I2 ? I2.props.value : s3.__ : i3, t3.__c ? k3 = (p3 = u4.__c = t3.__c).__ = p3.__E : (M ? u4.__c = p3 = new F2(x3, P2) : (u4.__c = p3 = new C(x3, P2), p3.constructor = F2, p3.render = Q), I2 && I2.sub(p3), p3.state || (p3.state = {}), p3.__n = i3, v3 = p3.__d = true, p3.__h = [], p3._sb = []), M && null == p3.__s && (p3.__s = p3.state), M && null != F2.getDerivedStateFromProps && (p3.__s == p3.state && (p3.__s = m({}, p3.__s)), m(p3.__s, F2.getDerivedStateFromProps(x3, p3.__s))), y2 = p3.props, d2 = p3.state, p3.__v = u4, v3) M && null == F2.getDerivedStateFromProps && null != p3.componentWillMount && p3.componentWillMount(), M && null != p3.componentDidMount && p3.__h.push(p3.componentDidMount);
-        else {
-          if (M && null == F2.getDerivedStateFromProps && x3 !== y2 && null != p3.componentWillReceiveProps && p3.componentWillReceiveProps(x3, P2), u4.__v == t3.__v || !p3.__e && null != p3.shouldComponentUpdate && false === p3.shouldComponentUpdate(x3, p3.__s, P2)) {
-            u4.__v != t3.__v && (p3.props = x3, p3.state = p3.__s, p3.__d = false), u4.__e = t3.__e, u4.__k = t3.__k, u4.__k.some(function(n3) {
-              n3 && (n3.__ = u4);
-            }), w.push.apply(p3.__h, p3._sb), p3._sb = [], p3.__h.length && e3.push(p3), f4 = $(t3);
-            break n;
-          }
-          null != p3.componentWillUpdate && p3.componentWillUpdate(x3, p3.__s, P2), M && null != p3.componentDidUpdate && p3.__h.push(function() {
-            p3.componentDidUpdate(y2, d2, _2);
-          });
-        }
-        if (p3.context = P2, p3.props = x3, p3.__P = n2, p3.__e = false, A2 = l.__r, H2 = 0, M) p3.state = p3.__s, p3.__d = false, A2 && A2(u4), s3 = p3.render(p3.props, p3.state, p3.context), w.push.apply(p3.__h, p3._sb), p3._sb = [];
-        else do {
-          p3.__d = false, A2 && A2(u4), s3 = p3.render(p3.props, p3.state, p3.context), p3.state = p3.__s;
-        } while (p3.__d && ++H2 < 25);
-        p3.state = p3.__s, null != p3.getChildContext && (i3 = m(m({}, i3), p3.getChildContext())), M && !v3 && null != p3.getSnapshotBeforeUpdate && (_2 = p3.getSnapshotBeforeUpdate(y2, d2)), T3 = null != s3 && s3.type === S && null == s3.key ? E(s3.props.children) : s3, f4 = L(n2, g(T3) ? T3 : [T3], u4, t3, i3, r3, o3, e3, f4, c3, a3), p3.base = u4.__e, u4.__u &= -161, p3.__h.length && e3.push(p3), k3 && (p3.__E = p3.__ = null);
-      } catch (n3) {
-        if (e3.length = h2, u4.__v = null, c3 || null != o3) {
-          if (n3.then) {
-            for (u4.__u |= c3 ? 160 : 128; f4 && 8 == f4.nodeType && f4.nextSibling; ) f4 = f4.nextSibling;
-            null != o3 && (o3[o3.indexOf(f4)] = null), u4.__e = f4;
-          } else if (null != o3) for (j3 = o3.length; j3--; ) b(o3[j3]);
-        } else u4.__e = t3.__e;
-        null == u4.__k && (u4.__k = t3.__k || []), n3.then || B(u4), l.__e(n3, u4, t3);
-      }
-    } else null == o3 && u4.__v == t3.__v ? (u4.__k = t3.__k, u4.__e = t3.__e) : f4 = u4.__e = G(t3.__e, u4, t3, i3, r3, o3, e3, c3, a3);
-    return (s3 = l.diffed) && s3(u4), 128 & u4.__u ? void 0 : f4;
-  }
-  function B(n2) {
-    n2 && (n2.__c && (n2.__c.__e = true), n2.__k && n2.__k.some(B));
-  }
-  function D(n2, u4, t3) {
-    for (var i3 = 0; i3 < t3.length; i3++) J(t3[i3], t3[++i3], t3[++i3]);
-    l.__c && l.__c(u4, n2), n2.some(function(u5) {
-      try {
-        n2 = u5.__h, u5.__h = [], n2.some(function(n3) {
-          n3.call(u5);
-        });
-      } catch (n3) {
-        l.__e(n3, u5.__v);
-      }
-    });
-  }
-  function E(n2) {
-    return "object" != typeof n2 || null == n2 || n2.__b > 0 ? n2 : g(n2) ? n2.map(E) : void 0 !== n2.constructor ? null : m({}, n2);
-  }
-  function G(u4, t3, i3, r3, o3, e3, f4, c3, a3) {
-    var s3, h2, p3, v3, y2, w3, _2, m3 = i3.props || d, k3 = t3.props, x3 = t3.type;
-    if ("svg" == x3 ? o3 = "http://www.w3.org/2000/svg" : "math" == x3 ? o3 = "http://www.w3.org/1998/Math/MathML" : o3 || (o3 = "http://www.w3.org/1999/xhtml"), null != e3) {
-      for (s3 = 0; s3 < e3.length; s3++) if ((y2 = e3[s3]) && "setAttribute" in y2 == !!x3 && (x3 ? y2.localName == x3 : 3 == y2.nodeType)) {
-        u4 = y2, e3[s3] = null;
-        break;
-      }
-    }
-    if (null == u4) {
-      if (null == x3) return document.createTextNode(k3);
-      u4 = document.createElementNS(o3, x3, k3.is && k3), c3 && (l.__m && l.__m(t3, e3), c3 = false), e3 = null;
-    }
-    if (null == x3) m3 === k3 || c3 && u4.data == k3 || (u4.data = k3);
-    else {
-      if (e3 = "textarea" == x3 && null != k3.defaultValue ? null : e3 && n.call(u4.childNodes), !c3 && null != e3) for (m3 = {}, s3 = 0; s3 < u4.attributes.length; s3++) m3[(y2 = u4.attributes[s3]).name] = y2.value;
-      for (s3 in m3) y2 = m3[s3], "dangerouslySetInnerHTML" == s3 ? p3 = y2 : "children" == s3 || s3 in k3 || "value" == s3 && "defaultValue" in k3 || "checked" == s3 && "defaultChecked" in k3 || N(u4, s3, null, y2, o3);
-      for (s3 in k3) y2 = k3[s3], "children" == s3 ? v3 = y2 : "dangerouslySetInnerHTML" == s3 ? h2 = y2 : "value" == s3 ? w3 = y2 : "checked" == s3 ? _2 = y2 : c3 && "function" != typeof y2 || m3[s3] === y2 || N(u4, s3, y2, m3[s3], o3);
-      if (h2) c3 || p3 && (h2.__html == p3.__html || h2.__html == u4.innerHTML) || (u4.innerHTML = h2.__html), t3.__k = [];
-      else if (p3 && (u4.innerHTML = ""), L("template" == t3.type ? u4.content : u4, g(v3) ? v3 : [v3], t3, i3, r3, "foreignObject" == x3 ? "http://www.w3.org/1999/xhtml" : o3, e3, f4, e3 ? e3[0] : i3.__k && $(i3, 0), c3, a3), null != e3) for (s3 = e3.length; s3--; ) b(e3[s3]);
-      c3 && "textarea" != x3 || (s3 = "value", "progress" == x3 && null == w3 ? u4.removeAttribute("value") : null != w3 && (w3 !== u4[s3] || "progress" == x3 && !w3 || "option" == x3 && w3 != m3[s3]) && N(u4, s3, w3, m3[s3], o3), s3 = "checked", null != _2 && _2 != u4[s3] && N(u4, s3, _2, m3[s3], o3));
-    }
-    return u4;
-  }
-  function J(n2, u4, t3) {
-    try {
-      if ("function" == typeof n2) {
-        var i3 = "function" == typeof n2.__u;
-        i3 && n2.__u(), i3 && null == u4 || (n2.__u = n2(u4));
-      } else n2.current = u4;
-    } catch (n3) {
-      l.__e(n3, t3);
-    }
-  }
-  function K(n2, u4, t3) {
-    var i3, r3;
-    if (l.unmount && l.unmount(n2), (i3 = n2.ref) && (i3.current && i3.current != n2.__e || J(i3, null, u4)), null != (i3 = n2.__c)) {
-      if (i3.componentWillUnmount) try {
-        i3.componentWillUnmount();
-      } catch (n3) {
-        l.__e(n3, u4);
-      }
-      i3.base = i3.__P = i3.__n = null;
-    }
-    if (i3 = n2.__k) for (r3 = 0; r3 < i3.length; r3++) i3[r3] && K(i3[r3], u4, t3 || "function" != typeof n2.type);
-    t3 || b(n2.__e), n2.__c = n2.__ = n2.__e = void 0;
-  }
-  function Q(n2, l3, u4) {
-    return this.constructor(n2, u4);
-  }
-  function R(u4, t3, i3) {
-    var r3, o3, e3, f4;
-    t3 == document && (t3 = document.documentElement), l.__ && l.__(u4, t3), o3 = (r3 = "function" == typeof i3) ? null : i3 && i3.__k || t3.__k, e3 = [], f4 = [], q(t3, u4 = (!r3 && i3 || t3).__k = k(S, null, [u4]), o3 || d, d, t3.namespaceURI, !r3 && i3 ? [i3] : o3 ? null : t3.firstChild ? n.call(t3.childNodes) : null, e3, !r3 && i3 ? i3 : o3 ? o3.__e : t3.firstChild, r3, f4), D(e3, u4, f4), u4.props.children = null;
-  }
-  function X(n2) {
-    function l3(n3) {
-      var u4, t3;
-      return this.getChildContext || (u4 = /* @__PURE__ */ new Set(), (t3 = {})[l3.__c] = this, this.getChildContext = function() {
-        return t3;
-      }, this.componentWillUnmount = function() {
-        u4 = null;
-      }, this.shouldComponentUpdate = function(n4) {
-        this.props.value != n4.value && u4.forEach(function(n5) {
-          n5.__e = true, A(n5);
-        });
-      }, this.sub = function(n4) {
-        u4.add(n4);
-        var l4 = n4.componentWillUnmount;
-        n4.componentWillUnmount = function() {
-          u4 && u4.delete(n4), l4 && l4.call(n4);
-        };
-      }), n3.children;
-    }
-    return l3.__c = "__cC" + y++, l3.__ = n2, l3.Provider = l3.__l = (l3.Consumer = function(n3, l4) {
-      return n3.children(l4);
-    }).contextType = l3, l3;
-  }
-  n = w.slice, l = { __e: function(n2, l3, u4, t3) {
-    for (var i3, r3, o3; l3 = l3.__; ) if ((i3 = l3.__c) && !i3.__) try {
-      if ((r3 = i3.constructor) && null != r3.getDerivedStateFromError && (i3.setState(r3.getDerivedStateFromError(n2)), o3 = i3.__d), null != i3.componentDidCatch && (i3.componentDidCatch(n2, t3 || {}), o3 = i3.__d), o3) return i3.__E = i3;
-    } catch (l4) {
-      n2 = l4;
-    }
-    throw n2;
-  } }, u = 0, t = function(n2) {
-    return null != n2 && void 0 === n2.constructor;
-  }, C.prototype.setState = function(n2, l3) {
-    var u4;
-    u4 = null != this.__s && this.__s != this.state ? this.__s : this.__s = m({}, this.state), "function" == typeof n2 && (n2 = n2(m({}, u4), this.props)), n2 && m(u4, n2), null != n2 && this.__v && (l3 && this._sb.push(l3), A(this));
-  }, C.prototype.forceUpdate = function(n2) {
-    this.__v && (this.__e = true, n2 && this.__h.push(n2), A(this));
-  }, C.prototype.render = S, i = [], o = "function" == typeof Promise ? Promise.prototype.then.bind(Promise.resolve()) : setTimeout, e = function(n2, l3) {
-    return n2.__v.__b - l3.__v.__b;
-  }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, a = "__a" + f, s = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
 
   // node_modules/lucide-preact/dist/esm/shared/src/utils/mergeClasses.mjs
-  var mergeClasses = (...classes) => classes.filter((className, index, array2) => {
+  var mergeClasses = (...classes2) => classes2.filter((className, index, array2) => {
     return Boolean(className) && className.trim() !== "" && array2.indexOf(className) === index;
   }).join(" ").trim();
 
@@ -6045,10 +6100,10 @@ ${text.slice(0, 800)}`);
   // node_modules/preact/hooks/dist/hooks.module.js
   var t2;
   var r2;
-  var u2;
+  var u3;
   var i2;
   var o2 = 0;
-  var f2 = [];
+  var f3 = [];
   var c2 = l;
   var e2 = c2.__b;
   var a2 = c2.__r;
@@ -6066,7 +6121,7 @@ ${text.slice(0, 800)}`);
     return i3.c = n2, u4 ? (null == i3.__ && (i3.__ = true, u4.sub(r2)), u4.props.value) : n2.__;
   }
   function j2() {
-    for (var n2; n2 = f2.shift(); ) {
+    for (var n2; n2 = f3.shift(); ) {
       var t3 = n2.__H;
       if (n2.__P && t3) try {
         t3.__h.some(z2), t3.__h.some(B2), t3.__h = [];
@@ -6082,15 +6137,15 @@ ${text.slice(0, 800)}`);
   }, c2.__r = function(n2) {
     a2 && a2(n2), t2 = 0;
     var i3 = (r2 = n2.__c).__H;
-    i3 && (u2 === r2 ? (i3.__h = [], r2.__h = [], i3.__.some(function(n3) {
+    i3 && (u3 === r2 ? (i3.__h = [], r2.__h = [], i3.__.some(function(n3) {
       n3.__N && (n3.__ = n3.__N), n3.u = n3.__N = void 0;
-    })) : (i3.__h.some(z2), i3.__h.some(B2), i3.__h = [], t2 = 0)), u2 = r2;
+    })) : (i3.__h.some(z2), i3.__h.some(B2), i3.__h = [], t2 = 0)), u3 = r2;
   }, c2.diffed = function(n2) {
     v2 && v2(n2);
     var t3 = n2.__c;
-    t3 && t3.__H && (t3.__H.__h.length && (1 !== f2.push(t3) && i2 === c2.requestAnimationFrame || ((i2 = c2.requestAnimationFrame) || w2)(j2)), t3.__H.__.some(function(n3) {
+    t3 && t3.__H && (t3.__H.__h.length && (1 !== f3.push(t3) && i2 === c2.requestAnimationFrame || ((i2 = c2.requestAnimationFrame) || w2)(j2)), t3.__H.__.some(function(n3) {
       n3.u && (n3.__H = n3.u, n3.u = void 0);
-    })), u2 = r2 = null;
+    })), u3 = r2 = null;
   }, c2.__c = function(n2, t3) {
     t3.some(function(n3) {
       try {
@@ -6157,7 +6212,7 @@ ${text.slice(0, 800)}`);
       aliases: [],
       size: 24
     },
-    class: classes = "",
+    class: classes2 = "",
     ...rest
   }) => {
     const {
@@ -6175,7 +6230,7 @@ ${text.slice(0, 800)}`);
       strokeWidth: strokeWidth ?? contextStrokeWidth,
       absoluteStrokeWidth: absoluteStrokeWidth ?? contextAbsoluteStrokeWidth,
       nonScalingStroke: nonScalingStroke ?? contextNonScalingStroke,
-      className: mergeClasses(contextClass, classes),
+      className: mergeClasses(contextClass, classes2),
       hasA11yProp: Boolean(children) || hasA11yProp(rest),
       attributes: rest
     });
@@ -6188,12 +6243,12 @@ ${text.slice(0, 800)}`);
   // node_modules/lucide-preact/dist/esm/createLucideIcon.mjs
   function createLucideIcon(iconDataOrName, iconNode, aliases = []) {
     const iconData = typeof iconDataOrName === "string" ? toLucideIconData(iconDataOrName, iconNode, aliases) : iconDataOrName;
-    const Component = ({ class: classes = "", className = "", children, ...props }) => k(
+    const Component = ({ class: classes2 = "", className = "", children, ...props }) => k(
       Icon,
       {
         ...props,
         icon: iconData,
-        class: mergeClasses(classes, className)
+        class: mergeClasses(classes2, className)
       },
       children
     );
@@ -6294,17 +6349,6 @@ ${text.slice(0, 800)}`);
   __iconData6.node;
   var X2 = createLucideIcon(__iconData6);
 
-  // node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js
-  var f3 = 0;
-  function u3(e3, t3, n2, o3, i3, u4) {
-    t3 || (t3 = {});
-    var a3, c3, p3 = t3;
-    if ("ref" in p3) for (c3 in p3 = {}, t3) "ref" == c3 ? a3 = t3[c3] : p3[c3] = t3[c3];
-    var l3 = { type: e3, props: p3, key: n2, ref: a3, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: --f3, __i: -1, __u: 0, __source: i3, __self: u4 };
-    if ("function" == typeof e3 && (a3 = e3.defaultProps)) for (c3 in a3) void 0 === p3[c3] && (p3[c3] = a3[c3]);
-    return l.vnode && l.vnode(l3), l3;
-  }
-
   // src/userscripts/shared/shared-icons.lib.jsx
   var ICONS = {
     x: X2,
@@ -6320,7 +6364,7 @@ ${text.slice(0, 800)}`);
     if (!Glyph) {
       throw new Error(`shared-icons: unknown icon "${name}". Available: ${ICON_NAMES.join(", ")}`);
     }
-    return /* @__PURE__ */ u3(
+    return /* @__PURE__ */ u2(
       Glyph,
       {
         size: size2,
@@ -6330,10 +6374,6 @@ ${text.slice(0, 800)}`);
         focusable: "false"
       }
     );
-  }
-  function mountIcon(slot, name, options = {}) {
-    if (slot) R(/* @__PURE__ */ u3(Icon2, { name, ...options }), slot);
-    return slot;
   }
 
   // src/userscripts/shared/shared-tokens.lib.js
@@ -7843,8 +7883,8 @@ ${root} :focus-visible {
   function isDockSide(value) {
     return value === "left" || value === "right";
   }
-  function appendClasses(el, classes) {
-    const list = String(classes ?? "").split(/\s+/).filter(Boolean);
+  function appendClasses(el, classes2) {
+    const list = String(classes2 ?? "").split(/\s+/).filter(Boolean);
     if (list.length) el.classList.add(...list);
   }
   function eventContainsNode(event, node) {
@@ -8157,7 +8197,7 @@ ${root} :focus-visible {
     dock = true,
     onOpen,
     onClose,
-    renderPanelHeader: renderPanelHeader2,
+    renderPanelHeader,
     renderPanelBody
   } = {}) {
     if (!root?.append) {
@@ -8196,7 +8236,7 @@ ${root} :focus-visible {
     const bodyEl = documentObject.createElement("div");
     bodyEl.className = "wk-widget-body";
     panelEl.append(headerEl, bodyEl);
-    renderPanelHeader2?.(headerEl);
+    renderPanelHeader?.(headerEl);
     renderPanelBody?.(bodyEl);
     root.append(buttonEl, panelEl);
     let isOpenState = false;
@@ -8585,11 +8625,8 @@ ${root} :focus-visible {
   `;
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.jsx
   var DEFAULT_BUTTON_POSITION = { top: 76, right: 24 };
-  function escapeHtml2(value) {
-    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-  }
   function detectHostTheme(documentObject = globalThis.document) {
     const host = documentObject?.documentElement;
     if (!host) return null;
@@ -8600,29 +8637,29 @@ ${root} :focus-visible {
     if (/(^|\s)light(\s|$)/.test(className) || inlineScheme.includes("light")) return "light";
     return null;
   }
-  function createButtonContentMarkup(labels = {}) {
-    return `
-    <span class="cqc-dot" aria-hidden="true"></span>
-    <span class="cqc-button-text">
-      <span class="cqc-button-title">${escapeHtml2(labels.buttonTitle || "")}</span>
-      <span class="cqc-status" data-tone="idle">${escapeHtml2(labels.statusIdle || "")}</span>
-    </span>
-  `;
+  function ButtonContent({ labels }) {
+    return /* @__PURE__ */ u2(S, { children: [
+      /* @__PURE__ */ u2("span", { class: "cqc-dot", "aria-hidden": "true" }),
+      /* @__PURE__ */ u2("span", { class: "cqc-button-text", children: [
+        /* @__PURE__ */ u2("span", { class: "cqc-button-title", children: labels.buttonTitle || "" }),
+        /* @__PURE__ */ u2("span", { class: "cqc-status", "data-tone": "idle", children: labels.statusIdle || "" })
+      ] })
+    ] });
   }
-  function renderPanelHeader(headerEl, labels = {}) {
-    headerEl.classList.add("cqc-panel-header");
-    headerEl.innerHTML = `
-    <div class="cqc-panel-title">
-      <span class="cqc-dot" aria-hidden="true"></span>
-      <span>${escapeHtml2(labels.panelTitle || "")}</span>
-    </div>
-    <div class="cqc-panel-actions">
-      <button type="button" class="cqc-refresh" data-action="refresh"><span data-icon="refresh-cw"></span><span>${escapeHtml2(labels.actionRefresh || "")}</span></button>
-      <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml2(labels.closeAria || "Close")}"><span data-icon="x"></span></button>
-    </div>
-  `;
-    mountIcon(headerEl.querySelector('[data-icon="refresh-cw"]'), "refresh-cw", { size: 14 });
-    mountIcon(headerEl.querySelector('[data-icon="x"]'), "x", { size: 16 });
+  function PanelHeader({ labels }) {
+    return /* @__PURE__ */ u2(S, { children: [
+      /* @__PURE__ */ u2("div", { class: "cqc-panel-title", children: [
+        /* @__PURE__ */ u2("span", { class: "cqc-dot", "aria-hidden": "true" }),
+        /* @__PURE__ */ u2("span", { children: labels.panelTitle || "" })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "cqc-panel-actions", children: [
+        /* @__PURE__ */ u2("button", { type: "button", class: "cqc-refresh", "data-action": "refresh", children: [
+          /* @__PURE__ */ u2(Icon2, { name: "refresh-cw", size: 14 }),
+          /* @__PURE__ */ u2("span", { children: labels.actionRefresh || "" })
+        ] }),
+        /* @__PURE__ */ u2("button", { type: "button", class: "cqc-icon-button", "data-action": "close", "aria-label": labels.closeAria || "Close", children: /* @__PURE__ */ u2(Icon2, { name: "x", size: 16 }) })
+      ] })
+    ] });
   }
   function createFloatingPanelShell({
     rootId,
@@ -8683,7 +8720,6 @@ ${root} :focus-visible {
       shell = createWidgetShell({
         root,
         buttonAriaLabel: labels.buttonAriaOpen,
-        buttonContent: createButtonContentMarkup(labels),
         buttonClass: "cqc-button",
         panelClass: "cqc-panel",
         panelWidth: 560,
@@ -8697,12 +8733,16 @@ ${root} :focus-visible {
         dock: true,
         onOpen,
         onClose,
-        renderPanelHeader: (headerEl) => renderPanelHeader(headerEl, labels),
+        renderPanelHeader: (headerEl) => {
+          headerEl.classList.add("cqc-panel-header");
+          R(/* @__PURE__ */ u2(PanelHeader, { labels }), headerEl);
+        },
         renderPanelBody: (bodyEl) => {
           bodyEl.classList.add("cqc-content");
         }
       });
       installShellStyles();
+      R(/* @__PURE__ */ u2(ButtonContent, { labels }), shell.buttonEl);
       shell.buttonEl.dataset.action = "toggle";
       statusNode = shell.buttonEl.querySelector(".cqc-status");
       contentNode = shell.panelEl.querySelector(".cqc-content");
@@ -8746,34 +8786,6 @@ ${root} :focus-visible {
       destroy
     };
     return api;
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-dom.lib.js
-  function applyActiveView(contentNode, rendered = {}) {
-    const activePanelView = rendered.activePanelView;
-    if (!contentNode) return activePanelView;
-    const detailsNode = contentNode.querySelector(".cqc-details");
-    if (detailsNode) {
-      detailsNode.innerHTML = rendered.html || "";
-    }
-    contentNode.querySelectorAll(".cqc-tab").forEach((tab) => {
-      tab.classList.toggle("is-active", tab.dataset.view === activePanelView);
-    });
-    return activePanelView;
-  }
-  function readSyncFormValues(contentNode) {
-    const form = contentNode?.querySelector?.("[data-sync-form]");
-    if (!form) return null;
-    return {
-      token: form.querySelector('[data-field="token"]')?.value || "",
-      gistId: form.querySelector('[data-field="gistId"]')?.value || "",
-      enabled: Boolean(form.querySelector('[data-field="enabled"]')?.checked)
-    };
-  }
-  function isSyncFormEditing(contentNode, activeElement) {
-    if (!activeElement || !contentNode?.contains?.(activeElement)) return false;
-    if (!activeElement.closest?.("[data-sync-form]")) return false;
-    return activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA";
   }
 
   // src/userscripts/shared/shared-toast.lib.jsx
@@ -8874,13 +8886,13 @@ ${root} :focus-visible {
   function ToastItem({ toast }) {
     const iconName = TONE_ICONS[toast.tone];
     const iconClass = toast.tone === "progress" ? "wk-toast-icon wk-spin" : "wk-toast-icon";
-    return /* @__PURE__ */ u3("div", { className: toast.leaving ? "wk-toast is-leaving" : "wk-toast", "data-tone": toast.tone, "data-toast-id": toast.id, children: [
-      /* @__PURE__ */ u3("span", { className: iconClass, hidden: !iconName, children: iconName ? /* @__PURE__ */ u3(Icon2, { name: iconName }) : null }),
-      /* @__PURE__ */ u3("span", { className: "wk-toast-message", children: toast.message })
+    return /* @__PURE__ */ u2("div", { className: toast.leaving ? "wk-toast is-leaving" : "wk-toast", "data-tone": toast.tone, "data-toast-id": toast.id, children: [
+      /* @__PURE__ */ u2("span", { className: iconClass, hidden: !iconName, children: iconName ? /* @__PURE__ */ u2(Icon2, { name: iconName }) : null }),
+      /* @__PURE__ */ u2("span", { className: "wk-toast-message", children: toast.message })
     ] });
   }
   function ToastList({ toasts }) {
-    return toasts.map((toast) => /* @__PURE__ */ u3(ToastItem, { toast }, toast.id));
+    return toasts.map((toast) => /* @__PURE__ */ u2(ToastItem, { toast }, toast.id));
   }
   function createToaster({ root } = {}) {
     if (!root?.append) {
@@ -8902,7 +8914,7 @@ ${root} :focus-visible {
     function commit(nextToasts) {
       if (destroyed) return;
       toasts = nextToasts;
-      R(/* @__PURE__ */ u3(ToastList, { toasts }), container);
+      R(/* @__PURE__ */ u2(ToastList, { toasts }), container);
     }
     function patch(id, changes) {
       commit(toasts.map((toast) => toast.id === id ? { ...toast, ...changes } : toast));
@@ -8978,7 +8990,7 @@ ${root} :focus-visible {
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.jsx
   var ROOT_ID = "codex-quota-compass-root";
   var EXPORT_NAME = "codex-quota-compass-snapshot-archive.v1.json";
   function createSnapshotSyncStatus(backendInfo) {
@@ -9090,9 +9102,7 @@ ${root} :focus-visible {
     let activePanelView = "details";
     let activeStatsPeriod = "day";
     let statsDrill = null;
-    let viewModel = null;
-    let dirty = false;
-    let deferred = false;
+    let syncDraft = null;
     let formGeneration = 0;
     let editRevision = 0;
     let foreground = 0;
@@ -9138,9 +9148,6 @@ ${root} :focus-visible {
       style.textContent = toaster.cssText;
       document2.head.append(style);
     }
-    function protectedForm() {
-      return dirty || isSyncFormEditing(content, document2.activeElement);
-    }
     function renderState(overrides = {}) {
       return { activePanelView, statsPeriod: activeStatsPeriod, statsDrill, expandedViews, ...overrides };
     }
@@ -9154,37 +9161,39 @@ ${root} :focus-visible {
         importReport: snapshot.importReport,
         storageBackend: backend,
         syncStatus: createSnapshotSyncStatus(backend),
-        remoteSyncStatus: snapshot.syncStatus
+        remoteSyncStatus: snapshot.errors?.sync ? { ...snapshot.syncStatus, lastError: snapshot.errors.sync } : snapshot.syncStatus
       });
     }
-    function safeStatus() {
-      const status = snapshot?.syncStatus || {};
-      const node = content?.querySelector(".cqc-sync-form-status");
-      if (!node) return;
-      const error = snapshot?.errors?.sync || status.lastError;
-      node.textContent = error ? t3("remoteSyncStatusError", { error }) : status.lastSyncedAt ? t3("remoteSyncLastSynced", { lastSyncedAt: new Date(status.lastSyncedAt).toLocaleString() }) : t3("remoteSyncNeverSynced");
-      node.dataset.tone = error ? "error" : "muted";
+    function setSyncDraft(next) {
+      if (disposed) return;
+      syncDraft = next;
+      editRevision++;
+      commitPresentation();
     }
     function commitPresentation() {
       if (disposed || !content) return;
-      if (protectedForm()) {
-        deferred = true;
-        safeStatus();
-        return;
-      }
-      deferred = false;
-      const next = presentation === "loading" ? renderer.renderLoading() : presentation === "error" ? renderer.renderError(presentationError) : (viewModel = createViewModel()) ? renderer.renderResult(viewModel, renderState()).html : "";
-      if (content.innerHTML !== next) {
-        content.innerHTML = next;
-        formGeneration++;
-      }
+      const viewModel = createViewModel();
+      if (viewModel) activePanelView = renderer.normalizeActivePanelView(viewModel, activePanelView);
+      const shown = presentation !== "snapshot" && syncDraft && viewModel ? "snapshot" : presentation;
+      R(
+        /* @__PURE__ */ u2(
+          renderer.Panel,
+          {
+            presentation: shown,
+            error: presentationError,
+            viewModel,
+            state: renderState(),
+            form: { draft: syncDraft, onDraft: setSyncDraft }
+          }
+        ),
+        content
+      );
       shell.schedulePanelResize();
     }
     function update(nextSnapshot) {
       if (disposed) return;
       snapshot = nextSnapshot;
-      if (presentation === "snapshot") commitPresentation();
-      else if (protectedForm()) safeStatus();
+      commitPresentation();
     }
     function notice(message, tone = "info") {
       if (!disposed) toaster?.show({ message, tone });
@@ -9287,17 +9296,17 @@ ${root} :focus-visible {
     }
     function saveSettings() {
       return once("save-remote-sync", async () => {
-        const values = readSyncFormValues(content);
-        if (!values) return { status: "skipped", reason: "form-unavailable", completed: [] };
+        if (!content?.querySelector("[data-sync-form]"))
+          return { status: "skipped", reason: "form-unavailable", completed: [] };
+        const status = snapshot?.syncStatus || {};
+        const values = syncDraft || { token: "", gistId: status.gistId || "", enabled: Boolean(status.enabled) };
         const generation = formGeneration;
         const revision = editRevision;
         const sequence = ++foreground;
         const outcome = await application.configureSync(values);
         if (disposed) return outcome;
         if (outcome.completed?.includes("settings") && generation === formGeneration && revision === editRevision) {
-          dirty = false;
-          const token = content?.querySelector('[data-field="token"]');
-          if (token) token.value = "";
+          syncDraft = null;
           presentation = "snapshot";
           commitPresentation();
         }
@@ -9368,28 +9377,14 @@ ${root} :focus-visible {
       return Promise.resolve({ status: "skipped", reason: "unknown-command", completed: [] });
     }
     function rerenderActive(nextView) {
-      if (disposed || !content || !viewModel) return;
-      if ((!nextView || nextView === activePanelView) && protectedForm()) {
-        deferred = true;
-        safeStatus();
-        return;
-      }
+      if (disposed || !content) return;
       if (nextView && nextView !== activePanelView) {
-        dirty = false;
-        deferred = false;
+        syncDraft = null;
         formGeneration++;
         statsDrill = null;
         activePanelView = nextView;
       }
-      if (deferred) {
-        presentation = "snapshot";
-        commitPresentation();
-      }
-      viewModel = createViewModel() || viewModel;
-      const rendered = renderer.renderActiveView(viewModel, renderState());
-      activePanelView = applyActiveView(content, rendered);
-      formGeneration++;
-      shell.schedulePanelResize();
+      commitPresentation();
     }
     function handleAction(action, event) {
       if (disposed || action === "toggle") return;
@@ -9447,28 +9442,12 @@ ${root} :focus-visible {
         rerenderActive();
       }
     }
-    function edited(event) {
-      if (event.target?.closest?.("[data-sync-form]")) {
-        dirty = true;
-        editRevision++;
-      }
-    }
-    function focusEnded() {
-      window2.queueMicrotask(() => {
-        if (deferred && !protectedForm()) commitPresentation();
-      });
-    }
-    content?.addEventListener("input", edited);
-    content?.addEventListener("change", edited);
-    content?.addEventListener("focusout", focusEnded);
     function dispose() {
       if (disposed) return;
       disposed = true;
       abortFiles.abort();
       files.dispose?.();
-      content?.removeEventListener("input", edited);
-      content?.removeEventListener("change", edited);
-      content?.removeEventListener("focusout", focusEnded);
+      if (content) R(null, content);
       toaster?.destroy?.();
       shell.destroy();
     }

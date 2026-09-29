@@ -1,19 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { h } from 'preact';
+import { renderToString } from 'preact-render-to-string';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-import { buildStatsView } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.js';
+import { StatsView } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.jsx';
 import { createQuotaPanelStatsStyles } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js';
 
-// Stub the renderer helpers so the view builder can be exercised without a DOM
-// or the real renderer. tableHtml echoes its rows as JSON so assertions can read
-// exactly which rows reached the table.
+// Stub the renderer components so the view can be exercised without the real
+// renderer. DataTable echoes its rows as JSON so assertions can read exactly
+// which rows reached the table.
 const helpers = {
   t: (key) => key,
-  sectionHtml: (title, body) => `<section data-title="${title}">${body}</section>`,
-  tableHtml: (rows) => `<table data-rows="${rows.length}">${JSON.stringify(rows)}</table>`,
-  escapeHtml: (value) => String(value ?? ''),
+  Section: ({ title, children }) => h('section', { 'data-title': title }, children),
+  DataTable: ({ rows }) => h('table', { 'data-rows': rows.length }, JSON.stringify(rows)),
 };
+
+function buildStatsView(props, components) {
+  return renderToString(h(StatsView, { ...props, ...components }));
+}
 
 const COST = {
   cycleStartDate: '2026-06-01',
@@ -53,11 +58,11 @@ const COST = {
 
 const ROLLING = { 累计折算USD: 8, 累计Credits: 200 };
 
-test('buildStatsView requires renderer helpers', () => {
-  assert.throws(() => buildStatsView({ cost: COST }, {}), /helpers/);
+test('StatsView requires renderer components', () => {
+  assert.throws(() => buildStatsView({ cost: COST }, {}), /requires t\/Section\/DataTable/);
 });
 
-test('buildStatsView (no cost) shows period tabs and an empty state', () => {
+test('StatsView (no cost) shows period tabs and an empty state', () => {
   const html = buildStatsView({ cost: null, period: 'day' }, helpers);
   assert.match(html, /cqc-stats-tabs/);
   assert.match(html, /statsEmpty/);
@@ -136,7 +141,7 @@ test('summary views render a 30-day settled USD bar chart, drills and empty stat
   assert.match(day, /aria-hidden="true"/);
   // Three settled days, tallest bar scaled to 100%.
   assert.equal((day.match(/cqc-stats-chart-bar/g) || []).length, 3);
-  assert.match(day, /style="height: 100%"/);
+  assert.match(day, /style="height: ?100%;?"/);
 
   const drill = buildStatsView(
     {

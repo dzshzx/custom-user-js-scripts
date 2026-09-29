@@ -37,7 +37,7 @@ import {
 } from './codex-quota-compass-archive.lib.js';
 import { createRemoteSyncClient } from './codex-quota-compass-remote-sync.lib.js';
 import { createQuotaApplication } from './codex-quota-compass-application.lib.js';
-import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quota-compass-panel-controller.lib.js';
+import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quota-compass-panel-controller.lib.jsx';
 
 (function () {
   'use strict';

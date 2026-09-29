@@ -1,18 +1,10 @@
-import { mountIcon } from '../shared/shared-icons.lib.jsx';
+import { render } from 'preact';
+import { Icon } from '../shared/shared-icons.lib.jsx';
 import { applyTheme } from '../shared/shared-tokens.lib.js';
 import { createWidgetShell } from '../shared/shared-widget-shell.lib.js';
 import { createShellStyles } from './codex-quota-compass-panel-shell-styles.lib.js';
 
 const DEFAULT_BUTTON_POSITION = { top: 76, right: 24 };
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
 
 // chatgpt.com signals its theme through a class or an inline color-scheme on
 // <html>; return null when neither is conclusive so the kit falls back to the
@@ -28,30 +20,38 @@ function detectHostTheme(documentObject = globalThis.document) {
   return null;
 }
 
-function createButtonContentMarkup(labels = {}) {
-  return `
-    <span class="cqc-dot" aria-hidden="true"></span>
-    <span class="cqc-button-text">
-      <span class="cqc-button-title">${escapeHtml(labels.buttonTitle || '')}</span>
-      <span class="cqc-status" data-tone="idle">${escapeHtml(labels.statusIdle || '')}</span>
-    </span>
-  `;
+function ButtonContent({ labels }) {
+  return (
+    <>
+      <span class="cqc-dot" aria-hidden="true" />
+      <span class="cqc-button-text">
+        <span class="cqc-button-title">{labels.buttonTitle || ''}</span>
+        <span class="cqc-status" data-tone="idle">
+          {labels.statusIdle || ''}
+        </span>
+      </span>
+    </>
+  );
 }
 
-function renderPanelHeader(headerEl, labels = {}) {
-  headerEl.classList.add('cqc-panel-header');
-  headerEl.innerHTML = `
-    <div class="cqc-panel-title">
-      <span class="cqc-dot" aria-hidden="true"></span>
-      <span>${escapeHtml(labels.panelTitle || '')}</span>
-    </div>
-    <div class="cqc-panel-actions">
-      <button type="button" class="cqc-refresh" data-action="refresh"><span data-icon="refresh-cw"></span><span>${escapeHtml(labels.actionRefresh || '')}</span></button>
-      <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || 'Close')}"><span data-icon="x"></span></button>
-    </div>
-  `;
-  mountIcon(headerEl.querySelector('[data-icon="refresh-cw"]'), 'refresh-cw', { size: 14 });
-  mountIcon(headerEl.querySelector('[data-icon="x"]'), 'x', { size: 16 });
+function PanelHeader({ labels }) {
+  return (
+    <>
+      <div class="cqc-panel-title">
+        <span class="cqc-dot" aria-hidden="true" />
+        <span>{labels.panelTitle || ''}</span>
+      </div>
+      <div class="cqc-panel-actions">
+        <button type="button" class="cqc-refresh" data-action="refresh">
+          <Icon name="refresh-cw" size={14} />
+          <span>{labels.actionRefresh || ''}</span>
+        </button>
+        <button type="button" class="cqc-icon-button" data-action="close" aria-label={labels.closeAria || 'Close'}>
+          <Icon name="x" size={16} />
+        </button>
+      </div>
+    </>
+  );
 }
 
 // Thin adapter over the shared widget shell: keeps the Codex Quota Compass DOM
@@ -125,7 +125,6 @@ function createFloatingPanelShell({
     shell = createWidgetShell({
       root,
       buttonAriaLabel: labels.buttonAriaOpen,
-      buttonContent: createButtonContentMarkup(labels),
       buttonClass: 'cqc-button',
       panelClass: 'cqc-panel',
       panelWidth: 560,
@@ -141,7 +140,10 @@ function createFloatingPanelShell({
       dock: true,
       onOpen,
       onClose,
-      renderPanelHeader: (headerEl) => renderPanelHeader(headerEl, labels),
+      renderPanelHeader: (headerEl) => {
+        headerEl.classList.add('cqc-panel-header');
+        render(<PanelHeader labels={labels} />, headerEl);
+      },
       renderPanelBody: (bodyEl) => {
         bodyEl.classList.add('cqc-content');
       },
@@ -149,6 +151,8 @@ function createFloatingPanelShell({
 
     installShellStyles();
 
+    // The status text is then updated in place by setStatus, outside preact.
+    render(<ButtonContent labels={labels} />, shell.buttonEl);
     shell.buttonEl.dataset.action = 'toggle';
     statusNode = shell.buttonEl.querySelector('.cqc-status');
     contentNode = shell.panelEl.querySelector('.cqc-content');

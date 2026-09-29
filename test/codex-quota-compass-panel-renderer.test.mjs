@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { h } from 'preact';
+import { renderToString } from 'preact-render-to-string';
 
-import { createQuotaPanelRenderer } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js';
+import { createQuotaPanelRenderer } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.jsx';
 
 const entryPath = path.resolve(
   import.meta.dirname,
@@ -11,7 +13,7 @@ const entryPath = path.resolve(
 );
 const rendererLibPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.js',
+  '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.jsx',
 );
 const rendererStylesLibPath = path.resolve(
   import.meta.dirname,
@@ -65,6 +67,17 @@ function t(key, variables = {}) {
   return template.replace(/\{([^}]+)\}/g, (_, name) => String(variables[name] ?? ''));
 }
 
+function panelHtml(renderer, props) {
+  return renderToString(h(renderer.Panel, props));
+}
+
+function renderResult(renderer, viewModel, state = {}) {
+  return {
+    activePanelView: renderer.normalizeActivePanelView(viewModel, state.activePanelView),
+    html: panelHtml(renderer, { viewModel, state }),
+  };
+}
+
 function createRenderer() {
   return createQuotaPanelRenderer({ t });
 }
@@ -87,17 +100,20 @@ test('installable metadata and Snapshot Archive version stay synchronized', () =
 test('renderLoading and renderError return escaped panel states', () => {
   const renderer = createRenderer();
 
-  assert.match(renderer.renderLoading(), /Loading hint/);
+  assert.match(panelHtml(renderer, { presentation: 'loading' }), /Loading hint/);
 
-  const errorHtml = renderer.renderError(new Error('<private>'));
+  const errorHtml = panelHtml(renderer, { presentation: 'error', error: new Error('<private>') });
   assert.match(errorHtml, /Failed/);
-  assert.match(errorHtml, /&lt;private&gt;/);
+  // Text is escaped by preact, never parsed as markup.
+  assert.match(errorHtml, /&lt;private/);
+  assert.doesNotMatch(errorHtml, /<private>/);
   assert.match(errorHtml, /data-action="refresh"/);
 });
 
 test('renderResult renders hero, secondary metrics, tabs, archive actions, and active view', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult(
+  const rendered = renderResult(
+    renderer,
     {
       heroMetric: {
         id: 'remainingUsdIncludingReset',
@@ -190,12 +206,13 @@ test('renderResult renders hero, secondary metrics, tabs, archive actions, and a
   assert.match(rendered.html, /Sync enabled/);
   assert.match(rendered.html, /data-action="export-archive"/);
   assert.match(rendered.html, /data-action="import-archive"/);
-  assert.match(rendered.html, /&lt;snapshot-2&gt;/);
+  assert.match(rendered.html, /&lt;snapshot-2/);
+  assert.doesNotMatch(rendered.html, /<snapshot-2>/);
 });
 
 test('hero block omits the reset sub-line when no reset window is known', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult({
+  const rendered = renderResult(renderer, {
     heroMetric: { id: 'h', type: 'credit', label: 'Remaining', usd: 1 },
     secondaryMetrics: [],
     tabs: [{ id: 'details', labelKey: 'tabDetails' }],
@@ -208,7 +225,8 @@ test('hero block omits the reset sub-line when no reset window is known', () => 
 
 test('details metrics section renders the demoted metric grid', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult(
+  const rendered = renderResult(
+    renderer,
     {
       heroMetric: { id: 'h', type: 'credit', label: 'Remaining', usd: 1 },
       secondaryMetrics: [],
@@ -259,7 +277,7 @@ test('truncated data views offer an expand toggle instead of the debug hint', ()
     },
   };
 
-  const collapsed = renderer.renderResult(viewModel, { activePanelView: 'details' });
+  const collapsed = renderResult(renderer, viewModel, { activePanelView: 'details' });
   assert.match(collapsed.html, /data-action="toggle-rows"/);
   assert.match(collapsed.html, /data-view-id="details-long"/);
   assert.match(collapsed.html, /data-expanded="false"/);
@@ -268,7 +286,7 @@ test('truncated data views offer an expand toggle instead of the debug hint', ()
   assert.doesNotMatch(collapsed.html, /2026-06-13/);
   assert.doesNotMatch(collapsed.html, /window\./);
 
-  const expanded = renderer.renderResult(viewModel, {
+  const expanded = renderResult(renderer, viewModel, {
     activePanelView: 'details',
     expandedViews: new Set(['details-long']),
   });
@@ -279,7 +297,8 @@ test('truncated data views offer an expand toggle instead of the debug hint', ()
 
 test('renderResult renders an inline sync form seeded from remote sync status', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult(
+  const rendered = renderResult(
+    renderer,
     {
       heroMetric: null,
       secondaryMetrics: [],
@@ -314,7 +333,7 @@ test('renderResult renders an inline sync form seeded from remote sync status', 
   // Sync-now appears only when enabled and configured.
   assert.match(rendered.html, /data-action="sync-remote"/);
   // The stored gist id is echoed (escaped) into the input value.
-  assert.match(rendered.html, /value="&lt;my-gist&gt;"/);
+  assert.match(rendered.html, /value="&lt;my-gist/);
   // The token is never echoed back into the form.
   assert.equal(rendered.html.includes('value="secret'), false);
 });
@@ -330,7 +349,8 @@ test('renderResult formats the last synced time through the injected timestamp f
       return 'LOCAL-TIME';
     },
   });
-  const rendered = renderer.renderResult(
+  const rendered = renderResult(
+    renderer,
     {
       heroMetric: null,
       secondaryMetrics: [],
@@ -362,7 +382,8 @@ test('renderResult reformats a valid ISO sync time by default and keeps junk ver
         key === 'remoteSyncLastSynced' ? `Last synced: ${variables.lastSyncedAt}` : t(key, variables),
       debugKey: '__debugKey',
     });
-    return renderer.renderResult(
+    return renderResult(
+      renderer,
       {
         heroMetric: null,
         secondaryMetrics: [],
@@ -395,7 +416,8 @@ test('renderResult localizes archive captured timestamps through the formatter',
       return `LOCAL(${value})`;
     },
   });
-  const rendered = renderer.renderResult(
+  const rendered = renderResult(
+    renderer,
     {
       heroMetric: null,
       secondaryMetrics: [],
@@ -425,7 +447,8 @@ test('renderResult localizes archive captured timestamps through the formatter',
 
 test('renderResult falls back to first tab when active view is unavailable', () => {
   const renderer = createRenderer();
-  const rendered = renderer.renderResult(
+  const rendered = renderResult(
+    renderer,
     {
       heroMetric: null,
       secondaryMetrics: [],
@@ -504,17 +527,17 @@ test('stats view renders cost dimensions, a live rolling line, and drillable row
     views: { stats: { id: 'stats', kind: 'stats' } },
   };
 
-  const day = renderer.renderActiveView(model, { activePanelView: 'stats' });
+  const day = renderResult(renderer, model, { activePanelView: 'stats' });
   assert.match(day.html, /cqc-stats-tabs/);
   assert.match(day.html, /statsRollingLive/);
   assert.match(day.html, /2026-06-02/);
 
-  const week = renderer.renderActiveView(model, { activePanelView: 'stats', statsPeriod: 'week' });
+  const week = renderResult(renderer, model, { activePanelView: 'stats', statsPeriod: 'week' });
   assert.match(week.html, /data-action="stats-drill"/);
   assert.match(week.html, /data-from="2026-05-23"/);
   assert.match(week.html, /data-to="2026-05-29"/);
 
-  const drill = renderer.renderActiveView(model, {
+  const drill = renderResult(renderer, model, {
     activePanelView: 'stats',
     statsPeriod: 'week',
     statsDrill: { from: '2026-05-23', to: '2026-05-29', label: 'wk' },

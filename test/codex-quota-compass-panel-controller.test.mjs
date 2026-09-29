@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 import { buildQuotaSnapshotResult } from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js';
 import { createQuotaCompassTranslator } from '../src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.js';
-import { createQuotaPanelController } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.js';
+import { createQuotaPanelController } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.jsx';
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 function deferred() {
@@ -235,7 +235,10 @@ test('saved settings clear the submitted token even when remote sync fails', { s
     token.blur();
     await tick();
     f.update({ errors: { sync: 'offline' } });
-    assert.notEqual(f.window.document.querySelector('[data-field="token"]'), token);
+    // The form is patched in place: same node, still empty, fresh status line.
+    assert.equal(f.window.document.querySelector('[data-field="token"]'), token);
+    assert.equal(token.value, '');
+    assert.match(f.window.document.querySelector('.cqc-sync-form-status').textContent, /offline/);
   } finally {
     f.close();
   }
@@ -251,6 +254,34 @@ test('failed settings save retains an unfocused dirty form through background up
     f.update({ errors: { sync: 'offline' } });
     assert.equal(f.window.document.querySelector('[data-field="token"]'), token);
     assert.equal(token.value, 'unsaved');
+  } finally {
+    f.close();
+  }
+});
+
+test('background refreshes patch the panel without replacing a focused token draft', { skip: domSkip }, async () => {
+  const f = fixture();
+  try {
+    const token = await openArchive(f);
+    const content = f.window.document.querySelector('.cqc-content');
+    let replaced = 0;
+    const observer = new f.window.MutationObserver((records) => {
+      for (const record of records) if ([...record.removedNodes].includes(token)) replaced++;
+    });
+    observer.observe(content, { childList: true, subtree: true });
+    token.focus();
+    edit(f, token, 'ghp_typing');
+    f.update({ syncStatus: { enabled: true, hasToken: true, gistId: 'from-background' } });
+    assert.equal((await f.panel.dispatch('refresh')).status, 'ok');
+    f.update({ errors: { sync: 'offline' } });
+    await tick();
+    observer.disconnect();
+    assert.equal(replaced, 0);
+    assert.equal(f.window.document.querySelector('[data-field="token"]'), token);
+    assert.equal(f.window.document.activeElement, token);
+    assert.equal(token.value, 'ghp_typing');
+    // Status that is not part of the draft still follows the background update.
+    assert.match(f.window.document.querySelector('.cqc-sync-form-status').textContent, /offline/);
   } finally {
     f.close();
   }
