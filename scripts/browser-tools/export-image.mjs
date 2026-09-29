@@ -4,8 +4,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { createCli, integerValue, parseCli, requireValue } from './cli-args.mjs';
 import { resolvePlaywrightImport } from './playwright-loader.mjs';
 import { readPreviewImage } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js';
+import { extensionFromMime } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.js';
 
 const DEFAULT_URL = 'https://mi.feishu.cn/file/UxkDbtSZqo9Ya4xCGNZcWOmWnlf';
 const DEFAULT_PROFILE_DIR = path.join(
@@ -42,74 +44,32 @@ Notes:
   - It exports original visible image data and exits if none can be extracted.`);
 }
 
-function parseInteger(value, flagName) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`${flagName} expects a non-negative integer, got: ${value}`);
-  }
-  return parsed;
-}
-
 function parseArgs(argv) {
-  const options = {
-    url: DEFAULT_URL,
-    profileDir: DEFAULT_PROFILE_DIR,
-    output: '',
-    waitMs: DEFAULT_WAIT_MS,
-    timeoutMs: DEFAULT_TIMEOUT_MS,
-    playMode: true,
-    headless: true,
-    debug: false,
+  const resolvedPath = (flagName) => {
+    const check = requireValue(flagName);
+    return (value) => path.resolve(check(value));
   };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = argv[index + 1];
-
-    switch (arg) {
-      case '--url':
-        if (!next) throw new Error('--url requires a value');
-        options.url = next;
-        index += 1;
-        break;
-      case '--profile-dir':
-        if (!next) throw new Error('--profile-dir requires a value');
-        options.profileDir = path.resolve(next);
-        index += 1;
-        break;
-      case '--output':
-        if (!next) throw new Error('--output requires a value');
-        options.output = path.resolve(next);
-        index += 1;
-        break;
-      case '--wait-ms':
-        if (!next) throw new Error('--wait-ms requires a value');
-        options.waitMs = parseInteger(next, '--wait-ms');
-        index += 1;
-        break;
-      case '--timeout-ms':
-        if (!next) throw new Error('--timeout-ms requires a value');
-        options.timeoutMs = parseInteger(next, '--timeout-ms');
-        index += 1;
-        break;
-      case '--no-play':
-        options.playMode = false;
-        break;
-      case '--headful':
-        options.headless = false;
-        break;
-      case '--debug':
-        options.debug = true;
-        break;
-      case '--help':
-      case '-h':
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
+  const program = createCli()
+    .option('--url <url>', '', requireValue('--url'), DEFAULT_URL)
+    .option('--profile-dir <dir>', '', resolvedPath('--profile-dir'), DEFAULT_PROFILE_DIR)
+    .option('--output <file>', '', resolvedPath('--output'), '')
+    .option('--wait-ms <ms>', '', integerValue('--wait-ms'), DEFAULT_WAIT_MS)
+    .option('--timeout-ms <ms>', '', integerValue('--timeout-ms'), DEFAULT_TIMEOUT_MS)
+    .option('--no-play')
+    .option('--headful')
+    .option('--debug');
+  const opts = parseCli(program, argv);
+  const options = {
+    url: opts.url,
+    profileDir: opts.profileDir,
+    output: opts.output,
+    waitMs: opts.waitMs,
+    timeoutMs: opts.timeoutMs,
+    playMode: opts.play,
+    headless: !opts.headful,
+    debug: Boolean(opts.debug),
+  };
+  if (opts.help) options.help = true;
   return options;
 }
 
@@ -118,7 +78,7 @@ function guessOutputPath(output, mime, now = new Date()) {
     return output;
   }
 
-  const ext = mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'bin';
+  const ext = extensionFromMime(mime);
   const ts = now
     .toISOString()
     .replace(/[-:TZ.]/g, '')

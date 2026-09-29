@@ -128,3 +128,29 @@ test('sanitizeUrl strips query strings and hashes from diagnostic output', () =>
     'https://example.com/path/to/page',
   );
 });
+
+test('login QR argument parsing keeps its established CLI contract', () => {
+  // A flag that takes a value consumes the next token even when it looks like a flag.
+  assert.equal(parseArgs(['--url', '-x']).url, '-x');
+  assert.throws(() => parseArgs(['--url', '']), { message: '--url requires a value' });
+  assert.throws(() => parseArgs(['--url']), { message: '--url requires a value' });
+  assert.deepEqual(parseArgs(['--success-host', 'a.example', '--success-host', 'b.example']).successHosts, [
+    'mi.feishu.cn',
+    'mi-p.feishu.cn',
+    'a.example',
+    'b.example',
+  ]);
+  assert.equal(parseArgs(['--login-timeout-ms', '0']).loginTimeoutMs, 0);
+  for (const value of ['-1', 'abc']) {
+    assert.throws(() => parseArgs(['--login-timeout-ms', value]), {
+      message: `--login-timeout-ms expects a non-negative integer, got: ${value}`,
+    });
+  }
+  assert.throws(() => parseArgs(['--bogus']), { message: 'Unknown argument: --bogus' });
+  assert.throws(() => parseArgs(['stray']), { message: 'Unknown argument: stray' });
+  assert.equal(parseArgs(['-h']).help, true);
+  assert.equal(parseArgs(['--help']).help, true);
+  assert.equal(parseArgs([]).help, undefined);
+  assert.equal(parseArgs(['--no-wait']).waitForLogin, false);
+  assert.equal(parseArgs(['--headful']).headless, false);
+});

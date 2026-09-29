@@ -115,3 +115,14 @@ test('runExportImage does not write when extraction is empty', async () => {
   assert.equal(writes, 0);
   assert.equal(closed, 1);
 });
+
+test('export image argument parsing rejects empty values, bad integers and unknown flags', () => {
+  assert.equal(parseArgs(['--url', '-x']).url, '-x');
+  assert.throws(() => parseArgs(['--output', '']), { message: '--output requires a value' });
+  assert.throws(() => parseArgs(['--wait-ms']), { message: '--wait-ms requires a value' });
+  assert.throws(() => parseArgs(['--timeout-ms', '-5']), {
+    message: '--timeout-ms expects a non-negative integer, got: -5',
+  });
+  assert.throws(() => parseArgs(['--play']), { message: 'Unknown argument: --play' });
+  assert.equal(parseArgs(['-h']).help, true);
+});

@@ -25,6 +25,11 @@ test('sanitizeFilePart and extensionFromMime keep filenames safe and typed', () 
   assert.equal(extensionFromMime('image/jpeg'), 'jpg');
   assert.equal(extensionFromMime('image/webp'), 'webp');
   assert.equal(extensionFromMime('application/octet-stream'), 'bin');
+  assert.equal(extensionFromMime('image/png; charset=binary'), 'png');
+  assert.equal(extensionFromMime('image/WEBP'), 'webp');
+  assert.equal(extensionFromMime(''), 'bin');
+  assert.equal(extensionFromMime(undefined), 'bin');
+  assert.equal(sanitizeFilePart('a\u0000b<c>', 'fb'), 'a-b-c-');
 });
 
 test('toUserMessage maps internal English errors to Chinese user copy', () => {

@@ -1,6 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 
+import { appendValue, createCli, integerValue, parseCli, parseInteger, requireValue } from './cli-args.mjs';
+
 export const DEFAULT_TARGET_URL = 'https://mi.feishu.cn/file/UxkDbtSZqo9Ya4xCGNZcWOmWnlf';
 export const DEFAULT_ROOT_DIR = path.join(os.homedir(), '.local', 'share', 'codex-browser', 'feishu-login');
 export const DEFAULT_PROFILE_DIR = path.join(DEFAULT_ROOT_DIR, 'playwright-profile');
@@ -15,139 +17,63 @@ export const DEFAULT_WAIT_AFTER_NAVIGATION_MS = 12_000;
 export const DEFAULT_LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
 export const DEFAULT_NAVIGATION_TIMEOUT_MS = 45_000;
 
-export function parseInteger(value, flagName) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`${flagName} expects a non-negative integer, got: ${value}`);
-  }
-  return parsed;
-}
+export { parseInteger };
 
-function requireValue(flagName, value) {
-  if (!value) throw new Error(`${flagName} requires a value`);
-  return value;
-}
+const resolvedPath = (flagName) => {
+  const check = requireValue(flagName);
+  return (value) => path.resolve(check(value));
+};
 
 export function parseArgs(argv) {
+  const program = createCli()
+    .option('--url <url>', '', requireValue('--url'), DEFAULT_TARGET_URL)
+    .option('--profile-dir <dir>', '', resolvedPath('--profile-dir'), DEFAULT_PROFILE_DIR)
+    .option('--qr-path <file>', '', resolvedPath('--qr-path'), DEFAULT_QR_PATH)
+    .option('--state-path <file>', '', resolvedPath('--state-path'), DEFAULT_STATE_PATH)
+    .option('--qr-selector <selector>', '', requireValue('--qr-selector'), DEFAULT_QR_SELECTOR)
+    .option('--tenant <name>', '', requireValue('--tenant'), '')
+    .option('--tenant-switch-text <text>', '', requireValue('--tenant-switch-text'), DEFAULT_TENANT_SWITCH_TEXT)
+    .option('--success-host <host>', '', appendValue('--success-host'), [...DEFAULT_SUCCESS_HOSTS])
+    .option('--success-url-pattern <regex>', '', appendValue('--success-url-pattern'), [])
+    .option('--success-text <text>', '', appendValue('--success-text'), [])
+    .option('--pending-url-pattern <regex>', '', appendValue('--pending-url-pattern'), [
+      ...DEFAULT_PENDING_URL_PATTERNS,
+    ])
+    .option('--pending-text <text>', '', appendValue('--pending-text'), [...DEFAULT_PENDING_TEXTS])
+    .option('--wait-after-nav-ms <ms>', '', integerValue('--wait-after-nav-ms'), DEFAULT_WAIT_AFTER_NAVIGATION_MS)
+    .option('--login-timeout-ms <ms>', '', integerValue('--login-timeout-ms'), DEFAULT_LOGIN_TIMEOUT_MS)
+    .option('--navigation-timeout-ms <ms>', '', integerValue('--navigation-timeout-ms'), DEFAULT_NAVIGATION_TIMEOUT_MS)
+    .option('--headful')
+    .option('--no-wait')
+    .option('--manual-confirm')
+    .option('--refresh')
+    .option('--use-shell-proxy')
+    .option('--debug');
+  const opts = parseCli(program, argv);
   const options = {
-    url: DEFAULT_TARGET_URL,
-    profileDir: DEFAULT_PROFILE_DIR,
-    qrPath: DEFAULT_QR_PATH,
-    statePath: DEFAULT_STATE_PATH,
-    qrSelector: DEFAULT_QR_SELECTOR,
-    tenant: '',
-    tenantSwitchText: DEFAULT_TENANT_SWITCH_TEXT,
-    successHosts: [...DEFAULT_SUCCESS_HOSTS],
-    successUrlPatterns: [],
-    successTexts: [],
-    pendingUrlPatterns: [...DEFAULT_PENDING_URL_PATTERNS],
-    pendingTexts: [...DEFAULT_PENDING_TEXTS],
-    waitAfterNavigationMs: DEFAULT_WAIT_AFTER_NAVIGATION_MS,
-    loginTimeoutMs: DEFAULT_LOGIN_TIMEOUT_MS,
-    navigationTimeoutMs: DEFAULT_NAVIGATION_TIMEOUT_MS,
-    headless: true,
-    waitForLogin: true,
-    manualConfirm: false,
-    refresh: false,
-    useDirectProxy: true,
-    debug: false,
+    url: opts.url,
+    profileDir: opts.profileDir,
+    qrPath: opts.qrPath,
+    statePath: opts.statePath,
+    qrSelector: opts.qrSelector,
+    tenant: opts.tenant,
+    tenantSwitchText: opts.tenantSwitchText,
+    successHosts: opts.successHost,
+    successUrlPatterns: opts.successUrlPattern,
+    successTexts: opts.successText,
+    pendingUrlPatterns: opts.pendingUrlPattern,
+    pendingTexts: opts.pendingText,
+    waitAfterNavigationMs: opts.waitAfterNavMs,
+    loginTimeoutMs: opts.loginTimeoutMs,
+    navigationTimeoutMs: opts.navigationTimeoutMs,
+    headless: !opts.headful,
+    waitForLogin: opts.wait,
+    manualConfirm: Boolean(opts.manualConfirm),
+    refresh: Boolean(opts.refresh),
+    useDirectProxy: !opts.useShellProxy,
+    debug: Boolean(opts.debug),
   };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    const next = argv[index + 1];
-
-    switch (arg) {
-      case '--url':
-        options.url = requireValue('--url', next);
-        index += 1;
-        break;
-      case '--profile-dir':
-        options.profileDir = path.resolve(requireValue('--profile-dir', next));
-        index += 1;
-        break;
-      case '--qr-path':
-        options.qrPath = path.resolve(requireValue('--qr-path', next));
-        index += 1;
-        break;
-      case '--state-path':
-        options.statePath = path.resolve(requireValue('--state-path', next));
-        index += 1;
-        break;
-      case '--qr-selector':
-        options.qrSelector = requireValue('--qr-selector', next);
-        index += 1;
-        break;
-      case '--tenant':
-        options.tenant = requireValue('--tenant', next);
-        index += 1;
-        break;
-      case '--tenant-switch-text':
-        options.tenantSwitchText = requireValue('--tenant-switch-text', next);
-        index += 1;
-        break;
-      case '--success-host':
-        options.successHosts.push(requireValue('--success-host', next));
-        index += 1;
-        break;
-      case '--success-url-pattern':
-        options.successUrlPatterns.push(requireValue('--success-url-pattern', next));
-        index += 1;
-        break;
-      case '--success-text':
-        options.successTexts.push(requireValue('--success-text', next));
-        index += 1;
-        break;
-      case '--pending-url-pattern':
-        options.pendingUrlPatterns.push(requireValue('--pending-url-pattern', next));
-        index += 1;
-        break;
-      case '--pending-text':
-        options.pendingTexts.push(requireValue('--pending-text', next));
-        index += 1;
-        break;
-      case '--wait-after-nav-ms':
-        options.waitAfterNavigationMs = parseInteger(requireValue('--wait-after-nav-ms', next), '--wait-after-nav-ms');
-        index += 1;
-        break;
-      case '--login-timeout-ms':
-        options.loginTimeoutMs = parseInteger(requireValue('--login-timeout-ms', next), '--login-timeout-ms');
-        index += 1;
-        break;
-      case '--navigation-timeout-ms':
-        options.navigationTimeoutMs = parseInteger(
-          requireValue('--navigation-timeout-ms', next),
-          '--navigation-timeout-ms',
-        );
-        index += 1;
-        break;
-      case '--headful':
-        options.headless = false;
-        break;
-      case '--no-wait':
-        options.waitForLogin = false;
-        break;
-      case '--manual-confirm':
-        options.manualConfirm = true;
-        break;
-      case '--refresh':
-        options.refresh = true;
-        break;
-      case '--use-shell-proxy':
-        options.useDirectProxy = false;
-        break;
-      case '--debug':
-        options.debug = true;
-        break;
-      case '--help':
-      case '-h':
-        options.help = true;
-        break;
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
+  if (opts.help) options.help = true;
   return options;
 }
 

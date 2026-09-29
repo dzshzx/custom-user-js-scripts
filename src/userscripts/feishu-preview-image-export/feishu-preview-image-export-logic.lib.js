@@ -1,19 +1,18 @@
+import filenamify from 'filenamify/browser';
+import mime from 'mime/lite';
+
 import { readPreviewImage } from './feishu-preview-image-export-extraction.lib.js';
 
 const LIB_NAME = 'FeishuPreviewImageExportLogicLib';
 
 function sanitizeFilePart(value, fallback) {
-  const text = String(value || '')
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, '-');
-  return text || fallback;
+  const text = String(value || '').trim();
+  return text ? filenamify(text, { replacement: '-' }) : fallback;
 }
 
-function extensionFromMime(mime) {
-  if (mime === 'image/png') return 'png';
-  if (mime === 'image/jpeg') return 'jpg';
-  if (mime === 'image/webp') return 'webp';
-  return 'bin';
+// image/jpeg -> jpg; parameters such as "; charset=binary" are ignored; unknown types -> bin.
+function extensionFromMime(type) {
+  return mime.getExtension(String(type || '')) || 'bin';
 }
 
 // 内部错误保持英文进 console；给用户的是这里映射的中文文案。
