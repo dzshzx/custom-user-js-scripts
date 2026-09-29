@@ -3,11 +3,13 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const versionPlanScript = path.join(projectRoot, 'scripts/version-plan.mjs');
+const fixtureRoots = [];
+after(() => Promise.all(fixtureRoots.map((root) => rm(root, { recursive: true, force: true }))));
 
 function git(root, ...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
@@ -27,6 +29,7 @@ function metadata(version, name = 'Fixture') {
 
 async function fixtureRepository(version = '1.2.3') {
   const root = await mkdtemp(path.join(tmpdir(), 'userscript-version-plan-'));
+  fixtureRoots.push(root);
   const scriptDir = path.join(root, 'src/userscripts/fixture');
   await mkdir(scriptDir, { recursive: true });
   await writeFile(path.join(scriptDir, 'fixture.user.js'), metadata(version));

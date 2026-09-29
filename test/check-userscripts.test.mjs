@@ -1,12 +1,14 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const lintScript = path.join(repoRoot, 'scripts/check-userscripts.mjs');
+const workspaces = [];
+after(() => Promise.all(workspaces.map((workspace) => rm(workspace, { recursive: true, force: true }))));
 
 function userscriptMetadata({ name, downloadURL, updateURL }) {
   return `// ==UserScript==
@@ -25,6 +27,7 @@ ${downloadURL ? `// @downloadURL  ${downloadURL}\n` : ''}${updateURL ? `// @upda
 
 async function createWorkspace(files, distFiles = {}) {
   const workspace = await mkdtemp(path.join(tmpdir(), 'check-userscripts-'));
+  workspaces.push(workspace);
   const srcDir = path.join(workspace, 'src');
   await mkdir(srcDir);
 
