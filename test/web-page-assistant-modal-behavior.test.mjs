@@ -184,7 +184,7 @@ test('pause and resume announce a full status sentence through the live region',
 });
 
 test('a failed write restores the button and surfaces the error reason', { skip: domSkip }, async () => {
-  const { window, root } = await boot({
+  const { root } = await boot({
     gmSetValue: () => Promise.reject(new Error('GM quota exceeded')),
     // The localStorage fallback also fails, so the write propagates.
     localStorageStub: {

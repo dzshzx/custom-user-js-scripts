@@ -1,6 +1,5 @@
 import { UTCDate } from '@date-fns/utc';
 import { addDays, lightFormat } from 'date-fns';
-import { createQuotaSnapshotAccess, rollingPeriodKey } from './codex-quota-compass-contract.lib.js';
 
 const MAIN_PRIMARY_WINDOW_KEY = 'main.primaryWindow';
 const MAIN_SEVEN_DAY_WINDOW_KEY = 'main.sevenDayWindow';

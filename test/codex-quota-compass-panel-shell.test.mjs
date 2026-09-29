@@ -40,7 +40,7 @@ function createMountedShell({ storage, labels, ...options } = {}) {
 test('createFloatingPanelShell mounts shell and preserves injected position key', { skip: domSkip }, async () => {
   const storage = createMemoryStorage();
   storage.setItem(POSITION_KEY, JSON.stringify({ left: 10, top: 90, dockSide: 'left' }));
-  const { shell, window } = createMountedShell({ storage });
+  const { shell } = createMountedShell({ storage });
   const refs = shell.refs();
 
   assert.equal(refs.root.id, 'cqc-test-root');

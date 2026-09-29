@@ -447,7 +447,7 @@ test('a hung state export returns at the original deadline without a late rename
 test('Flow returns its original timeout when the production adapter state export hangs', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'login-qr-flow-hung-export-'));
   let exportStarted;
-  const started = new Promise((resolve) => {
+  new Promise((resolve) => {
     exportStarted = resolve;
   });
   const fake = fakePlaywright({

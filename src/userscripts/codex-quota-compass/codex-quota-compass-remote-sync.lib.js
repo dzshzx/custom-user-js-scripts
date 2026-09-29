@@ -3,7 +3,6 @@ import * as v from 'valibot';
 import { resolveGmApi } from '../shared/shared-gm.lib.js';
 import {
   EXPORT_FORMAT,
-  EXPORT_VERSION,
   buildSnapshotExportDocument,
   exportDocumentContentKey,
   previewImportArchiveDocument,
@@ -150,10 +149,10 @@ function createFetchJsonRequester(options = {}) {
       return text ? JSON.parse(text) : null;
     } catch (error) {
       if (error?.name === 'AbortError') {
-        throw new Error('GitHub Gist sync request timed out.');
+        throw new Error('GitHub Gist sync request timed out.', { cause: error });
       }
       if (error instanceof SyntaxError) {
-        throw new Error('GitHub Gist sync response is not valid JSON.');
+        throw new Error('GitHub Gist sync response is not valid JSON.', { cause: error });
       }
       throw error;
     } finally {

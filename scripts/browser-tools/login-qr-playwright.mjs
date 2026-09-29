@@ -289,7 +289,7 @@ function createSession({ context, page, options, fileSystem, makeId }) {
         await documentHandle.dispose().catch(() => {});
         throw codedError('CANCELLED');
       }
-      let sameDocument = false;
+      let sameDocument;
       try {
         sameDocument =
           generation === observationGeneration &&

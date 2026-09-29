@@ -102,7 +102,7 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 ```bash
 npm ci
 npm run test:prepare # 项目锁定的 Playwright CLI 安装对应 Chromium 和系统依赖
-npm run verify      # 一次构建、产物一致性、metadata lint、全部测试
+npm run verify      # 一次构建、产物一致性、metadata lint、ESLint、全部测试
 ```
 
 `npm run lint` 与 `npm test` 仍可独立运行，会先自动构建。完整入口要求所有测试通过，
