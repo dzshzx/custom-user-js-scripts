@@ -4,11 +4,12 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import semver from 'semver';
+
 import { firstMetadataValue } from './lib/userscript-metadata.mjs';
 import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource, refSource } from './lib/userscript-sources.mjs';
 
-const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const DEFAULT_BASE_REF = 'origin/master';
 
 function usage() {
@@ -28,31 +29,29 @@ function fail(message) {
   throw new Error(message);
 }
 
+// Releases use plain MAJOR.MINOR.PATCH: semver.valid also accepts a leading "v"
+// and returns a prerelease-bearing or build-bearing version differently, so
+// only a string that round-trips unchanged without prerelease counts.
 function parseVersion(value, label, issues) {
-  const match = VERSION_PATTERN.exec(value);
-  if (!match) {
+  const version = semver.parse(value);
+  if (!version || version.version !== value || version.prerelease.length > 0) {
     issues.push(`${label} has a non-SemVer @version "${value || '<missing>'}"`);
     return null;
   }
-  const parts = match.slice(1).map(Number);
-  if (!parts.every(Number.isSafeInteger)) {
-    issues.push(`${label} has a version component outside the safe integer range`);
-    return null;
-  }
-  return parts;
+  return version;
 }
 
 function transitionKind(baseline, target, namespace, issues) {
   const before = parseVersion(baseline, `${namespace} baseline`, issues);
   const after = parseVersion(target, `${namespace} target`, issues);
   if (!before || !after) return 'invalid';
-  if (before.every((part, index) => part === after[index])) return 'unchanged';
-  const direction = before.findIndex((part, index) => part !== after[index]);
-  if (after[direction] < before[direction]) {
+  const order = semver.compare(before, after);
+  if (order === 0) return 'unchanged';
+  if (order > 0) {
     issues.push(`${namespace} target ${target} is older than immutable published baseline ${baseline}`);
     return 'invalid';
   }
-  return ['major', 'minor', 'patch'][direction];
+  return semver.diff(before, after);
 }
 
 async function readVersions(source, label) {

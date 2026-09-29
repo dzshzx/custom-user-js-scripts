@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { access, chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -69,6 +69,9 @@ async function releaseToolRepository({ bare = false } = {}) {
   await chmod(path.join(fixture.root, 'scripts/promote-version-plan.sh'), 0o755);
   git(fixture.root, 'add', '.');
   git(fixture.root, 'commit', '-m', 'add trusted release tools');
+  // Stands in for the workflow's `npm ci --ignore-scripts`; excluded so it never enters a commit.
+  await symlink(path.join(projectRoot, 'node_modules'), path.join(fixture.root, 'node_modules'), 'dir');
+  await writeFile(path.join(fixture.root, '.git/info/exclude'), 'node_modules\n', { flag: 'a' });
   git(fixture.root, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
   const baseline = git(fixture.root, 'rev-parse', 'HEAD');
 
@@ -183,7 +186,8 @@ test('version comparison rejects integers that would lose precision', async () =
     'https://example.test/userscripts :: Fixture=1.2.9007199254740992',
   );
   assert.equal(proposed.status, 1);
-  assert.match(proposed.stderr, /outside the safe integer range/);
+  assert.match(proposed.stderr, /non-SemVer @version "1\.2\.9007199254740993"/);
+  assert.match(proposed.stderr, /non-SemVer @version "1\.2\.9007199254740992"/);
 });
 
 test('minor, major, and skipped-patch transitions pass without approval', async () => {
@@ -436,4 +440,13 @@ test('trusted promote lease rejects a still-fast-forwardable baseline race', asy
   assert.equal(await exists(advanceMarker), true, 'test must advance master during the final push');
   assert.equal(git(fixture.bareRoot, 'rev-parse', 'master'), advanceRef);
   assert.equal(git(fixture.root, 'merge-base', '--is-ancestor', advanceRef, candidate), '');
+});
+
+test('prerelease, build-tagged and v-prefixed versions are rejected', async () => {
+  const fixture = await fixtureRepository('1.2.3');
+  for (const target of ['1.2.4-rc.1', '1.2.4+build.1', 'v1.2.4']) {
+    const proposed = runPlan(fixture.root, 'plan', '--target', `https://example.test/userscripts :: Fixture=${target}`);
+    assert.equal(proposed.status, 1, target);
+    assert.match(proposed.stderr, /non-SemVer @version/, target);
+  }
 });
