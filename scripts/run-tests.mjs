@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { loadTestPlaywright } from './test-playwright.mjs';
+import { loadTestPlaywright, projectPlaywrightVersion } from './test-playwright.mjs';
 
 // These existing names and owning files are stable acceptance identifiers.
 export const requiredTests = [
@@ -77,7 +77,7 @@ export async function environmentReport() {
   const playwright = await loadTestPlaywright();
   const browser = await playwright.chromium.launch({ headless: true });
   try {
-    return { node: process.version, playwright: '1.61.1', browser: browser.version() };
+    return { node: process.version, playwright: projectPlaywrightVersion, browser: browser.version() };
   } finally {
     await browser.close();
   }
@@ -107,7 +107,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     passed: false,
     status: 'tests-not-run',
     counts: null,
-    environment: { node: process.version, playwright: '1.61.1', browser: null },
+    environment: { node: process.version, playwright: projectPlaywrightVersion, browser: null },
     stages: { environment: 'not-run', build: 'not-in-this-entry', tests: 'not-run' },
     timings: {},
   };

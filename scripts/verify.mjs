@@ -1,11 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { environmentReport, runTests, writeReport } from './run-tests.mjs';
+import { projectPlaywrightVersion } from './test-playwright.mjs';
 
 const report = {
   passed: false,
   status: 'tests-not-run',
   counts: null,
-  environment: { node: process.version, playwright: '1.61.1', browser: null },
+  environment: { node: process.version, playwright: projectPlaywrightVersion, browser: null },
   stages: { environment: 'not-run', build: 'not-run', checks: 'not-run', tests: 'not-run' },
   timings: {},
 };

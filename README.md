@@ -107,7 +107,7 @@ npm run verify      # 一次构建、产物一致性、metadata lint、ESLint、
 
 `npm run lint` 与 `npm test` 仍可独立运行，会先自动构建。完整入口要求所有测试通过，
 并核对五项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
-项目精确锁定 Playwright 1.61.1；测试只加载本项目依赖和该版本的默认 Chromium，
+项目在 `package.json` devDependencies 精确锁定 Playwright，测试脚本从那里读取版本；测试只加载本项目依赖和该版本的默认 Chromium，
 缺依赖或浏览器直接报错。日常 browser-tools 的缓存兼容行为不变。
 聚焦调试使用 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs`（加载器让测试直接导入 `.jsx` 源码）；它不代表完整验收。
 原生 JSON 报告、准备时间和人工验收边界见 [测试说明](docs/testing.md)。

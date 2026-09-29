@@ -1,7 +1,7 @@
 # Automated verification
 
 Use Node 22 (CI) or newer, then `npm ci`, `npm run test:prepare`,
-and `npm run verify`. Preparation uses the installed Playwright 1.61.1 CLI,
+and `npm run verify`. Preparation uses the installed Playwright CLI (exact pin in `package.json`),
 including its matching Chromium and OS libraries; Linux may require sudo for
 OS dependencies. No npx package download or user-cache search participates in
 browser tests. Playwright's standard `PLAYWRIGHT_BROWSERS_PATH` can select an

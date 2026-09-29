@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { projectPlaywrightVersion } from './test-playwright.mjs';
 const started = performance.now();
 // An explicit local CLI cannot download a different Playwright package via npx.
 const result = spawnSync(process.execPath, ['node_modules/playwright/cli.js', 'install', '--with-deps', 'chromium'], {
@@ -20,7 +21,7 @@ await writeFile(
           ? null
           : result.error?.message || 'Project Playwright browser preparation failed; see installation output.',
       node: process.version,
-      playwright: '1.61.1',
+      playwright: projectPlaywrightVersion,
       duration_ms: performance.now() - started,
       exitCode: result.status ?? 1,
     },
