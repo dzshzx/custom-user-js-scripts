@@ -1,7 +1,11 @@
+import { clear, createStore, del, entries, get, set } from 'idb-keyval';
+import QuickLRU from 'quick-lru';
 import { cancelled, delay } from './javdb-recommend-request.lib.js';
 
 const CATALOG = 'javdb_recommend_periods_cache_v1';
-const DETAILS = 'javdb_recommend_details_cache_v1';
+// Legacy localStorage details document; detail entries now live in IndexedDB.
+const LEGACY_DETAILS = 'javdb_recommend_details_cache_v1';
+const DETAIL_LIMIT = 48;
 const INDEX = 'javdb_recommend_search_index_v1_';
 const HOUR = 3600000,
   MONTH = 30 * 24 * HOUR;
@@ -22,13 +26,26 @@ const project = (movie) =>
     ]),
   );
 
-export function createArchiveData({ storage, request, now = Date.now, timers = globalThis }) {
+// Per-period detail entries in the page origin's IndexedDB. Every call is async
+// so a missing indexedDB (or a blocked open) surfaces as a rejection.
+export function createDetailStore(dbName = 'javdb-recommend-archive', storeName = 'details') {
+  const store = createStore(dbName, storeName);
+  return {
+    get: async (key) => get(key, store),
+    set: async (key, value) => set(key, value, store),
+    del: async (key) => del(key, store),
+    clear: async () => clear(store),
+    entries: async () => entries(store),
+  };
+}
+
+export function createArchiveData({ storage, details, request, now = Date.now, timers = globalThis }) {
   let periods = [],
     generation = 0,
     disposed = false,
     catalogWork = null,
     activeSearch = null;
-  const memory = new Map(),
+  const memory = new QuickLRU({ maxSize: 24 }),
     requests = new Map(),
     liveLeases = new Set();
   const controller = () =>
@@ -49,6 +66,26 @@ export function createArchiveData({ storage, request, now = Date.now, timers = g
       return false;
     }
   };
+  // Detail storage is a cache: every failure reads as a miss or a skipped write.
+  const readDetail = async (period) => {
+    try {
+      return (await details?.get(String(period))) || null;
+    } catch {
+      return null;
+    }
+  };
+  const readAllDetails = async () => {
+    try {
+      return Object.fromEntries((await details?.entries()) || []);
+    } catch {
+      return {};
+    }
+  };
+  try {
+    storage.removeItem(LEGACY_DETAILS);
+  } catch {
+    /* Legacy cleanup is best effort. */
+  }
   const valid = (entry) => entry && Array.isArray(entry.movies) && Number.isFinite(entry.fetchedAt);
   const ttl = (period) => (periods[0]?.period === period ? 2 * HOUR : MONTH);
   const fresh = (entry, period) => valid(entry) && now() - entry.fetchedAt < ttl(period);
@@ -70,25 +107,22 @@ export function createArchiveData({ storage, request, now = Date.now, timers = g
     write(INDEX + period, { fetchedAt: entry.fetchedAt, movies: entry.movies.map(project) });
   }
   function remember(period, entry) {
-    memory.delete(period);
     memory.set(period, entry);
-    if (memory.size > 24) memory.delete(memory.keys().next().value);
   }
-  function saveDetail(period, entry) {
-    const stored = read(DETAILS)?.entries;
-    const entries = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
-    entries[period] = { ...entry, accessedAt: now() };
-    const keys = Object.keys(entries).sort((a, b) => {
-      if (a === String(period)) return -1;
-      if (b === String(period)) return 1;
-      return (
-        (entries[b].accessedAt || entries[b].fetchedAt || 0) - (entries[a].accessedAt || entries[a].fetchedAt || 0)
-      );
-    });
-    keys.splice(48).forEach((key) => delete entries[key]);
-    while (!write(DETAILS, { entries })) {
-      if (keys.length <= 1) break;
-      delete entries[keys.pop()];
+  async function saveDetail(period, entry) {
+    if (!details) return;
+    try {
+      await details.set(String(period), { ...entry, accessedAt: now() });
+      const stored = await details.entries();
+      if (stored.length <= DETAIL_LIMIT) return;
+      const stamp = (value) => value?.accessedAt || value?.fetchedAt || 0;
+      const stale = stored
+        .filter(([key]) => key !== String(period))
+        .sort((a, b) => stamp(b[1]) - stamp(a[1]))
+        .slice(DETAIL_LIMIT - 1);
+      await Promise.all(stale.map(([key]) => details.del(key)));
+    } catch {
+      /* A detail cache that cannot be written only costs a later refetch. */
     }
   }
   function loadCatalog({ force = false, onProgress } = {}) {
@@ -160,15 +194,17 @@ export function createArchiveData({ storage, request, now = Date.now, timers = g
       check(epoch);
       if (released) throw cancelled();
     };
-    const local = memory.get(period) || (diskEntries ? diskEntries[period] : read(DETAILS)?.entries?.[period]);
-    const cached =
-      purpose === 'search'
-        ? index(period) || (fresh(local, period) ? local : null)
-        : fresh(local, period)
-          ? local
-          : null;
+    let local = null;
     const work = (async () => {
       assertActive();
+      local = memory.get(period) || (diskEntries ? diskEntries[period] : await readDetail(period));
+      assertActive();
+      const cached =
+        purpose === 'search'
+          ? index(period) || (fresh(local, period) ? local : null)
+          : fresh(local, period)
+            ? local
+            : null;
       if (cached) {
         if (purpose === 'navigation') {
           remember(period, cached);
@@ -273,8 +309,8 @@ export function createArchiveData({ storage, request, now = Date.now, timers = g
       }
       notify(onUpdate, { ...result, groups: result.groups.slice().sort((a, b) => a.index - b.index), group });
     };
-    // One details-document parse for the entire local pass and missing-period fallbacks.
-    const diskEntries = read(DETAILS)?.entries || {};
+    // One detail-store scan for the entire local pass and missing-period fallbacks.
+    let diskEntries = {};
     const job = {
       cancel() {
         if (stopped) return;
@@ -286,6 +322,7 @@ export function createArchiveData({ storage, request, now = Date.now, timers = g
     };
     job.done = Promise.resolve()
       .then(async () => {
+        if (!cancelledSearch()) diskEntries = await readAllDetails();
         if (!cancelledSearch())
           periods.slice().forEach((item, i) => {
             const local = memory.get(item.period) || diskEntries[item.period];
@@ -355,7 +392,7 @@ export function createArchiveData({ storage, request, now = Date.now, timers = g
       cancelWork();
       periods = [];
       storage.removeItem(CATALOG);
-      storage.removeItem(DETAILS);
+      details?.clear().catch(() => {});
       for (let i = storage.length - 1; i >= 0; i--) {
         const key = storage.key(i);
         if (key?.startsWith(INDEX)) storage.removeItem(key);

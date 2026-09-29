@@ -25,8 +25,12 @@ user history; its GitHub token is a credential.
    never mirrored, never written to page storage. Without manager storage the
    sync feature fails closed with a visible error.
 4. JavDB Recommend Archive is `@grant none` by design (no privileged API) and
-   keeps its caches in page `localStorage` only — the fallback rule applied from
-   the start, not an exception to it.
+   keeps its caches in page-origin storage only — the fallback rule applied from
+   the start, not an exception to it. Catalog and search indexes stay in page
+   `localStorage`; per-period detail entries live in page-origin IndexedDB
+   (revised 2026-09-29), which is equally visible to the host page, so the
+   reasoning above is unchanged. The old `localStorage` details document is
+   removed on startup.
 
 ## Consequences
 

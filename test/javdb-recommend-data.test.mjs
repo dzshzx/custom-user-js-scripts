@@ -24,6 +24,31 @@ function storage() {
     removeItem: (key) => values.delete(key),
   };
 }
+function detailStore() {
+  const values = new Map();
+  let scans = 0;
+  return {
+    values,
+    get scans() {
+      return scans;
+    },
+    get: async (key) => values.get(key),
+    set: async (key, value) => {
+      values.set(key, value);
+    },
+    del: async (key) => {
+      values.delete(key);
+    },
+    clear: async () => values.clear(),
+    entries: async () => {
+      scans++;
+      return [...values.entries()];
+    },
+  };
+}
+const putDetails = (details, entries) => {
+  for (const [key, value] of Object.entries(entries)) details.values.set(String(key), value);
+};
 const put = (s, key, value) => s.setItem(key, JSON.stringify({ version: 1, ...value }));
 const movie = { id: 'm', number: 'ABC', title: 'match' };
 const deferred = () => {
@@ -36,11 +61,12 @@ const deferred = () => {
 const tick = async () => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 };
-async function setup({ ids = [3, 2, 1], request, time = 100 * H, store = storage() } = {}) {
+async function setup({ ids = [3, 2, 1], request, time = 100 * H, store = storage(), details = detailStore() } = {}) {
   put(store, C, { fetchedAt: time, fullFetchedAt: time, periods: ids.map((period) => ({ period })) });
   let current = time;
   const data = createArchiveData({
     storage: store,
+    details,
     request: request || (async () => ({ movies: [movie] })),
     now: () => current,
   });
@@ -48,6 +74,7 @@ async function setup({ ids = [3, 2, 1], request, time = 100 * H, store = storage
   return {
     data,
     store,
+    details,
     advance: (delta) => {
       current += delta;
     },
@@ -84,13 +111,13 @@ test('independent leases share transport; releasing search preserves browsing; f
 });
 test('memory and projected index retain source timestamps and expire latest period', async () => {
   let calls = 0;
-  const { data, store, time, advance } = await setup({
+  const { data, store, details, time, advance } = await setup({
     request: async () => {
       calls++;
       return { movies: [movie] };
     },
   });
-  put(store, D, { entries: { 3: { fetchedAt: time - H, movies: [movie] } } });
+  putDetails(details, { 3: { fetchedAt: time - H, movies: [movie] } });
   const first = data.acquirePeriod(3);
   await first.promise;
   first.release();
@@ -103,12 +130,12 @@ test('memory and projected index retain source timestamps and expire latest peri
   data.dispose();
 });
 test('network failure falls back with degradation while cancellation never succeeds with stale data', async () => {
-  const { data, store, time } = await setup({
+  const { data, details, time } = await setup({
     request: async () => {
       throw new TypeError('offline');
     },
   });
-  put(store, D, { entries: { 3: { fetchedAt: time - 3 * H, movies: [movie] } } });
+  putDetails(details, { 3: { fetchedAt: time - 3 * H, movies: [movie] } });
   const lease = data.acquirePeriod(3);
   assert.equal((await lease.promise).degraded, true);
   lease.release();
@@ -119,8 +146,9 @@ test('network failure falls back with degradation while cancellation never succe
 });
 test('clear cancels consumers and ignores late responses without repopulating storage', async () => {
   const pending = deferred();
-  const { data, store } = await setup({ request: () => pending.promise });
+  const { data, store, details } = await setup({ request: () => pending.promise });
   put(store, I + 8, { fetchedAt: 1, movies: [movie] });
+  putDetails(details, { 7: { fetchedAt: 1, movies: [movie] } });
   const lease = data.acquirePeriod(3);
   const rejected = assert.rejects(lease.promise, { name: 'AbortError' });
   data.clearCaches();
@@ -128,25 +156,25 @@ test('clear cancels consumers and ignores late responses without repopulating st
   pending.resolve({ movies: [movie] });
   await tick();
   assert.equal(store.values.size, 0);
+  assert.equal(details.values.size, 0);
   data.dispose();
 });
-test('search scans detail document once, preserves browsing payloads and reuses separate indexes', async () => {
-  const { data, store, time } = await setup({ ids: Array.from({ length: 60 }, (_, i) => 60 - i) });
+test('search scans the detail store once, preserves browsing payloads and reuses separate indexes', async () => {
+  const { data, details, time } = await setup({ ids: Array.from({ length: 60 }, (_, i) => 60 - i) });
   const entries = Object.fromEntries(
     Array.from({ length: 60 }, (_, i) => [i + 1, { fetchedAt: time, movies: [movie] }]),
   );
-  put(store, D, { entries });
-  const before = store.values.get(D);
-  store.reads.clear();
+  putDetails(details, entries);
+  const before = new Map(details.values);
   const first = await data.search({ query: 'match' }).done;
   assert.equal(first.status, 'complete');
   assert.equal(first.hitPeriods, 60);
-  assert.equal(store.reads.get(D), 1);
-  assert.equal(store.values.get(D), before);
-  store.removeItem(D);
+  assert.equal(details.scans, 1);
+  assert.deepEqual(details.values, before);
+  details.values.clear();
   const second = await data.search({ query: 'match' }).done;
   assert.equal(second.hitPeriods, 60);
-  assert.equal(store.values.has(D), false);
+  assert.equal(details.values.size, 0);
   data.dispose();
 });
 test('partial search reports missing failures separately and groups follow catalog order', async () => {
@@ -211,9 +239,15 @@ test('catalog fallback, forced full verification and duplicate periods preserve 
   assert.equal(calls, 2);
   data.dispose();
 });
-test('corrupt detail documents and full storage leave fetched data usable', async () => {
-  const { data, store } = await setup();
-  store.setItem(D, '{broken');
+test('failing detail storage and full localStorage leave fetched data usable', async () => {
+  const details = detailStore();
+  details.get =
+    details.set =
+    details.entries =
+      async () => {
+        throw new Error('full');
+      };
+  const { data, store } = await setup({ details });
   store.setItem = () => {
     throw new Error('full');
   };
@@ -270,7 +304,7 @@ test('disposed data rejects new work and cancels startup without writing late ca
 
 test('navigation disk and memory are bounded independently at 48 and 24 periods', async () => {
   let calls = 0;
-  const { data, store } = await setup({
+  const { data, details, advance } = await setup({
     ids: [60],
     request: async () => {
       calls++;
@@ -278,13 +312,16 @@ test('navigation disk and memory are bounded independently at 48 and 24 periods'
     },
   });
   for (let period = 1; period <= 50; period++) {
+    advance(1);
     const lease = data.acquirePeriod(period);
     await lease.promise;
     lease.release();
   }
-  assert.equal(Object.keys(JSON.parse(store.values.get(D)).entries).length, 48);
-  assert.ok(JSON.parse(store.values.get(D)).entries[50]);
-  store.removeItem(D);
+  await tick();
+  assert.equal(details.values.size, 48);
+  assert.ok(details.values.get('50'));
+  assert.equal(details.values.has('1'), false);
+  details.values.clear();
   const recent = data.acquirePeriod(50);
   await recent.promise;
   recent.release();
@@ -296,20 +333,12 @@ test('navigation disk and memory are bounded independently at 48 and 24 periods'
   data.dispose();
 });
 
-test('quota errors progressively shrink the navigation document and keep the new period', async () => {
-  const { data, store, time } = await setup();
-  put(store, D, {
-    entries: { 1: { fetchedAt: time - 1, movies: [movie] }, 2: { fetchedAt: time - 2, movies: [movie] } },
-  });
-  const originalSet = store.setItem;
-  store.setItem = (key, value) => {
-    if (key === D && Object.keys(JSON.parse(value).entries).length > 1) throw new Error('quota');
-    originalSet(key, value);
-  };
-  const lease = data.acquirePeriod(3);
-  await lease.promise;
-  lease.release();
-  assert.deepEqual(Object.keys(JSON.parse(store.values.get(D)).entries), ['3']);
+test('legacy localStorage details document is removed on startup', async () => {
+  const store = storage();
+  put(store, D, { entries: { 3: { fetchedAt: 1, movies: [movie] } } });
+  const { data } = await setup({ store });
+  assert.equal(store.values.has(D), false);
+  assert.ok(store.values.has(C));
   data.dispose();
 });
 

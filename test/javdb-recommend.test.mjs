@@ -6,6 +6,14 @@ import vm from 'node:vm';
 import { md5 } from '../src/userscripts/javdb-recommend/javdb-recommend-request.lib.js';
 
 import { createDomWindow, createMemoryStorage, domSkip } from './helpers/dom-env.mjs';
+import { IDBFactory } from 'fake-indexeddb';
+
+// Each page-storage object stands for one origin; its IndexedDB lives as long as it does.
+const originDatabases = new WeakMap();
+function indexedDBFor(storage) {
+  if (!originDatabases.has(storage)) originDatabases.set(storage, new IDBFactory());
+  return originDatabases.get(storage);
+}
 import { parseMetadataBlock } from '../scripts/lib/userscript-metadata.mjs';
 
 const srcPath = path.resolve(import.meta.dirname, '../src/userscripts/javdb-recommend/javdb-recommend.user.js');
@@ -93,6 +101,7 @@ async function runScript(window, fetchImpl, extraGlobals = {}, storage = createM
     document: window.document,
     location: window.location,
     localStorage: storage,
+    indexedDB: indexedDBFor(storage),
     fetch: fetchImpl,
     console,
     URLSearchParams,
@@ -1046,7 +1055,12 @@ test('re-anchoring aborts an obsolete detail request with no other consumers', {
 
   jump.value = '5';
   jump.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="5"] .item'); i += 1) {
+  // The detail read goes through IndexedDB before the request, and loading skeletons also carry .item.
+  for (
+    let i = 0;
+    i < 100 && (periodFiveAttempts < 2 || !window.document.querySelector('.jdb-ra-sec[data-period="5"] .item'));
+    i += 1
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   assert.equal(periodFiveAttempts, 2);
