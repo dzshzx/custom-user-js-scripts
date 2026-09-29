@@ -1,4 +1,4 @@
-import { iconSvg } from '../shared/shared-icons.lib.js';
+import { mountIcon } from '../shared/shared-icons.lib.jsx';
 import { applyTheme } from '../shared/shared-tokens.lib.js';
 import { createWidgetShell } from '../shared/shared-widget-shell.lib.js';
 import { createShellStyles } from './codex-quota-compass-panel-shell-styles.lib.js';
@@ -46,10 +46,12 @@ function renderPanelHeader(headerEl, labels = {}) {
       <span>${escapeHtml(labels.panelTitle || '')}</span>
     </div>
     <div class="cqc-panel-actions">
-      <button type="button" class="cqc-refresh" data-action="refresh">${iconSvg('refresh-cw', { size: 14 })}<span>${escapeHtml(labels.actionRefresh || '')}</span></button>
-      <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || 'Close')}">${iconSvg('x', { size: 16 })}</button>
+      <button type="button" class="cqc-refresh" data-action="refresh"><span data-icon="refresh-cw"></span><span>${escapeHtml(labels.actionRefresh || '')}</span></button>
+      <button type="button" class="cqc-icon-button" data-action="close" aria-label="${escapeHtml(labels.closeAria || 'Close')}"><span data-icon="x"></span></button>
     </div>
   `;
+  mountIcon(headerEl.querySelector('[data-icon="refresh-cw"]'), 'refresh-cw', { size: 14 });
+  mountIcon(headerEl.querySelector('[data-icon="x"]'), 'x', { size: 16 });
 }
 
 // Thin adapter over the shared widget shell: keeps the Codex Quota Compass DOM

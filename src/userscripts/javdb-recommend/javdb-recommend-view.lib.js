@@ -3,8 +3,8 @@ import { createSiteChrome } from './javdb-recommend-site-chrome.lib.js';
 
 var BASE = location.origin;
 /* ================= 官网资源约定 ================= */
-/* 图标 vendored from Lucide (https://lucide.dev), ISC License —— 与
-     src/userscripts/shared/shared-icons.lib.js 同源；由构建打包到安装文件。 */
+/* 图标 vendored from Lucide (https://lucide.dev), ISC License；本脚本的卡片流
+     仍用字符串模板，不走 shared-icons 的 preact 组件。 */
 var ICON_PATHS = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   'chevron-left': '<path d="m15 18-6-6 6-6"/>',

@@ -21,13 +21,14 @@ export const domSkip = domAvailable
   : 'DOM library not installed; run `npm install --no-save --no-package-lock happy-dom` to enable UI/UX tests.';
 
 // Preact creates nodes through the global `document` (as it exists in a real
-// userscript page). Modules that render with preact and are imported directly
-// by a test need `globalDocument: true`; the latest window wins, and each test
-// file runs in its own process, so the global never leaks across files.
+// userscript page), and shared icons, toasts and the quota panel all render
+// with preact, so every DOM window installs its document globally by default;
+// the latest window wins, and each test file runs in its own process, so the
+// global never leaks across files.
 // @floating-ui/dom reads the global `window` and DOM constructors once a
 // global window exists; tests that assert panel placement pass
 // `globalWindow: true`.
-export function createDomWindow({ url = 'https://chatgpt.com/', globalDocument = false, globalWindow = false } = {}) {
+export function createDomWindow({ url = 'https://chatgpt.com/', globalDocument = true, globalWindow = false } = {}) {
   if (!domAvailable) {
     throw new Error('happy-dom is not installed.');
   }

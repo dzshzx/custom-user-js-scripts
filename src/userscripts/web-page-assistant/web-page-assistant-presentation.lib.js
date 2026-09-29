@@ -1,10 +1,14 @@
-import { iconSvg } from '../shared/shared-icons.lib.js';
+import { mountIcon } from '../shared/shared-icons.lib.jsx';
 
 const LIB_NAME = 'WebPageAssistantPresentationLib';
 
-const REFRESH_ICON_HTML = iconSvg('refresh-cw', { size: 16, strokeWidth: 2.4 });
-const SETTINGS_ICON_HTML = iconSvg('settings', { size: 16, strokeWidth: 2.4 });
-const CLOSE_ICON_HTML = iconSvg('x', { size: 16, strokeWidth: 2.4 });
+const ICON_OPTIONS = { size: 16, strokeWidth: 2.4 };
+
+function mountIcons(container) {
+  for (const slot of container.querySelectorAll('[data-part-icon]')) {
+    mountIcon(slot, slot.dataset.partIcon, ICON_OPTIONS);
+  }
+}
 
 // Widget expansion is pointer-dependent: coarse pointers (touch) toggle via
 // click instead of hover. Kept here so entry and layout share one probe.
@@ -192,15 +196,13 @@ function createWidgetElement({ documentObject, model }) {
   widget.className = enabled ? 'part-widget' : 'part-widget is-idle';
   widget.innerHTML = `
     <button type="button" class="part-widget-button"${enabled ? '' : ' data-part-action="open-settings"'} aria-label="${enabled ? '自动刷新倒计时，悬停或聚焦查看控制' : '自动刷新未启用，打开设置'}">
-      <span class="part-widget-button-icon" aria-hidden="true">
-        ${REFRESH_ICON_HTML}
-      </span>
+      <span class="part-widget-button-icon" aria-hidden="true" data-part-icon="refresh-cw"></span>
       ${enabled ? '<span class="part-widget-button-text" data-part-role="countdown" aria-hidden="true">--:--</span>' : ''}
     </button>
     <div class="part-widget-panel">
       <div class="part-widget-panel-header">
         <p class="part-title">自动刷新</p>
-        <button type="button" class="part-icon-button" data-part-action="open-settings" aria-label="打开自动刷新设置">${SETTINGS_ICON_HTML}</button>
+        <button type="button" class="part-icon-button" data-part-action="open-settings" aria-label="打开自动刷新设置" data-part-icon="settings"></button>
       </div>
       ${enabled ? '<div class="part-widget-countdown" data-part-role="countdown" aria-hidden="true">--:--</div>' : ''}
       <div class="part-muted" data-part-role="widget-summary"></div>
@@ -217,6 +219,7 @@ function createWidgetElement({ documentObject, model }) {
     <span class="part-sr-only" role="status" data-part-role="widget-status"></span>
   `;
 
+  mountIcons(widget);
   widget.querySelector('[data-part-role="widget-summary"]').textContent = model.summary;
 
   return {
@@ -247,9 +250,7 @@ function createDialogElement({ documentObject, model }) {
           <h2 class="part-title" id="part-dialog-title">网页助手</h2>
           <p class="part-subtitle">按页面或站点管理自动刷新与限制解除。</p>
         </div>
-        <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
-          ${CLOSE_ICON_HTML}
-        </button>
+        <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭" data-part-icon="x"></button>
       </div>
       <div class="part-tabs" role="tablist" aria-label="网页助手功能">
         <button type="button" class="part-tab" role="tab" aria-selected="${model.activeTab === 'refresh'}" data-part-action="switch-tab" data-part-tab="refresh">自动刷新</button>
@@ -366,6 +367,7 @@ function createDialogElement({ documentObject, model }) {
 	      </div>
   `;
 
+  mountIcons(panel);
   dialog.append(panel);
   return dialog;
 }

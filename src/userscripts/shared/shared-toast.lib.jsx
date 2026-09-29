@@ -1,5 +1,5 @@
 import { render } from 'preact';
-import { iconSvg } from './shared-icons.lib.js';
+import { Icon } from './shared-icons.lib.jsx';
 
 const TOAST_LIMIT = 3;
 const DEFAULT_DURATION_MS = 4000;
@@ -106,11 +106,9 @@ function ToastItem({ toast }) {
   const iconClass = toast.tone === 'progress' ? 'wk-toast-icon wk-spin' : 'wk-toast-icon';
   return (
     <div className={toast.leaving ? 'wk-toast is-leaving' : 'wk-toast'} data-tone={toast.tone} data-toast-id={toast.id}>
-      <span
-        className={iconClass}
-        hidden={!iconName}
-        dangerouslySetInnerHTML={{ __html: iconName ? iconSvg(iconName) : '' }}
-      />
+      <span className={iconClass} hidden={!iconName}>
+        {iconName ? <Icon name={iconName} /> : null}
+      </span>
       <span className="wk-toast-message">{toast.message}</span>
     </div>
   );

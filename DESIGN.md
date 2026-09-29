@@ -112,7 +112,7 @@ sans-serif`.
   Dark mode resolves through `resolveTheme`/`applyTheme` (host detection first,
   `prefers-color-scheme` fallback) and applies via `[data-wk-theme]` on the
   script root, not per-script media queries.
-- Icons come from `shared-icons.lib.js` (vendored Lucide SVG paths).
+- Icons come from `shared-icons.lib.jsx`, a thin wrapper over the `lucide-preact` package (license ships with the package).
 - In-page feedback goes through `shared-toast.lib.jsx`.
 - Extend the kit when a script needs a capability it lacks; keep per-script
   styles limited to domain presentation.
@@ -178,7 +178,7 @@ sans-serif`.
   dialog message line.
 - Presentation responsibilities belong in presentation support modules:
   scoped styles, icons, dialog contract, widget markup, and dialog markup.
-  Icons come from the shared `shared-icons` module (vendored Lucide).
+  Icons come from the shared `shared-icons` module (lucide-preact).
 - Runtime state, storage, refresh timers, widget positioning, and unlocker
   behavior should stay outside presentation modules.
 - Page and site scope labels must remain clear; users need to know whether a
@@ -206,7 +206,7 @@ sans-serif`.
 - Navigation payloads and the full-search index are separate caches. Search index admission must not evict browsing payloads; detail transport remains single-flight per period and uses consumer leases so cancellation only aborts a request after its last consumer releases it.
 - Full-archive search renders each matching Period exactly once as it arrives. Browse and search share the Period Section module: metadata is inserted as text, filtering uses archive-owned markers, and a loading section keeps the same `section` and `.movie-list` nodes after data arrives. Identical payloads keep externally attached card controls and listeners. Off-screen Period sections may use browser-native rendering containment, but DOM order and externally decorated movie grids remain stable for multi-userscript compatibility.
 - Movie cards reuse the site's native `movie-list` markup and link directly to the site's `/v/<id>` detail pages. Covers are landscape and must render uncropped (`contain`); release dates share the restrained metadata row with scores instead of adding another card section.
-- All glyphs are inline Lucide SVGs (vendored from `src/userscripts/shared/shared-icons.lib.js` into the presentation module and bundled into the installation file); never emoji. Buttons keep icon plus text.
+- All glyphs are inline Lucide SVGs (this script keeps its own few vendored Lucide paths because its card stream stays string-rendered; bundled into the installation file); never emoji. Buttons keep icon plus text.
 - The search box is disambiguated by a segmented control (loaded stream vs. all periods): the loaded segment filters instantly on input, the all-periods segment runs the stoppable full-archive search from an explicit submit (Enter or the search button).
 - Period sections render gray skeleton cards at the native card aspect ratio (`padding-top: 67%`) while loading, swapped wholesale when data arrives; a failed cover image yields a labelled placeholder box instead of a hidden hole.
 - On narrow viewports (<769px) the sticky toolbar becomes two fixed rows (period navigation, then search and actions), with anchor scroll margins recalculated to match.
@@ -246,4 +246,4 @@ sans-serif`.
 - No global CSS selectors that can style the host page unintentionally.
 - No native `alert()` / `confirm()` for in-page feedback; use the kit toast.
 - No emoji, icon fonts, or CSS-drawn icons in script UI; use the kit's
-  vendored Lucide set.
+  Lucide icons (`shared-icons`, backed by lucide-preact).

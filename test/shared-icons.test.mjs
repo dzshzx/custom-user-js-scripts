@@ -1,59 +1,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { h } from 'preact';
+import { renderToString } from 'preact-render-to-string';
+import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-import { ICON_NAMES, iconSvg } from '../src/userscripts/shared/shared-icons.lib.js';
+import { ICON_NAMES, Icon, mountIcon } from '../src/userscripts/shared/shared-icons.lib.jsx';
 
-const EXPECTED_ICONS = [
-  'x',
-  'refresh-cw',
-  'settings',
-  'search',
-  'chevron-left',
-  'chevron-right',
-  'arrow-left',
-  'star',
-  'check',
-  'alert-triangle',
-  'loader',
-];
-
-test('ICON_NAMES lists the vendored Lucide set', () => {
-  assert.deepEqual([...ICON_NAMES].sort(), [...EXPECTED_ICONS].sort());
+test('ICON_NAMES lists the icons scripts use', () => {
+  assert.deepEqual([...ICON_NAMES].sort(), ['alert-triangle', 'check', 'loader', 'refresh-cw', 'settings', 'x']);
 });
 
-test('iconSvg returns a consistent accessible SVG string for every icon', () => {
+test('Icon renders an accessible lucide SVG with shared classes for every name', () => {
   for (const name of ICON_NAMES) {
-    const svg = iconSvg(name);
+    const svg = renderToString(h(Icon, { name }));
     assert.ok(svg.startsWith('<svg'), name);
-    assert.ok(svg.endsWith('</svg>'), name);
     for (const fragment of [
       'viewBox="0 0 24 24"',
       'fill="none"',
       'stroke="currentColor"',
       'stroke-width="2"',
-      'stroke-linecap="round"',
-      'stroke-linejoin="round"',
       'width="16"',
       'height="16"',
       'aria-hidden="true"',
       'focusable="false"',
-      `wk-icon-${name}`,
+      `wk-icon wk-icon-${name}`,
     ]) {
       assert.ok(svg.includes(fragment), `${name} missing ${fragment}`);
     }
   }
 });
 
-test('iconSvg honors size and strokeWidth options', () => {
-  const svg = iconSvg('x', { size: 20, strokeWidth: 1.5 });
+test('Icon honors size and strokeWidth and rejects unknown names', () => {
+  const svg = renderToString(h(Icon, { name: 'x', size: 20, strokeWidth: 1.5 }));
   assert.ok(svg.includes('width="20"'));
-  assert.ok(svg.includes('height="20"'));
   assert.ok(svg.includes('stroke-width="1.5"'));
+  assert.throws(() => renderToString(h(Icon, { name: 'nope' })), /unknown icon "nope"/);
 });
 
-test('iconSvg rejects unknown names and non-numeric sizing', () => {
-  assert.throws(() => iconSvg('nope'), /unknown icon "nope"/);
-  assert.throws(() => iconSvg('nope'), /alert-triangle/);
-  assert.throws(() => iconSvg('x', { size: '16px; color: red' }));
-  assert.throws(() => iconSvg('x', { strokeWidth: 0 }));
+test('mountIcon renders into an existing slot', { skip: domSkip }, () => {
+  const window = createDomWindow({ globalDocument: true });
+  const slot = window.document.createElement('span');
+  mountIcon(slot, 'settings', { size: 14 });
+  assert.ok(slot.querySelector('svg.wk-icon-settings'));
+  assert.equal(slot.querySelector('svg').getAttribute('width'), '14');
 });

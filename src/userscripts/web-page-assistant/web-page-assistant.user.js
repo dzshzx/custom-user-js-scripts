@@ -1765,43 +1765,715 @@
     documentObject.documentElement.append(style);
   }
 
-  // src/userscripts/shared/shared-icons.lib.js
-  var ICON_CONTENT = {
-    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
-    "refresh-cw": '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
-    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1-1-1.73l-.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15-.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
-    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-    "chevron-left": '<path d="m15 18-6-6 6-6"/>',
-    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
-    "arrow-left": '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
-    star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
-    check: '<path d="M20 6 9 17l-5-5"/>',
-    "alert-triangle": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
-    loader: '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>'
-  };
-  var ICON_NAMES = Object.keys(ICON_CONTENT);
-  function toPositiveNumber(value, name) {
-    const number = Number(value);
-    if (!Number.isFinite(number) || number <= 0) {
-      throw new Error(`shared-icons: ${name} must be a positive number, got ${JSON.stringify(value)}`);
-    }
-    return number;
+  // node_modules/preact/dist/preact.module.js
+  var n;
+  var l;
+  var u;
+  var t;
+  var i;
+  var r;
+  var o;
+  var e;
+  var f;
+  var c;
+  var a;
+  var s;
+  var h;
+  var p;
+  var v;
+  var y;
+  var d = {};
+  var w = [];
+  var _ = /acit|ex(?:s|g|n|p|$)|rph|grid|ows|mnc|ntw|ine[ch]|zoo|^ord|itera/i;
+  var g = Array.isArray;
+  function m(n2, l3) {
+    for (var u4 in l3) n2[u4] = l3[u4];
+    return n2;
   }
-  function iconSvg(name, { size: size2 = 16, strokeWidth = 2 } = {}) {
-    const content = ICON_CONTENT[name];
-    if (!content) {
+  function b(n2) {
+    n2 && n2.parentNode && n2.parentNode.removeChild(n2);
+  }
+  function k(l3, u4, t3) {
+    var i3, r3, o3, e3 = {};
+    for (o3 in u4) "key" == o3 ? i3 = u4[o3] : "ref" == o3 ? r3 = u4[o3] : e3[o3] = u4[o3];
+    if (arguments.length > 2 && (e3.children = arguments.length > 3 ? n.call(arguments, 2) : t3), "function" == typeof l3 && null != l3.defaultProps) for (o3 in l3.defaultProps) void 0 === e3[o3] && (e3[o3] = l3.defaultProps[o3]);
+    return x(l3, e3, i3, r3, null);
+  }
+  function x(n2, t3, i3, r3, o3) {
+    var e3 = { type: n2, props: t3, key: i3, ref: r3, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: null == o3 ? ++u : o3, __i: -1, __u: 0 };
+    return null == o3 && null != l.vnode && l.vnode(e3), e3;
+  }
+  function S(n2) {
+    return n2.children;
+  }
+  function C(n2, l3) {
+    this.props = n2, this.context = l3;
+  }
+  function $(n2, l3) {
+    if (null == l3) return n2.__ ? $(n2.__, n2.__i + 1) : null;
+    for (var u4; l3 < n2.__k.length; l3++) if (null != (u4 = n2.__k[l3]) && null != u4.__e) return u4.__e;
+    return "function" == typeof n2.type ? $(n2) : null;
+  }
+  function I(n2) {
+    if (n2.__P && n2.__d) {
+      var u4 = n2.__v, t3 = u4.__e, i3 = [], r3 = [], o3 = m({}, u4);
+      o3.__v = u4.__v + 1, l.vnode && l.vnode(o3), q(n2.__P, o3, u4, n2.__n, n2.__P.namespaceURI, 32 & u4.__u ? [t3] : null, i3, null == t3 ? $(u4) : t3, !!(32 & u4.__u), r3), o3.__v = u4.__v, o3.__.__k[o3.__i] = o3, D(i3, o3, r3), u4.__e = u4.__ = null, o3.__e != t3 && P(o3);
+    }
+  }
+  function P(n2) {
+    if (null != (n2 = n2.__) && null != n2.__c) return n2.__e = n2.__c.base = null, n2.__k.some(function(l3) {
+      if (null != l3 && null != l3.__e) return n2.__e = n2.__c.base = l3.__e;
+    }), P(n2);
+  }
+  function A(n2) {
+    (!n2.__d && (n2.__d = true) && i.push(n2) && !H.__r++ || r != l.debounceRendering) && ((r = l.debounceRendering) || o)(H);
+  }
+  function H() {
+    try {
+      for (var n2, l3 = 1; i.length; ) i.length > l3 && i.sort(e), n2 = i.shift(), l3 = i.length, I(n2);
+    } finally {
+      i.length = H.__r = 0;
+    }
+  }
+  function L(n2, l3, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
+    var s3, h2, p3, v3, y2, _2, g2 = t3 && t3.__k || w, m3 = l3.length;
+    for (f4 = T(u4, l3, g2, f4, m3), s3 = 0; s3 < m3; s3++) null != (p3 = u4.__k[s3]) && (h2 = -1 != p3.__i && g2[p3.__i] || d, p3.__i = s3, _2 = q(n2, p3, h2, i3, r3, o3, e3, f4, c3, a3), v3 = p3.__e, p3.ref && h2.ref != p3.ref && (h2.ref && J(h2.ref, null, p3), a3.push(p3.ref, p3.__c || v3, p3)), null == y2 && null != v3 && (y2 = v3), 4 & p3.__u ? (f4 = j(p3, f4, n2), h2.__e && (h2.__e = null)) : "function" == typeof p3.type && void 0 !== _2 ? f4 = _2 : v3 && (f4 = v3.nextSibling), p3.__u &= -7);
+    return u4.__e = y2, f4;
+  }
+  function T(n2, l3, u4, t3, i3) {
+    var r3, o3, e3, f4, c3, a3 = u4.length, s3 = a3, h2 = 0;
+    for (n2.__k = new Array(i3), r3 = 0; r3 < i3; r3++) null != (o3 = l3[r3]) && "boolean" != typeof o3 && "function" != typeof o3 ? ("string" == typeof o3 || "number" == typeof o3 || "bigint" == typeof o3 || o3.constructor == String ? o3 = n2.__k[r3] = x(null, o3, null, null, null) : g(o3) ? o3 = n2.__k[r3] = x(S, { children: o3 }, null, null, null) : void 0 === o3.constructor && o3.__b > 0 ? o3 = n2.__k[r3] = x(o3.type, o3.props, o3.key, o3.ref ? o3.ref : null, o3.__v) : n2.__k[r3] = o3, f4 = r3 + h2, o3.__ = n2, o3.__b = n2.__b + 1, e3 = null, -1 != (c3 = o3.__i = O(o3, u4, f4, s3)) && (s3--, (e3 = u4[c3]) && (e3.__u |= 2)), null == e3 || null == e3.__v ? (-1 == c3 && (i3 > a3 ? h2-- : i3 < a3 && h2++), "function" != typeof o3.type && (o3.__u |= 4)) : c3 != f4 && (c3 == f4 - 1 ? h2-- : c3 == f4 + 1 ? h2++ : (c3 > f4 ? h2-- : h2++, o3.__u |= 4))) : n2.__k[r3] = null;
+    if (s3) for (r3 = 0; r3 < a3; r3++) null != (e3 = u4[r3]) && 0 == (2 & e3.__u) && (e3.__e == t3 && (t3 = $(e3)), K(e3, e3));
+    return t3;
+  }
+  function j(n2, l3, u4) {
+    var t3, i3;
+    if ("function" == typeof n2.type) {
+      for (t3 = n2.__k, i3 = 0; t3 && i3 < t3.length; i3++) t3[i3] && (t3[i3].__ = n2, l3 = j(t3[i3], l3, u4));
+      return l3;
+    }
+    n2.__e != l3 && (l3 && n2.type && !l3.parentNode && (l3 = $(n2)), l3 = u4.insertBefore(n2.__e, l3 || null));
+    do {
+      l3 = l3 && l3.nextSibling;
+    } while (null != l3 && 8 == l3.nodeType);
+    return l3;
+  }
+  function F(n2, l3) {
+    return l3 = l3 || [], null == n2 || "boolean" == typeof n2 || (g(n2) ? n2.some(function(n3) {
+      F(n3, l3);
+    }) : l3.push(n2)), l3;
+  }
+  function O(n2, l3, u4, t3) {
+    var i3, r3, o3, e3 = n2.key, f4 = n2.type, c3 = l3[u4], a3 = null != c3 && 0 == (2 & c3.__u);
+    if (null === c3 && null == e3 || a3 && e3 == c3.key && f4 == c3.type) return u4;
+    if (t3 > (a3 ? 1 : 0)) {
+      for (i3 = u4 - 1, r3 = u4 + 1; i3 >= 0 || r3 < l3.length; ) if (null != (c3 = l3[o3 = i3 >= 0 ? i3-- : r3++]) && 0 == (2 & c3.__u) && e3 == c3.key && f4 == c3.type) return o3;
+    }
+    return -1;
+  }
+  function z(n2, l3, u4) {
+    "-" == l3[0] ? n2.setProperty(l3, null == u4 ? "" : u4) : n2[l3] = null == u4 ? "" : "number" != typeof u4 || _.test(l3) ? u4 : u4 + "px";
+  }
+  function N(n2, l3, u4, t3, i3) {
+    var r3, o3;
+    n: if ("style" == l3) if ("string" == typeof u4) n2.style.cssText = u4;
+    else {
+      if ("string" == typeof t3 && (n2.style.cssText = t3 = ""), t3) for (l3 in t3) u4 && l3 in u4 || z(n2.style, l3, "");
+      if (u4) for (l3 in u4) t3 && u4[l3] == t3[l3] || z(n2.style, l3, u4[l3]);
+    }
+    else if ("o" == l3[0] && "n" == l3[1]) r3 = l3 != (l3 = l3.replace(s, "$1")), o3 = l3.toLowerCase(), l3 = o3 in n2 || "onFocusOut" == l3 || "onFocusIn" == l3 ? o3.slice(2) : l3.slice(2), n2.l || (n2.l = {}), n2.l[l3 + r3] = u4, u4 ? t3 ? u4[a] = t3[a] : (u4[a] = h, n2.addEventListener(l3, r3 ? v : p, r3)) : n2.removeEventListener(l3, r3 ? v : p, r3);
+    else {
+      if ("http://www.w3.org/2000/svg" == i3) l3 = l3.replace(/xlink(H|:h)/, "h").replace(/sName$/, "s");
+      else if ("width" != l3 && "height" != l3 && "href" != l3 && "list" != l3 && "form" != l3 && "tabIndex" != l3 && "download" != l3 && "rowSpan" != l3 && "colSpan" != l3 && "role" != l3 && "popover" != l3 && l3 in n2) try {
+        n2[l3] = null == u4 ? "" : u4;
+        break n;
+      } catch (n3) {
+      }
+      "function" == typeof u4 || (null == u4 || false === u4 && "-" != l3[4] ? n2.removeAttribute(l3) : n2.setAttribute(l3, "popover" == l3 && 1 == u4 ? "" : u4));
+    }
+  }
+  function V(n2) {
+    return function(u4) {
+      if (this.l) {
+        var t3 = this.l[u4.type + n2];
+        if (null == u4[c]) u4[c] = h++;
+        else if (u4[c] < t3[a]) return;
+        return t3(l.event ? l.event(u4) : u4);
+      }
+    };
+  }
+  function q(n2, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
+    var s3, h2, p3, v3, y2, d2, _2, k3, x3, M, I2, P2, A2, H2, T3, j3, F2 = u4.type;
+    if (void 0 !== u4.constructor) return null;
+    128 & t3.__u && (c3 = !!(32 & t3.__u), o3 = [f4 = u4.__e = t3.__e]), (s3 = l.__b) && s3(u4);
+    n: if ("function" == typeof F2) {
+      h2 = e3.length;
+      try {
+        if (x3 = u4.props, M = F2.prototype && F2.prototype.render, I2 = (s3 = F2.contextType) && i3[s3.__c], P2 = s3 ? I2 ? I2.props.value : s3.__ : i3, t3.__c ? k3 = (p3 = u4.__c = t3.__c).__ = p3.__E : (M ? u4.__c = p3 = new F2(x3, P2) : (u4.__c = p3 = new C(x3, P2), p3.constructor = F2, p3.render = Q), I2 && I2.sub(p3), p3.state || (p3.state = {}), p3.__n = i3, v3 = p3.__d = true, p3.__h = [], p3._sb = []), M && null == p3.__s && (p3.__s = p3.state), M && null != F2.getDerivedStateFromProps && (p3.__s == p3.state && (p3.__s = m({}, p3.__s)), m(p3.__s, F2.getDerivedStateFromProps(x3, p3.__s))), y2 = p3.props, d2 = p3.state, p3.__v = u4, v3) M && null == F2.getDerivedStateFromProps && null != p3.componentWillMount && p3.componentWillMount(), M && null != p3.componentDidMount && p3.__h.push(p3.componentDidMount);
+        else {
+          if (M && null == F2.getDerivedStateFromProps && x3 !== y2 && null != p3.componentWillReceiveProps && p3.componentWillReceiveProps(x3, P2), u4.__v == t3.__v || !p3.__e && null != p3.shouldComponentUpdate && false === p3.shouldComponentUpdate(x3, p3.__s, P2)) {
+            u4.__v != t3.__v && (p3.props = x3, p3.state = p3.__s, p3.__d = false), u4.__e = t3.__e, u4.__k = t3.__k, u4.__k.some(function(n3) {
+              n3 && (n3.__ = u4);
+            }), w.push.apply(p3.__h, p3._sb), p3._sb = [], p3.__h.length && e3.push(p3), f4 = $(t3);
+            break n;
+          }
+          null != p3.componentWillUpdate && p3.componentWillUpdate(x3, p3.__s, P2), M && null != p3.componentDidUpdate && p3.__h.push(function() {
+            p3.componentDidUpdate(y2, d2, _2);
+          });
+        }
+        if (p3.context = P2, p3.props = x3, p3.__P = n2, p3.__e = false, A2 = l.__r, H2 = 0, M) p3.state = p3.__s, p3.__d = false, A2 && A2(u4), s3 = p3.render(p3.props, p3.state, p3.context), w.push.apply(p3.__h, p3._sb), p3._sb = [];
+        else do {
+          p3.__d = false, A2 && A2(u4), s3 = p3.render(p3.props, p3.state, p3.context), p3.state = p3.__s;
+        } while (p3.__d && ++H2 < 25);
+        p3.state = p3.__s, null != p3.getChildContext && (i3 = m(m({}, i3), p3.getChildContext())), M && !v3 && null != p3.getSnapshotBeforeUpdate && (_2 = p3.getSnapshotBeforeUpdate(y2, d2)), T3 = null != s3 && s3.type === S && null == s3.key ? E(s3.props.children) : s3, f4 = L(n2, g(T3) ? T3 : [T3], u4, t3, i3, r3, o3, e3, f4, c3, a3), p3.base = u4.__e, u4.__u &= -161, p3.__h.length && e3.push(p3), k3 && (p3.__E = p3.__ = null);
+      } catch (n3) {
+        if (e3.length = h2, u4.__v = null, c3 || null != o3) {
+          if (n3.then) {
+            for (u4.__u |= c3 ? 160 : 128; f4 && 8 == f4.nodeType && f4.nextSibling; ) f4 = f4.nextSibling;
+            null != o3 && (o3[o3.indexOf(f4)] = null), u4.__e = f4;
+          } else if (null != o3) for (j3 = o3.length; j3--; ) b(o3[j3]);
+        } else u4.__e = t3.__e;
+        null == u4.__k && (u4.__k = t3.__k || []), n3.then || B(u4), l.__e(n3, u4, t3);
+      }
+    } else null == o3 && u4.__v == t3.__v ? (u4.__k = t3.__k, u4.__e = t3.__e) : f4 = u4.__e = G(t3.__e, u4, t3, i3, r3, o3, e3, c3, a3);
+    return (s3 = l.diffed) && s3(u4), 128 & u4.__u ? void 0 : f4;
+  }
+  function B(n2) {
+    n2 && (n2.__c && (n2.__c.__e = true), n2.__k && n2.__k.some(B));
+  }
+  function D(n2, u4, t3) {
+    for (var i3 = 0; i3 < t3.length; i3++) J(t3[i3], t3[++i3], t3[++i3]);
+    l.__c && l.__c(u4, n2), n2.some(function(u5) {
+      try {
+        n2 = u5.__h, u5.__h = [], n2.some(function(n3) {
+          n3.call(u5);
+        });
+      } catch (n3) {
+        l.__e(n3, u5.__v);
+      }
+    });
+  }
+  function E(n2) {
+    return "object" != typeof n2 || null == n2 || n2.__b > 0 ? n2 : g(n2) ? n2.map(E) : void 0 !== n2.constructor ? null : m({}, n2);
+  }
+  function G(u4, t3, i3, r3, o3, e3, f4, c3, a3) {
+    var s3, h2, p3, v3, y2, w3, _2, m3 = i3.props || d, k3 = t3.props, x3 = t3.type;
+    if ("svg" == x3 ? o3 = "http://www.w3.org/2000/svg" : "math" == x3 ? o3 = "http://www.w3.org/1998/Math/MathML" : o3 || (o3 = "http://www.w3.org/1999/xhtml"), null != e3) {
+      for (s3 = 0; s3 < e3.length; s3++) if ((y2 = e3[s3]) && "setAttribute" in y2 == !!x3 && (x3 ? y2.localName == x3 : 3 == y2.nodeType)) {
+        u4 = y2, e3[s3] = null;
+        break;
+      }
+    }
+    if (null == u4) {
+      if (null == x3) return document.createTextNode(k3);
+      u4 = document.createElementNS(o3, x3, k3.is && k3), c3 && (l.__m && l.__m(t3, e3), c3 = false), e3 = null;
+    }
+    if (null == x3) m3 === k3 || c3 && u4.data == k3 || (u4.data = k3);
+    else {
+      if (e3 = "textarea" == x3 && null != k3.defaultValue ? null : e3 && n.call(u4.childNodes), !c3 && null != e3) for (m3 = {}, s3 = 0; s3 < u4.attributes.length; s3++) m3[(y2 = u4.attributes[s3]).name] = y2.value;
+      for (s3 in m3) y2 = m3[s3], "dangerouslySetInnerHTML" == s3 ? p3 = y2 : "children" == s3 || s3 in k3 || "value" == s3 && "defaultValue" in k3 || "checked" == s3 && "defaultChecked" in k3 || N(u4, s3, null, y2, o3);
+      for (s3 in k3) y2 = k3[s3], "children" == s3 ? v3 = y2 : "dangerouslySetInnerHTML" == s3 ? h2 = y2 : "value" == s3 ? w3 = y2 : "checked" == s3 ? _2 = y2 : c3 && "function" != typeof y2 || m3[s3] === y2 || N(u4, s3, y2, m3[s3], o3);
+      if (h2) c3 || p3 && (h2.__html == p3.__html || h2.__html == u4.innerHTML) || (u4.innerHTML = h2.__html), t3.__k = [];
+      else if (p3 && (u4.innerHTML = ""), L("template" == t3.type ? u4.content : u4, g(v3) ? v3 : [v3], t3, i3, r3, "foreignObject" == x3 ? "http://www.w3.org/1999/xhtml" : o3, e3, f4, e3 ? e3[0] : i3.__k && $(i3, 0), c3, a3), null != e3) for (s3 = e3.length; s3--; ) b(e3[s3]);
+      c3 && "textarea" != x3 || (s3 = "value", "progress" == x3 && null == w3 ? u4.removeAttribute("value") : null != w3 && (w3 !== u4[s3] || "progress" == x3 && !w3 || "option" == x3 && w3 != m3[s3]) && N(u4, s3, w3, m3[s3], o3), s3 = "checked", null != _2 && _2 != u4[s3] && N(u4, s3, _2, m3[s3], o3));
+    }
+    return u4;
+  }
+  function J(n2, u4, t3) {
+    try {
+      if ("function" == typeof n2) {
+        var i3 = "function" == typeof n2.__u;
+        i3 && n2.__u(), i3 && null == u4 || (n2.__u = n2(u4));
+      } else n2.current = u4;
+    } catch (n3) {
+      l.__e(n3, t3);
+    }
+  }
+  function K(n2, u4, t3) {
+    var i3, r3;
+    if (l.unmount && l.unmount(n2), (i3 = n2.ref) && (i3.current && i3.current != n2.__e || J(i3, null, u4)), null != (i3 = n2.__c)) {
+      if (i3.componentWillUnmount) try {
+        i3.componentWillUnmount();
+      } catch (n3) {
+        l.__e(n3, u4);
+      }
+      i3.base = i3.__P = i3.__n = null;
+    }
+    if (i3 = n2.__k) for (r3 = 0; r3 < i3.length; r3++) i3[r3] && K(i3[r3], u4, t3 || "function" != typeof n2.type);
+    t3 || b(n2.__e), n2.__c = n2.__ = n2.__e = void 0;
+  }
+  function Q(n2, l3, u4) {
+    return this.constructor(n2, u4);
+  }
+  function R(u4, t3, i3) {
+    var r3, o3, e3, f4;
+    t3 == document && (t3 = document.documentElement), l.__ && l.__(u4, t3), o3 = (r3 = "function" == typeof i3) ? null : i3 && i3.__k || t3.__k, e3 = [], f4 = [], q(t3, u4 = (!r3 && i3 || t3).__k = k(S, null, [u4]), o3 || d, d, t3.namespaceURI, !r3 && i3 ? [i3] : o3 ? null : t3.firstChild ? n.call(t3.childNodes) : null, e3, !r3 && i3 ? i3 : o3 ? o3.__e : t3.firstChild, r3, f4), D(e3, u4, f4), u4.props.children = null;
+  }
+  function X(n2) {
+    function l3(n3) {
+      var u4, t3;
+      return this.getChildContext || (u4 = /* @__PURE__ */ new Set(), (t3 = {})[l3.__c] = this, this.getChildContext = function() {
+        return t3;
+      }, this.componentWillUnmount = function() {
+        u4 = null;
+      }, this.shouldComponentUpdate = function(n4) {
+        this.props.value != n4.value && u4.forEach(function(n5) {
+          n5.__e = true, A(n5);
+        });
+      }, this.sub = function(n4) {
+        u4.add(n4);
+        var l4 = n4.componentWillUnmount;
+        n4.componentWillUnmount = function() {
+          u4 && u4.delete(n4), l4 && l4.call(n4);
+        };
+      }), n3.children;
+    }
+    return l3.__c = "__cC" + y++, l3.__ = n2, l3.Provider = l3.__l = (l3.Consumer = function(n3, l4) {
+      return n3.children(l4);
+    }).contextType = l3, l3;
+  }
+  n = w.slice, l = { __e: function(n2, l3, u4, t3) {
+    for (var i3, r3, o3; l3 = l3.__; ) if ((i3 = l3.__c) && !i3.__) try {
+      if ((r3 = i3.constructor) && null != r3.getDerivedStateFromError && (i3.setState(r3.getDerivedStateFromError(n2)), o3 = i3.__d), null != i3.componentDidCatch && (i3.componentDidCatch(n2, t3 || {}), o3 = i3.__d), o3) return i3.__E = i3;
+    } catch (l4) {
+      n2 = l4;
+    }
+    throw n2;
+  } }, u = 0, t = function(n2) {
+    return null != n2 && void 0 === n2.constructor;
+  }, C.prototype.setState = function(n2, l3) {
+    var u4;
+    u4 = null != this.__s && this.__s != this.state ? this.__s : this.__s = m({}, this.state), "function" == typeof n2 && (n2 = n2(m({}, u4), this.props)), n2 && m(u4, n2), null != n2 && this.__v && (l3 && this._sb.push(l3), A(this));
+  }, C.prototype.forceUpdate = function(n2) {
+    this.__v && (this.__e = true, n2 && this.__h.push(n2), A(this));
+  }, C.prototype.render = S, i = [], o = "function" == typeof Promise ? Promise.prototype.then.bind(Promise.resolve()) : setTimeout, e = function(n2, l3) {
+    return n2.__v.__b - l3.__v.__b;
+  }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, a = "__a" + f, s = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
+
+  // node_modules/lucide-preact/dist/esm/shared/src/utils/mergeClasses.mjs
+  var mergeClasses = (...classes) => classes.filter((className, index, array) => {
+    return Boolean(className) && className.trim() !== "" && array.indexOf(className) === index;
+  }).join(" ").trim();
+
+  // node_modules/lucide-preact/dist/esm/shared/src/utils/toKebabCase.mjs
+  var toKebabCase = (string) => string?.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+
+  // node_modules/lucide-preact/dist/esm/shared/src/utils/toLucideIconData.mjs
+  function toLucideIconData(iconName, iconNode, aliases = []) {
+    if (iconNode == null) {
+      throw new Error("[lucide]: iconNode is required when icon name is used");
+    }
+    return {
+      name: toKebabCase(iconName),
+      size: 24,
+      node: iconNode,
+      ...aliases.length > 0 ? { aliases } : {}
+    };
+  }
+
+  // node_modules/lucide-preact/dist/esm/shared/src/utils/toCamelCase.mjs
+  var toCamelCase = (string) => {
+    let out = "";
+    let upperNext = false;
+    for (const ch of string) {
+      if (ch === "-" || ch === "_" || ch <= " ") {
+        upperNext = out.length > 0;
+        continue;
+      }
+      if (out.length === 0) {
+        out += ch.toLowerCase();
+      } else {
+        out += upperNext ? ch.toUpperCase() : ch;
+      }
+      upperNext = false;
+    }
+    return out;
+  };
+
+  // node_modules/lucide-preact/dist/esm/shared/src/utils/toPascalCase.mjs
+  var toPascalCase = (string) => {
+    const camelCase = toCamelCase(string);
+    return camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
+  };
+
+  // node_modules/lucide-preact/dist/esm/shared/src/build/defaultAttributes.mjs
+  var defaultAttributes = {
+    xmlns: "http://www.w3.org/2000/svg",
+    width: 24,
+    height: 24,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    "stroke-width": 2,
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round"
+  };
+
+  // node_modules/lucide-preact/dist/esm/shared/src/build/buildLucideIconNode.mjs
+  function isDefined(value) {
+    return value !== null && value !== void 0;
+  }
+  function buildLucideIconNode(icon, params = {}) {
+    const attributeNames = params.attributeNames ?? {};
+    const getAttributeName = (attributeName) => attributeNames[attributeName] ?? attributeName;
+    const viewBoxWidth = icon.size ?? icon.width ?? defaultAttributes["width"];
+    const viewBoxHeight = icon.size ?? icon.height ?? defaultAttributes["height"];
+    const aliasClassNames = icon.aliases?.filter((alias) => typeof alias === "string" && alias.trim() !== "").map((alias) => `lucide-${alias}`) ?? [];
+    const iconClassNames = [...icon.name ? [`lucide-${icon.name}`] : [], ...aliasClassNames];
+    const classNamesFromClassName = params.className?.split(" ").filter(Boolean) ?? [];
+    const className = params.includeDefaultClasses === false ? mergeClasses(...classNamesFromClassName) : mergeClasses("lucide", ...iconClassNames, ...classNamesFromClassName);
+    const calculatedStrokeWidth = params.absoluteStrokeWidth ? Number(params.strokeWidth ?? defaultAttributes["stroke-width"]) * Number(icon.size ?? icon.width ?? defaultAttributes["width"]) / Number(params.size ?? params.width ?? defaultAttributes["width"]) : params.strokeWidth ?? defaultAttributes["stroke-width"];
+    const attributes = {
+      ...Object.entries(defaultAttributes).reduce((attrs, [attrName, value]) => {
+        attrs[getAttributeName(attrName)] = value;
+        return attrs;
+      }, {}),
+      ..."color" in params && params.color && {
+        [getAttributeName("stroke")]: params.color
+      },
+      ..."size" in params && isDefined(params.size) && {
+        [getAttributeName("width")]: params.size,
+        [getAttributeName("height")]: params.size
+      },
+      ..."width" in params && isDefined(params.width) && {
+        [getAttributeName("width")]: params.width
+      },
+      ..."height" in params && isDefined(params.height) && {
+        [getAttributeName("height")]: params.height
+      },
+      [getAttributeName("stroke-width")]: calculatedStrokeWidth,
+      ...className && {
+        [getAttributeName("class")]: className
+      },
+      [getAttributeName("viewBox")]: `0 0 ${viewBoxWidth} ${viewBoxHeight}`,
+      ...params.hasA11yProp === false ? {
+        [getAttributeName("aria-hidden")]: "true"
+      } : {},
+      ..."attributes" in params && params.attributes
+    };
+    return [
+      "svg",
+      attributes,
+      icon.node.map((child) => {
+        const [name, attrs, children] = child;
+        const nextAttrs = params.nonScalingStroke ? { [getAttributeName("vector-effect")]: "non-scaling-stroke", ...attrs } : attrs;
+        return children ? [name, nextAttrs, children] : [name, nextAttrs];
+      })
+    ];
+  }
+
+  // node_modules/lucide-preact/dist/esm/shared/src/utils/hasA11yProp.mjs
+  var hasA11yProp = (props) => {
+    for (const prop in props) {
+      if (prop.startsWith("aria-") || prop === "role" || prop === "title") {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // node_modules/preact/hooks/dist/hooks.module.js
+  var t2;
+  var r2;
+  var u2;
+  var i2;
+  var o2 = 0;
+  var f2 = [];
+  var c2 = l;
+  var e2 = c2.__b;
+  var a2 = c2.__r;
+  var v2 = c2.diffed;
+  var l2 = c2.__c;
+  var m2 = c2.unmount;
+  var p2 = c2.__;
+  function s2(n2, t3) {
+    c2.__h && c2.__h(r2, n2, o2 || t3), o2 = 0;
+    var u4 = r2.__H || (r2.__H = { __: [], __h: [] });
+    return n2 >= u4.__.length && u4.__.push({}), u4.__[n2];
+  }
+  function x2(n2) {
+    var u4 = r2.context[n2.__c], i3 = s2(t2++, 9);
+    return i3.c = n2, u4 ? (null == i3.__ && (i3.__ = true, u4.sub(r2)), u4.props.value) : n2.__;
+  }
+  function j2() {
+    for (var n2; n2 = f2.shift(); ) {
+      var t3 = n2.__H;
+      if (n2.__P && t3) try {
+        t3.__h.some(z2), t3.__h.some(B2), t3.__h = [];
+      } catch (r3) {
+        t3.__h = [], c2.__e(r3, n2.__v);
+      }
+    }
+  }
+  c2.__b = function(n2) {
+    r2 = null, e2 && e2(n2);
+  }, c2.__ = function(n2, t3) {
+    n2 && t3.__k && t3.__k.__m && (n2.__m = t3.__k.__m), p2 && p2(n2, t3);
+  }, c2.__r = function(n2) {
+    a2 && a2(n2), t2 = 0;
+    var i3 = (r2 = n2.__c).__H;
+    i3 && (u2 === r2 ? (i3.__h = [], r2.__h = [], i3.__.some(function(n3) {
+      n3.__N && (n3.__ = n3.__N), n3.u = n3.__N = void 0;
+    })) : (i3.__h.some(z2), i3.__h.some(B2), i3.__h = [], t2 = 0)), u2 = r2;
+  }, c2.diffed = function(n2) {
+    v2 && v2(n2);
+    var t3 = n2.__c;
+    t3 && t3.__H && (t3.__H.__h.length && (1 !== f2.push(t3) && i2 === c2.requestAnimationFrame || ((i2 = c2.requestAnimationFrame) || w2)(j2)), t3.__H.__.some(function(n3) {
+      n3.u && (n3.__H = n3.u, n3.u = void 0);
+    })), u2 = r2 = null;
+  }, c2.__c = function(n2, t3) {
+    t3.some(function(n3) {
+      try {
+        n3.__h.some(z2), n3.__h = n3.__h.filter(function(n4) {
+          return !n4.__ || B2(n4);
+        });
+      } catch (r3) {
+        t3.some(function(n4) {
+          n4.__h && (n4.__h = []);
+        }), t3 = [], c2.__e(r3, n3.__v);
+      }
+    }), l2 && l2(n2, t3);
+  }, c2.unmount = function(n2) {
+    m2 && m2(n2);
+    var t3, r3 = n2.__c;
+    r3 && r3.__H && (r3.__H.__.some(function(n3) {
+      try {
+        z2(n3);
+      } catch (n4) {
+        t3 = n4;
+      }
+    }), r3.__H = void 0, t3 && c2.__e(t3, r3.__v));
+  };
+  var k2 = "function" == typeof requestAnimationFrame;
+  function w2(n2) {
+    var t3, r3 = function() {
+      clearTimeout(u4), k2 && cancelAnimationFrame(t3), setTimeout(n2);
+    }, u4 = setTimeout(r3, 35);
+    k2 && (t3 = requestAnimationFrame(r3));
+  }
+  function z2(n2) {
+    var t3 = r2, u4 = n2.__c;
+    "function" == typeof u4 && (n2.__c = void 0, u4()), r2 = t3;
+  }
+  function B2(n2) {
+    var t3 = r2;
+    n2.__c = n2.__(), r2 = t3;
+  }
+
+  // node_modules/lucide-preact/dist/esm/context.mjs
+  var LucideContext = X({
+    size: 24,
+    color: "currentColor",
+    strokeWidth: 2,
+    absoluteStrokeWidth: false,
+    nonScalingStroke: false,
+    class: ""
+  });
+  var useLucideContext = () => x2(LucideContext);
+
+  // node_modules/lucide-preact/dist/esm/Icon.mjs
+  var Icon = ({
+    color,
+    size: size2,
+    width,
+    height,
+    strokeWidth,
+    absoluteStrokeWidth,
+    nonScalingStroke,
+    children,
+    iconNode = [],
+    icon = {
+      node: iconNode,
+      aliases: [],
+      size: 24
+    },
+    class: classes = "",
+    ...rest
+  }) => {
+    const {
+      size: contextSize = 24,
+      strokeWidth: contextStrokeWidth = 2,
+      absoluteStrokeWidth: contextAbsoluteStrokeWidth = false,
+      nonScalingStroke: contextNonScalingStroke = false,
+      color: contextColor = "currentColor",
+      class: contextClass = ""
+    } = useLucideContext() ?? {};
+    const [name, svgAttributes, builtIconNode = []] = buildLucideIconNode(icon, {
+      color: color ?? contextColor,
+      width: width ?? size2 ?? contextSize,
+      height: height ?? size2 ?? contextSize,
+      strokeWidth: strokeWidth ?? contextStrokeWidth,
+      absoluteStrokeWidth: absoluteStrokeWidth ?? contextAbsoluteStrokeWidth,
+      nonScalingStroke: nonScalingStroke ?? contextNonScalingStroke,
+      className: mergeClasses(contextClass, classes),
+      hasA11yProp: Boolean(children) || hasA11yProp(rest),
+      attributes: rest
+    });
+    return k(name, { ...svgAttributes }, [
+      ...builtIconNode.map(([tag, attrs]) => k(tag, attrs)),
+      ...F(children)
+    ]);
+  };
+
+  // node_modules/lucide-preact/dist/esm/createLucideIcon.mjs
+  function createLucideIcon(iconDataOrName, iconNode, aliases = []) {
+    const iconData = typeof iconDataOrName === "string" ? toLucideIconData(iconDataOrName, iconNode, aliases) : iconDataOrName;
+    const Component = ({ class: classes = "", className = "", children, ...props }) => k(
+      Icon,
+      {
+        ...props,
+        icon: iconData,
+        class: mergeClasses(classes, className)
+      },
+      children
+    );
+    if (iconData.name) {
+      Component.displayName = toPascalCase(iconData.name);
+    }
+    return Component;
+  }
+
+  // node_modules/lucide-preact/dist/esm/icons/check.mjs
+  var __iconData = {
+    name: "check",
+    size: 24,
+    node: [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]]
+  };
+  __iconData.node;
+  var Check = createLucideIcon(__iconData);
+
+  // node_modules/lucide-preact/dist/esm/icons/loader.mjs
+  var __iconData2 = {
+    name: "loader",
+    size: 24,
+    node: [
+      ["path", { d: "M12 2v4", key: "3427ic" }],
+      ["path", { d: "m16.2 7.8 2.9-2.9", key: "r700ao" }],
+      ["path", { d: "M18 12h4", key: "wj9ykh" }],
+      ["path", { d: "m16.2 16.2 2.9 2.9", key: "1bxg5t" }],
+      ["path", { d: "M12 18v4", key: "jadmvz" }],
+      ["path", { d: "m4.9 19.1 2.9-2.9", key: "bwix9q" }],
+      ["path", { d: "M2 12h4", key: "j09sii" }],
+      ["path", { d: "m4.9 4.9 2.9 2.9", key: "giyufr" }]
+    ]
+  };
+  __iconData2.node;
+  var Loader = createLucideIcon(__iconData2);
+
+  // node_modules/lucide-preact/dist/esm/icons/refresh-cw.mjs
+  var __iconData3 = {
+    name: "refresh-cw",
+    size: 24,
+    node: [
+      ["path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", key: "v9h5vc" }],
+      ["path", { d: "M21 3v5h-5", key: "1q7to0" }],
+      ["path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", key: "3uifl3" }],
+      ["path", { d: "M8 16H3v5", key: "1cv678" }]
+    ]
+  };
+  __iconData3.node;
+  var RefreshCw = createLucideIcon(__iconData3);
+
+  // node_modules/lucide-preact/dist/esm/icons/settings.mjs
+  var __iconData4 = {
+    name: "settings",
+    size: 24,
+    node: [
+      [
+        "path",
+        {
+          d: "M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915",
+          key: "1i5ecw"
+        }
+      ],
+      ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
+    ]
+  };
+  __iconData4.node;
+  var Settings = createLucideIcon(__iconData4);
+
+  // node_modules/lucide-preact/dist/esm/icons/triangle-alert.mjs
+  var __iconData5 = {
+    name: "triangle-alert",
+    size: 24,
+    node: [
+      [
+        "path",
+        {
+          d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3",
+          key: "wmoenq"
+        }
+      ],
+      ["path", { d: "M12 9v4", key: "juzpu7" }],
+      ["path", { d: "M12 17h.01", key: "p32p05" }]
+    ],
+    aliases: ["alert-triangle"]
+  };
+  __iconData5.node;
+  var TriangleAlert = createLucideIcon(__iconData5);
+
+  // node_modules/lucide-preact/dist/esm/icons/x.mjs
+  var __iconData6 = {
+    name: "x",
+    size: 24,
+    node: [
+      ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
+      ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
+    ]
+  };
+  __iconData6.node;
+  var X2 = createLucideIcon(__iconData6);
+
+  // node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js
+  var f3 = 0;
+  function u3(e3, t3, n2, o3, i3, u4) {
+    t3 || (t3 = {});
+    var a3, c3, p3 = t3;
+    if ("ref" in p3) for (c3 in p3 = {}, t3) "ref" == c3 ? a3 = t3[c3] : p3[c3] = t3[c3];
+    var l3 = { type: e3, props: p3, key: n2, ref: a3, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: --f3, __i: -1, __u: 0, __source: i3, __self: u4 };
+    if ("function" == typeof e3 && (a3 = e3.defaultProps)) for (c3 in a3) void 0 === p3[c3] && (p3[c3] = a3[c3]);
+    return l.vnode && l.vnode(l3), l3;
+  }
+
+  // src/userscripts/shared/shared-icons.lib.jsx
+  var ICONS = {
+    x: X2,
+    "refresh-cw": RefreshCw,
+    settings: Settings,
+    check: Check,
+    "alert-triangle": TriangleAlert,
+    loader: Loader
+  };
+  var ICON_NAMES = Object.keys(ICONS);
+  function Icon2({ name, size: size2 = 16, strokeWidth = 2 }) {
+    const Glyph = ICONS[name];
+    if (!Glyph) {
       throw new Error(`shared-icons: unknown icon "${name}". Available: ${ICON_NAMES.join(", ")}`);
     }
-    const resolvedSize = toPositiveNumber(size2, "size");
-    const resolvedStrokeWidth = toPositiveNumber(strokeWidth, "strokeWidth");
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${resolvedStrokeWidth}" stroke-linecap="round" stroke-linejoin="round" width="${resolvedSize}" height="${resolvedSize}" class="wk-icon wk-icon-${name}" aria-hidden="true" focusable="false">${content}</svg>`;
+    return /* @__PURE__ */ u3(
+      Glyph,
+      {
+        size: size2,
+        strokeWidth,
+        class: `wk-icon wk-icon-${name}`,
+        "aria-hidden": "true",
+        focusable: "false"
+      }
+    );
+  }
+  function mountIcon(slot, name, options = {}) {
+    if (slot) R(/* @__PURE__ */ u3(Icon2, { name, ...options }), slot);
+    return slot;
   }
 
   // src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js
   var LIB_NAME3 = "WebPageAssistantPresentationLib";
-  var REFRESH_ICON_HTML = iconSvg("refresh-cw", { size: 16, strokeWidth: 2.4 });
-  var SETTINGS_ICON_HTML = iconSvg("settings", { size: 16, strokeWidth: 2.4 });
-  var CLOSE_ICON_HTML = iconSvg("x", { size: 16, strokeWidth: 2.4 });
+  var ICON_OPTIONS = { size: 16, strokeWidth: 2.4 };
+  function mountIcons(container) {
+    for (const slot of container.querySelectorAll("[data-part-icon]")) {
+      mountIcon(slot, slot.dataset.partIcon, ICON_OPTIONS);
+    }
+  }
   function isCoarsePointer(windowObject = globalThis.window) {
     try {
       const matchMedia = windowObject?.matchMedia;
@@ -1959,15 +2631,13 @@
     widget.className = enabled ? "part-widget" : "part-widget is-idle";
     widget.innerHTML = `
     <button type="button" class="part-widget-button"${enabled ? "" : ' data-part-action="open-settings"'} aria-label="${enabled ? "自动刷新倒计时，悬停或聚焦查看控制" : "自动刷新未启用，打开设置"}">
-      <span class="part-widget-button-icon" aria-hidden="true">
-        ${REFRESH_ICON_HTML}
-      </span>
+      <span class="part-widget-button-icon" aria-hidden="true" data-part-icon="refresh-cw"></span>
       ${enabled ? '<span class="part-widget-button-text" data-part-role="countdown" aria-hidden="true">--:--</span>' : ""}
     </button>
     <div class="part-widget-panel">
       <div class="part-widget-panel-header">
         <p class="part-title">自动刷新</p>
-        <button type="button" class="part-icon-button" data-part-action="open-settings" aria-label="打开自动刷新设置">${SETTINGS_ICON_HTML}</button>
+        <button type="button" class="part-icon-button" data-part-action="open-settings" aria-label="打开自动刷新设置" data-part-icon="settings"></button>
       </div>
       ${enabled ? '<div class="part-widget-countdown" data-part-role="countdown" aria-hidden="true">--:--</div>' : ""}
       <div class="part-muted" data-part-role="widget-summary"></div>
@@ -1979,6 +2649,7 @@
     </div>
     <span class="part-sr-only" role="status" data-part-role="widget-status"></span>
   `;
+    mountIcons(widget);
     widget.querySelector('[data-part-role="widget-summary"]').textContent = model.summary;
     return {
       widget,
@@ -2004,9 +2675,7 @@
           <h2 class="part-title" id="part-dialog-title">网页助手</h2>
           <p class="part-subtitle">按页面或站点管理自动刷新与限制解除。</p>
         </div>
-        <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭">
-          ${CLOSE_ICON_HTML}
-        </button>
+        <button type="button" class="part-icon-button" data-part-action="close-dialog" aria-label="关闭" data-part-icon="x"></button>
       </div>
       <div class="part-tabs" role="tablist" aria-label="网页助手功能">
         <button type="button" class="part-tab" role="tab" aria-selected="${model.activeTab === "refresh"}" data-part-action="switch-tab" data-part-tab="refresh">自动刷新</button>
@@ -2122,6 +2791,7 @@
 	        <div class="part-message" data-part-role="message" aria-live="polite"></div>
 	      </div>
   `;
+    mountIcons(panel);
     dialog.append(panel);
     return dialog;
   }
@@ -2131,9 +2801,9 @@
   var max = Math.max;
   var round = Math.round;
   var floor = Math.floor;
-  var createCoords = (v) => ({
-    x: v,
-    y: v
+  var createCoords = (v3) => ({
+    x: v3,
+    y: v3
   });
   var oppositeSideMap = {
     left: "right",
@@ -2237,20 +2907,20 @@
   }
   function rectToClientRect(rect) {
     const {
-      x,
-      y,
+      x: x3,
+      y: y2,
       width,
       height
     } = rect;
     return {
       width,
       height,
-      top: y,
-      left: x,
-      right: x + width,
-      bottom: y + height,
-      x,
-      y
+      top: y2,
+      left: x3,
+      right: x3 + width,
+      bottom: y2 + height,
+      x: x3,
+      y: y2
     };
   }
 
@@ -2312,8 +2982,8 @@
       options = {};
     }
     const {
-      x,
-      y,
+      x: x3,
+      y: y2,
       platform: platform2,
       rects,
       elements,
@@ -2336,8 +3006,8 @@
       strategy
     }));
     const rect = elementContext === "floating" ? {
-      x,
-      y,
+      x: x3,
+      y: y2,
       width: rects.floating.width,
       height: rects.floating.height
     } : rects.reference;
@@ -2378,14 +3048,14 @@
       strategy
     });
     let {
-      x,
-      y
+      x: x3,
+      y: y2
     } = computeCoordsFromPlacement(rects, placement, rtl);
     let statefulPlacement = placement;
     let resetCount = 0;
     const middlewareData = {};
-    for (let i = 0; i < middleware.length; i++) {
-      const currentMiddleware = middleware[i];
+    for (let i3 = 0; i3 < middleware.length; i3++) {
+      const currentMiddleware = middleware[i3];
       if (!currentMiddleware) {
         continue;
       }
@@ -2399,8 +3069,8 @@
         data,
         reset
       } = await fn({
-        x,
-        y,
+        x: x3,
+        y: y2,
         initialPlacement: placement,
         placement: statefulPlacement,
         strategy,
@@ -2412,8 +3082,8 @@
           floating
         }
       });
-      x = nextX != null ? nextX : x;
-      y = nextY != null ? nextY : y;
+      x3 = nextX != null ? nextX : x3;
+      y2 = nextY != null ? nextY : y2;
       middlewareData[name] = {
         ...middlewareData[name],
         ...data
@@ -2432,16 +3102,16 @@
             }) : reset.rects;
           }
           ({
-            x,
-            y
+            x: x3,
+            y: y2
           } = computeCoordsFromPlacement(rects, statefulPlacement, rtl));
         }
-        i = -1;
+        i3 = -1;
       }
     }
     return {
-      x,
-      y,
+      x: x3,
+      y: y2,
       placement: statefulPlacement,
       strategy,
       middlewareData
@@ -2508,7 +3178,7 @@
             const ignoreCrossAxisOverflow = checkCrossAxis === "alignment" ? initialSideAxis !== getSideAxis(nextPlacement) : false;
             if (!ignoreCrossAxisOverflow || // We leave the current main axis only if every placement on that axis
             // overflows the main axis.
-            overflowsData.every((d) => getSideAxis(d.placement) === initialSideAxis ? d.overflows[0] > 0 : true)) {
+            overflowsData.every((d2) => getSideAxis(d2.placement) === initialSideAxis ? d2.overflows[0] > 0 : true)) {
               return {
                 data: {
                   index: nextIndex,
@@ -2520,20 +3190,20 @@
               };
             }
           }
-          let resetPlacement = (_overflowsData$filter = overflowsData.filter((d) => d.overflows[0] <= 0).sort((a, b) => a.overflows[1] - b.overflows[1])[0]) == null ? void 0 : _overflowsData$filter.placement;
+          let resetPlacement = (_overflowsData$filter = overflowsData.filter((d2) => d2.overflows[0] <= 0).sort((a3, b2) => a3.overflows[1] - b2.overflows[1])[0]) == null ? void 0 : _overflowsData$filter.placement;
           if (!resetPlacement) {
             switch (fallbackStrategy) {
               case "bestFit": {
                 var _overflowsData$filter2;
-                const placement2 = (_overflowsData$filter2 = overflowsData.filter((d) => {
+                const placement2 = (_overflowsData$filter2 = overflowsData.filter((d2) => {
                   if (hasFallbackAxisSideDirection) {
-                    const currentSideAxis = getSideAxis(d.placement);
+                    const currentSideAxis = getSideAxis(d2.placement);
                     return currentSideAxis === initialSideAxis || // Create a bias to the `y` side axis due to horizontal
                     // reading directions favoring greater width.
                     currentSideAxis === "y";
                   }
                   return true;
-                }).map((d) => [d.placement, d.overflows.filter((overflow2) => overflow2 > 0).reduce((acc, overflow2) => acc + overflow2, 0)]).sort((a, b) => a[1] - b[1])[0]) == null ? void 0 : _overflowsData$filter2[0];
+                }).map((d2) => [d2.placement, d2.overflows.filter((overflow2) => overflow2 > 0).reduce((acc, overflow2) => acc + overflow2, 0)]).sort((a3, b2) => a3[1] - b2[1])[0]) == null ? void 0 : _overflowsData$filter2[0];
                 if (placement2) {
                   resetPlacement = placement2;
                 }
@@ -2604,8 +3274,8 @@
       async fn(state) {
         var _middlewareData$offse, _middlewareData$arrow;
         const {
-          x,
-          y,
+          x: x3,
+          y: y2,
           placement,
           middlewareData
         } = state;
@@ -2614,8 +3284,8 @@
           return {};
         }
         return {
-          x: x + diffCoords.x,
-          y: y + diffCoords.y,
+          x: x3 + diffCoords.x,
+          y: y2 + diffCoords.y,
           data: {
             ...diffCoords,
             placement
@@ -2633,8 +3303,8 @@
       options,
       async fn(state) {
         const {
-          x,
-          y,
+          x: x3,
+          y: y2,
           placement,
           platform: platform2
         } = state;
@@ -2644,20 +3314,20 @@
           limiter = {
             fn: (_ref) => {
               let {
-                x: x2,
-                y: y2
+                x: x4,
+                y: y3
               } = _ref;
               return {
-                x: x2,
-                y: y2
+                x: x4,
+                y: y3
               };
             }
           },
           ...detectOverflowOptions
         } = evaluate(options, state);
         const coords = {
-          x,
-          y
+          x: x3,
+          y: y2
         };
         const overflow = await platform2.detectOverflow(state, detectOverflowOptions);
         const crossAxis = getSideAxis(placement);
@@ -2679,8 +3349,8 @@
         return {
           ...limitedCoords,
           data: {
-            x: limitedCoords.x - x,
-            y: limitedCoords.y - y,
+            x: limitedCoords.x - x3,
+            y: limitedCoords.y - y2,
             enabled: {
               [mainAxis]: checkMainAxis,
               [crossAxis]: checkCrossAxis
@@ -2878,19 +3548,19 @@
     const {
       width,
       height,
-      $
+      $: $2
     } = getCssDimensions(domElement);
-    let x = ($ ? round(rect.width) : rect.width) / width;
-    let y = ($ ? round(rect.height) : rect.height) / height;
-    if (!x || !Number.isFinite(x)) {
-      x = 1;
+    let x3 = ($2 ? round(rect.width) : rect.width) / width;
+    let y2 = ($2 ? round(rect.height) : rect.height) / height;
+    if (!x3 || !Number.isFinite(x3)) {
+      x3 = 1;
     }
-    if (!y || !Number.isFinite(y)) {
-      y = 1;
+    if (!y2 || !Number.isFinite(y2)) {
+      y2 = 1;
     }
     return {
-      x,
-      y
+      x: x3,
+      y: y2
     };
   }
   var noOffsets = /* @__PURE__ */ createCoords(0);
@@ -2930,8 +3600,8 @@
       }
     }
     const visualOffsets = shouldAddVisualOffsets(domElement, isFixedStrategy, offsetParent) ? getVisualOffsets(domElement) : createCoords(0);
-    let x = (clientRect.left + visualOffsets.x) / scale.x;
-    let y = (clientRect.top + visualOffsets.y) / scale.y;
+    let x3 = (clientRect.left + visualOffsets.x) / scale.x;
+    let y2 = (clientRect.top + visualOffsets.y) / scale.y;
     let width = clientRect.width / scale.x;
     let height = clientRect.height / scale.y;
     if (domElement && offsetParent) {
@@ -2945,12 +3615,12 @@
         const css = getComputedStyle2(currentIFrame);
         const left = iframeRect.left + (currentIFrame.clientLeft + parseFloat(css.paddingLeft)) * iframeScale.x;
         const top = iframeRect.top + (currentIFrame.clientTop + parseFloat(css.paddingTop)) * iframeScale.y;
-        x *= iframeScale.x;
-        y *= iframeScale.y;
+        x3 *= iframeScale.x;
+        y2 *= iframeScale.y;
         width *= iframeScale.x;
         height *= iframeScale.y;
-        x += left;
-        y += top;
+        x3 += left;
+        y2 += top;
         currentWin = getWindow(currentIFrame);
         currentIFrame = getFrameElement(currentWin);
       }
@@ -2958,8 +3628,8 @@
     return rectToClientRect({
       width,
       height,
-      x,
-      y
+      x: x3,
+      y: y2
     });
   }
   function getWindowScrollBarX(element, rect) {
@@ -2971,11 +3641,11 @@
   }
   function getHTMLOffset(documentElement, scroll) {
     const htmlRect = documentElement.getBoundingClientRect();
-    const x = htmlRect.left + scroll.scrollLeft - getWindowScrollBarX(documentElement, htmlRect);
-    const y = htmlRect.top + scroll.scrollTop;
+    const x3 = htmlRect.left + scroll.scrollLeft - getWindowScrollBarX(documentElement, htmlRect);
+    const y2 = htmlRect.top + scroll.scrollTop;
     return {
-      x,
-      y
+      x: x3,
+      y: y2
     };
   }
   function convertOffsetParentRelativeRectToViewportRelativeRect(_ref) {
@@ -3025,16 +3695,16 @@
     const body = html.ownerDocument.body;
     const width = max(html.scrollWidth, html.clientWidth, body.scrollWidth, body.clientWidth);
     const height = max(html.scrollHeight, html.clientHeight, body.scrollHeight, body.clientHeight);
-    let x = -scroll.scrollLeft + getWindowScrollBarX(html);
-    const y = -scroll.scrollTop;
+    let x3 = -scroll.scrollLeft + getWindowScrollBarX(html);
+    const y2 = -scroll.scrollTop;
     if (getComputedStyle2(body).direction === "rtl") {
-      x += max(html.clientWidth, body.clientWidth) - width;
+      x3 += max(html.clientWidth, body.clientWidth) - width;
     }
     return {
       width,
       height,
-      x,
-      y
+      x: x3,
+      y: y2
     };
   }
   var SCROLLBAR_MAX = 25;
@@ -3048,21 +3718,21 @@
     const visualViewport = win.visualViewport;
     let width = html.clientWidth;
     let height = html.clientHeight;
-    let x = 0;
-    let y = 0;
+    let x3 = 0;
+    let y2 = 0;
     if (visualViewport) {
       const layoutRelativeClientCoords = !isWebKit() || strategy === "fixed";
       if (isLayoutViewport) {
         if (!layoutRelativeClientCoords) {
-          x = -visualViewport.offsetLeft;
-          y = -visualViewport.offsetTop;
+          x3 = -visualViewport.offsetLeft;
+          y2 = -visualViewport.offsetTop;
         }
       } else {
         width = visualViewport.width;
         height = visualViewport.height;
         if (layoutRelativeClientCoords) {
-          x = visualViewport.offsetLeft;
-          y = visualViewport.offsetTop;
+          x3 = visualViewport.offsetLeft;
+          y2 = visualViewport.offsetTop;
         }
       }
     }
@@ -3081,8 +3751,8 @@
     return {
       width,
       height,
-      x,
-      y
+      x: x3,
+      y: y2
     };
   }
   function getInnerBoundingClientRect(element, strategy) {
@@ -3092,13 +3762,13 @@
     const scale = getScale(element);
     const width = element.clientWidth * scale.x;
     const height = element.clientHeight * scale.y;
-    const x = left * scale.x;
-    const y = top * scale.y;
+    const x3 = left * scale.x;
+    const y2 = top * scale.y;
     return {
       width,
       height,
-      x,
-      y
+      x: x3,
+      y: y2
     };
   }
   function getClientRectFromClippingAncestor(element, clippingAncestor, strategy) {
@@ -3158,8 +3828,8 @@
     let right = firstRect.right;
     let bottom = firstRect.bottom;
     let left = firstRect.left;
-    for (let i = 1; i < clippingAncestors.length; i++) {
-      const rect = getClientRectFromClippingAncestor(element, clippingAncestors[i], strategy);
+    for (let i3 = 1; i3 < clippingAncestors.length; i3++) {
+      const rect = getClientRectFromClippingAncestor(element, clippingAncestors[i3], strategy);
       top = max(rect.top, top);
       right = min(rect.right, right);
       bottom = min(rect.bottom, bottom);
@@ -3206,11 +3876,11 @@
       offsets.x = getWindowScrollBarX(documentElement);
     }
     const htmlOffset = documentElement && !isOffsetParentAnElement && !isFixed ? getHTMLOffset(documentElement, scroll) : createCoords(0);
-    const x = rect.left + scroll.scrollLeft - offsets.x - htmlOffset.x;
-    const y = rect.top + scroll.scrollTop - offsets.y - htmlOffset.y;
+    const x3 = rect.left + scroll.scrollLeft - offsets.x - htmlOffset.x;
+    const y2 = rect.top + scroll.scrollTop - offsets.y - htmlOffset.y;
     return {
-      x,
-      y,
+      x: x3,
+      y: y2,
       width: rect.width,
       height: rect.height
     };
@@ -3284,8 +3954,8 @@
     isElement,
     isRTL
   };
-  function rectsAreEqual(a, b) {
-    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+  function rectsAreEqual(a3, b2) {
+    return a3.x === b2.x && a3.y === b2.y && a3.width === b2.width && a3.height === b2.height;
   }
   function observeMove(element, onMove, ancestorResize) {
     let io = null;
@@ -4141,9 +4811,9 @@ ${root} :focus-visible {
         floating: panel,
         placement: "top-end",
         strategy: "absolute",
-        apply({ x, y, placement: side }) {
-          panel.style.setProperty("--part-panel-left", `${Math.round(x)}px`);
-          panel.style.setProperty("--part-panel-top", `${Math.round(y)}px`);
+        apply({ x: x3, y: y2, placement: side }) {
+          panel.style.setProperty("--part-panel-left", `${Math.round(x3)}px`);
+          panel.style.setProperty("--part-panel-top", `${Math.round(y2)}px`);
           panel.style.setProperty("--part-panel-origin", side.startsWith("bottom") ? "top right" : "bottom right");
         }
       }) : null;
@@ -4698,3 +5368,30 @@ ${root} :focus-visible {
   })();
 })();
 // @license      MIT
+/*! Bundled license information:
+
+lucide-preact/dist/esm/shared/src/utils/mergeClasses.mjs:
+lucide-preact/dist/esm/shared/src/utils/toKebabCase.mjs:
+lucide-preact/dist/esm/shared/src/utils/toLucideIconData.mjs:
+lucide-preact/dist/esm/shared/src/utils/toCamelCase.mjs:
+lucide-preact/dist/esm/shared/src/utils/toPascalCase.mjs:
+lucide-preact/dist/esm/shared/src/build/defaultAttributes.mjs:
+lucide-preact/dist/esm/shared/src/build/buildLucideIconNode.mjs:
+lucide-preact/dist/esm/shared/src/utils/hasA11yProp.mjs:
+lucide-preact/dist/esm/context.mjs:
+lucide-preact/dist/esm/Icon.mjs:
+lucide-preact/dist/esm/createLucideIcon.mjs:
+lucide-preact/dist/esm/icons/check.mjs:
+lucide-preact/dist/esm/icons/loader.mjs:
+lucide-preact/dist/esm/icons/refresh-cw.mjs:
+lucide-preact/dist/esm/icons/settings.mjs:
+lucide-preact/dist/esm/icons/triangle-alert.mjs:
+lucide-preact/dist/esm/icons/x.mjs:
+lucide-preact/dist/esm/lucide-preact.mjs:
+  (**
+   * @license lucide-preact v1.48.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   *)
+*/
