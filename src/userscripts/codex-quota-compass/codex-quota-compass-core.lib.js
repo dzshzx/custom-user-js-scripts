@@ -1,3 +1,5 @@
+import { UTCDate } from '@date-fns/utc';
+import { addDays, lightFormat } from 'date-fns';
 import { createQuotaSnapshotAccess, rollingPeriodKey } from './codex-quota-compass-contract.lib.js';
 
 const MAIN_PRIMARY_WINDOW_KEY = 'main.primaryWindow';
@@ -20,30 +22,23 @@ function lastItem(items) {
 }
 
 function ymdUTC(value) {
-  const date = new Date(value);
-  return [date.getUTCFullYear(), pad2(date.getUTCMonth() + 1), pad2(date.getUTCDate())].join('-');
+  return lightFormat(new UTCDate(value), 'yyyy-MM-dd');
 }
 
 function ymdLocal(value) {
-  const date = new Date(value);
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 10);
+  return lightFormat(new Date(value), 'yyyy-MM-dd');
 }
 
 function addDaysLocalMs(value, days) {
-  const date = new Date(value);
-  date.setDate(date.getDate() + days);
-  return date.getTime();
+  return addDays(value, days).getTime();
 }
 
 function firstDayOfMonthUTC(value) {
-  const date = new Date(value);
-  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-01`;
+  return lightFormat(new UTCDate(value), 'yyyy-MM-01');
 }
 
 function firstDayOfMonthLocal(value) {
-  const date = new Date(value);
-  return ymdLocal(new Date(date.getFullYear(), date.getMonth(), 1).getTime());
+  return lightFormat(new Date(value), 'yyyy-MM-01');
 }
 
 function tokenTotal(row = {}) {
@@ -547,4 +542,12 @@ function createQuotaCalculator({
   return { run };
 }
 
-export { buildQuotaSnapshotResult, createQuotaCalculator };
+export {
+  addDaysLocalMs,
+  buildQuotaSnapshotResult,
+  createQuotaCalculator,
+  firstDayOfMonthLocal,
+  firstDayOfMonthUTC,
+  ymdLocal,
+  ymdUTC,
+};

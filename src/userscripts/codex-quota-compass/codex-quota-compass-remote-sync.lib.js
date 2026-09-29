@@ -1,7 +1,9 @@
+import pLimit from 'p-limit';
 import {
   EXPORT_FORMAT,
   EXPORT_VERSION,
   buildSnapshotExportDocument,
+  exportDocumentContentKey,
   previewImportArchiveDocument,
 } from './codex-quota-compass-archive.lib.js';
 
@@ -292,26 +294,8 @@ function archiveFilePayload(archive, exportedAt) {
 // convergence (ledger + retained snapshots), ignoring the always-changing
 // `exportedAt` / `snapshotCount` envelope fields so an unchanged archive is
 // not re-pushed on every page open.
-function stableStringify(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`;
-  }
-  if (value && typeof value === 'object') {
-    const keys = Object.keys(value).sort();
-    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
-  }
-  return JSON.stringify(value ?? null);
-}
-
-function archiveContentKey(documentObject) {
-  return stableStringify({
-    ledger: (documentObject && documentObject.ledger) || {},
-    snapshots: Array.isArray(documentObject?.snapshots) ? documentObject.snapshots : [],
-  });
-}
-
 function sameArchiveContent(left, right) {
-  return archiveContentKey(left) === archiveContentKey(right);
+  return exportDocumentContentKey(left) === exportDocumentContentKey(right);
 }
 
 const GIST_PAGE_SIZE = 100;
@@ -397,11 +381,9 @@ function createRemoteSyncClient({
     throw new Error('Remote sync requires a Snapshot Archive store.');
   }
 
-  let queue = Promise.resolve();
+  const queue = pLimit(1);
   function enqueue(operation) {
-    const result = queue.then(operation);
-    queue = result.catch(() => {});
-    return result;
+    return queue(operation);
   }
 
   async function getSettings() {

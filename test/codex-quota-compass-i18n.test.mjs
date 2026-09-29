@@ -66,3 +66,13 @@ test('new UI strings are translated in both locales', () => {
   assert.match(en.t('statsEmpty'), /after each run/);
   assert.match(zh.t('tableNoData'), /刷新/);
 });
+
+test('count messages select plural forms with Intl.PluralRules', () => {
+  const en = createQuotaCompassTranslator({ navigator: { language: 'en-US' } });
+  assert.equal(en.t('exportDone', { count: 1 }), 'Export complete: 1 snapshot.');
+  assert.equal(en.t('exportDone', { count: 0 }), 'Export complete: 0 snapshots.');
+  assert.equal(en.t('exportDone', { count: 5 }), 'Export complete: 5 snapshots.');
+  assert.equal(en.t('tableShowAll', { total: 1 }), 'Show all 1 row');
+  const zh = createQuotaCompassTranslator({ navigator: { language: 'zh-CN' } });
+  assert.equal(zh.t('exportDone', { count: 1 }), '导出完成：1 条记录。');
+});

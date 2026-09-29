@@ -1,3 +1,5 @@
+import stableStringify from 'fast-json-stable-stringify';
+import pLimit from 'p-limit';
 import { isMainSevenDayWindow, projectQuotaSnapshotForArchive } from './codex-quota-compass-contract.lib.js';
 import {
   foldSnapshotsIntoLedger,
@@ -239,19 +241,24 @@ function mergeSnapshots(currentArchive, incomingSnapshots) {
   };
 }
 
+// The single content key for sync convergence: ledger + retained snapshots,
+// serialized independent of key order. Undefined object fields are dropped
+// (JSON semantics), so a local object and its JSON round-trip compare equal.
+function contentKey(ledger, snapshots) {
+  return stableStringify({
+    ledger: isPlainObject(ledger) ? ledger : {},
+    snapshots: Array.isArray(snapshots) ? snapshots : [],
+  });
+}
+
 function archiveContentKey(archive) {
   const normalized = normalizeSnapshotArchive(archive);
-  function stable(value) {
-    if (Array.isArray(value)) return value.map(stable);
-    if (isPlainObject(value))
-      return Object.fromEntries(
-        Object.keys(value)
-          .sort()
-          .map((key) => [key, stable(value[key])]),
-      );
-    return value;
-  }
-  return JSON.stringify(stable({ ledger: normalized.ledger, snapshots: normalized.snapshots }));
+  return contentKey(normalized.ledger, normalized.snapshots);
+}
+
+// Export documents are already normalized; compare them without re-normalizing.
+function exportDocumentContentKey(documentObject) {
+  return contentKey(documentObject?.ledger, documentObject?.snapshots);
 }
 
 function mergeSnapshotArchives(primary, incoming, { nowMs = Date.now() } = {}) {
@@ -553,16 +560,9 @@ function createSnapshotArchiveStore({
   };
   // All reads (including adapter migrations) and mutations share one local queue.
   // Operations call private implementations, never their queued public siblings.
-  let queue = Promise.resolve();
+  const queue = pLimit(1);
   return Object.fromEntries(
-    Object.entries(operations).map(([name, operation]) => [
-      name,
-      (...args) => {
-        const result = queue.then(() => operation(...args));
-        queue = result.catch(() => {});
-        return result;
-      },
-    ]),
+    Object.entries(operations).map(([name, operation]) => [name, (...args) => queue(() => operation(...args))]),
   );
 }
 
@@ -582,6 +582,7 @@ export {
   mergeSnapshots,
   mergeSnapshotArchives,
   archiveContentKey,
+  exportDocumentContentKey,
   cycleStartDateFromArchive,
   buildLedgerCostViews,
   createSnapshotArchiveStore,

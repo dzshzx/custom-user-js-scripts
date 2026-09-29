@@ -484,3 +484,15 @@ test('repeated same-day saves do not multiply ledger rows or exceed the snapshot
   assert.equal(cost.cycle.totalCredits, 300);
   assert.equal(cost.month.totalCredits, 300);
 });
+
+test('content key is independent of key order and treats undefined fields like JSON', async () => {
+  const { archiveContentKey, exportDocumentContentKey } =
+    await import('../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js');
+  const left = { ledger: { b: 1, a: { y: 2, x: 1 } }, snapshots: [{ q: 1, p: undefined }] };
+  const right = { snapshots: [{ q: 1 }], ledger: { a: { x: 1, y: 2 }, b: 1 } };
+  assert.equal(exportDocumentContentKey(left), exportDocumentContentKey(right));
+  assert.equal(exportDocumentContentKey(left), exportDocumentContentKey(JSON.parse(JSON.stringify(left))));
+  assert.notEqual(exportDocumentContentKey(left), exportDocumentContentKey({ ...right, ledger: { b: 2 } }));
+  assert.equal(exportDocumentContentKey({}), exportDocumentContentKey({ ledger: null, snapshots: 'x' }));
+  assert.equal(archiveContentKey({ snapshots: [] }), archiveContentKey({ snapshots: [], createdAt: 'ignored' }));
+});

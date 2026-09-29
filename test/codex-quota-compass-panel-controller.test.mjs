@@ -39,7 +39,7 @@ function state(overrides = {}) {
   };
 }
 function fixture(options = {}) {
-  const window = createDomWindow({ url: 'https://chatgpt.com/' });
+  const window = createDomWindow({ url: 'https://chatgpt.com/', globalDocument: true });
   const t = createQuotaCompassTranslator({ navigator: { language: 'en-US' } }).t;
   let current = state();
   let runs = 0;
