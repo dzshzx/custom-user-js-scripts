@@ -98,3 +98,26 @@ incomplete target set or invalid metadata, and a downgrade of an immutable
 published version. Every other forward transition passes. The promote
 workflow still rechecks the candidate from trusted `master` against a fresh
 baseline immediately before the fast-forward.
+
+## Amendment: land replaces promote (2026-09-29)
+
+`promote.yml`, the `ci-runs-verdict` action, `scripts/candidate.sh` and
+`scripts/promote-version-plan.sh` are removed. The gate stays "the exact commit
+that reaches `master` has green CI"; only the client that walks it changes:
+
+1. The global `land` command pushes `candidate/<sha>`, waits for that sha's
+   `ci-ok` check (the summary job over every CI job), fast-forwards `master` to
+   the exact sha and deletes the candidate. When `master` advanced meanwhile,
+   `land` recuts the candidate on top of it and CI runs again.
+2. The version-plan recheck moves into CI: every non-`master` run (candidate or
+   pull request) runs `version-plan.mjs check` against the current
+   `origin/master`. Publication still happens only by advancing `master`, so
+   the fresh-baseline property holds through `land`'s re-test on recut.
+3. The recheck now runs candidate-owned code with a read-only token instead of
+   trusted `master` code with a write token. No workflow holds a write token
+   over candidate code any more, and a single maintainer authors every
+   candidate, so the trusted-loader split has nothing left to protect.
+4. The `master` ruleset requires `ci-ok`. Dependabot pull requests (dependency
+   updates only, no `@version` change) auto-merge by rebase once `ci-ok` is
+   green; the rebase gives the landed commit a new sha, which is the one
+   accepted exception to the exact-sha rule.

@@ -45,8 +45,8 @@ version to its proposed version, including identities that do not change.
 _Avoid_: partial bump list, selected scripts
 
 **Release Gate**:
-The complete Version Plan and green candidate evidence required before the
-promote workflow publishes by advancing `master`. Bump levels and
+The complete Version Plan and green candidate evidence (the `ci-ok` check)
+required before `land` publishes by advancing `master`. Bump levels and
 immutability are defined by `PRODUCT.md` "Version Policy".
 _Avoid_: push-to-publish, pull-request merge, tag release, hotfix in place
 

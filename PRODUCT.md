@@ -171,13 +171,13 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
   baseline, a missing script, invalid metadata, a downgrade, an orphan dist
   installable, or mismatched entry/bridge/dist versions stops the release.
 - A releasing version bump belongs on the task branch before it is pushed as a
-  `candidate/**` branch (`scripts/candidate.sh`). CI runs on the candidate and
-  `promote.yml` fast-forwards `master` to that exact green commit; because raw
+  `candidate/**` branch (the global `land` command). CI runs on the candidate and
+  `land` fast-forwards `master` to that exact green commit; because raw
   `@downloadURL` / `@updateURL` endpoints read `master`, that promotion is the
   external publication boundary. The `master` ruleset refuses any sha without a
-  green `verify` check, so there is no push-first-then-see path. Immediately
-  before the fast-forward, the trusted workflow from `master` fetches the current
-  baseline and independently rechecks the candidate tree.
+  green `ci-ok` check, so there is no push-first-then-see path. CI checks the
+  candidate's version plan against the current `origin/master`, and `land`
+  re-tests a recut candidate whenever `master` advanced before the fast-forward.
 - A userscript change may keep its version only when the user explicitly chose
   not to release it yet; installed copies then remain on the prior version.
   Once a bumped version reaches `master`, treat it as immutable and publish any

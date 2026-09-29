@@ -18,12 +18,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The version plan reads the published baseline from origin/master.
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
       - run: npm run test:prepare
+      # Release gate (ADR-0002): a candidate or PR reaching master publishes, so
+      # its versions must form a valid plan against the current master. `land`
+      # re-tests a recut candidate whenever master advanced, so this baseline is
+      # the one the fast-forward lands on. A master push is already published.
+      - name: Check the version plan against master
+        if: github.ref != 'refs/heads/master'
+        run: node scripts/version-plan.mjs check --base-ref origin/master --target-ref HEAD
       # Build once, retain dist freshness and metadata gates, require all tests.
       - run: npm run verify
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

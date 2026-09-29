@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { access, chmod, copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -45,84 +45,6 @@ function runPlan(root, ...args) {
     cwd: root,
     encoding: 'utf8',
   });
-}
-
-async function exists(file) {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function releaseToolRepository({ bare = false } = {}) {
-  const fixture = await fixtureRepository();
-  await mkdir(path.join(fixture.root, 'scripts/lib'), { recursive: true });
-  for (const file of ['candidate.sh', 'promote-version-plan.sh', 'version-plan.mjs']) {
-    await copyFile(path.join(projectRoot, 'scripts', file), path.join(fixture.root, 'scripts', file));
-  }
-  for (const file of ['userscript-metadata.mjs', 'userscript-inventory.mjs', 'userscript-sources.mjs']) {
-    await copyFile(path.join(projectRoot, 'scripts/lib', file), path.join(fixture.root, 'scripts/lib', file));
-  }
-  await chmod(path.join(fixture.root, 'scripts/candidate.sh'), 0o755);
-  await chmod(path.join(fixture.root, 'scripts/promote-version-plan.sh'), 0o755);
-  git(fixture.root, 'add', '.');
-  git(fixture.root, 'commit', '-m', 'add trusted release tools');
-  // Stands in for the workflow's `npm ci --ignore-scripts`; excluded so it never enters a commit.
-  await symlink(path.join(projectRoot, 'node_modules'), path.join(fixture.root, 'node_modules'), 'dir');
-  await writeFile(path.join(fixture.root, '.git/info/exclude'), 'node_modules\n', { flag: 'a' });
-  git(fixture.root, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
-  const baseline = git(fixture.root, 'rev-parse', 'HEAD');
-
-  let bareRoot;
-  if (bare) {
-    bareRoot = await mkdtemp(path.join(tmpdir(), 'userscript-version-remote-'));
-    git(fixture.root, 'remote', 'set-url', 'origin', bareRoot);
-    execFileSync('git', ['init', '--bare', '--initial-branch=master'], { cwd: bareRoot });
-    git(fixture.root, 'push', 'origin', 'master');
-  }
-  git(fixture.root, 'switch', '-c', 'task/release');
-  return { ...fixture, baseline, bareRoot };
-}
-
-async function gitWrapper({ advanceMarker, advanceRef, pushMarker } = {}) {
-  const root = await mkdtemp(path.join(tmpdir(), 'userscript-git-wrapper-'));
-  const wrapper = path.join(root, 'git');
-  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
-  await writeFile(
-    wrapper,
-    `#!/usr/bin/env bash
-set -euo pipefail
-if [[ "\${1:-}" == "remote" && "\${2:-}" == "get-url" && "\${3:-}" == "origin" ]]; then
-  echo git@github.com:Dzshzx/Example.git
-  exit 0
-fi
-if [[ "\${1:-}" == "fetch" && -n "\${SKIP_FETCH:-}" ]]; then
-  exit 0
-fi
-if [[ "\${1:-}" == "push" && -n "\${PUSH_MARKER:-}" ]]; then
-  touch "$PUSH_MARKER"
-fi
-if [[ "\${1:-}" == "push" && " $* " == *" --force-with-lease="* && -n "\${ADVANCE_REF:-}" && ! -e "\${ADVANCE_MARKER:-}" ]]; then
-  "$REAL_GIT" push origin "\${ADVANCE_REF}:refs/heads/master"
-  touch "$ADVANCE_MARKER"
-fi
-exec "$REAL_GIT" "$@"
-`,
-  );
-  await chmod(wrapper, 0o755);
-  return {
-    env: {
-      ...process.env,
-      ADVANCE_MARKER: advanceMarker || '',
-      ADVANCE_REF: advanceRef || '',
-      BASH_ENV: '',
-      PATH: `${root}:${process.env.PATH}`,
-      PUSH_MARKER: pushMarker || '',
-      REAL_GIT: realGit,
-    },
-  };
 }
 
 async function commitVersion(fixture, version, ...messageArgs) {
@@ -272,91 +194,6 @@ test('an orphan dist installable makes the complete target set invalid', async (
   assert.match(result.stderr, /orphan installable without a source entry owner/);
 });
 
-test('candidate entry rejects a downgrade before any remote push', async () => {
-  const fixture = await releaseToolRepository();
-  await commitVersion(fixture, '1.2.2');
-  const pushMarker = path.join(await mkdtemp(path.join(tmpdir(), 'candidate-push-marker-')), 'push');
-  const wrapper = await gitWrapper({ pushMarker });
-  wrapper.env.SKIP_FETCH = '1';
-  const result = spawnSync('bash', ['scripts/candidate.sh', '--no-wait'], {
-    cwd: fixture.root,
-    encoding: 'utf8',
-    env: wrapper.env,
-  });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /version plan is invalid/);
-  assert.equal(await exists(pushMarker), false, 'candidate must stop before git push');
-});
-
-test('candidate entry pushes a minor without any confirmation argument', async () => {
-  const fixture = await releaseToolRepository({ bare: true });
-  await commitVersion(fixture, '1.3.0');
-  const sha = git(fixture.root, 'rev-parse', 'HEAD');
-  const wrapper = await gitWrapper();
-  const result = spawnSync('bash', ['scripts/candidate.sh', '--no-wait'], {
-    cwd: fixture.root,
-    encoding: 'utf8',
-    env: wrapper.env,
-  });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(
-    git(fixture.bareRoot, 'for-each-ref', '--format=%(objectname)', 'refs/heads/candidate/'),
-    new RegExp(sha),
-  );
-});
-
-test('trusted promote gate rejects a downgrade without moving master', async () => {
-  const fixture = await releaseToolRepository({ bare: true });
-  await commitVersion(fixture, '1.2.2');
-  const candidate = git(fixture.root, 'rev-parse', 'HEAD');
-  const wrapper = await gitWrapper();
-  const result = spawnSync('bash', ['scripts/promote-version-plan.sh', candidate], {
-    cwd: fixture.root,
-    encoding: 'utf8',
-    env: wrapper.env,
-  });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /older than immutable published baseline/);
-  assert.equal(git(fixture.bareRoot, 'rev-parse', 'master'), fixture.baseline);
-});
-
-test('trusted promote fast-forwards a minor without approval', async () => {
-  const fixture = await releaseToolRepository({ bare: true });
-  await commitVersion(fixture, '1.3.0');
-  const candidate = git(fixture.root, 'rev-parse', 'HEAD');
-  const wrapper = await gitWrapper();
-  const result = spawnSync('bash', ['scripts/promote-version-plan.sh', candidate], {
-    cwd: fixture.root,
-    encoding: 'utf8',
-    env: wrapper.env,
-  });
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(git(fixture.bareRoot, 'rev-parse', 'master'), candidate);
-});
-
-test('trusted promote reads malicious candidate inventory modules as data only', async () => {
-  const fixture = await releaseToolRepository({ bare: true });
-  await writeFile(fixture.script, metadata('1.2.2'));
-  for (const file of ['userscript-inventory.mjs', 'userscript-sources.mjs']) {
-    await writeFile(path.join(fixture.root, 'scripts/lib', file), "throw new Error('CANDIDATE_CODE_EXECUTED');\n");
-  }
-  git(fixture.root, 'add', '.');
-  git(fixture.root, 'commit', '-m', 'downgraded candidate with untrusted tools');
-  const candidate = git(fixture.root, 'rev-parse', 'HEAD');
-  // Mirrors checkout(master) in promote.yml while candidate remains a Git object.
-  git(fixture.root, 'checkout', fixture.baseline, '--', 'scripts');
-  const wrapper = await gitWrapper();
-  const result = spawnSync('bash', ['scripts/promote-version-plan.sh', candidate], {
-    cwd: fixture.root,
-    encoding: 'utf8',
-    env: wrapper.env,
-  });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /older than immutable published baseline/);
-  assert.doesNotMatch(result.stderr, /CANDIDATE_CODE_EXECUTED/);
-  assert.equal(git(fixture.bareRoot, 'rev-parse', 'master'), fixture.baseline);
-});
-
 test('five-identity fixed plan survives single-file to entry migration unchanged', async (t) => {
   const fixture = await fixtureRepository();
   t.after(() => rm(fixture.root, { recursive: true, force: true }));
@@ -415,31 +252,6 @@ test('version plan requires a real entry even when lint can accept a historical 
   const result = runPlan(fixture.root, 'plan');
   assert.equal(result.status, 1);
   assert.match(result.stderr, /without a source entry owner/);
-});
-
-test('trusted promote lease rejects a still-fast-forwardable baseline race', async () => {
-  const fixture = await releaseToolRepository({ bare: true });
-  await writeFile(path.join(fixture.root, 'non-version-change.txt'), 'candidate ancestor\n');
-  git(fixture.root, 'add', '.');
-  git(fixture.root, 'commit', '-m', 'candidate ancestor');
-  const advanceRef = git(fixture.root, 'rev-parse', 'HEAD');
-
-  await commitVersion(fixture, '1.3.0');
-  const candidate = git(fixture.root, 'rev-parse', 'HEAD');
-
-  const markerRoot = await mkdtemp(path.join(tmpdir(), 'promote-race-marker-'));
-  const advanceMarker = path.join(markerRoot, 'advanced');
-  const wrapper = await gitWrapper({ advanceMarker, advanceRef });
-  const result = spawnSync('bash', ['scripts/promote-version-plan.sh', candidate], {
-    cwd: fixture.root,
-    encoding: 'utf8',
-    env: wrapper.env,
-  });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /stale info|rejected/i);
-  assert.equal(await exists(advanceMarker), true, 'test must advance master during the final push');
-  assert.equal(git(fixture.bareRoot, 'rev-parse', 'master'), advanceRef);
-  assert.equal(git(fixture.root, 'merge-base', '--is-ancestor', advanceRef, candidate), '');
 });
 
 test('prerelease, build-tagged and v-prefixed versions are rejected', async () => {
