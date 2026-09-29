@@ -1,9 +1,12 @@
+import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
+
 const BUTTON_SAFE_MARGIN = 12;
 const DOCK_THRESHOLD = 32;
 const DOCK_OFFSET = 8;
 const PANEL_SAFE_MARGIN = 12;
 const PANEL_GAP = 8;
 const DRAG_THRESHOLD_PX = 4;
+const HOVER_INTENT_MS = 150;
 const FALLBACK_BUTTON_SIZE = 44;
 const PANEL_ANIMATION_MS = 200;
 const PANEL_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -130,6 +133,309 @@ const WIDGET_SHELL_CSS = `
 }
 `.trim();
 
+function windowTimers(windowObject) {
+  return {
+    setTimeout:
+      typeof windowObject?.setTimeout === 'function'
+        ? windowObject.setTimeout.bind(windowObject)
+        : (callback, ms) => setTimeout(callback, ms),
+    clearTimeout:
+      typeof windowObject?.clearTimeout === 'function'
+        ? windowObject.clearTimeout.bind(windowObject)
+        : (timer) => clearTimeout(timer),
+  };
+}
+
+/**
+ * Owns a fixed-position anchor's place on screen: viewport clamping, pointer
+ * drag with capture, edge docking and the post-drag click suppression. The
+ * anchor is the element that moves; the handle is where the drag starts (the
+ * same node for a plain floating button). Persistence stays with the caller
+ * through `onDrop`, so each script keeps its own storage key and value shape.
+ */
+function createDragAnchor({
+  anchorEl,
+  handleEl = anchorEl,
+  draggingEl = anchorEl,
+  windowObject,
+  measure,
+  dock = true,
+  timers = windowTimers(windowObject),
+  onDragStart,
+  onMove,
+  onDrop,
+} = {}) {
+  let position = { left: 0, top: 0, dockSide: null };
+  let dragState = null;
+  let suppressed = false;
+  let suppressionTimer = null;
+  const cleanups = [];
+
+  const size = () => {
+    const measured = measure?.() || {};
+    return {
+      width: measured.width || FALLBACK_BUTTON_SIZE,
+      height: measured.height || FALLBACK_BUTTON_SIZE,
+    };
+  };
+
+  function clampPosition(left, top) {
+    const { width, height } = size();
+    const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
+    const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
+    return {
+      left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
+      top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop),
+    };
+  }
+
+  function dockedPosition(dockSide, top) {
+    const { width } = size();
+    return {
+      left: dockSide === 'right' ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
+      top: clampPosition(0, top).top,
+    };
+  }
+
+  function detectDockSide(left) {
+    const { width } = size();
+    if (left <= DOCK_THRESHOLD) return 'left';
+    if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return 'right';
+    return null;
+  }
+
+  function applyPosition(next = position) {
+    const dockSide = dock && isDockSide(next?.dockSide) ? next.dockSide : null;
+    const resolved = dockSide
+      ? dockedPosition(dockSide, next?.top ?? position.top)
+      : clampPosition(next?.left ?? position.left, next?.top ?? position.top);
+    position = { ...resolved, dockSide };
+
+    if (dockSide) {
+      anchorEl.dataset.wkDocked = dockSide;
+    } else {
+      delete anchorEl.dataset.wkDocked;
+    }
+    anchorEl.style.top = `${Math.round(resolved.top)}px`;
+    anchorEl.style.bottom = 'auto';
+    if (dockSide === 'right') {
+      anchorEl.style.left = 'auto';
+      anchorEl.style.right = `${DOCK_OFFSET}px`;
+    } else {
+      anchorEl.style.left = `${Math.round(resolved.left)}px`;
+      anchorEl.style.right = 'auto';
+    }
+    onMove?.(position);
+    return position;
+  }
+
+  function listen(type, handler) {
+    handleEl.addEventListener(type, handler);
+    cleanups.push(() => handleEl.removeEventListener(type, handler));
+  }
+
+  function releaseCapture(pointerId) {
+    try {
+      if (handleEl.hasPointerCapture?.(pointerId)) handleEl.releasePointerCapture(pointerId);
+    } catch {
+      // Ignore pointer capture implementations that cannot report synthetic pointers.
+    }
+  }
+
+  listen('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: position.left,
+      startTop: position.top,
+      moved: false,
+    };
+    draggingEl.classList.add('is-dragging');
+    try {
+      handleEl.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Some synthetic or older pointer implementations do not support capture.
+    }
+  });
+
+  listen('pointermove', (event) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    const dx = event.clientX - dragState.startX;
+    const dy = event.clientY - dragState.startY;
+    if (!dragState.moved && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD_PX) {
+      dragState.moved = true;
+      suppressed = true;
+      onDragStart?.();
+    }
+    if (!dragState.moved) return;
+    applyPosition({ left: dragState.startLeft + dx, top: dragState.startTop + dy, dockSide: null });
+  });
+
+  function finishDrag(event) {
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    const moved = dragState.moved;
+    dragState = null;
+    draggingEl.classList.remove('is-dragging');
+    releaseCapture(event.pointerId);
+    if (!moved) return;
+
+    applyPosition({ ...position, dockSide: dock ? detectDockSide(position.left) : null });
+    onDrop?.(position);
+
+    // The click that trails a drag must not count as activation.
+    timers.clearTimeout(suppressionTimer);
+    suppressionTimer = timers.setTimeout(() => {
+      suppressionTimer = null;
+      suppressed = false;
+    }, 0);
+  }
+
+  listen('pointerup', finishDrag);
+  listen('pointercancel', finishDrag);
+
+  return {
+    applyPosition,
+    clampPosition,
+    getPosition: () => position,
+    isDragSuppressed: () => suppressed,
+    destroy() {
+      if (dragState) releaseCapture(dragState.pointerId);
+      dragState = null;
+      draggingEl.classList.remove('is-dragging');
+      timers.clearTimeout(suppressionTimer);
+      suppressionTimer = null;
+      suppressed = false;
+      for (const cleanup of cleanups.splice(0)) cleanup();
+    },
+  };
+}
+
+/**
+ * Hover/focus disclosure for a compact widget: hover expands after a short
+ * intent delay (leaving first cancels it); coarse pointers without hover
+ * toggle with a click on the trigger instead. Focus inside expands, focus
+ * leaving collapses. `is-expanded` goes on the container.
+ */
+function createHoverExpansion({
+  container,
+  trigger,
+  isCoarsePointer = () => false,
+  isSuppressed = () => false,
+  hoverIntentMs = HOVER_INTENT_MS,
+  timers,
+} = {}) {
+  let hoverTimer = null;
+  let active = true;
+  const cleanups = [];
+
+  function listen(target, type, handler) {
+    const guarded = (event) => {
+      if (active) handler(event);
+    };
+    target.addEventListener(type, guarded);
+    cleanups.push(() => target.removeEventListener(type, guarded));
+  }
+
+  function setExpanded(isExpanded) {
+    if (isExpanded && isSuppressed()) return;
+    container.classList.toggle('is-expanded', isExpanded);
+  }
+
+  function cancelHover() {
+    timers.clearTimeout(hoverTimer);
+    hoverTimer = null;
+  }
+
+  if (isCoarsePointer()) {
+    listen(trigger, 'click', () => {
+      if (isSuppressed()) return;
+      setExpanded(!container.classList.contains('is-expanded'));
+    });
+  } else {
+    listen(container, 'mouseenter', () => {
+      cancelHover();
+      hoverTimer = timers.setTimeout(() => {
+        hoverTimer = null;
+        if (active) setExpanded(true);
+      }, hoverIntentMs);
+    });
+    listen(container, 'mouseleave', () => {
+      cancelHover();
+      setExpanded(false);
+    });
+  }
+  listen(container, 'focusin', () => setExpanded(true));
+  listen(container, 'focusout', (event) => {
+    if (!event.relatedTarget || !container.contains(event.relatedTarget)) setExpanded(false);
+  });
+
+  return {
+    setExpanded,
+    destroy() {
+      active = false;
+      cancelHover();
+      container.classList.remove('is-expanded');
+      for (const cleanup of cleanups.splice(0)) cleanup();
+    },
+  };
+}
+
+/**
+ * Places a panel against its reference with @floating-ui/dom: the preferred
+ * side flips when it does not fit and the panel shifts to stay inside the
+ * viewport margin. `start()` keeps it placed while the reference moves or
+ * resizes (autoUpdate); `update()` places it once. `apply` receives the
+ * floating-ui result and writes the coordinates the host CSS expects.
+ */
+function createPanelPlacement({
+  reference,
+  floating,
+  placement = 'bottom-end',
+  strategy = 'fixed',
+  gap = PANEL_GAP,
+  margin = PANEL_SAFE_MARGIN,
+  apply,
+} = {}) {
+  let stopAutoUpdate = null;
+  let generation = 0;
+
+  async function update() {
+    const current = ++generation;
+    const result = await computePosition(reference, floating, {
+      placement,
+      strategy,
+      middleware: [
+        offset(gap),
+        flip({ padding: margin, flipAlignment: false }),
+        shift({ padding: margin, crossAxis: true }),
+      ],
+    });
+    // A newer update or stop() supersedes this one.
+    if (current !== generation) return null;
+    apply(result);
+    return result;
+  }
+
+  function stop() {
+    generation += 1;
+    stopAutoUpdate?.();
+    stopAutoUpdate = null;
+  }
+
+  return {
+    update,
+    start() {
+      stop();
+      stopAutoUpdate = autoUpdate(reference, floating, () => {
+        update().catch(() => {});
+      });
+    },
+    stop,
+  };
+}
+
 function createWidgetShell({
   root,
   buttonId,
@@ -156,14 +462,9 @@ function createWidgetShell({
     throw new Error('shared-widget-shell: root must expose ownerDocument.');
   }
   const windowObject = documentObject.defaultView ?? globalThis.window ?? globalThis;
-  const scheduleTimeout =
-    typeof windowObject.setTimeout === 'function'
-      ? windowObject.setTimeout.bind(windowObject)
-      : (callback, ms) => setTimeout(callback, ms);
-  const cancelTimeout =
-    typeof windowObject.clearTimeout === 'function'
-      ? windowObject.clearTimeout.bind(windowObject)
-      : (timer) => clearTimeout(timer);
+  const timers = windowTimers(windowObject);
+  const scheduleTimeout = timers.setTimeout;
+  const cancelTimeout = timers.clearTimeout;
   const requestFrame =
     typeof windowObject.requestAnimationFrame === 'function'
       ? windowObject.requestAnimationFrame.bind(windowObject)
@@ -200,9 +501,7 @@ function createWidgetShell({
 
   root.append(buttonEl, panelEl);
 
-  let position = { left: 0, top: 0, dockSide: null };
   let isOpenState = false;
-  let suppressNextClick = false;
   let closeTimer = null;
 
   function measureButton() {
@@ -213,64 +512,49 @@ function createWidgetShell({
     };
   }
 
-  function clampPosition(left, top) {
-    const { width, height } = measureButton();
-    const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
-    const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
-    return {
-      left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
-      top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop),
-    };
-  }
+  const anchor = createDragAnchor({
+    anchorEl: buttonEl,
+    windowObject,
+    measure: measureButton,
+    dock,
+    timers,
+    onMove() {
+      if (isOpenState) positionPanel();
+    },
+    onDrop() {
+      persistPosition();
+    },
+  });
 
-  function dockedPosition(dockSide, top) {
-    const { width } = measureButton();
-    const clamped = clampPosition(0, top);
-    return {
-      left: dockSide === 'right' ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
-      top: clamped.top,
-    };
-  }
-
-  function detectDockSide(left) {
-    const { width } = measureButton();
-    if (left <= DOCK_THRESHOLD) return 'left';
-    if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return 'right';
-    return null;
-  }
+  const placement = createPanelPlacement({
+    reference: buttonEl,
+    floating: panelEl,
+    placement: 'bottom-end',
+    strategy: 'fixed',
+    apply({ x, y, placement: side }) {
+      const position = anchor.getPosition();
+      const { width: buttonWidth, height: buttonHeight } = measureButton();
+      const width = panelEl.offsetWidth || Number.parseFloat(panelEl.style.width) || panelWidth;
+      const height = panelEl.offsetHeight || Number.parseFloat(panelEl.style.maxHeight) || panelMaxHeight;
+      panelEl.style.left = `${Math.round(x)}px`;
+      panelEl.style.top = `${Math.round(y)}px`;
+      const originX = Math.min(Math.max(position.left + buttonWidth / 2 - x, 24), width - 24);
+      const originY = Math.min(Math.max(position.top + buttonHeight / 2 - y, 24), height - 24);
+      panelEl.style.transformOrigin = `${Math.round(originX)}px ${Math.round(originY)}px`;
+      panelEl.dataset.wkPlacement = side.startsWith('top') ? 'above' : 'below';
+    },
+  });
 
   function resolveDefaultPosition() {
     const { width } = measureButton();
     const top = Number.isFinite(defaultPosition?.top) ? defaultPosition.top : 76;
     const right = Number.isFinite(defaultPosition?.right) ? defaultPosition.right : 24;
-    return clampPosition(windowObject.innerWidth - right - width, top);
-  }
-
-  function applyPosition(next) {
-    const dockSide = dock && isDockSide(next?.dockSide) ? next.dockSide : null;
-    const resolved = dockSide
-      ? dockedPosition(dockSide, next?.top ?? position.top)
-      : clampPosition(next?.left ?? position.left, next?.top ?? position.top);
-    position = { ...resolved, dockSide };
-
-    if (dockSide) {
-      buttonEl.dataset.wkDocked = dockSide;
-    } else {
-      delete buttonEl.dataset.wkDocked;
-    }
-    buttonEl.style.top = `${Math.round(resolved.top)}px`;
-    if (dockSide === 'right') {
-      buttonEl.style.left = 'auto';
-      buttonEl.style.right = `${DOCK_OFFSET}px`;
-    } else {
-      buttonEl.style.left = `${Math.round(resolved.left)}px`;
-      buttonEl.style.right = 'auto';
-    }
-    return position;
+    return { left: windowObject.innerWidth - right - width, top };
   }
 
   async function persistPosition() {
     if (!storage?.set || !positionKey) return;
+    const position = anchor.getPosition();
     const value = { left: Math.round(position.left), top: Math.round(position.top) };
     if (position.dockSide) value.dockSide = position.dockSide;
     try {
@@ -286,41 +570,26 @@ function createWidgetShell({
       const raw = await storage.get(positionKey);
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (parsed && Number.isFinite(parsed.left) && Number.isFinite(parsed.top)) {
-        applyPosition({
+        anchor.applyPosition({
           left: parsed.left,
           top: parsed.top,
           dockSide: isDockSide(parsed.dockSide) ? parsed.dockSide : null,
         });
-        if (isOpenState) positionPanel();
       }
     } catch {
       // Ignore invalid persisted UI state.
     }
   }
 
+  // Size is decided here; floating-ui decides where it goes (flip below/above,
+  // shift inside the safe margin) and applies it asynchronously.
   function positionPanel() {
     const safe = PANEL_SAFE_MARGIN;
-    const { width: buttonWidth, height: buttonHeight } = measureButton();
     const width = Math.min(panelWidth, windowObject.innerWidth - safe * 2);
     const maxHeight = Math.min(panelMaxHeight, windowObject.innerHeight - safe * 2);
-    const height = Math.min(maxHeight, panelEl.offsetHeight || maxHeight);
-    const maxLeft = Math.max(safe, windowObject.innerWidth - width - safe);
-    const left = Math.min(Math.max(safe, position.left + buttonWidth - width), maxLeft);
-    const belowTop = position.top + buttonHeight + PANEL_GAP;
-    const aboveTop = position.top - height - PANEL_GAP;
-    const fitsBelow = belowTop + height <= windowObject.innerHeight - safe;
-    const maxTop = Math.max(safe, windowObject.innerHeight - height - safe);
-    const top = fitsBelow ? Math.min(belowTop, maxTop) : Math.min(Math.max(safe, aboveTop), maxTop);
-
-    panelEl.style.left = `${Math.round(left)}px`;
-    panelEl.style.top = `${Math.round(top)}px`;
     panelEl.style.width = `${Math.round(width)}px`;
     panelEl.style.maxHeight = `${Math.round(maxHeight)}px`;
-
-    const originX = Math.min(Math.max(position.left + buttonWidth / 2 - left, 24), width - 24);
-    const originY = Math.min(Math.max(position.top + buttonHeight / 2 - top, 24), height - 24);
-    panelEl.style.transformOrigin = `${Math.round(originX)}px ${Math.round(originY)}px`;
-    panelEl.dataset.wkPlacement = fitsBelow ? 'below' : 'above';
+    return placement.update().catch(() => null);
   }
 
   function syncExpanded() {
@@ -334,6 +603,7 @@ function createWidgetShell({
     panelEl.hidden = false;
     panelEl.classList.remove('is-open');
     positionPanel();
+    placement.start();
     buttonEl.classList.add('is-active');
     syncExpanded();
     requestFrame(() => {
@@ -347,6 +617,7 @@ function createWidgetShell({
   function close() {
     if (!isOpenState) return;
     isOpenState = false;
+    placement.stop();
     panelEl.classList.remove('is-open');
     buttonEl.classList.remove('is-active');
     syncExpanded();
@@ -367,70 +638,6 @@ function createWidgetShell({
     }
   }
 
-  function installDrag() {
-    let dragState = null;
-
-    buttonEl.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) return;
-      dragState = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        startLeft: position.left,
-        startTop: position.top,
-        moved: false,
-      };
-      buttonEl.classList.add('is-dragging');
-      try {
-        buttonEl.setPointerCapture?.(event.pointerId);
-      } catch {
-        // Some synthetic or older pointer implementations do not support capture.
-      }
-    });
-
-    buttonEl.addEventListener('pointermove', (event) => {
-      if (!dragState || dragState.pointerId !== event.pointerId) return;
-      const dx = event.clientX - dragState.startX;
-      const dy = event.clientY - dragState.startY;
-      if (Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;
-      if (!dragState.moved) return;
-      applyPosition({
-        left: dragState.startLeft + dx,
-        top: dragState.startTop + dy,
-        dockSide: null,
-      });
-      if (isOpenState) positionPanel();
-    });
-
-    function finishDrag(event) {
-      if (!dragState || dragState.pointerId !== event.pointerId) return;
-      const moved = dragState.moved;
-      dragState = null;
-      buttonEl.classList.remove('is-dragging');
-      try {
-        if (buttonEl.hasPointerCapture?.(event.pointerId)) {
-          buttonEl.releasePointerCapture(event.pointerId);
-        }
-      } catch {
-        // Ignore pointer capture implementations that cannot report synthetic pointers.
-      }
-      if (!moved) return;
-
-      const dockSide = dock ? detectDockSide(position.left) : null;
-      applyPosition({ ...position, dockSide });
-      persistPosition();
-      if (isOpenState) positionPanel();
-
-      suppressNextClick = true;
-      scheduleTimeout(() => {
-        suppressNextClick = false;
-      }, 0);
-    }
-
-    buttonEl.addEventListener('pointerup', finishDrag);
-    buttonEl.addEventListener('pointercancel', finishDrag);
-  }
-
   function onDocumentPointerDown(event) {
     if (!isOpenState) return;
     if (eventContainsNode(event, panelEl) || eventContainsNode(event, buttonEl)) return;
@@ -443,28 +650,25 @@ function createWidgetShell({
   }
 
   function onWindowResize() {
-    applyPosition(position);
-    if (isOpenState) positionPanel();
+    anchor.applyPosition();
   }
 
   buttonEl.addEventListener('click', () => {
-    if (suppressNextClick) {
-      suppressNextClick = false;
-      return;
-    }
+    if (anchor.isDragSuppressed()) return;
     toggle();
   });
   documentObject.addEventListener('pointerdown', onDocumentPointerDown, true);
   documentObject.addEventListener('keydown', onDocumentKeydown);
   windowObject.addEventListener?.('resize', onWindowResize);
 
-  applyPosition(resolveDefaultPosition());
-  installDrag();
+  anchor.applyPosition(resolveDefaultPosition());
   restorePosition();
 
   function destroy() {
     cancelTimeout(closeTimer);
     isOpenState = false;
+    placement.stop();
+    anchor.destroy();
     syncExpanded();
     documentObject.removeEventListener('pointerdown', onDocumentPointerDown, true);
     documentObject.removeEventListener('keydown', onDocumentKeydown);
@@ -475,7 +679,7 @@ function createWidgetShell({
 
   // Re-measure and re-place the panel after the body content changes size.
   function reposition() {
-    if (isOpenState) positionPanel();
+    return isOpenState ? positionPanel() : Promise.resolve(null);
   }
 
   return {
@@ -491,4 +695,4 @@ function createWidgetShell({
   };
 }
 
-export { createWidgetShell };
+export { createWidgetShell, createDragAnchor, createHoverExpansion, createPanelPlacement };

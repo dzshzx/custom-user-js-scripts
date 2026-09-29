@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@date-fns/utc": "2.1.1",
+    "@floating-ui/dom": "1.8.0",
     "commander": "15.0.0",
     "date-fns": "4.4.0",
     "fast-json-stable-stringify": "2.1.0",

@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.8
+// @version      0.5.9
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -29,6 +29,7 @@ import { createQuotaCompassTranslator } from './codex-quota-compass-i18n.lib.js'
 import * as CoreLib from './codex-quota-compass-core.lib.js';
 import { createQuotaRuntime, createDefaultQuotaRuntimeConfig } from './codex-quota-compass-runtime.lib.js';
 import { createSnapshotArchiveStoragePort } from './codex-quota-compass-storage.lib.js';
+import { resolveGmApi } from '../shared/shared-gm.lib.js';
 import {
   normalizeSnapshotArchive,
   mergeSnapshotArchives,
@@ -45,7 +46,7 @@ import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quo
   const DEBUG_KEY = '__codexQuotaCompassDebug';
   const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
   const RUNNING_KEY = '__codexQuotaCompassRunning';
-  const SCRIPT_VERSION = '0.5.8';
+  const SCRIPT_VERSION = '0.5.9';
   const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
   const archiveStoragePort = createSnapshotArchiveStoragePort({
     scriptName: SCRIPT_NAME,
@@ -110,20 +111,21 @@ import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quo
   });
   panel.update(application.getState());
 
-  if (typeof GM_registerMenuCommand === 'function') {
-    GM_registerMenuCommand(t('menuRun'), () => {
+  const { registerMenuCommand } = resolveGmApi();
+  if (registerMenuCommand) {
+    registerMenuCommand(t('menuRun'), () => {
       void panel.dispatch({ type: 'refresh', open: true });
     });
-    GM_registerMenuCommand(t('menuRemoteConfigure'), () => {
+    registerMenuCommand(t('menuRemoteConfigure'), () => {
       void panel.dispatch({ type: 'open', view: 'archive' });
     });
-    GM_registerMenuCommand(t('menuRemoteSync'), () => {
+    registerMenuCommand(t('menuRemoteSync'), () => {
       void panel.dispatch({ type: 'sync' });
     });
-    GM_registerMenuCommand(t('menuExport'), () => {
+    registerMenuCommand(t('menuExport'), () => {
       void panel.dispatch({ type: 'export-archive' });
     });
-    GM_registerMenuCommand(t('menuImport'), () => {
+    registerMenuCommand(t('menuImport'), () => {
       void panel.dispatch({ type: 'import-archive' });
     });
   }

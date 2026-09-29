@@ -20,7 +20,7 @@ function createStorageAdapter(initial = {}) {
 }
 
 function setup({ storage, ...overrides } = {}) {
-  const window = createDomWindow();
+  const window = createDomWindow({ globalWindow: true });
   const root = window.document.createElement('div');
   root.id = 'wk-test-root';
   window.document.body.append(root);
@@ -52,6 +52,14 @@ function pointerEvent(window, type, props = {}) {
 
 const flushTimers = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Panel placement runs happy-dom's synchronous getComputedStyle, so the open
+// animation frame can land well after 16ms on a loaded machine.
+async function waitFor(predicate, timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate() && Date.now() < deadline) await flushTimers(5);
+  return predicate();
+}
+
 test('open, close and toggle drive hidden, aria-expanded and callbacks', { skip: domSkip }, async () => {
   const { shell, events } = setup();
   const { buttonEl, panelEl } = shell;
@@ -64,8 +72,7 @@ test('open, close and toggle drive hidden, aria-expanded and callbacks', { skip:
   assert.equal(panelEl.hidden, false);
   assert.equal(shell.isOpen(), true);
   assert.equal(buttonEl.getAttribute('aria-expanded'), 'true');
-  await flushTimers(50);
-  assert.ok(panelEl.classList.contains('is-open'));
+  assert.ok(await waitFor(() => panelEl.classList.contains('is-open')));
 
   shell.toggle();
   assert.equal(shell.isOpen(), false);
@@ -249,16 +256,56 @@ test('buttonClass and panelClass append host classes alongside the kit classes',
   shell.destroy();
 });
 
-test('reposition re-places an open panel and is a no-op when closed', { skip: domSkip }, () => {
+test('reposition re-places an open panel and is a no-op when closed', { skip: domSkip }, async () => {
   const { shell } = setup();
 
-  shell.reposition();
+  assert.equal(await shell.reposition(), null);
   assert.equal(shell.panelEl.style.left, '');
 
   shell.open();
-  shell.reposition();
+  await shell.reposition();
   assert.equal(shell.panelEl.style.width, '560px');
   assert.match(shell.panelEl.style.left, /px$/);
   assert.match(shell.panelEl.style.top, /px$/);
   shell.destroy();
 });
+
+test(
+  'panel placement flips above the button near the bottom and shifts inside the margin',
+  { skip: domSkip },
+  async () => {
+    const { window, shell } = setup({ panelMaxHeight: 200 });
+    // happy-dom reports a 0x0 layout viewport; floating-ui clips against it.
+    Object.defineProperty(window.document.documentElement, 'clientWidth', { value: 1024 });
+    Object.defineProperty(window.document.documentElement, 'clientHeight', { value: 768 });
+    const { buttonEl, panelEl } = shell;
+    const rect = (left, top, width, height) => () => ({
+      x: left,
+      y: top,
+      left,
+      top,
+      width,
+      height,
+      right: left + width,
+      bottom: top + height,
+    });
+    // happy-dom has no layout; give the button and panel real geometry.
+    buttonEl.getBoundingClientRect = rect(960, 700, 44, 44);
+    Object.defineProperty(panelEl, 'offsetWidth', { value: 560 });
+    Object.defineProperty(panelEl, 'offsetHeight', { value: 200 });
+
+    shell.open();
+    await shell.reposition();
+    assert.equal(panelEl.dataset.wkPlacement, 'above');
+    assert.equal(panelEl.style.top, `${700 - 8 - 200}px`);
+    // End-aligned to the button's right edge (1004 - 560), inside the 12px margin.
+    assert.equal(panelEl.style.left, '444px');
+
+    buttonEl.getBoundingClientRect = rect(20, 40, 44, 44);
+    await shell.reposition();
+    assert.equal(panelEl.dataset.wkPlacement, 'below');
+    assert.equal(panelEl.style.top, `${40 + 44 + 8}px`);
+    assert.equal(panelEl.style.left, '12px');
+    shell.destroy();
+  },
+);

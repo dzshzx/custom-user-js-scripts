@@ -99,7 +99,14 @@ sans-serif`.
 - Floating companion UI is built on the shared kit in `src/userscripts/shared/`
   instead of per-script shell code: `shared-widget-shell.lib.js` owns the
   draggable/dockable floating button, panel positioning, position persistence,
-  Esc close, focus hand-off, and outside-click close.
+  Esc close, focus hand-off, and outside-click close. Its parts are exported
+  for widgets with their own markup: `createDragAnchor` (clamp, drag, edge
+  docking, post-drag click suppression), `createHoverExpansion` (hover intent
+  and coarse-pointer disclosure) and `createPanelPlacement` (flip/shift/
+  autoUpdate through `@floating-ui/dom`).
+- Userscript manager APIs (`GM_*` / `GM.*`) are resolved only in
+  `shared-gm.lib.js` (`resolveGmApi`); lint rejects `typeof GM` probes
+  elsewhere.
 - Color, type scale, radius, shadow, and focus-ring tokens come from
   `shared-tokens.lib.js` (`--wk-*`); each script passes only its accent color.
   Dark mode resolves through `resolveTheme`/`applyTheme` (host detection first,
@@ -157,6 +164,8 @@ sans-serif`.
   sentences.
 - Hover expansion carries a short intent delay; coarse pointers toggle
   expansion by clicking the widget button instead.
+- Drag, clamping, hover disclosure and compact-panel placement come from the
+  shared widget kit parts; the widget does not dock to screen edges.
 - The settings dialog owns scope selection, refresh settings, unlocker
   capability toggles, status boxes, and destructive delete actions.
 - The dialog behaves as a true modal: focus trap, Esc close, inert page

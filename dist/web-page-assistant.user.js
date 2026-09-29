@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.5
+// @version      0.3.6
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -207,6 +207,59 @@
     return next;
   }
 
+  // src/userscripts/shared/shared-gm.lib.js
+  function pickFunction(override, legacy) {
+    if (typeof override === "function") return override;
+    if (typeof legacy === "function") return legacy;
+    return null;
+  }
+  function bindModern(gm, ...names) {
+    for (const name of names) {
+      if (typeof gm?.[name] === "function") return gm[name].bind(gm);
+    }
+    return null;
+  }
+  function legacyGlobals() {
+    return {
+      getValue: typeof GM_getValue === "function" ? GM_getValue : null,
+      setValue: typeof GM_setValue === "function" ? GM_setValue : null,
+      addValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
+      removeValueChangeListener: typeof GM_removeValueChangeListener === "function" ? GM_removeValueChangeListener : null,
+      registerMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
+      xmlHttpRequest: typeof GM_xmlhttpRequest === "function" ? GM_xmlhttpRequest : null,
+      download: typeof GM_download === "function" ? GM_download : null
+    };
+  }
+  function modernGlobal() {
+    return typeof GM !== "undefined" ? GM : null;
+  }
+  function resolveGmApi(overrides = {}) {
+    const legacy = legacyGlobals();
+    const gm = overrides.gm || overrides.gmApi || modernGlobal();
+    const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
+    let valueChange = null;
+    if (legacyAdd) {
+      valueChange = {
+        add: legacyAdd,
+        remove: pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
+      };
+    } else if (typeof gm?.addValueChangeListener === "function") {
+      valueChange = {
+        add: gm.addValueChangeListener.bind(gm),
+        remove: bindModern(gm, "removeValueChangeListener")
+      };
+    }
+    return {
+      getValue: pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue"),
+      setValue: pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue"),
+      valueChange,
+      registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
+      xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),
+      // Legacy only: GM.download does not share GM_download's callback contract.
+      download: pickFunction(overrides.gmDownload, legacy.download)
+    };
+  }
+
   // src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js
   function maybePromise(value) {
     return value && typeof value.then === "function" ? value : Promise.resolve(value);
@@ -220,39 +273,24 @@
       widgetPositionKey,
       fallbackStorageKey,
       fallbackWidgetPositionKey,
-      gmGetValue,
-      gmSetValue,
-      gmRegisterMenuCommand,
-      gmAddValueChangeListener,
-      gmRemoveValueChangeListener,
-      gmApi,
       localStorageAdapter,
       eventTarget,
       logger,
       toPromise = maybePromise
     } = adapters;
+    const gm = resolveGmApi(adapters);
     async function readPrimaryValue(key, fallbackValue) {
-      if (typeof gmGetValue === "function") {
+      if (gm.getValue) {
         return {
           available: true,
-          value: await toPromise(gmGetValue(key, fallbackValue))
-        };
-      }
-      if (gmApi && typeof gmApi.getValue === "function") {
-        return {
-          available: true,
-          value: await gmApi.getValue(key, fallbackValue)
+          value: await toPromise(gm.getValue(key, fallbackValue))
         };
       }
       return { available: false, value: fallbackValue };
     }
     async function writePrimaryValue(key, value) {
-      if (typeof gmSetValue === "function") {
-        await toPromise(gmSetValue(key, value));
-        return true;
-      }
-      if (gmApi && typeof gmApi.setValue === "function") {
-        await gmApi.setValue(key, value);
+      if (gm.setValue) {
+        await toPromise(gm.setValue(key, value));
         return true;
       }
       return false;
@@ -304,22 +342,20 @@
       const listener = (_name, _oldValue, _newValue, remote) => {
         if (remote) onChange();
       };
-      if (typeof gmAddValueChangeListener === "function") {
-        const id = gmAddValueChangeListener(storageKey, listener);
+      if (!gm.valueChange) return null;
+      const { add, remove } = gm.valueChange;
+      const result = add(storageKey, listener);
+      if (!result || typeof result.then !== "function") {
         return () => {
-          if (typeof gmRemoveValueChangeListener === "function") gmRemoveValueChangeListener(id);
+          if (remove) remove(result);
         };
       }
-      if (gmApi && typeof gmApi.addValueChangeListener === "function") {
-        const id = toPromise(gmApi.addValueChangeListener(storageKey, listener));
-        id.catch((error) => logger.warn(`${scriptName}: failed to watch userscript storage.`, error));
-        return () => {
-          if (typeof gmApi.removeValueChangeListener !== "function") return;
-          id.then((value) => gmApi.removeValueChangeListener(value)).catch(() => {
-          });
-        };
-      }
-      return null;
+      result.catch((error) => logger.warn(`${scriptName}: failed to watch userscript storage.`, error));
+      return () => {
+        if (!remove) return;
+        result.then((value) => remove(value)).catch(() => {
+        });
+      };
     }
     return {
       async readSettings() {
@@ -389,12 +425,8 @@
       },
       registerSettingsMenu(label, callback) {
         try {
-          if (typeof gmRegisterMenuCommand === "function") {
-            gmRegisterMenuCommand(label, callback);
-            return true;
-          }
-          if (gmApi && typeof gmApi.registerMenuCommand === "function") {
-            gmApi.registerMenuCommand(label, callback);
+          if (gm.registerMenuCommand) {
+            gm.registerMenuCommand(label, callback);
             return true;
           }
         } catch (error) {
@@ -1461,12 +1493,12 @@
     }
     return number;
   }
-  function iconSvg(name, { size = 16, strokeWidth = 2 } = {}) {
+  function iconSvg(name, { size: size2 = 16, strokeWidth = 2 } = {}) {
     const content = ICON_CONTENT[name];
     if (!content) {
       throw new Error(`shared-icons: unknown icon "${name}". Available: ${ICON_NAMES.join(", ")}`);
     }
-    const resolvedSize = toPositiveNumber(size, "size");
+    const resolvedSize = toPositiveNumber(size2, "size");
     const resolvedStrokeWidth = toPositiveNumber(strokeWidth, "strokeWidth");
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${resolvedStrokeWidth}" stroke-linecap="round" stroke-linejoin="round" width="${resolvedSize}" height="${resolvedSize}" class="wk-icon wk-icon-${name}" aria-hidden="true" focusable="false">${content}</svg>`;
   }
@@ -1802,254 +1834,1692 @@
     return dialog;
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-widget-layout.lib.js
-  function createWidgetLayoutRuntime(adapters) {
-    const {
-      normalizeWidgetPosition,
-      clampNumber,
-      getViewportSize,
-      persistPosition,
-      onPositionChange,
-      setTimeout,
-      clearTimeout: clearTimeoutAdapter,
-      isCoarsePointer: isCoarsePointer2 = () => false,
-      hoverIntentMs = 150,
-      logger,
-      constants,
-      scriptName = "Web Page Assistant"
-    } = adapters;
-    const clearTimer = typeof clearTimeoutAdapter === "function" ? clearTimeoutAdapter : (timer) => globalThis.clearTimeout(timer);
-    let widget = null;
-    let widgetButton = null;
-    let position = null;
-    let suppressExpansion = false;
-    let hoverTimer = null;
-    let suppressionTimer = null;
-    let dragState = null;
-    let bindingGeneration = 0;
-    let bindingCleanups = [];
-    let disposed = false;
-    function addListener(target, type, handler) {
-      target.addEventListener(type, handler);
-      bindingCleanups.push(() => target.removeEventListener(type, handler));
+  // node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
+  var min = Math.min;
+  var max = Math.max;
+  var round = Math.round;
+  var floor = Math.floor;
+  var createCoords = (v) => ({
+    x: v,
+    y: v
+  });
+  var oppositeSideMap = {
+    left: "right",
+    right: "left",
+    bottom: "top",
+    top: "bottom"
+  };
+  function clamp(start, value, end) {
+    return max(start, min(value, end));
+  }
+  function evaluate(value, param) {
+    return typeof value === "function" ? value(param) : value;
+  }
+  function getSide(placement) {
+    return placement.split("-")[0];
+  }
+  function getAlignment(placement) {
+    return placement.split("-")[1];
+  }
+  function getOppositeAxis(axis) {
+    return axis === "x" ? "y" : "x";
+  }
+  function getAxisLength(axis) {
+    return axis === "y" ? "height" : "width";
+  }
+  function getSideAxis(placement) {
+    const firstChar = placement[0];
+    return firstChar === "t" || firstChar === "b" ? "y" : "x";
+  }
+  function getAlignmentAxis(placement) {
+    return getOppositeAxis(getSideAxis(placement));
+  }
+  function getAlignmentSides(placement, rects, rtl) {
+    if (rtl === void 0) {
+      rtl = false;
     }
-    function releaseDragCapture() {
-      if (!dragState || !widgetButton) return;
-      try {
-        if (widgetButton.hasPointerCapture(dragState.pointerId)) {
-          widgetButton.releasePointerCapture(dragState.pointerId);
+    const alignment = getAlignment(placement);
+    const alignmentAxis = getAlignmentAxis(placement);
+    const length = getAxisLength(alignmentAxis);
+    let mainAlignmentSide = alignmentAxis === "x" ? alignment === (rtl ? "end" : "start") ? "right" : "left" : alignment === "start" ? "bottom" : "top";
+    if (rects.reference[length] > rects.floating[length]) {
+      mainAlignmentSide = getOppositePlacement(mainAlignmentSide);
+    }
+    return [mainAlignmentSide, getOppositePlacement(mainAlignmentSide)];
+  }
+  function getExpandedPlacements(placement) {
+    const oppositePlacement = getOppositePlacement(placement);
+    return [getOppositeAlignmentPlacement(placement), oppositePlacement, getOppositeAlignmentPlacement(oppositePlacement)];
+  }
+  function getOppositeAlignmentPlacement(placement) {
+    return placement.includes("start") ? placement.replace("start", "end") : placement.replace("end", "start");
+  }
+  var lrPlacement = ["left", "right"];
+  var rlPlacement = ["right", "left"];
+  var tbPlacement = ["top", "bottom"];
+  var btPlacement = ["bottom", "top"];
+  function getSideList(side, isStart, rtl) {
+    switch (side) {
+      case "top":
+      case "bottom":
+        if (rtl) return isStart ? rlPlacement : lrPlacement;
+        return isStart ? lrPlacement : rlPlacement;
+      case "left":
+      case "right":
+        return isStart ? tbPlacement : btPlacement;
+      default:
+        return [];
+    }
+  }
+  function getOppositeAxisPlacements(placement, flipAlignment, direction, rtl) {
+    const alignment = getAlignment(placement);
+    let list = getSideList(getSide(placement), direction === "start", rtl);
+    if (alignment) {
+      list = list.map((side) => side + "-" + alignment);
+      if (flipAlignment) {
+        list = list.concat(list.map(getOppositeAlignmentPlacement));
+      }
+    }
+    return list;
+  }
+  function getOppositePlacement(placement) {
+    const side = getSide(placement);
+    return oppositeSideMap[side] + placement.slice(side.length);
+  }
+  function expandPaddingObject(padding) {
+    var _padding$top, _padding$right, _padding$bottom, _padding$left;
+    return {
+      top: (_padding$top = padding.top) != null ? _padding$top : 0,
+      right: (_padding$right = padding.right) != null ? _padding$right : 0,
+      bottom: (_padding$bottom = padding.bottom) != null ? _padding$bottom : 0,
+      left: (_padding$left = padding.left) != null ? _padding$left : 0
+    };
+  }
+  function getPaddingObject(padding) {
+    return typeof padding !== "number" ? expandPaddingObject(padding) : {
+      top: padding,
+      right: padding,
+      bottom: padding,
+      left: padding
+    };
+  }
+  function rectToClientRect(rect) {
+    const {
+      x,
+      y,
+      width,
+      height
+    } = rect;
+    return {
+      width,
+      height,
+      top: y,
+      left: x,
+      right: x + width,
+      bottom: y + height,
+      x,
+      y
+    };
+  }
+
+  // node_modules/@floating-ui/core/dist/floating-ui.core.mjs
+  function computeCoordsFromPlacement(_ref, placement, rtl) {
+    let {
+      reference,
+      floating
+    } = _ref;
+    const sideAxis = getSideAxis(placement);
+    const alignmentAxis = getAlignmentAxis(placement);
+    const alignLength = getAxisLength(alignmentAxis);
+    const side = getSide(placement);
+    const isVertical = sideAxis === "y";
+    const commonX = reference.x + reference.width / 2 - floating.width / 2;
+    const commonY = reference.y + reference.height / 2 - floating.height / 2;
+    const commonAlign = reference[alignLength] / 2 - floating[alignLength] / 2;
+    let coords;
+    switch (side) {
+      case "top":
+        coords = {
+          x: commonX,
+          y: reference.y - floating.height
+        };
+        break;
+      case "bottom":
+        coords = {
+          x: commonX,
+          y: reference.y + reference.height
+        };
+        break;
+      case "right":
+        coords = {
+          x: reference.x + reference.width,
+          y: commonY
+        };
+        break;
+      case "left":
+        coords = {
+          x: reference.x - floating.width,
+          y: commonY
+        };
+        break;
+      default:
+        coords = {
+          x: reference.x,
+          y: reference.y
+        };
+    }
+    const alignment = getAlignment(placement);
+    if (alignment) {
+      coords[alignmentAxis] += commonAlign * (alignment === "end" ? 1 : -1) * (rtl && isVertical ? -1 : 1);
+    }
+    return coords;
+  }
+  async function detectOverflow(state, options) {
+    var _await$platform$isEle;
+    if (options === void 0) {
+      options = {};
+    }
+    const {
+      x,
+      y,
+      platform: platform2,
+      rects,
+      elements,
+      strategy
+    } = state;
+    const {
+      boundary = "clippingAncestors",
+      rootBoundary = "viewport",
+      elementContext = "floating",
+      altBoundary = false,
+      padding = 0
+    } = evaluate(options, state);
+    const paddingObject = getPaddingObject(padding);
+    const altContext = elementContext === "floating" ? "reference" : "floating";
+    const element = elements[altBoundary ? altContext : elementContext];
+    const clippingClientRect = rectToClientRect(await platform2.getClippingRect({
+      element: ((_await$platform$isEle = await (platform2.isElement == null ? void 0 : platform2.isElement(element))) != null ? _await$platform$isEle : true) ? element : element.contextElement || await (platform2.getDocumentElement == null ? void 0 : platform2.getDocumentElement(elements.floating)),
+      boundary,
+      rootBoundary,
+      strategy
+    }));
+    const rect = elementContext === "floating" ? {
+      x,
+      y,
+      width: rects.floating.width,
+      height: rects.floating.height
+    } : rects.reference;
+    const offsetParent = await (platform2.getOffsetParent == null ? void 0 : platform2.getOffsetParent(elements.floating));
+    const offsetScale = await (platform2.isElement == null ? void 0 : platform2.isElement(offsetParent)) && await (platform2.getScale == null ? void 0 : platform2.getScale(offsetParent)) || {
+      x: 1,
+      y: 1
+    };
+    const elementClientRect = rectToClientRect(platform2.convertOffsetParentRelativeRectToViewportRelativeRect ? await platform2.convertOffsetParentRelativeRectToViewportRelativeRect({
+      elements,
+      rect,
+      offsetParent,
+      strategy
+    }) : rect);
+    return {
+      top: (clippingClientRect.top - elementClientRect.top + paddingObject.top) / offsetScale.y,
+      bottom: (elementClientRect.bottom - clippingClientRect.bottom + paddingObject.bottom) / offsetScale.y,
+      left: (clippingClientRect.left - elementClientRect.left + paddingObject.left) / offsetScale.x,
+      right: (elementClientRect.right - clippingClientRect.right + paddingObject.right) / offsetScale.x
+    };
+  }
+  var MAX_RESET_COUNT = 50;
+  var computePosition = async (reference, floating, config) => {
+    const {
+      placement = "bottom",
+      strategy = "absolute",
+      middleware = [],
+      platform: platform2
+    } = config;
+    const platformWithDetectOverflow = platform2.detectOverflow ? platform2 : {
+      ...platform2,
+      detectOverflow
+    };
+    const rtl = await (platform2.isRTL == null ? void 0 : platform2.isRTL(floating));
+    let rects = await platform2.getElementRects({
+      reference,
+      floating,
+      strategy
+    });
+    let {
+      x,
+      y
+    } = computeCoordsFromPlacement(rects, placement, rtl);
+    let statefulPlacement = placement;
+    let resetCount = 0;
+    const middlewareData = {};
+    for (let i = 0; i < middleware.length; i++) {
+      const currentMiddleware = middleware[i];
+      if (!currentMiddleware) {
+        continue;
+      }
+      const {
+        name,
+        fn
+      } = currentMiddleware;
+      const {
+        x: nextX,
+        y: nextY,
+        data,
+        reset
+      } = await fn({
+        x,
+        y,
+        initialPlacement: placement,
+        placement: statefulPlacement,
+        strategy,
+        middlewareData,
+        rects,
+        platform: platformWithDetectOverflow,
+        elements: {
+          reference,
+          floating
         }
+      });
+      x = nextX != null ? nextX : x;
+      y = nextY != null ? nextY : y;
+      middlewareData[name] = {
+        ...middlewareData[name],
+        ...data
+      };
+      if (reset && resetCount < MAX_RESET_COUNT) {
+        resetCount++;
+        if (typeof reset === "object") {
+          if (reset.placement) {
+            statefulPlacement = reset.placement;
+          }
+          if (reset.rects) {
+            rects = reset.rects === true ? await platform2.getElementRects({
+              reference,
+              floating,
+              strategy
+            }) : reset.rects;
+          }
+          ({
+            x,
+            y
+          } = computeCoordsFromPlacement(rects, statefulPlacement, rtl));
+        }
+        i = -1;
+      }
+    }
+    return {
+      x,
+      y,
+      placement: statefulPlacement,
+      strategy,
+      middlewareData
+    };
+  };
+  var flip = function(options) {
+    if (options === void 0) {
+      options = {};
+    }
+    return {
+      name: "flip",
+      options,
+      async fn(state) {
+        var _middlewareData$arrow, _middlewareData$flip;
+        const {
+          placement,
+          middlewareData,
+          rects,
+          initialPlacement,
+          platform: platform2,
+          elements
+        } = state;
+        const {
+          mainAxis: checkMainAxis = true,
+          crossAxis: checkCrossAxis = true,
+          fallbackPlacements: specifiedFallbackPlacements,
+          fallbackStrategy = "bestFit",
+          fallbackAxisSideDirection = "none",
+          flipAlignment = true,
+          ...detectOverflowOptions
+        } = evaluate(options, state);
+        if ((_middlewareData$arrow = middlewareData.arrow) != null && _middlewareData$arrow.alignmentOffset) {
+          return {};
+        }
+        const side = getSide(placement);
+        const initialSideAxis = getSideAxis(initialPlacement);
+        const isBasePlacement = getSide(initialPlacement) === initialPlacement;
+        const rtl = await (platform2.isRTL == null ? void 0 : platform2.isRTL(elements.floating));
+        const fallbackPlacements = specifiedFallbackPlacements || (isBasePlacement || !flipAlignment ? [getOppositePlacement(initialPlacement)] : getExpandedPlacements(initialPlacement));
+        const hasFallbackAxisSideDirection = fallbackAxisSideDirection !== "none";
+        if (!specifiedFallbackPlacements && hasFallbackAxisSideDirection) {
+          fallbackPlacements.push(...getOppositeAxisPlacements(initialPlacement, flipAlignment, fallbackAxisSideDirection, rtl));
+        }
+        const placements2 = [initialPlacement, ...fallbackPlacements];
+        const overflow = await platform2.detectOverflow(state, detectOverflowOptions);
+        const overflows = [];
+        let overflowsData = ((_middlewareData$flip = middlewareData.flip) == null ? void 0 : _middlewareData$flip.overflows) || [];
+        if (checkMainAxis) {
+          overflows.push(overflow[side]);
+        }
+        if (checkCrossAxis) {
+          const sides2 = getAlignmentSides(placement, rects, rtl);
+          overflows.push(overflow[sides2[0]], overflow[sides2[1]]);
+        }
+        overflowsData = [...overflowsData, {
+          placement,
+          overflows
+        }];
+        if (!overflows.every((side2) => side2 <= 0)) {
+          var _middlewareData$flip2, _overflowsData$filter;
+          const nextIndex = (((_middlewareData$flip2 = middlewareData.flip) == null ? void 0 : _middlewareData$flip2.index) || 0) + 1;
+          const nextPlacement = placements2[nextIndex];
+          if (nextPlacement) {
+            const ignoreCrossAxisOverflow = checkCrossAxis === "alignment" ? initialSideAxis !== getSideAxis(nextPlacement) : false;
+            if (!ignoreCrossAxisOverflow || // We leave the current main axis only if every placement on that axis
+            // overflows the main axis.
+            overflowsData.every((d) => getSideAxis(d.placement) === initialSideAxis ? d.overflows[0] > 0 : true)) {
+              return {
+                data: {
+                  index: nextIndex,
+                  overflows: overflowsData
+                },
+                reset: {
+                  placement: nextPlacement
+                }
+              };
+            }
+          }
+          let resetPlacement = (_overflowsData$filter = overflowsData.filter((d) => d.overflows[0] <= 0).sort((a, b) => a.overflows[1] - b.overflows[1])[0]) == null ? void 0 : _overflowsData$filter.placement;
+          if (!resetPlacement) {
+            switch (fallbackStrategy) {
+              case "bestFit": {
+                var _overflowsData$filter2;
+                const placement2 = (_overflowsData$filter2 = overflowsData.filter((d) => {
+                  if (hasFallbackAxisSideDirection) {
+                    const currentSideAxis = getSideAxis(d.placement);
+                    return currentSideAxis === initialSideAxis || // Create a bias to the `y` side axis due to horizontal
+                    // reading directions favoring greater width.
+                    currentSideAxis === "y";
+                  }
+                  return true;
+                }).map((d) => [d.placement, d.overflows.filter((overflow2) => overflow2 > 0).reduce((acc, overflow2) => acc + overflow2, 0)]).sort((a, b) => a[1] - b[1])[0]) == null ? void 0 : _overflowsData$filter2[0];
+                if (placement2) {
+                  resetPlacement = placement2;
+                }
+                break;
+              }
+              case "initialPlacement":
+                resetPlacement = initialPlacement;
+                break;
+            }
+          }
+          if (placement !== resetPlacement) {
+            return {
+              reset: {
+                placement: resetPlacement
+              }
+            };
+          }
+        }
+        return {};
+      }
+    };
+  };
+  var originSides = /* @__PURE__ */ new Set(["left", "top"]);
+  async function convertValueToCoords(state, options) {
+    const {
+      placement,
+      platform: platform2,
+      elements
+    } = state;
+    const rtl = await (platform2.isRTL == null ? void 0 : platform2.isRTL(elements.floating));
+    const side = getSide(placement);
+    const alignment = getAlignment(placement);
+    const isVertical = getSideAxis(placement) === "y";
+    const mainAxisMulti = originSides.has(side) ? -1 : 1;
+    const crossAxisMulti = rtl && isVertical ? -1 : 1;
+    const rawValue = evaluate(options, state);
+    let {
+      mainAxis,
+      crossAxis,
+      alignmentAxis
+    } = typeof rawValue === "number" ? {
+      mainAxis: rawValue,
+      crossAxis: 0,
+      alignmentAxis: null
+    } : {
+      mainAxis: rawValue.mainAxis || 0,
+      crossAxis: rawValue.crossAxis || 0,
+      alignmentAxis: rawValue.alignmentAxis
+    };
+    if (alignment && typeof alignmentAxis === "number") {
+      crossAxis = alignment === "end" ? alignmentAxis * -1 : alignmentAxis;
+    }
+    return isVertical ? {
+      x: crossAxis * crossAxisMulti,
+      y: mainAxis * mainAxisMulti
+    } : {
+      x: mainAxis * mainAxisMulti,
+      y: crossAxis * crossAxisMulti
+    };
+  }
+  var offset = function(options) {
+    if (options === void 0) {
+      options = 0;
+    }
+    return {
+      name: "offset",
+      options,
+      async fn(state) {
+        var _middlewareData$offse, _middlewareData$arrow;
+        const {
+          x,
+          y,
+          placement,
+          middlewareData
+        } = state;
+        const diffCoords = await convertValueToCoords(state, options);
+        if (placement === ((_middlewareData$offse = middlewareData.offset) == null ? void 0 : _middlewareData$offse.placement) && (_middlewareData$arrow = middlewareData.arrow) != null && _middlewareData$arrow.alignmentOffset) {
+          return {};
+        }
+        return {
+          x: x + diffCoords.x,
+          y: y + diffCoords.y,
+          data: {
+            ...diffCoords,
+            placement
+          }
+        };
+      }
+    };
+  };
+  var shift = function(options) {
+    if (options === void 0) {
+      options = {};
+    }
+    return {
+      name: "shift",
+      options,
+      async fn(state) {
+        const {
+          x,
+          y,
+          placement,
+          platform: platform2
+        } = state;
+        const {
+          mainAxis: checkMainAxis = true,
+          crossAxis: checkCrossAxis = false,
+          limiter = {
+            fn: (_ref) => {
+              let {
+                x: x2,
+                y: y2
+              } = _ref;
+              return {
+                x: x2,
+                y: y2
+              };
+            }
+          },
+          ...detectOverflowOptions
+        } = evaluate(options, state);
+        const coords = {
+          x,
+          y
+        };
+        const overflow = await platform2.detectOverflow(state, detectOverflowOptions);
+        const crossAxis = getSideAxis(placement);
+        const mainAxis = getOppositeAxis(crossAxis);
+        let mainAxisCoord = coords[mainAxis];
+        let crossAxisCoord = coords[crossAxis];
+        const clampCoord = (axis, coord) => clamp(coord + overflow[axis === "y" ? "top" : "left"], coord, coord - overflow[axis === "y" ? "bottom" : "right"]);
+        if (checkMainAxis) {
+          mainAxisCoord = clampCoord(mainAxis, mainAxisCoord);
+        }
+        if (checkCrossAxis) {
+          crossAxisCoord = clampCoord(crossAxis, crossAxisCoord);
+        }
+        const limitedCoords = limiter.fn({
+          ...state,
+          [mainAxis]: mainAxisCoord,
+          [crossAxis]: crossAxisCoord
+        });
+        return {
+          ...limitedCoords,
+          data: {
+            x: limitedCoords.x - x,
+            y: limitedCoords.y - y,
+            enabled: {
+              [mainAxis]: checkMainAxis,
+              [crossAxis]: checkCrossAxis
+            }
+          }
+        };
+      }
+    };
+  };
+
+  // node_modules/@floating-ui/utils/dist/floating-ui.utils.dom.mjs
+  function hasWindow() {
+    return typeof window !== "undefined";
+  }
+  function getNodeName(node) {
+    if (isNode(node)) {
+      return (node.nodeName || "").toLowerCase();
+    }
+    return "#document";
+  }
+  function getWindow(node) {
+    var _node$ownerDocument;
+    return (node == null || (_node$ownerDocument = node.ownerDocument) == null ? void 0 : _node$ownerDocument.defaultView) || window;
+  }
+  function getDocumentElement(node) {
+    var _ref;
+    return (_ref = (isNode(node) ? node.ownerDocument : node.document) || window.document) == null ? void 0 : _ref.documentElement;
+  }
+  function isNode(value) {
+    if (!hasWindow()) {
+      return false;
+    }
+    return value instanceof Node || value instanceof getWindow(value).Node;
+  }
+  function isElement(value) {
+    if (!hasWindow()) {
+      return false;
+    }
+    return value instanceof Element || value instanceof getWindow(value).Element;
+  }
+  function isHTMLElement(value) {
+    if (!hasWindow()) {
+      return false;
+    }
+    return value instanceof HTMLElement || value instanceof getWindow(value).HTMLElement;
+  }
+  function isShadowRoot(value) {
+    if (!hasWindow() || typeof ShadowRoot === "undefined") {
+      return false;
+    }
+    return value instanceof ShadowRoot || value instanceof getWindow(value).ShadowRoot;
+  }
+  function isOverflowElement(element) {
+    const {
+      overflow,
+      overflowX,
+      overflowY,
+      display
+    } = getComputedStyle2(element);
+    return /auto|scroll|overlay|hidden|clip/.test(overflow + overflowY + overflowX) && display !== "inline" && display !== "contents";
+  }
+  function isTableElement(element) {
+    return /^(table|td|th)$/.test(getNodeName(element));
+  }
+  function isTopLayer(element) {
+    try {
+      if (element.matches(":popover-open")) {
+        return true;
+      }
+    } catch (_e) {
+    }
+    try {
+      return element.matches(":modal");
+    } catch (_e) {
+      return false;
+    }
+  }
+  var willChangeRe = /transform|translate|scale|rotate|perspective|filter/;
+  var containRe = /paint|layout|strict|content/;
+  var isNotNone = (value) => !!value && value !== "none";
+  var isWebKitValue;
+  function isContainingBlock(elementOrCss) {
+    const css = isElement(elementOrCss) ? getComputedStyle2(elementOrCss) : elementOrCss;
+    return isNotNone(css.transform) || isNotNone(css.translate) || isNotNone(css.scale) || isNotNone(css.rotate) || isNotNone(css.perspective) || !isWebKit() && (isNotNone(css.backdropFilter) || isNotNone(css.filter)) || willChangeRe.test(css.willChange || "") || containRe.test(css.contain || "");
+  }
+  function getContainingBlock(element) {
+    let currentNode = getParentNode(element);
+    while (isHTMLElement(currentNode) && !isLastTraversableNode(currentNode)) {
+      if (isContainingBlock(currentNode)) {
+        return currentNode;
+      } else if (isTopLayer(currentNode)) {
+        return null;
+      }
+      currentNode = getParentNode(currentNode);
+    }
+    return null;
+  }
+  function isWebKit() {
+    if (isWebKitValue == null) {
+      isWebKitValue = typeof CSS !== "undefined" && CSS.supports && CSS.supports("-webkit-backdrop-filter", "none");
+    }
+    return isWebKitValue;
+  }
+  function isLastTraversableNode(node) {
+    return /^(html|body|#document)$/.test(getNodeName(node));
+  }
+  function getComputedStyle2(element) {
+    return getWindow(element).getComputedStyle(element);
+  }
+  function getNodeScroll(element) {
+    if (isElement(element)) {
+      return {
+        scrollLeft: element.scrollLeft,
+        scrollTop: element.scrollTop
+      };
+    }
+    return {
+      scrollLeft: element.scrollX,
+      scrollTop: element.scrollY
+    };
+  }
+  function getParentNode(node) {
+    if (getNodeName(node) === "html") {
+      return node;
+    }
+    const result = (
+      // Step into the shadow DOM of the parent of a slotted node.
+      node.assignedSlot || // DOM Element detected.
+      node.parentNode || // ShadowRoot detected.
+      isShadowRoot(node) && node.host || // Fallback.
+      getDocumentElement(node)
+    );
+    return isShadowRoot(result) ? result.host : result;
+  }
+  function getNearestOverflowAncestor(node) {
+    const parentNode = getParentNode(node);
+    if (isLastTraversableNode(parentNode)) {
+      return (node.ownerDocument || node).body;
+    }
+    if (isHTMLElement(parentNode) && isOverflowElement(parentNode)) {
+      return parentNode;
+    }
+    return getNearestOverflowAncestor(parentNode);
+  }
+  function getOverflowAncestors(node, list, traverseIframes) {
+    var _node$ownerDocument2;
+    if (list === void 0) {
+      list = [];
+    }
+    if (traverseIframes === void 0) {
+      traverseIframes = true;
+    }
+    const scrollableAncestor = getNearestOverflowAncestor(node);
+    const isBody = scrollableAncestor === ((_node$ownerDocument2 = node.ownerDocument) == null ? void 0 : _node$ownerDocument2.body);
+    const win = getWindow(scrollableAncestor);
+    if (isBody) {
+      const frameElement = getFrameElement(win);
+      return list.concat(win, win.visualViewport || [], isOverflowElement(scrollableAncestor) ? scrollableAncestor : [], frameElement && traverseIframes ? getOverflowAncestors(frameElement) : []);
+    } else {
+      return list.concat(scrollableAncestor, getOverflowAncestors(scrollableAncestor, [], traverseIframes));
+    }
+  }
+  function getFrameElement(win) {
+    return win.parent && Object.getPrototypeOf(win.parent) ? win.frameElement : null;
+  }
+
+  // node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs
+  function getCssDimensions(element) {
+    const css = getComputedStyle2(element);
+    let width = parseFloat(css.width) || 0;
+    let height = parseFloat(css.height) || 0;
+    const hasOffset = isHTMLElement(element);
+    const offsetWidth = hasOffset ? element.offsetWidth : width;
+    const offsetHeight = hasOffset ? element.offsetHeight : height;
+    const shouldFallback = round(width) !== offsetWidth || round(height) !== offsetHeight;
+    if (shouldFallback) {
+      width = offsetWidth;
+      height = offsetHeight;
+    }
+    return {
+      width,
+      height,
+      $: shouldFallback
+    };
+  }
+  function unwrapElement(element) {
+    return !isElement(element) ? element.contextElement : element;
+  }
+  function getScale(element) {
+    const domElement = unwrapElement(element);
+    if (!isHTMLElement(domElement)) {
+      return createCoords(1);
+    }
+    const rect = domElement.getBoundingClientRect();
+    const {
+      width,
+      height,
+      $
+    } = getCssDimensions(domElement);
+    let x = ($ ? round(rect.width) : rect.width) / width;
+    let y = ($ ? round(rect.height) : rect.height) / height;
+    if (!x || !Number.isFinite(x)) {
+      x = 1;
+    }
+    if (!y || !Number.isFinite(y)) {
+      y = 1;
+    }
+    return {
+      x,
+      y
+    };
+  }
+  var noOffsets = /* @__PURE__ */ createCoords(0);
+  function getVisualOffsets(element) {
+    const win = getWindow(element);
+    if (!isWebKit() || !win.visualViewport) {
+      return noOffsets;
+    }
+    return {
+      x: win.visualViewport.offsetLeft,
+      y: win.visualViewport.offsetTop
+    };
+  }
+  function shouldAddVisualOffsets(element, isFixed, floatingOffsetParent) {
+    if (isFixed === void 0) {
+      isFixed = false;
+    }
+    return !!floatingOffsetParent && isFixed && floatingOffsetParent === getWindow(element);
+  }
+  function getBoundingClientRect(element, includeScale, isFixedStrategy, offsetParent) {
+    if (includeScale === void 0) {
+      includeScale = false;
+    }
+    if (isFixedStrategy === void 0) {
+      isFixedStrategy = false;
+    }
+    const clientRect = element.getBoundingClientRect();
+    const domElement = unwrapElement(element);
+    let scale = createCoords(1);
+    if (includeScale) {
+      if (offsetParent) {
+        if (isElement(offsetParent)) {
+          scale = getScale(offsetParent);
+        }
+      } else {
+        scale = getScale(element);
+      }
+    }
+    const visualOffsets = shouldAddVisualOffsets(domElement, isFixedStrategy, offsetParent) ? getVisualOffsets(domElement) : createCoords(0);
+    let x = (clientRect.left + visualOffsets.x) / scale.x;
+    let y = (clientRect.top + visualOffsets.y) / scale.y;
+    let width = clientRect.width / scale.x;
+    let height = clientRect.height / scale.y;
+    if (domElement && offsetParent) {
+      const win = getWindow(domElement);
+      const offsetWin = isElement(offsetParent) ? getWindow(offsetParent) : offsetParent;
+      let currentWin = win;
+      let currentIFrame = getFrameElement(currentWin);
+      while (currentIFrame && offsetWin !== currentWin) {
+        const iframeScale = getScale(currentIFrame);
+        const iframeRect = currentIFrame.getBoundingClientRect();
+        const css = getComputedStyle2(currentIFrame);
+        const left = iframeRect.left + (currentIFrame.clientLeft + parseFloat(css.paddingLeft)) * iframeScale.x;
+        const top = iframeRect.top + (currentIFrame.clientTop + parseFloat(css.paddingTop)) * iframeScale.y;
+        x *= iframeScale.x;
+        y *= iframeScale.y;
+        width *= iframeScale.x;
+        height *= iframeScale.y;
+        x += left;
+        y += top;
+        currentWin = getWindow(currentIFrame);
+        currentIFrame = getFrameElement(currentWin);
+      }
+    }
+    return rectToClientRect({
+      width,
+      height,
+      x,
+      y
+    });
+  }
+  function getWindowScrollBarX(element, rect) {
+    const leftScroll = getNodeScroll(element).scrollLeft;
+    if (!rect) {
+      return getBoundingClientRect(getDocumentElement(element)).left + leftScroll;
+    }
+    return rect.left + leftScroll;
+  }
+  function getHTMLOffset(documentElement, scroll) {
+    const htmlRect = documentElement.getBoundingClientRect();
+    const x = htmlRect.left + scroll.scrollLeft - getWindowScrollBarX(documentElement, htmlRect);
+    const y = htmlRect.top + scroll.scrollTop;
+    return {
+      x,
+      y
+    };
+  }
+  function convertOffsetParentRelativeRectToViewportRelativeRect(_ref) {
+    let {
+      elements,
+      rect,
+      offsetParent,
+      strategy
+    } = _ref;
+    const isFixed = strategy === "fixed";
+    const documentElement = getDocumentElement(offsetParent);
+    const topLayer = elements ? isTopLayer(elements.floating) : false;
+    if (offsetParent === documentElement || topLayer && isFixed) {
+      return rect;
+    }
+    let scroll = {
+      scrollLeft: 0,
+      scrollTop: 0
+    };
+    let scale = createCoords(1);
+    const offsets = createCoords(0);
+    const isOffsetParentAnElement = isHTMLElement(offsetParent);
+    if (isOffsetParentAnElement || !isFixed) {
+      if (getNodeName(offsetParent) !== "body" || isOverflowElement(documentElement)) {
+        scroll = getNodeScroll(offsetParent);
+      }
+      if (isOffsetParentAnElement) {
+        const offsetRect = getBoundingClientRect(offsetParent);
+        scale = getScale(offsetParent);
+        offsets.x = offsetRect.x + offsetParent.clientLeft;
+        offsets.y = offsetRect.y + offsetParent.clientTop;
+      }
+    }
+    const htmlOffset = documentElement && !isOffsetParentAnElement && !isFixed ? getHTMLOffset(documentElement, scroll) : createCoords(0);
+    return {
+      width: rect.width * scale.x,
+      height: rect.height * scale.y,
+      x: rect.x * scale.x - scroll.scrollLeft * scale.x + offsets.x + htmlOffset.x,
+      y: rect.y * scale.y - scroll.scrollTop * scale.y + offsets.y + htmlOffset.y
+    };
+  }
+  function getClientRects(element) {
+    return element.getClientRects ? Array.from(element.getClientRects()) : [];
+  }
+  function getDocumentRect(html) {
+    const scroll = getNodeScroll(html);
+    const body = html.ownerDocument.body;
+    const width = max(html.scrollWidth, html.clientWidth, body.scrollWidth, body.clientWidth);
+    const height = max(html.scrollHeight, html.clientHeight, body.scrollHeight, body.clientHeight);
+    let x = -scroll.scrollLeft + getWindowScrollBarX(html);
+    const y = -scroll.scrollTop;
+    if (getComputedStyle2(body).direction === "rtl") {
+      x += max(html.clientWidth, body.clientWidth) - width;
+    }
+    return {
+      width,
+      height,
+      x,
+      y
+    };
+  }
+  var SCROLLBAR_MAX = 25;
+  function getViewportRect(element, strategy, rootBoundary) {
+    if (rootBoundary === void 0) {
+      rootBoundary = "viewport";
+    }
+    const isLayoutViewport = rootBoundary === "layoutViewport";
+    const win = getWindow(element);
+    const html = getDocumentElement(element);
+    const visualViewport = win.visualViewport;
+    let width = html.clientWidth;
+    let height = html.clientHeight;
+    let x = 0;
+    let y = 0;
+    if (visualViewport) {
+      const layoutRelativeClientCoords = !isWebKit() || strategy === "fixed";
+      if (isLayoutViewport) {
+        if (!layoutRelativeClientCoords) {
+          x = -visualViewport.offsetLeft;
+          y = -visualViewport.offsetTop;
+        }
+      } else {
+        width = visualViewport.width;
+        height = visualViewport.height;
+        if (layoutRelativeClientCoords) {
+          x = visualViewport.offsetLeft;
+          y = visualViewport.offsetTop;
+        }
+      }
+    }
+    const windowScrollbarX = getWindowScrollBarX(html);
+    if (windowScrollbarX <= 0) {
+      const doc = html.ownerDocument;
+      const body = doc.body;
+      const bodyStyles = getComputedStyle(body);
+      const bodyMarginInline = doc.compatMode === "CSS1Compat" ? parseFloat(bodyStyles.marginLeft) + parseFloat(bodyStyles.marginRight) || 0 : 0;
+      const reservedWidth = Math.abs(html.clientWidth - body.clientWidth - bodyMarginInline);
+      const gutter = getComputedStyle(html).scrollbarGutter === "stable both-edges" ? reservedWidth / 2 : reservedWidth;
+      if (gutter <= SCROLLBAR_MAX) {
+        width -= gutter;
+      }
+    }
+    return {
+      width,
+      height,
+      x,
+      y
+    };
+  }
+  function getInnerBoundingClientRect(element, strategy) {
+    const clientRect = getBoundingClientRect(element, true, strategy === "fixed");
+    const top = clientRect.top + element.clientTop;
+    const left = clientRect.left + element.clientLeft;
+    const scale = getScale(element);
+    const width = element.clientWidth * scale.x;
+    const height = element.clientHeight * scale.y;
+    const x = left * scale.x;
+    const y = top * scale.y;
+    return {
+      width,
+      height,
+      x,
+      y
+    };
+  }
+  function getClientRectFromClippingAncestor(element, clippingAncestor, strategy) {
+    let rect;
+    if (clippingAncestor === "viewport" || clippingAncestor === "layoutViewport") {
+      rect = getViewportRect(element, strategy, clippingAncestor);
+    } else if (clippingAncestor === "document") {
+      rect = getDocumentRect(getDocumentElement(element));
+    } else if (isElement(clippingAncestor)) {
+      rect = getInnerBoundingClientRect(clippingAncestor, strategy);
+    } else {
+      const visualOffsets = getVisualOffsets(element);
+      rect = {
+        x: clippingAncestor.x - visualOffsets.x,
+        y: clippingAncestor.y - visualOffsets.y,
+        width: clippingAncestor.width,
+        height: clippingAncestor.height
+      };
+    }
+    return rectToClientRect(rect);
+  }
+  function getClippingElementAncestors(element, cache) {
+    const cachedResult = cache.get(element);
+    if (cachedResult) {
+      return cachedResult;
+    }
+    let result = getOverflowAncestors(element, [], false).filter((el) => isElement(el) && getNodeName(el) !== "body");
+    let lastKeptComputedStyle = null;
+    const elementIsFixed = getComputedStyle2(element).position === "fixed";
+    let currentNode = elementIsFixed ? getParentNode(element) : element;
+    while (isElement(currentNode) && !isLastTraversableNode(currentNode)) {
+      const computedStyle = getComputedStyle2(currentNode);
+      const currentNodeIsContaining = isContainingBlock(currentNode);
+      const lastPosition = lastKeptComputedStyle ? lastKeptComputedStyle.position : elementIsFixed ? "fixed" : "";
+      const shouldDropCurrentNode = !currentNodeIsContaining && (lastPosition === "fixed" || lastPosition === "absolute" && computedStyle.position === "static");
+      if (shouldDropCurrentNode) {
+        result = result.filter((ancestor) => ancestor !== currentNode);
+      } else {
+        lastKeptComputedStyle = computedStyle;
+      }
+      currentNode = getParentNode(currentNode);
+    }
+    cache.set(element, result);
+    return result;
+  }
+  function getClippingRect(_ref) {
+    let {
+      element,
+      boundary,
+      rootBoundary,
+      strategy
+    } = _ref;
+    const elementClippingAncestors = boundary === "clippingAncestors" ? isTopLayer(element) ? [] : getClippingElementAncestors(element, this._c) : [].concat(boundary);
+    const clippingAncestors = [...elementClippingAncestors, rootBoundary];
+    const firstRect = getClientRectFromClippingAncestor(element, clippingAncestors[0], strategy);
+    let top = firstRect.top;
+    let right = firstRect.right;
+    let bottom = firstRect.bottom;
+    let left = firstRect.left;
+    for (let i = 1; i < clippingAncestors.length; i++) {
+      const rect = getClientRectFromClippingAncestor(element, clippingAncestors[i], strategy);
+      top = max(rect.top, top);
+      right = min(rect.right, right);
+      bottom = min(rect.bottom, bottom);
+      left = max(rect.left, left);
+    }
+    return {
+      width: right - left,
+      height: bottom - top,
+      x: left,
+      y: top
+    };
+  }
+  function getDimensions(element) {
+    const {
+      width,
+      height
+    } = getCssDimensions(element);
+    return {
+      width,
+      height
+    };
+  }
+  function getRectRelativeToOffsetParent(element, offsetParent, strategy) {
+    const isOffsetParentAnElement = isHTMLElement(offsetParent);
+    const documentElement = getDocumentElement(offsetParent);
+    const isFixed = strategy === "fixed";
+    const rect = getBoundingClientRect(element, true, isFixed, offsetParent);
+    let scroll = {
+      scrollLeft: 0,
+      scrollTop: 0
+    };
+    const offsets = createCoords(0);
+    if (isOffsetParentAnElement || !isFixed) {
+      if (getNodeName(offsetParent) !== "body" || isOverflowElement(documentElement)) {
+        scroll = getNodeScroll(offsetParent);
+      }
+      if (isOffsetParentAnElement) {
+        const offsetRect = getBoundingClientRect(offsetParent, true, isFixed, offsetParent);
+        offsets.x = offsetRect.x + offsetParent.clientLeft;
+        offsets.y = offsetRect.y + offsetParent.clientTop;
+      }
+    }
+    if (!isOffsetParentAnElement && documentElement) {
+      offsets.x = getWindowScrollBarX(documentElement);
+    }
+    const htmlOffset = documentElement && !isOffsetParentAnElement && !isFixed ? getHTMLOffset(documentElement, scroll) : createCoords(0);
+    const x = rect.left + scroll.scrollLeft - offsets.x - htmlOffset.x;
+    const y = rect.top + scroll.scrollTop - offsets.y - htmlOffset.y;
+    return {
+      x,
+      y,
+      width: rect.width,
+      height: rect.height
+    };
+  }
+  function isStaticPositioned(element) {
+    return getComputedStyle2(element).position === "static";
+  }
+  function getTrueOffsetParent(element, polyfill) {
+    if (!isHTMLElement(element) || getComputedStyle2(element).position === "fixed") {
+      return null;
+    }
+    if (polyfill) {
+      return polyfill(element);
+    }
+    let rawOffsetParent = element.offsetParent;
+    if (getDocumentElement(element) === rawOffsetParent) {
+      rawOffsetParent = rawOffsetParent.ownerDocument.body;
+    }
+    return rawOffsetParent;
+  }
+  function getOffsetParent(element, polyfill) {
+    const win = getWindow(element);
+    if (isTopLayer(element)) {
+      return win;
+    }
+    if (!isHTMLElement(element)) {
+      let svgOffsetParent = getParentNode(element);
+      while (svgOffsetParent && !isLastTraversableNode(svgOffsetParent)) {
+        if (isElement(svgOffsetParent) && !isStaticPositioned(svgOffsetParent)) {
+          return svgOffsetParent;
+        }
+        svgOffsetParent = getParentNode(svgOffsetParent);
+      }
+      return win;
+    }
+    let offsetParent = getTrueOffsetParent(element, polyfill);
+    while (offsetParent && isTableElement(offsetParent) && isStaticPositioned(offsetParent)) {
+      offsetParent = getTrueOffsetParent(offsetParent, polyfill);
+    }
+    if (offsetParent && isLastTraversableNode(offsetParent) && isStaticPositioned(offsetParent) && !isContainingBlock(offsetParent)) {
+      return win;
+    }
+    return offsetParent || getContainingBlock(element) || win;
+  }
+  var getElementRects = async function(data) {
+    const getOffsetParentFn = this.getOffsetParent || getOffsetParent;
+    const getDimensionsFn = this.getDimensions;
+    const floatingDimensions = await getDimensionsFn(data.floating);
+    return {
+      reference: getRectRelativeToOffsetParent(data.reference, await getOffsetParentFn(data.floating), data.strategy),
+      floating: {
+        x: 0,
+        y: 0,
+        width: floatingDimensions.width,
+        height: floatingDimensions.height
+      }
+    };
+  };
+  function isRTL(element) {
+    return getComputedStyle2(element).direction === "rtl";
+  }
+  var platform = {
+    convertOffsetParentRelativeRectToViewportRelativeRect,
+    getDocumentElement,
+    getClippingRect,
+    getOffsetParent,
+    getElementRects,
+    getClientRects,
+    getDimensions,
+    getScale,
+    isElement,
+    isRTL
+  };
+  function rectsAreEqual(a, b) {
+    return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+  }
+  function observeMove(element, onMove, ancestorResize) {
+    let io = null;
+    let timeoutId;
+    const root = getDocumentElement(element);
+    function cleanup() {
+      var _io;
+      clearTimeout(timeoutId);
+      (_io = io) == null || _io.disconnect();
+      io = null;
+    }
+    function refresh(skip, threshold) {
+      if (skip === void 0) {
+        skip = false;
+      }
+      if (threshold === void 0) {
+        threshold = 1;
+      }
+      cleanup();
+      const elementRectForRootMargin = element.getBoundingClientRect();
+      const {
+        left,
+        top,
+        width,
+        height
+      } = elementRectForRootMargin;
+      if (!skip) {
+        onMove();
+      }
+      if (!width || !height) {
+        return;
+      }
+      const insetTop = floor(top);
+      const insetRight = floor(root.clientWidth - (left + width));
+      const insetBottom = floor(root.clientHeight - (top + height));
+      const insetLeft = floor(left);
+      const rootMargin = -insetTop + "px " + -insetRight + "px " + -insetBottom + "px " + -insetLeft + "px";
+      const options = {
+        rootMargin,
+        threshold: max(0, min(1, threshold)) || 1
+      };
+      let isFirstUpdate = true;
+      function handleObserve(entries) {
+        const ratio = entries[0].intersectionRatio;
+        if (!rectsAreEqual(elementRectForRootMargin, element.getBoundingClientRect())) {
+          return refresh();
+        }
+        if (ratio !== threshold) {
+          if (!isFirstUpdate) {
+            return refresh();
+          }
+          if (!ratio) {
+            timeoutId = setTimeout(() => {
+              refresh(false, 1e-7);
+            }, 1e3);
+          } else {
+            refresh(false, ratio);
+          }
+        }
+        isFirstUpdate = false;
+      }
+      try {
+        io = new IntersectionObserver(handleObserve, {
+          ...options,
+          // Handle <iframe>s
+          root: root.ownerDocument
+        });
+      } catch (_e) {
+        io = new IntersectionObserver(handleObserve, options);
+      }
+      io.observe(element);
+    }
+    const win = getWindow(element);
+    const handleResize = () => refresh(ancestorResize);
+    win.addEventListener("resize", handleResize);
+    refresh(true);
+    return () => {
+      win.removeEventListener("resize", handleResize);
+      cleanup();
+    };
+  }
+  function autoUpdate(reference, floating, update, options) {
+    if (options === void 0) {
+      options = {};
+    }
+    const {
+      ancestorScroll = true,
+      ancestorResize = true,
+      elementResize = typeof ResizeObserver === "function",
+      layoutShift = typeof IntersectionObserver === "function",
+      animationFrame = false
+    } = options;
+    const referenceEl = unwrapElement(reference);
+    const ancestors = ancestorScroll || ancestorResize ? [...referenceEl ? getOverflowAncestors(referenceEl) : [], ...floating ? getOverflowAncestors(floating) : []] : [];
+    ancestors.forEach((ancestor) => {
+      ancestorScroll && ancestor.addEventListener("scroll", update);
+      ancestorResize && ancestor.addEventListener("resize", update);
+    });
+    const cleanupIo = referenceEl && layoutShift ? observeMove(referenceEl, update, ancestorResize) : null;
+    let reobserveFrame = -1;
+    let resizeObserver = null;
+    if (elementResize) {
+      resizeObserver = new ResizeObserver((_ref) => {
+        let [firstEntry] = _ref;
+        if (firstEntry && firstEntry.target === referenceEl && resizeObserver && floating) {
+          resizeObserver.unobserve(floating);
+          cancelAnimationFrame(reobserveFrame);
+          reobserveFrame = requestAnimationFrame(() => {
+            var _resizeObserver;
+            (_resizeObserver = resizeObserver) == null || _resizeObserver.observe(floating);
+          });
+        }
+        update();
+      });
+      if (referenceEl && !animationFrame) {
+        resizeObserver.observe(referenceEl);
+      }
+      if (floating) {
+        resizeObserver.observe(floating);
+      }
+    }
+    let frameId;
+    let prevRefRect = animationFrame ? getBoundingClientRect(reference) : null;
+    if (animationFrame) {
+      frameLoop();
+    }
+    function frameLoop() {
+      const nextRefRect = getBoundingClientRect(reference);
+      if (prevRefRect && !rectsAreEqual(prevRefRect, nextRefRect)) {
+        update();
+      }
+      prevRefRect = nextRefRect;
+      frameId = requestAnimationFrame(frameLoop);
+    }
+    update();
+    return () => {
+      var _resizeObserver2;
+      ancestors.forEach((ancestor) => {
+        ancestorScroll && ancestor.removeEventListener("scroll", update);
+        ancestorResize && ancestor.removeEventListener("resize", update);
+      });
+      cleanupIo == null || cleanupIo();
+      (_resizeObserver2 = resizeObserver) == null || _resizeObserver2.disconnect();
+      resizeObserver = null;
+      if (animationFrame) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }
+  var offset2 = offset;
+  var shift2 = shift;
+  var flip2 = flip;
+  var computePosition2 = (reference, floating, options) => {
+    const cache = /* @__PURE__ */ new Map();
+    const mergedOptions = options != null ? options : {};
+    const platformWithCache = {
+      ...platform,
+      ...mergedOptions.platform,
+      _c: cache
+    };
+    return computePosition(reference, floating, {
+      ...mergedOptions,
+      platform: platformWithCache
+    });
+  };
+
+  // src/userscripts/shared/shared-widget-shell.lib.js
+  var BUTTON_SAFE_MARGIN = 12;
+  var DOCK_THRESHOLD = 32;
+  var DOCK_OFFSET = 8;
+  var PANEL_SAFE_MARGIN = 12;
+  var PANEL_GAP = 8;
+  var DRAG_THRESHOLD_PX = 4;
+  var HOVER_INTENT_MS = 150;
+  var FALLBACK_BUTTON_SIZE = 44;
+  var PANEL_ANIMATION_MS = 200;
+  var PANEL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+  function isDockSide(value) {
+    return value === "left" || value === "right";
+  }
+  var WIDGET_SHELL_CSS = `
+.wk-widget-button {
+  position: fixed;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--wk-border-strong);
+  border-radius: var(--wk-radius-pill);
+  background: var(--wk-surface);
+  color: var(--wk-text);
+  box-shadow: var(--wk-shadow-pop);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--wk-fs-md);
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.wk-widget-button.is-dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.wk-widget-button[data-wk-docked="left"],
+.wk-widget-button[data-wk-docked="right"] {
+  opacity: 0.55;
+  transform: scale(0.72);
+}
+
+.wk-widget-button[data-wk-docked="left"] {
+  transform-origin: left center;
+}
+
+.wk-widget-button[data-wk-docked="right"] {
+  transform-origin: right center;
+}
+
+.wk-widget-button[data-wk-docked]:hover,
+.wk-widget-button[data-wk-docked]:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.wk-widget-panel {
+  position: fixed;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--wk-border);
+  border-radius: var(--wk-radius-panel);
+  background: var(--wk-surface);
+  color: var(--wk-text);
+  box-shadow: var(--wk-shadow-panel);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--wk-fs-md);
+  line-height: 1.45;
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+  transition:
+    opacity ${PANEL_ANIMATION_MS}ms ${PANEL_EASING},
+    transform ${PANEL_ANIMATION_MS}ms ${PANEL_EASING};
+}
+
+.wk-widget-panel[hidden] {
+  display: none;
+}
+
+.wk-widget-panel.is-open {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.wk-widget-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--wk-border);
+}
+
+.wk-widget-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-widget-button,
+  .wk-widget-panel {
+    transition: none;
+  }
+}
+`.trim();
+  function windowTimers(windowObject) {
+    return {
+      setTimeout: typeof windowObject?.setTimeout === "function" ? windowObject.setTimeout.bind(windowObject) : (callback, ms) => setTimeout(callback, ms),
+      clearTimeout: typeof windowObject?.clearTimeout === "function" ? windowObject.clearTimeout.bind(windowObject) : (timer) => clearTimeout(timer)
+    };
+  }
+  function createDragAnchor({
+    anchorEl,
+    handleEl = anchorEl,
+    draggingEl = anchorEl,
+    windowObject,
+    measure,
+    dock = true,
+    timers = windowTimers(windowObject),
+    onDragStart,
+    onMove,
+    onDrop
+  } = {}) {
+    let position = { left: 0, top: 0, dockSide: null };
+    let dragState = null;
+    let suppressed = false;
+    let suppressionTimer = null;
+    const cleanups = [];
+    const size2 = () => {
+      const measured = measure?.() || {};
+      return {
+        width: measured.width || FALLBACK_BUTTON_SIZE,
+        height: measured.height || FALLBACK_BUTTON_SIZE
+      };
+    };
+    function clampPosition(left, top) {
+      const { width, height } = size2();
+      const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
+      const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
+      return {
+        left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
+        top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop)
+      };
+    }
+    function dockedPosition(dockSide, top) {
+      const { width } = size2();
+      return {
+        left: dockSide === "right" ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
+        top: clampPosition(0, top).top
+      };
+    }
+    function detectDockSide(left) {
+      const { width } = size2();
+      if (left <= DOCK_THRESHOLD) return "left";
+      if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return "right";
+      return null;
+    }
+    function applyPosition(next = position) {
+      const dockSide = dock && isDockSide(next?.dockSide) ? next.dockSide : null;
+      const resolved = dockSide ? dockedPosition(dockSide, next?.top ?? position.top) : clampPosition(next?.left ?? position.left, next?.top ?? position.top);
+      position = { ...resolved, dockSide };
+      if (dockSide) {
+        anchorEl.dataset.wkDocked = dockSide;
+      } else {
+        delete anchorEl.dataset.wkDocked;
+      }
+      anchorEl.style.top = `${Math.round(resolved.top)}px`;
+      anchorEl.style.bottom = "auto";
+      if (dockSide === "right") {
+        anchorEl.style.left = "auto";
+        anchorEl.style.right = `${DOCK_OFFSET}px`;
+      } else {
+        anchorEl.style.left = `${Math.round(resolved.left)}px`;
+        anchorEl.style.right = "auto";
+      }
+      onMove?.(position);
+      return position;
+    }
+    function listen(type, handler) {
+      handleEl.addEventListener(type, handler);
+      cleanups.push(() => handleEl.removeEventListener(type, handler));
+    }
+    function releaseCapture(pointerId) {
+      try {
+        if (handleEl.hasPointerCapture?.(pointerId)) handleEl.releasePointerCapture(pointerId);
       } catch {
       }
     }
-    function cleanupBinding() {
-      bindingGeneration += 1;
-      clearTimer(hoverTimer);
-      clearTimer(suppressionTimer);
-      hoverTimer = null;
-      suppressionTimer = null;
-      releaseDragCapture();
+    listen("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      dragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startLeft: position.left,
+        startTop: position.top,
+        moved: false
+      };
+      draggingEl.classList.add("is-dragging");
+      try {
+        handleEl.setPointerCapture?.(event.pointerId);
+      } catch {
+      }
+    });
+    listen("pointermove", (event) => {
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+      const dx = event.clientX - dragState.startX;
+      const dy = event.clientY - dragState.startY;
+      if (!dragState.moved && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD_PX) {
+        dragState.moved = true;
+        suppressed = true;
+        onDragStart?.();
+      }
+      if (!dragState.moved) return;
+      applyPosition({ left: dragState.startLeft + dx, top: dragState.startTop + dy, dockSide: null });
+    });
+    function finishDrag(event) {
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+      const moved = dragState.moved;
       dragState = null;
-      widget?.classList.remove("is-expanded");
-      widget?.classList.remove("is-dragging");
-      for (const cleanup of bindingCleanups.splice(0)) cleanup();
-      widget = null;
-      widgetButton = null;
-      suppressExpansion = false;
+      draggingEl.classList.remove("is-dragging");
+      releaseCapture(event.pointerId);
+      if (!moved) return;
+      applyPosition({ ...position, dockSide: dock ? detectDockSide(position.left) : null });
+      onDrop?.(position);
+      timers.clearTimeout(suppressionTimer);
+      suppressionTimer = timers.setTimeout(() => {
+        suppressionTimer = null;
+        suppressed = false;
+      }, 0);
     }
-    function defaultPosition() {
-      const viewport = getViewportSize();
-      return {
-        left: viewport.width - constants.widgetWidth - constants.defaultOffset,
-        top: viewport.height - constants.widgetHeight - constants.defaultOffset
+    listen("pointerup", finishDrag);
+    listen("pointercancel", finishDrag);
+    return {
+      applyPosition,
+      clampPosition,
+      getPosition: () => position,
+      isDragSuppressed: () => suppressed,
+      destroy() {
+        if (dragState) releaseCapture(dragState.pointerId);
+        dragState = null;
+        draggingEl.classList.remove("is-dragging");
+        timers.clearTimeout(suppressionTimer);
+        suppressionTimer = null;
+        suppressed = false;
+        for (const cleanup of cleanups.splice(0)) cleanup();
+      }
+    };
+  }
+  function createHoverExpansion({
+    container,
+    trigger,
+    isCoarsePointer: isCoarsePointer2 = () => false,
+    isSuppressed = () => false,
+    hoverIntentMs = HOVER_INTENT_MS,
+    timers
+  } = {}) {
+    let hoverTimer = null;
+    let active = true;
+    const cleanups = [];
+    function listen(target, type, handler) {
+      const guarded = (event) => {
+        if (active) handler(event);
       };
-    }
-    function clampPosition(nextPosition) {
-      const viewport = getViewportSize();
-      const source = normalizeWidgetPosition(nextPosition) || defaultPosition();
-      const maxLeft = Math.max(constants.safeMargin, viewport.width - constants.widgetWidth - constants.safeMargin);
-      const maxTop = Math.max(constants.safeMargin, viewport.height - constants.widgetHeight - constants.safeMargin);
-      return {
-        left: Math.min(Math.max(constants.safeMargin, source.left), maxLeft),
-        top: Math.min(Math.max(constants.safeMargin, source.top), maxTop)
-      };
-    }
-    function positionPanel() {
-      if (!widget) return null;
-      const panel = widget.querySelector(".part-widget-panel");
-      if (!panel) return null;
-      const viewport = getViewportSize();
-      const widgetRect = widget.getBoundingClientRect();
-      const panelWidth = Math.min(
-        constants.panelWidth,
-        Math.max(constants.buttonSize, viewport.width - constants.safeMargin * 2)
-      );
-      const panelHeight = panel.offsetHeight;
-      const maxLeft = Math.max(constants.safeMargin, viewport.width - panelWidth - constants.safeMargin);
-      const panelLeft = clampNumber(widgetRect.right - panelWidth, constants.safeMargin, maxLeft);
-      const aboveTop = widgetRect.top - panelHeight - constants.panelGap;
-      const belowTop = widgetRect.top + constants.widgetHeight + constants.panelGap;
-      const maxTop = Math.max(constants.safeMargin, viewport.height - panelHeight - constants.safeMargin);
-      const shouldPlaceBelow = aboveTop < constants.safeMargin && belowTop <= maxTop;
-      const panelTop = clampNumber(shouldPlaceBelow ? belowTop : aboveTop, constants.safeMargin, maxTop);
-      const placement = {
-        left: Math.round(panelLeft - widgetRect.left),
-        top: Math.round(panelTop - widgetRect.top),
-        width: Math.round(panelWidth),
-        origin: shouldPlaceBelow ? "top right" : "bottom right"
-      };
-      panel.style.setProperty("--part-panel-left", `${placement.left}px`);
-      panel.style.setProperty("--part-panel-top", `${placement.top}px`);
-      panel.style.setProperty("--part-panel-width", `${placement.width}px`);
-      panel.style.setProperty("--part-panel-origin", placement.origin);
-      return placement;
-    }
-    function applyPosition(nextPosition = position) {
-      if (!widget) return null;
-      position = clampPosition(nextPosition);
-      onPositionChange(position);
-      widget.style.left = `${position.left}px`;
-      widget.style.top = `${position.top}px`;
-      widget.style.right = "auto";
-      widget.style.bottom = "auto";
-      positionPanel();
-      return position;
+      target.addEventListener(type, guarded);
+      cleanups.push(() => target.removeEventListener(type, guarded));
     }
     function setExpanded(isExpanded) {
-      if (!widget) return;
-      if (suppressExpansion && isExpanded) return;
-      widget.classList.toggle("is-expanded", isExpanded);
+      if (isExpanded && isSuppressed()) return;
+      container.classList.toggle("is-expanded", isExpanded);
     }
-    function installExpansion() {
-      const generation = bindingGeneration;
-      if (isCoarsePointer2()) {
-        addListener(widgetButton, "click", () => {
-          if (generation !== bindingGeneration) return;
-          if (suppressExpansion) return;
-          setExpanded(!widget.classList.contains("is-expanded"));
-        });
-      } else {
-        addListener(widget, "mouseenter", () => {
-          if (generation !== bindingGeneration) return;
-          clearTimer(hoverTimer);
-          hoverTimer = setTimeout(() => {
-            if (generation !== bindingGeneration) return;
-            hoverTimer = null;
-            setExpanded(true);
-          }, hoverIntentMs);
-        });
-        addListener(widget, "mouseleave", () => {
-          if (generation !== bindingGeneration) return;
-          clearTimer(hoverTimer);
+    function cancelHover() {
+      timers.clearTimeout(hoverTimer);
+      hoverTimer = null;
+    }
+    if (isCoarsePointer2()) {
+      listen(trigger, "click", () => {
+        if (isSuppressed()) return;
+        setExpanded(!container.classList.contains("is-expanded"));
+      });
+    } else {
+      listen(container, "mouseenter", () => {
+        cancelHover();
+        hoverTimer = timers.setTimeout(() => {
           hoverTimer = null;
-          setExpanded(false);
-        });
+          if (active) setExpanded(true);
+        }, hoverIntentMs);
+      });
+      listen(container, "mouseleave", () => {
+        cancelHover();
+        setExpanded(false);
+      });
+    }
+    listen(container, "focusin", () => setExpanded(true));
+    listen(container, "focusout", (event) => {
+      if (!event.relatedTarget || !container.contains(event.relatedTarget)) setExpanded(false);
+    });
+    return {
+      setExpanded,
+      destroy() {
+        active = false;
+        cancelHover();
+        container.classList.remove("is-expanded");
+        for (const cleanup of cleanups.splice(0)) cleanup();
       }
-      addListener(widget, "focusin", () => {
-        if (generation === bindingGeneration) setExpanded(true);
+    };
+  }
+  function createPanelPlacement({
+    reference,
+    floating,
+    placement = "bottom-end",
+    strategy = "fixed",
+    gap = PANEL_GAP,
+    margin = PANEL_SAFE_MARGIN,
+    apply
+  } = {}) {
+    let stopAutoUpdate = null;
+    let generation = 0;
+    async function update() {
+      const current = ++generation;
+      const result = await computePosition2(reference, floating, {
+        placement,
+        strategy,
+        middleware: [
+          offset2(gap),
+          flip2({ padding: margin, flipAlignment: false }),
+          shift2({ padding: margin, crossAxis: true })
+        ]
       });
-      addListener(widget, "focusout", (event) => {
-        if (generation !== bindingGeneration) return;
-        if (!event.relatedTarget || !widget.contains(event.relatedTarget)) {
-          setExpanded(false);
-        }
-      });
+      if (current !== generation) return null;
+      apply(result);
+      return result;
     }
-    function installDrag() {
-      const generation = bindingGeneration;
-      addListener(widgetButton, "pointerdown", (event) => {
-        if (generation !== bindingGeneration) return;
-        if (event.button !== 0) return;
-        const rect = widget.getBoundingClientRect();
-        dragState = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          startLeft: rect.left,
-          startTop: rect.top,
-          moved: false
-        };
-        widget.classList.add("is-dragging");
-        try {
-          widgetButton.setPointerCapture(event.pointerId);
-        } catch {
-        }
-      });
-      addListener(widgetButton, "pointermove", (event) => {
-        if (generation !== bindingGeneration) return;
-        if (!dragState || dragState.pointerId !== event.pointerId) return;
-        const dx = event.clientX - dragState.startX;
-        const dy = event.clientY - dragState.startY;
-        if (Math.abs(dx) + Math.abs(dy) > 4) {
-          dragState.moved = true;
-          suppressExpansion = true;
-          setExpanded(false);
-        }
-        if (!dragState.moved) return;
-        applyPosition({
-          left: dragState.startLeft + dx,
-          top: dragState.startTop + dy
-        });
-      });
-      function finishDrag(event) {
-        if (generation !== bindingGeneration) return;
-        if (!dragState || dragState.pointerId !== event.pointerId) return;
-        const moved = dragState.moved;
-        dragState = null;
-        widget.classList.remove("is-dragging");
-        try {
-          if (widgetButton.hasPointerCapture(event.pointerId)) {
-            widgetButton.releasePointerCapture(event.pointerId);
-          }
-        } catch {
-        }
-        if (moved) {
-          const rect = widget.getBoundingClientRect();
-          const next = clampPosition({ left: rect.left, top: rect.top });
-          applyPosition(next);
-          persistPosition(next).catch((error) => {
-            logger.warn(`${scriptName}: failed to persist widget position.`, error);
-          });
-        }
-        clearTimer(suppressionTimer);
-        suppressionTimer = setTimeout(() => {
-          if (generation !== bindingGeneration) return;
-          suppressionTimer = null;
-          suppressExpansion = false;
-        }, 0);
-      }
-      addListener(widgetButton, "pointerup", finishDrag);
-      addListener(widgetButton, "pointercancel", finishDrag);
-    }
-    function attach(nextWidget, nextWidgetButton, initialPosition) {
-      cleanupBinding();
-      if (disposed) return;
-      widget = nextWidget;
-      widgetButton = nextWidgetButton;
-      if (initialPosition) position = normalizeWidgetPosition(initialPosition);
-      installExpansion();
-      installDrag();
-    }
-    function getPosition() {
-      return position;
-    }
-    function isExpansionSuppressed() {
-      return suppressExpansion;
-    }
-    function dispose() {
-      if (disposed) return;
-      disposed = true;
-      cleanupBinding();
+    function stop() {
+      generation += 1;
+      stopAutoUpdate?.();
+      stopAutoUpdate = null;
     }
     return {
-      attach,
-      applyPosition,
-      positionPanel,
-      setExpanded,
-      clampPosition,
-      getPosition,
-      isExpansionSuppressed,
-      dispose
+      update,
+      start() {
+        stop();
+        stopAutoUpdate = autoUpdate(reference, floating, () => {
+          update().catch(() => {
+          });
+        });
+      },
+      stop
     };
   }
 
@@ -2226,6 +3696,11 @@ ${root} :focus-visible {
   var STYLE_ID = `${ROOT_ID}-style`;
   var TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
   var DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
+  var WIDGET_SIZE = { width: 154, height: 60 };
+  var WIDGET_DEFAULT_OFFSET = 18;
+  var PANEL_WIDTH = 248;
+  var PANEL_MIN_WIDTH = 52;
+  var PANEL_SAFE_MARGIN2 = 12;
   var FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
   var PRESETS = [
     { label: "30 秒", ms: 30 * 1e3 },
@@ -2330,31 +3805,76 @@ ${root} :focus-visible {
     const disposedPromise = new Promise((resolve) => {
       finishDisposed = resolve;
     });
-    const layout = createWidgetLayoutRuntime({
-      normalizeWidgetPosition: positions.normalize,
-      clampNumber(value, min, max) {
-        return Math.min(Math.max(min, value), max);
-      },
-      getViewportSize: () => ({ width: windowObject.innerWidth, height: windowObject.innerHeight }),
-      persistPosition: async (position) => positions.write(position),
-      onPositionChange(position) {
-        widgetPosition = position;
-      },
-      setTimeout: timers.setTimeout,
-      clearTimeout: timers.clearTimeout,
-      isCoarsePointer: () => isCoarsePointer(windowObject),
-      logger: console,
-      scriptName: SCRIPT_NAME,
-      constants: {
-        buttonSize: 52,
-        widgetWidth: 154,
-        widgetHeight: 60,
-        panelWidth: 248,
-        panelGap: 8,
-        safeMargin: 12,
-        defaultOffset: 18
-      }
-    });
+    let widgetShell = null;
+    function defaultWidgetPosition() {
+      return {
+        left: windowObject.innerWidth - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
+        top: windowObject.innerHeight - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET
+      };
+    }
+    function sizeWidgetPanel(panel) {
+      const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN2 * 2));
+      panel.style.setProperty("--part-panel-width", `${Math.round(width)}px`);
+    }
+    function attachWidgetShell() {
+      detachWidgetShell();
+      const panel = widget.querySelector(".part-widget-panel");
+      const anchor = createDragAnchor({
+        anchorEl: widget,
+        handleEl: widgetButton,
+        windowObject,
+        measure: () => WIDGET_SIZE,
+        dock: false,
+        timers,
+        onDragStart() {
+          expansion.setExpanded(false);
+        },
+        onMove(position) {
+          widgetPosition = { left: position.left, top: position.top };
+          placement?.update().catch(() => {
+          });
+        },
+        onDrop(position) {
+          positions.write({ left: Math.round(position.left), top: Math.round(position.top) }).catch((error) => {
+            console.warn(`${SCRIPT_NAME}: failed to persist widget position.`, error);
+          });
+        }
+      });
+      const expansion = createHoverExpansion({
+        container: widget,
+        trigger: widgetButton,
+        isCoarsePointer: () => isCoarsePointer(windowObject),
+        isSuppressed: () => anchor.isDragSuppressed(),
+        timers
+      });
+      const placement = panel ? createPanelPlacement({
+        reference: widget,
+        floating: panel,
+        placement: "top-end",
+        strategy: "absolute",
+        apply({ x, y, placement: side }) {
+          panel.style.setProperty("--part-panel-left", `${Math.round(x)}px`);
+          panel.style.setProperty("--part-panel-top", `${Math.round(y)}px`);
+          panel.style.setProperty("--part-panel-origin", side.startsWith("bottom") ? "top right" : "bottom right");
+        }
+      }) : null;
+      widgetShell = { anchor, expansion, placement, panel };
+    }
+    function detachWidgetShell() {
+      if (!widgetShell) return;
+      widgetShell.placement?.stop();
+      widgetShell.expansion.destroy();
+      widgetShell.anchor.destroy();
+      widgetShell = null;
+    }
+    function placeWidget() {
+      if (!widgetShell) return;
+      const position = positions.normalize(widgetPosition) || defaultWidgetPosition();
+      widgetShell.anchor.applyPosition({ left: position.left, top: position.top });
+      if (widgetShell.panel) sizeWidgetPanel(widgetShell.panel);
+      widgetShell.placement?.update().catch(() => {
+      });
+    }
     function currentStatusText(snapshot = latestSnapshot) {
       const activeMatch = snapshot.refresh.activeMatch;
       if (!activeMatch) return "当前未启用自动刷新。";
@@ -2417,9 +3937,10 @@ ${root} :focus-visible {
       countdownNodes = rendered.countdownNodes;
       widgetStatusNode = rendered.statusNode;
       lastWidgetStatusText = "";
-      layout.attach(widget, widgetButton, widgetPosition);
       root.append(widget);
-      layout.applyPosition();
+      attachWidgetShell();
+      placeWidget();
+      widgetShell.placement?.start();
       hasMountedWidget = true;
       if (returnToWidget) dialogReturnFocus = widgetButton;
       updatePauseButton();
@@ -2701,7 +4222,7 @@ ${root} :focus-visible {
         return;
       }
       if (action === "close-dialog" && dialog && actionNode === dialog) return;
-      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && layout.isExpansionSuppressed())
+      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && widgetShell?.anchor.isDragSuppressed())
         return;
       event.preventDefault();
       event.stopPropagation();
@@ -2743,7 +4264,7 @@ ${root} :focus-visible {
       renderDialog({ message: `将保存到${scopeLabel(selectedScope)}。`, scope: selectedScope, tab: activeDialogTab });
     }
     function handleResize() {
-      if (!disposed) layout.applyPosition();
+      if (!disposed) placeWidget();
     }
     function update(snapshot, change = {}) {
       latestSnapshot = snapshot;
@@ -2814,7 +4335,7 @@ ${root} :focus-visible {
       pendingOpenIntent = null;
       pendingSubmissions.clear();
       closeDialog({ restoreFocus: false });
-      layout.dispose();
+      detachWidgetShell();
       windowObject.removeEventListener("resize", handleResize);
       if (root) {
         root.removeEventListener("click", handleRootClick);
@@ -2867,12 +4388,6 @@ ${root} :focus-visible {
       widgetPositionKey: WIDGET_POSITION_KEY,
       fallbackStorageKey: `__${STORAGE_KEY}`,
       fallbackWidgetPositionKey: `__${WIDGET_POSITION_KEY}`,
-      gmGetValue: typeof GM_getValue === "function" ? GM_getValue : null,
-      gmSetValue: typeof GM_setValue === "function" ? GM_setValue : null,
-      gmRegisterMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
-      gmAddValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
-      gmRemoveValueChangeListener: typeof GM_removeValueChangeListener === "function" ? GM_removeValueChangeListener : null,
-      gmApi: typeof GM !== "undefined" ? GM : null,
       localStorageAdapter: localStorage,
       eventTarget: window,
       logger: console

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.7
+// @version      0.1.8
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -17,6 +17,7 @@
 
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
 import { createToaster } from '../shared/shared-toast.lib.js';
+import { resolveGmApi } from '../shared/shared-gm.lib.js';
 import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-export-logic.lib.js';
 
 (function () {
@@ -62,10 +63,11 @@ import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-
     return toaster;
   }
 
+  const gmApi = resolveGmApi();
   const runtime = createImageExportRuntime({
     documentObject: document,
     fetchImpl: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
-    gmDownload: typeof GM_download === 'function' ? GM_download : null,
+    gmDownload: gmApi.download,
   });
 
   function runExport() {
@@ -92,7 +94,7 @@ import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-
       });
   }
 
-  if (typeof GM_registerMenuCommand === 'function') {
-    GM_registerMenuCommand('导出当前飞书主图', runExport);
+  if (gmApi.registerMenuCommand) {
+    gmApi.registerMenuCommand('导出当前飞书主图', runExport);
   }
 })();

@@ -7,7 +7,7 @@ import {
   createDialogElement,
   isCoarsePointer,
 } from './web-page-assistant-presentation.lib.js';
-import { createWidgetLayoutRuntime } from './web-page-assistant-widget-layout.lib.js';
+import { createDragAnchor, createHoverExpansion, createPanelPlacement } from '../shared/shared-widget-shell.lib.js';
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
 
 const SCRIPT_NAME = 'Web Page Assistant';
@@ -15,6 +15,12 @@ const ROOT_ID = 'page-auto-refresh-timer-root';
 const STYLE_ID = `${ROOT_ID}-style`;
 const TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
 const DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
+// Widget footprint from the base styles (.part-widget) and the compact panel.
+const WIDGET_SIZE = { width: 154, height: 60 };
+const WIDGET_DEFAULT_OFFSET = 18;
+const PANEL_WIDTH = 248;
+const PANEL_MIN_WIDTH = 52;
+const PANEL_SAFE_MARGIN = 12;
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 const PRESETS = [
   { label: '30 秒', ms: 30 * 1000 },
@@ -128,31 +134,84 @@ function createWebPageAssistantView({
     finishDisposed = resolve;
   });
 
-  const layout = createWidgetLayoutRuntime({
-    normalizeWidgetPosition: positions.normalize,
-    clampNumber(value, min, max) {
-      return Math.min(Math.max(min, value), max);
-    },
-    getViewportSize: () => ({ width: windowObject.innerWidth, height: windowObject.innerHeight }),
-    persistPosition: async (position) => positions.write(position),
-    onPositionChange(position) {
-      widgetPosition = position;
-    },
-    setTimeout: timers.setTimeout,
-    clearTimeout: timers.clearTimeout,
-    isCoarsePointer: () => isCoarsePointer(windowObject),
-    logger: console,
-    scriptName: SCRIPT_NAME,
-    constants: {
-      buttonSize: 52,
-      widgetWidth: 154,
-      widgetHeight: 60,
-      panelWidth: 248,
-      panelGap: 8,
-      safeMargin: 12,
-      defaultOffset: 18,
-    },
-  });
+  let widgetShell = null;
+
+  function defaultWidgetPosition() {
+    return {
+      left: windowObject.innerWidth - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
+      top: windowObject.innerHeight - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET,
+    };
+  }
+
+  function sizeWidgetPanel(panel) {
+    const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN * 2));
+    panel.style.setProperty('--part-panel-width', `${Math.round(width)}px`);
+  }
+
+  // The widget rides on the shared kit: drag and clamping from the drag
+  // anchor (no edge docking), hover/focus disclosure, and panel placement
+  // through floating-ui against the widget box.
+  function attachWidgetShell() {
+    detachWidgetShell();
+    const panel = widget.querySelector('.part-widget-panel');
+    const anchor = createDragAnchor({
+      anchorEl: widget,
+      handleEl: widgetButton,
+      windowObject,
+      measure: () => WIDGET_SIZE,
+      dock: false,
+      timers,
+      onDragStart() {
+        expansion.setExpanded(false);
+      },
+      onMove(position) {
+        widgetPosition = { left: position.left, top: position.top };
+        placement?.update().catch(() => {});
+      },
+      onDrop(position) {
+        positions.write({ left: Math.round(position.left), top: Math.round(position.top) }).catch((error) => {
+          console.warn(`${SCRIPT_NAME}: failed to persist widget position.`, error);
+        });
+      },
+    });
+    const expansion = createHoverExpansion({
+      container: widget,
+      trigger: widgetButton,
+      isCoarsePointer: () => isCoarsePointer(windowObject),
+      isSuppressed: () => anchor.isDragSuppressed(),
+      timers,
+    });
+    const placement = panel
+      ? createPanelPlacement({
+          reference: widget,
+          floating: panel,
+          placement: 'top-end',
+          strategy: 'absolute',
+          apply({ x, y, placement: side }) {
+            panel.style.setProperty('--part-panel-left', `${Math.round(x)}px`);
+            panel.style.setProperty('--part-panel-top', `${Math.round(y)}px`);
+            panel.style.setProperty('--part-panel-origin', side.startsWith('bottom') ? 'top right' : 'bottom right');
+          },
+        })
+      : null;
+    widgetShell = { anchor, expansion, placement, panel };
+  }
+
+  function detachWidgetShell() {
+    if (!widgetShell) return;
+    widgetShell.placement?.stop();
+    widgetShell.expansion.destroy();
+    widgetShell.anchor.destroy();
+    widgetShell = null;
+  }
+
+  function placeWidget() {
+    if (!widgetShell) return;
+    const position = positions.normalize(widgetPosition) || defaultWidgetPosition();
+    widgetShell.anchor.applyPosition({ left: position.left, top: position.top });
+    if (widgetShell.panel) sizeWidgetPanel(widgetShell.panel);
+    widgetShell.placement?.update().catch(() => {});
+  }
 
   function currentStatusText(snapshot = latestSnapshot) {
     const activeMatch = snapshot.refresh.activeMatch;
@@ -221,9 +280,10 @@ function createWebPageAssistantView({
     countdownNodes = rendered.countdownNodes;
     widgetStatusNode = rendered.statusNode;
     lastWidgetStatusText = '';
-    layout.attach(widget, widgetButton, widgetPosition);
     root.append(widget);
-    layout.applyPosition();
+    attachWidgetShell();
+    placeWidget();
+    widgetShell.placement?.start();
     hasMountedWidget = true;
     if (returnToWidget) dialogReturnFocus = widgetButton;
     updatePauseButton();
@@ -528,7 +588,7 @@ function createWebPageAssistantView({
     if (
       action === 'open-settings' &&
       actionNode.classList.contains('part-widget-button') &&
-      layout.isExpansionSuppressed()
+      widgetShell?.anchor.isDragSuppressed()
     )
       return;
     event.preventDefault();
@@ -578,7 +638,7 @@ function createWebPageAssistantView({
   }
 
   function handleResize() {
-    if (!disposed) layout.applyPosition();
+    if (!disposed) placeWidget();
   }
 
   function update(snapshot, change = {}) {
@@ -653,7 +713,7 @@ function createWebPageAssistantView({
     pendingOpenIntent = null;
     pendingSubmissions.clear();
     closeDialog({ restoreFocus: false });
-    layout.dispose();
+    detachWidgetShell();
     windowObject.removeEventListener('resize', handleResize);
     if (root) {
       root.removeEventListener('click', handleRootClick);

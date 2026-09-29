@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.7
+// @version      0.1.8
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -682,6 +682,59 @@ ${root} :focus-visible {
       show,
       showProgress,
       destroy
+    };
+  }
+
+  // src/userscripts/shared/shared-gm.lib.js
+  function pickFunction(override, legacy) {
+    if (typeof override === "function") return override;
+    if (typeof legacy === "function") return legacy;
+    return null;
+  }
+  function bindModern(gm, ...names) {
+    for (const name of names) {
+      if (typeof gm?.[name] === "function") return gm[name].bind(gm);
+    }
+    return null;
+  }
+  function legacyGlobals() {
+    return {
+      getValue: typeof GM_getValue === "function" ? GM_getValue : null,
+      setValue: typeof GM_setValue === "function" ? GM_setValue : null,
+      addValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
+      removeValueChangeListener: typeof GM_removeValueChangeListener === "function" ? GM_removeValueChangeListener : null,
+      registerMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
+      xmlHttpRequest: typeof GM_xmlhttpRequest === "function" ? GM_xmlhttpRequest : null,
+      download: typeof GM_download === "function" ? GM_download : null
+    };
+  }
+  function modernGlobal() {
+    return typeof GM !== "undefined" ? GM : null;
+  }
+  function resolveGmApi(overrides = {}) {
+    const legacy = legacyGlobals();
+    const gm = overrides.gm || overrides.gmApi || modernGlobal();
+    const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
+    let valueChange = null;
+    if (legacyAdd) {
+      valueChange = {
+        add: legacyAdd,
+        remove: pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
+      };
+    } else if (typeof gm?.addValueChangeListener === "function") {
+      valueChange = {
+        add: gm.addValueChangeListener.bind(gm),
+        remove: bindModern(gm, "removeValueChangeListener")
+      };
+    }
+    return {
+      getValue: pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue"),
+      setValue: pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue"),
+      valueChange,
+      registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
+      xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),
+      // Legacy only: GM.download does not share GM_download's callback contract.
+      download: pickFunction(overrides.gmDownload, legacy.download)
     };
   }
 
@@ -1510,10 +1563,11 @@ ${root} :focus-visible {
       }
       return toaster;
     }
+    const gmApi = resolveGmApi();
     const runtime = createImageExportRuntime({
       documentObject: document,
       fetchImpl: typeof fetch === "function" ? fetch.bind(globalThis) : null,
-      gmDownload: typeof GM_download === "function" ? GM_download : null
+      gmDownload: gmApi.download
     });
     function runExport() {
       const activeToaster = ensureToaster();
@@ -1533,8 +1587,8 @@ ${root} :focus-visible {
         progress.fail(toUserMessage(error));
       });
     }
-    if (typeof GM_registerMenuCommand === "function") {
-      GM_registerMenuCommand("导出当前飞书主图", runExport);
+    if (gmApi.registerMenuCommand) {
+      gmApi.registerMenuCommand("导出当前飞书主图", runExport);
     }
   })();
 })();

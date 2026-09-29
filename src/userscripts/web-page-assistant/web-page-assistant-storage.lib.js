@@ -1,3 +1,5 @@
+import { resolveGmApi } from '../shared/shared-gm.lib.js';
+
 function maybePromise(value) {
   return value && typeof value.then === 'function' ? value : Promise.resolve(value);
 }
@@ -11,30 +13,20 @@ function createWebPageAssistantStoragePort(adapters) {
     widgetPositionKey,
     fallbackStorageKey,
     fallbackWidgetPositionKey,
-    gmGetValue,
-    gmSetValue,
-    gmRegisterMenuCommand,
-    gmAddValueChangeListener,
-    gmRemoveValueChangeListener,
-    gmApi,
     localStorageAdapter,
     eventTarget,
     logger,
     toPromise = maybePromise,
   } = adapters;
+  // GM overrides (gmGetValue, gmApi, ...) in `adapters` replace the probed
+  // manager API; production passes none and gets the resolved globals.
+  const gm = resolveGmApi(adapters);
 
   async function readPrimaryValue(key, fallbackValue) {
-    if (typeof gmGetValue === 'function') {
+    if (gm.getValue) {
       return {
         available: true,
-        value: await toPromise(gmGetValue(key, fallbackValue)),
-      };
-    }
-
-    if (gmApi && typeof gmApi.getValue === 'function') {
-      return {
-        available: true,
-        value: await gmApi.getValue(key, fallbackValue),
+        value: await toPromise(gm.getValue(key, fallbackValue)),
       };
     }
 
@@ -42,13 +34,8 @@ function createWebPageAssistantStoragePort(adapters) {
   }
 
   async function writePrimaryValue(key, value) {
-    if (typeof gmSetValue === 'function') {
-      await toPromise(gmSetValue(key, value));
-      return true;
-    }
-
-    if (gmApi && typeof gmApi.setValue === 'function') {
-      await gmApi.setValue(key, value);
+    if (gm.setValue) {
+      await toPromise(gm.setValue(key, value));
       return true;
     }
 
@@ -112,21 +99,20 @@ function createWebPageAssistantStoragePort(adapters) {
     const listener = (_name, _oldValue, _newValue, remote) => {
       if (remote) onChange();
     };
-    if (typeof gmAddValueChangeListener === 'function') {
-      const id = gmAddValueChangeListener(storageKey, listener);
+    if (!gm.valueChange) return null;
+    const { add, remove } = gm.valueChange;
+    const result = add(storageKey, listener);
+    if (!result || typeof result.then !== 'function') {
       return () => {
-        if (typeof gmRemoveValueChangeListener === 'function') gmRemoveValueChangeListener(id);
+        if (remove) remove(result);
       };
     }
-    if (gmApi && typeof gmApi.addValueChangeListener === 'function') {
-      const id = toPromise(gmApi.addValueChangeListener(storageKey, listener));
-      id.catch((error) => logger.warn(`${scriptName}: failed to watch userscript storage.`, error));
-      return () => {
-        if (typeof gmApi.removeValueChangeListener !== 'function') return;
-        id.then((value) => gmApi.removeValueChangeListener(value)).catch(() => {});
-      };
-    }
-    return null;
+    // GM.addValueChangeListener resolves the listener id asynchronously.
+    result.catch((error) => logger.warn(`${scriptName}: failed to watch userscript storage.`, error));
+    return () => {
+      if (!remove) return;
+      result.then((value) => remove(value)).catch(() => {});
+    };
   }
 
   return {
@@ -201,13 +187,8 @@ function createWebPageAssistantStoragePort(adapters) {
     },
     registerSettingsMenu(label, callback) {
       try {
-        if (typeof gmRegisterMenuCommand === 'function') {
-          gmRegisterMenuCommand(label, callback);
-          return true;
-        }
-
-        if (gmApi && typeof gmApi.registerMenuCommand === 'function') {
-          gmApi.registerMenuCommand(label, callback);
+        if (gm.registerMenuCommand) {
+          gm.registerMenuCommand(label, callback);
           return true;
         }
       } catch (error) {

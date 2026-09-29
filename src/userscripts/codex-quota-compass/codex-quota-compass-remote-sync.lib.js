@@ -1,4 +1,5 @@
 import pLimit from 'p-limit';
+import { resolveGmApi } from '../shared/shared-gm.lib.js';
 import {
   EXPORT_FORMAT,
   EXPORT_VERSION,
@@ -71,29 +72,18 @@ function normalizeSettings(rawSettings) {
 
 function createGmSettingsStore(options = {}) {
   async function readRaw() {
-    const gmGetValue = options.gmGetValue || (typeof GM_getValue === 'function' ? GM_getValue : null);
-    if (typeof gmGetValue === 'function') {
-      return maybePromise(gmGetValue(REMOTE_SYNC_SETTINGS_KEY, null));
-    }
-
-    const gmApi = options.gm || (typeof GM !== 'undefined' ? GM : null);
-    if (typeof gmApi?.getValue === 'function') {
-      return gmApi.getValue(REMOTE_SYNC_SETTINGS_KEY, null);
+    const { getValue } = resolveGmApi(options);
+    if (getValue) {
+      return maybePromise(getValue(REMOTE_SYNC_SETTINGS_KEY, null));
     }
 
     throw new Error('GM storage is required for remote sync settings.');
   }
 
   async function writeRaw(settings) {
-    const gmSetValue = options.gmSetValue || (typeof GM_setValue === 'function' ? GM_setValue : null);
-    if (typeof gmSetValue === 'function') {
-      await maybePromise(gmSetValue(REMOTE_SYNC_SETTINGS_KEY, settings));
-      return settings;
-    }
-
-    const gmApi = options.gm || (typeof GM !== 'undefined' ? GM : null);
-    if (typeof gmApi?.setValue === 'function') {
-      await gmApi.setValue(REMOTE_SYNC_SETTINGS_KEY, settings);
+    const { setValue } = resolveGmApi(options);
+    if (setValue) {
+      await maybePromise(setValue(REMOTE_SYNC_SETTINGS_KEY, settings));
       return settings;
     }
 
@@ -155,12 +145,7 @@ function createFetchJsonRequester(options = {}) {
 }
 
 function getGmXmlHttpRequest(options = {}) {
-  if (typeof options.gmXmlhttpRequest === 'function') return options.gmXmlhttpRequest;
-  if (typeof GM_xmlhttpRequest === 'function') return GM_xmlhttpRequest;
-  const gmApi = options.gm || (typeof GM !== 'undefined' ? GM : null);
-  if (typeof gmApi?.xmlHttpRequest === 'function') return gmApi.xmlHttpRequest.bind(gmApi);
-  if (typeof gmApi?.xmlhttpRequest === 'function') return gmApi.xmlhttpRequest.bind(gmApi);
-  return null;
+  return resolveGmApi(options).xmlHttpRequest;
 }
 
 function createGmJsonRequester(options = {}) {

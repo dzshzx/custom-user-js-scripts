@@ -1,3 +1,5 @@
+import { resolveGmApi } from '../shared/shared-gm.lib.js';
+
 const DEFAULT_ARCHIVE_KEY = 'codexQuotaCompassSnapshotArchive';
 const DEFAULT_ARCHIVE_FALLBACK_KEY = 'codexQuotaCompassSnapshotArchiveFallback';
 const STORAGE_BACKENDS = {
@@ -48,29 +50,18 @@ function createSnapshotArchiveStoragePort(options = {}) {
   }
 
   async function readFromGmStorage() {
-    const gmGetValue = options.gmGetValue || (typeof GM_getValue === 'function' ? GM_getValue : null);
-    if (typeof gmGetValue === 'function') {
-      return await maybePromise(gmGetValue(archiveKey, null));
-    }
-
-    const gmApi = options.gm || (typeof GM !== 'undefined' ? GM : null);
-    if (typeof gmApi?.getValue === 'function') {
-      return await gmApi.getValue(archiveKey, null);
+    const { getValue } = resolveGmApi(options);
+    if (getValue) {
+      return await maybePromise(getValue(archiveKey, null));
     }
 
     throw new Error('GM storage is unavailable.');
   }
 
   async function writeToGmStorage(nextArchive) {
-    const gmSetValue = options.gmSetValue || (typeof GM_setValue === 'function' ? GM_setValue : null);
-    if (typeof gmSetValue === 'function') {
-      await maybePromise(gmSetValue(archiveKey, nextArchive));
-      return nextArchive;
-    }
-
-    const gmApi = options.gm || (typeof GM !== 'undefined' ? GM : null);
-    if (typeof gmApi?.setValue === 'function') {
-      await gmApi.setValue(archiveKey, nextArchive);
+    const { setValue } = resolveGmApi(options);
+    if (setValue) {
+      await maybePromise(setValue(archiveKey, nextArchive));
       return nextArchive;
     }
 
@@ -108,30 +99,7 @@ function createSnapshotArchiveStoragePort(options = {}) {
   }
 
   function getGmValueChangeAdapter() {
-    const gmAddValueChangeListener =
-      options.gmAddValueChangeListener ||
-      (typeof GM_addValueChangeListener === 'function' ? GM_addValueChangeListener : null);
-    const gmRemoveValueChangeListener =
-      options.gmRemoveValueChangeListener ||
-      (typeof GM_removeValueChangeListener === 'function' ? GM_removeValueChangeListener : null);
-
-    if (typeof gmAddValueChangeListener === 'function') {
-      return {
-        add: gmAddValueChangeListener,
-        remove: typeof gmRemoveValueChangeListener === 'function' ? gmRemoveValueChangeListener : null,
-      };
-    }
-
-    const gmApi = options.gm || (typeof GM !== 'undefined' ? GM : null);
-    if (typeof gmApi?.addValueChangeListener === 'function') {
-      return {
-        add: gmApi.addValueChangeListener.bind(gmApi),
-        remove:
-          typeof gmApi.removeValueChangeListener === 'function' ? gmApi.removeValueChangeListener.bind(gmApi) : null,
-      };
-    }
-
-    return null;
+    return resolveGmApi(options).valueChange;
   }
 
   return {

@@ -1,3 +1,4 @@
+import { readdir, readFile } from 'node:fs/promises';
 import { REQUIRED_METADATA_FIELDS, firstMetadataValue } from './lib/userscript-metadata.mjs';
 import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource } from './lib/userscript-sources.mjs';
@@ -42,6 +43,17 @@ for (const record of inventory.records) {
     if (download !== update) report(script.path, '@downloadURL and @updateURL differ');
     if (!download.endsWith(`/${expected}`))
       report(script.path, `@downloadURL must end with /${expected} (the script's own path)`);
+  }
+}
+// Only the shared adapter probes the userscript manager API; scripts go
+// through resolveGmApi so GM_* / GM.* precedence stays in one place.
+const GM_ADAPTER = 'src/userscripts/shared/shared-gm.lib.js';
+const GM_PROBE = /typeof\s+GM(?:_\w+)?\b/;
+for (const name of await readdir('src', { recursive: true })) {
+  const file = `src/${name.replaceAll('\\', '/')}`;
+  if (!/\.(lib|entry)\.js$/.test(file) || file === GM_ADAPTER) continue;
+  if (GM_PROBE.test(await readFile(file, 'utf8'))) {
+    report(file, `probes the GM API directly; use resolveGmApi from ${GM_ADAPTER}`);
   }
 }
 const installables = inventory.files.filter((file) => file.path.endsWith('.user.js'));
