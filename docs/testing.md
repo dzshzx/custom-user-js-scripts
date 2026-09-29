@@ -11,7 +11,7 @@ Verify builds once, checks committed dist/bridge freshness, metadata and
 formatting (`scripts/format.sh --check`), then
 runs the complete node:test suite. Independent lint/test commands still build
 first. The complete entries accept no filters. For focused debugging use
-`node --test test/<name>.test.mjs` after building.
+`node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs` after building (the loader lets tests import `.jsx` sources; `npm test` sets it for every file).
 
 The five required browser tests retain their existing exact name plus owning
 file as the identifier (listed in scripts/run-tests.mjs). Quota disposal and

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-import { createToaster } from '../src/userscripts/shared/shared-toast.lib.js';
+import { createToaster } from '../src/userscripts/shared/shared-toast.lib.jsx';
 
 function setup() {
   const window = createDomWindow({ globalDocument: true });
@@ -80,7 +80,7 @@ test('showProgress updates, then settles into success or error tones', { skip: d
 });
 
 test('show auto-dismisses after the given duration', { skip: domSkip }, (t) => {
-  // shared-toast.lib.js is imported directly (not evaluated inside a
+  // shared-toast.lib.jsx is imported directly (not evaluated inside a
   // happy-dom window), so its bare `setTimeout` is Node's real global and
   // node:test's mock.timers can advance it without any real wait.
   const { container, toaster } = setup();
@@ -99,7 +99,7 @@ test('destroy removes the container and clears pending timers', { skip: domSkip 
   toaster.show({ message: 'Bye', duration: 20 });
   toaster.destroy();
 
-  // destroy() clears every pending timer synchronously (shared-toast.lib.js
+  // destroy() clears every pending timer synchronously (shared-toast.lib.jsx
   // destroy(): `for (const timer of timers) clearTimeout(timer)`), so there
   // is nothing left to wait for here.
   assert.equal(root.querySelector('.wk-toasts'), null);
@@ -109,7 +109,7 @@ test('destroy removes the container and clears pending timers', { skip: domSkip 
 test('ToastList renders tone, icon, and leaving state as static markup', async () => {
   const { h } = await import('preact');
   const { renderToString } = await import('preact-render-to-string');
-  const { ToastList } = await import('../src/userscripts/shared/shared-toast.lib.js');
+  const { ToastList } = await import('../src/userscripts/shared/shared-toast.lib.jsx');
   const html = renderToString(
     h(ToastList, {
       toasts: [

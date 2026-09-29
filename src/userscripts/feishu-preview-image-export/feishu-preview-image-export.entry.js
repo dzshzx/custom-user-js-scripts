@@ -16,7 +16,7 @@
 // ==/UserScript==
 
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
-import { createToaster } from '../shared/shared-toast.lib.js';
+import { createToaster } from '../shared/shared-toast.lib.jsx';
 import { resolveGmApi } from '../shared/shared-gm.lib.js';
 import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-export-logic.lib.js';
 

@@ -37,7 +37,7 @@
     "esbuild@0.28.1": true
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.15"
   },
   "dependencies": {
     "@date-fns/utc": "2.1.1",

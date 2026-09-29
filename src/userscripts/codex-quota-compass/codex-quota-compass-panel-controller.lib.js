@@ -3,7 +3,7 @@ import { createQuotaPanelRenderer } from './codex-quota-compass-panel-renderer.l
 import { createFloatingPanelShell } from './codex-quota-compass-panel-shell.lib.js';
 import { applyActiveView, isSyncFormEditing, readSyncFormValues } from './codex-quota-compass-panel-dom.lib.js';
 import { buildTokenCss } from '../shared/shared-tokens.lib.js';
-import { createToaster } from '../shared/shared-toast.lib.js';
+import { createToaster } from '../shared/shared-toast.lib.jsx';
 
 const ROOT_ID = 'codex-quota-compass-root';
 const EXPORT_NAME = 'codex-quota-compass-snapshot-archive.v1.json';

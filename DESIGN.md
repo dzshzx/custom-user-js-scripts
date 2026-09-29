@@ -113,7 +113,7 @@ sans-serif`.
   `prefers-color-scheme` fallback) and applies via `[data-wk-theme]` on the
   script root, not per-script media queries.
 - Icons come from `shared-icons.lib.js` (vendored Lucide SVG paths).
-- In-page feedback goes through `shared-toast.lib.js`.
+- In-page feedback goes through `shared-toast.lib.jsx`.
 - Extend the kit when a script needs a capability it lacks; keep per-script
   styles limited to domain presentation.
 

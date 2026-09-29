@@ -26,7 +26,13 @@ export const requiredTests = [
   ['feishu-preview-image-extraction.test.mjs', 'real Playwright page.evaluate matches the direct result'],
 ];
 
+// Test files run in child processes; they inherit NODE_OPTIONS, so every file
+// can import .jsx sources the same way a focused `node --import` run does.
+export const JSX_LOADER_FLAG = `--import=${new URL('./jsx-loader.mjs', import.meta.url).href}`;
+
 export async function runTests(options = {}) {
+  if (!(process.env.NODE_OPTIONS || '').includes(JSX_LOADER_FLAG))
+    process.env.NODE_OPTIONS = [process.env.NODE_OPTIONS, JSX_LOADER_FLAG].filter(Boolean).join(' ');
   const results = [];
   const diagnostics = [];
   const started = performance.now();

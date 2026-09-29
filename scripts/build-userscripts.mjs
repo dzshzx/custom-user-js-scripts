@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import esbuild from 'esbuild';
 import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource } from './lib/userscript-sources.mjs';
+import { JSX_OPTIONS } from './lib/jsx-build-options.mjs';
 
 import {
   REQUIRED_METADATA_FIELDS,
@@ -72,7 +73,7 @@ function validateEntryMetadata({ scriptId, entryPath, entrySource }) {
 
 async function assertNoOrphanLibs({ rootDir, scriptDir, entryPath, metafile }) {
   const bundledInputs = new Set(Object.keys(metafile.inputs).map((input) => path.resolve(rootDir, input)));
-  const libFiles = (await readdir(scriptDir)).filter((name) => name.endsWith('.lib.js'));
+  const libFiles = (await readdir(scriptDir)).filter((name) => /\.lib\.jsx?$/.test(name));
   const orphans = libFiles.filter((name) => !bundledInputs.has(path.join(scriptDir, name)));
   if (orphans.length) {
     throw new Error(
@@ -94,6 +95,7 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
       format: 'iife',
       platform: 'browser',
       target: 'es2022',
+      ...JSX_OPTIONS,
       minify: false,
       charset: 'utf8',
       sourcemap: false,

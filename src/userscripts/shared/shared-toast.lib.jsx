@@ -1,4 +1,4 @@
-import { h, render } from 'preact';
+import { render } from 'preact';
 import { iconSvg } from './shared-icons.lib.js';
 
 const TOAST_LIMIT = 3;
@@ -104,24 +104,20 @@ const TOAST_CSS = `
 function ToastItem({ toast }) {
   const iconName = TONE_ICONS[toast.tone];
   const iconClass = toast.tone === 'progress' ? 'wk-toast-icon wk-spin' : 'wk-toast-icon';
-  return h(
-    'div',
-    {
-      className: toast.leaving ? 'wk-toast is-leaving' : 'wk-toast',
-      'data-tone': toast.tone,
-      'data-toast-id': toast.id,
-    },
-    h('span', {
-      className: iconClass,
-      hidden: !iconName,
-      dangerouslySetInnerHTML: { __html: iconName ? iconSvg(iconName) : '' },
-    }),
-    h('span', { className: 'wk-toast-message' }, toast.message),
+  return (
+    <div className={toast.leaving ? 'wk-toast is-leaving' : 'wk-toast'} data-tone={toast.tone} data-toast-id={toast.id}>
+      <span
+        className={iconClass}
+        hidden={!iconName}
+        dangerouslySetInnerHTML={{ __html: iconName ? iconSvg(iconName) : '' }}
+      />
+      <span className="wk-toast-message">{toast.message}</span>
+    </div>
   );
 }
 
 function ToastList({ toasts }) {
-  return toasts.map((toast) => h(ToastItem, { key: toast.id, toast }));
+  return toasts.map((toast) => <ToastItem key={toast.id} toast={toast} />);
 }
 
 function createToaster({ root } = {}) {
@@ -146,7 +142,7 @@ function createToaster({ root } = {}) {
   function commit(nextToasts) {
     if (destroyed) return;
     toasts = nextToasts;
-    render(h(ToastList, { toasts }), container);
+    render(<ToastList toasts={toasts} />, container);
   }
 
   function patch(id, changes) {
