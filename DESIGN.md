@@ -168,8 +168,9 @@ sans-serif`.
   shared widget kit parts; the widget does not dock to screen edges.
 - The settings dialog owns scope selection, refresh settings, unlocker
   capability toggles, status boxes, and destructive delete actions.
-- The dialog behaves as a true modal: focus trap, Esc close, inert page
-  background while open, and focus returned to the trigger on close. Full
+- The dialog is a native modal `<dialog>` (`showModal()`): the platform
+  keeps focus in the page content, closes on Esc, makes the page background
+  inert while open, and focus returns to the trigger on close. Full
   rebuilds (tab/scope/save) preserve the panel scroll offset and the focused
   control.
 - Write actions disable their button with a pending label while storage is in

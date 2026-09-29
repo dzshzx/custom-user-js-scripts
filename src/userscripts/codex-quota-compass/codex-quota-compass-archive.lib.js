@@ -1,5 +1,6 @@
 import stableStringify from 'fast-json-stable-stringify';
 import pLimit from 'p-limit';
+import * as v from 'valibot';
 import { isMainSevenDayWindow, projectQuotaSnapshotForArchive } from './codex-quota-compass-contract.lib.js';
 import {
   foldSnapshotsIntoLedger,
@@ -24,22 +25,32 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+// JSON-safe value: Dates become ISO strings, non-finite numbers become null,
+// undefined becomes null and any other primitive is stringified.
+const JsonValueSchema = v.lazy(() =>
+  v.union([
+    v.pipe(
+      v.date(),
+      v.transform((date) => date.toISOString()),
+    ),
+    v.array(JsonValueSchema),
+    v.record(v.string(), JsonValueSchema),
+    v.pipe(
+      v.custom((value) => typeof value === 'number'),
+      v.transform((value) => (Number.isFinite(value) ? value : null)),
+    ),
+    v.string(),
+    v.boolean(),
+    v.null(),
+    v.pipe(
+      v.unknown(),
+      v.transform((value) => (value == null ? null : String(value))),
+    ),
+  ]),
+);
+
 function sanitizeValue(value) {
-  if (Array.isArray(value)) {
-    return value.map(sanitizeValue);
-  }
-
-  if (isPlainObject(value)) {
-    return Object.fromEntries(Object.entries(value).map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)]));
-  }
-
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'string' || typeof value === 'boolean' || value === null) {
-    return value;
-  }
-
-  return value == null ? null : String(value);
+  return v.parse(JsonValueSchema, value);
 }
 
 function sortSnapshotsByCaptureTime(snapshots) {
@@ -48,27 +59,58 @@ function sortSnapshotsByCaptureTime(snapshots) {
     .sort((left, right) => String(left.capturedAt || '').localeCompare(String(right.capturedAt || '')));
 }
 
-function normalizeDailyRows(rows) {
-  return Array.isArray(rows) ? rows.map((row) => sanitizeValue(row)) : [];
-}
+// Missing keys still run through the transform, so defaults apply uniformly.
+const coerce = (transform) =>
+  v.pipe(
+    v.optional(v.unknown(), () => undefined),
+    v.transform(transform),
+  );
+const plainObjectValue = coerce((value) => sanitizeValue(isPlainObject(value) ? value : {}));
+const nullableString = v.fallback(v.string(), null);
+
+// A snapshot without a usable capture time is dropped (silently when reading an archive).
+const SnapshotSchema = v.pipe(
+  v.custom(isPlainObject),
+  v.object({
+    snapshotId: coerce((value) => (typeof value === 'string' && value.trim() ? value.trim() : null)),
+    capturedAt: v.pipe(
+      v.string(),
+      v.check((value) => value.trim() !== ''),
+    ),
+    scriptVersion: v.fallback(v.string(), ''),
+    sourceContext: plainObjectValue,
+    windowSnapshot: v.fallback(v.array(JsonValueSchema), []),
+    periodSummaries: plainObjectValue,
+    periodDetails: plainObjectValue,
+  }),
+);
+
+// Archive shell; legacy archives were a bare snapshot array. Ledger rules stay in the ledger module.
+const SnapshotArchiveSchema = v.object({
+  createdAt: nullableString,
+  updatedAt: nullableString,
+  ledger: coerce((ledger) => normalizeLedger(ledger)),
+  snapshots: coerce((snapshots) => (Array.isArray(snapshots) ? snapshots.map(normalizeSnapshot).filter(Boolean) : [])),
+});
+
+const SupportedExportDocumentSchema = v.object({
+  format: v.literal(EXPORT_FORMAT),
+  version: v.picklist([...SUPPORTED_EXPORT_VERSIONS]),
+});
 
 function normalizeSnapshot(input) {
-  if (!isPlainObject(input)) return null;
-
-  const snapshotId = typeof input.snapshotId === 'string' && input.snapshotId.trim() ? input.snapshotId.trim() : null;
-  const capturedAt = typeof input.capturedAt === 'string' && input.capturedAt.trim() ? input.capturedAt : null;
-
-  if (!capturedAt) return null;
-
+  const result = v.safeParse(SnapshotSchema, input);
+  if (!result.success) return null;
+  const snapshot = result.output;
   return {
-    snapshotId,
-    capturedAt,
-    scriptVersion: typeof input.scriptVersion === 'string' ? input.scriptVersion : '',
+    snapshotId: snapshot.snapshotId,
+    capturedAt: snapshot.capturedAt,
+    scriptVersion: snapshot.scriptVersion,
     storageSchemaVersion: ARCHIVE_SCHEMA_VERSION,
-    sourceContext: sanitizeValue(isPlainObject(input.sourceContext) ? input.sourceContext : {}),
-    windowSnapshot: normalizeDailyRows(input.windowSnapshot),
-    periodSummaries: sanitizeValue(isPlainObject(input.periodSummaries) ? input.periodSummaries : {}),
-    periodDetails: sanitizeValue(isPlainObject(input.periodDetails) ? input.periodDetails : {}),
+    sourceContext: snapshot.sourceContext,
+    windowSnapshot: snapshot.windowSnapshot,
+    periodSummaries: snapshot.periodSummaries,
+    periodDetails: snapshot.periodDetails,
   };
 }
 
@@ -78,17 +120,14 @@ function normalizeSnapshotArchive(rawArchive) {
     : isPlainObject(rawArchive)
       ? rawArchive
       : {};
-
-  const snapshots = Array.isArray(archiveObject.snapshots)
-    ? archiveObject.snapshots.map(normalizeSnapshot).filter(Boolean)
-    : [];
+  const archive = v.parse(SnapshotArchiveSchema, archiveObject);
 
   return {
     schemaVersion: ARCHIVE_SCHEMA_VERSION,
-    createdAt: typeof archiveObject.createdAt === 'string' ? archiveObject.createdAt : null,
-    updatedAt: typeof archiveObject.updatedAt === 'string' ? archiveObject.updatedAt : null,
-    ledger: normalizeLedger(archiveObject.ledger),
-    snapshots: sortSnapshotsByCaptureTime(snapshots),
+    createdAt: archive.createdAt,
+    updatedAt: archive.updatedAt,
+    ledger: archive.ledger,
+    snapshots: sortSnapshotsByCaptureTime(archive.snapshots),
   };
 }
 
@@ -296,11 +335,7 @@ function buildSnapshotExportDocument(archive, exportedAt) {
 }
 
 function previewImportArchiveDocument(currentArchive, documentObject, nowMs = Date.now()) {
-  if (
-    !isPlainObject(documentObject) ||
-    documentObject.format !== EXPORT_FORMAT ||
-    !SUPPORTED_EXPORT_VERSIONS.has(documentObject.version)
-  ) {
+  if (!isPlainObject(documentObject) || !v.is(SupportedExportDocumentSchema, documentObject)) {
     throw new Error('Unsupported Snapshot Export document.');
   }
 

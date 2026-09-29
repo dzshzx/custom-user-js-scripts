@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.6
+// @version      0.3.7
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -61,6 +61,280 @@
     setRefreshSetting: () => setRefreshSetting,
     setUnlockerSetting: () => setUnlockerSetting
   });
+
+  // node_modules/valibot/dist/index.mjs
+  var store$4;
+  var DEFAULT_CONFIG = {
+    lang: void 0,
+    message: void 0,
+    abortEarly: void 0,
+    abortPipeEarly: void 0
+  };
+  // @__NO_SIDE_EFFECTS__
+  function getGlobalConfig(config$1) {
+    if (!config$1 && !store$4) return DEFAULT_CONFIG;
+    return {
+      lang: config$1?.lang ?? store$4?.lang,
+      message: config$1?.message,
+      abortEarly: config$1?.abortEarly ?? store$4?.abortEarly,
+      abortPipeEarly: config$1?.abortPipeEarly ?? store$4?.abortPipeEarly
+    };
+  }
+  var store$3;
+  // @__NO_SIDE_EFFECTS__
+  function getGlobalMessage(lang) {
+    return store$3?.get(lang);
+  }
+  var store$2;
+  // @__NO_SIDE_EFFECTS__
+  function getSchemaMessage(lang) {
+    return store$2?.get(lang);
+  }
+  var store$1;
+  // @__NO_SIDE_EFFECTS__
+  function getSpecificMessage(reference, lang) {
+    return store$1?.get(reference)?.get(lang);
+  }
+  // @__NO_SIDE_EFFECTS__
+  function _stringify(input) {
+    const type = typeof input;
+    if (type === "string") return `"${input}"`;
+    if (type === "number" || type === "bigint" || type === "boolean") return `${input}`;
+    if (type === "object" || type === "function") return (input && Object.getPrototypeOf(input)?.constructor?.name) ?? "null";
+    return type;
+  }
+  function _addIssue(context, label, dataset, config$1, other) {
+    const input = other && "input" in other ? other.input : dataset.value;
+    const expected = other?.expected ?? context.expects ?? null;
+    const received = other?.received ?? /* @__PURE__ */ _stringify(input);
+    const issue = {
+      kind: context.kind,
+      type: context.type,
+      input,
+      expected,
+      received,
+      message: `Invalid ${label}: ${expected ? `Expected ${expected} but r` : "R"}eceived ${received}`,
+      requirement: context.requirement,
+      path: other?.path,
+      issues: other?.issues,
+      lang: config$1.lang,
+      abortEarly: config$1.abortEarly,
+      abortPipeEarly: config$1.abortPipeEarly
+    };
+    const isSchema = context.kind === "schema";
+    const message$1 = other?.message ?? context.message ?? /* @__PURE__ */ getSpecificMessage(context.reference, issue.lang) ?? (isSchema ? /* @__PURE__ */ getSchemaMessage(issue.lang) : null) ?? config$1.message ?? /* @__PURE__ */ getGlobalMessage(issue.lang);
+    if (message$1 !== void 0) issue.message = typeof message$1 === "function" ? message$1(issue) : message$1;
+    if (isSchema) dataset.typed = false;
+    if (dataset.issues) dataset.issues.push(issue);
+    else dataset.issues = [issue];
+  }
+  function _standardSchema(schema) {
+    schema["~standard"] = {
+      version: 1,
+      vendor: "valibot",
+      validate: (value$1) => schema["~run"]({ value: value$1 }, /* @__PURE__ */ getGlobalConfig())
+    };
+    return schema;
+  }
+  var ValiError = class extends Error {
+    /**
+    * Creates a Valibot error with useful information.
+    *
+    * @param issues The error issues.
+    */
+    constructor(issues) {
+      super(issues[0].message);
+      this.name = "ValiError";
+      this.issues = issues;
+    }
+  };
+  // @__NO_SIDE_EFFECTS__
+  function check(requirement, message$1) {
+    return {
+      kind: "validation",
+      type: "check",
+      reference: check,
+      async: false,
+      expects: null,
+      requirement,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (dataset.typed && !this.requirement(dataset.value)) _addIssue(this, "input", dataset, config$1);
+        return dataset;
+      }
+    };
+  }
+  // @__NO_SIDE_EFFECTS__
+  function transform(operation) {
+    return {
+      kind: "transformation",
+      type: "transform",
+      reference: transform,
+      async: false,
+      operation,
+      "~run"(dataset) {
+        dataset.value = this.operation(dataset.value);
+        return dataset;
+      }
+    };
+  }
+  // @__NO_SIDE_EFFECTS__
+  function getFallback(schema, dataset, config$1) {
+    return typeof schema.fallback === "function" ? schema.fallback(dataset, config$1) : schema.fallback;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function getDefault(schema, dataset, config$1) {
+    return typeof schema.default === "function" ? schema.default(dataset, config$1) : schema.default;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function custom(check$1, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "custom",
+      reference: custom,
+      expects: "unknown",
+      async: false,
+      check: check$1,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (this.check(dataset.value)) dataset.typed = true;
+        else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function object(entries$1, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "object",
+      reference: object,
+      expects: "Object",
+      async: false,
+      entries: entries$1,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        const input = dataset.value;
+        if (input && typeof input === "object") {
+          dataset.typed = true;
+          dataset.value = {};
+          for (const key in this.entries) {
+            const valueSchema = this.entries[key];
+            if (key in input || (valueSchema.type === "exact_optional" || valueSchema.type === "optional" || valueSchema.type === "nullish") && valueSchema.default !== void 0) {
+              const value$1 = key in input ? input[key] : /* @__PURE__ */ getDefault(valueSchema);
+              const valueDataset = valueSchema["~run"]({ value: value$1 }, config$1);
+              if (valueDataset.issues) {
+                const pathItem = {
+                  type: "object",
+                  origin: "value",
+                  input,
+                  key,
+                  value: value$1
+                };
+                for (const issue of valueDataset.issues) {
+                  if (issue.path) issue.path.unshift(pathItem);
+                  else issue.path = [pathItem];
+                  dataset.issues?.push(issue);
+                }
+                if (!dataset.issues) dataset.issues = valueDataset.issues;
+                if (config$1.abortEarly) {
+                  dataset.typed = false;
+                  break;
+                }
+              }
+              if (!valueDataset.typed) dataset.typed = false;
+              dataset.value[key] = valueDataset.value;
+            } else if (valueSchema.fallback !== void 0) dataset.value[key] = /* @__PURE__ */ getFallback(valueSchema);
+            else if (valueSchema.type !== "exact_optional" && valueSchema.type !== "optional" && valueSchema.type !== "nullish") {
+              _addIssue(this, "key", dataset, config$1, {
+                input: void 0,
+                expected: `"${key}"`,
+                path: [{
+                  type: "object",
+                  origin: "key",
+                  input,
+                  key,
+                  value: input[key]
+                }]
+              });
+              if (config$1.abortEarly) break;
+            }
+          }
+        } else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function optional(wrapped, default_) {
+    return _standardSchema({
+      kind: "schema",
+      type: "optional",
+      reference: optional,
+      expects: `(${wrapped.expects} | undefined)`,
+      async: false,
+      wrapped,
+      default: default_,
+      "~run"(dataset, config$1) {
+        if (dataset.value === void 0) {
+          if (this.default !== void 0) dataset.value = /* @__PURE__ */ getDefault(this, dataset, config$1);
+          if (dataset.value === void 0) {
+            dataset.typed = true;
+            return dataset;
+          }
+        }
+        return this.wrapped["~run"](dataset, config$1);
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function unknown() {
+    return _standardSchema({
+      kind: "schema",
+      type: "unknown",
+      reference: unknown,
+      expects: "unknown",
+      async: false,
+      "~run"(dataset) {
+        dataset.typed = true;
+        return dataset;
+      }
+    });
+  }
+  function parse(schema, input, config$1) {
+    const dataset = schema["~run"]({ value: input }, /* @__PURE__ */ getGlobalConfig(config$1));
+    if (dataset.issues) throw new ValiError(dataset.issues);
+    return dataset.value;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function pipe(...pipe$1) {
+    return _standardSchema({
+      ...pipe$1[0],
+      pipe: pipe$1,
+      "~run"(dataset, config$1) {
+        for (const item of pipe$1) if (item.kind !== "metadata") {
+          if (dataset.issues && (item.kind === "schema" || item.kind === "transformation")) {
+            dataset.typed = false;
+            break;
+          }
+          if (!dataset.issues || !config$1.abortEarly && !config$1.abortPipeEarly) dataset = item["~run"](dataset, config$1);
+        }
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function safeParse(schema, input, config$1) {
+    const dataset = schema["~run"]({ value: input }, /* @__PURE__ */ getGlobalConfig(config$1));
+    return {
+      typed: dataset.typed,
+      success: !dataset.issues,
+      output: dataset.value,
+      issues: dataset.issues
+    };
+  }
+
+  // src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js
   var MIN_INTERVAL_MS = 1e3;
   var MAX_INTERVAL_MS = 60 * 60 * 1e3;
   var DEFAULT_UNLOCKER_OPTIONS = {
@@ -89,54 +363,59 @@
   function isValidIntervalMs(value) {
     return Number.isFinite(value) && value >= MIN_INTERVAL_MS && value <= MAX_INTERVAL_MS;
   }
-  function emptyScopedSettings() {
-    return {
-      pages: {},
-      sites: {}
-    };
+  var coerce = (transform2) => pipe(
+    optional(unknown(), () => void 0),
+    transform(transform2)
+  );
+  var record = (entries) => pipe(custom(isRecord), object(entries));
+  function timestampOrNow(value) {
+    return Number.isFinite(Number(value)) ? Number(value) : Date.now();
+  }
+  var RefreshSettingSchema = record({
+    intervalMs: pipe(coerce(Number), check(isValidIntervalMs), transform(Math.round)),
+    updatedAt: coerce(timestampOrNow)
+  });
+  var UnlockerSettingSchema = record({
+    enabled: coerce(Boolean),
+    allowSelection: coerce((value) => value !== false),
+    allowCopy: coerce((value) => value !== false),
+    allowContextMenu: coerce((value) => value !== false),
+    allowDrag: coerce((value) => value === true),
+    suppressBeforeUnload: coerce((value) => value === true),
+    updatedAt: coerce(timestampOrNow)
+  });
+  var scopedBucket = (settingSchema) => coerce((bucket) => {
+    const next = {};
+    for (const [key, setting] of Object.entries(isRecord(bucket) ? bucket : {})) {
+      const result = safeParse(settingSchema, setting);
+      if (result.success) next[key] = result.output;
+    }
+    return next;
+  });
+  var scopedSettingsSchema = (settingSchema) => object({ pages: scopedBucket(settingSchema), sites: scopedBucket(settingSchema) });
+  var RefreshScopedSchema = scopedSettingsSchema(RefreshSettingSchema);
+  var UnlockerScopedSchema = scopedSettingsSchema(UnlockerSettingSchema);
+  function parseOrNull(schema, value) {
+    const result = safeParse(schema, value);
+    return result.success ? result.output : null;
   }
   function normalizeRefreshSetting(value) {
-    if (!isRecord(value)) return null;
-    const intervalMs = Number(value.intervalMs);
-    if (!isValidIntervalMs(intervalMs)) return null;
-    return {
-      intervalMs: Math.round(intervalMs),
-      updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : Date.now()
-    };
+    return parseOrNull(RefreshSettingSchema, value);
   }
   function normalizeUnlockerSetting(value) {
-    if (!isRecord(value)) return null;
-    return {
-      enabled: Boolean(value.enabled),
-      allowSelection: value.allowSelection !== false,
-      allowCopy: value.allowCopy !== false,
-      allowContextMenu: value.allowContextMenu !== false,
-      allowDrag: value.allowDrag === true,
-      suppressBeforeUnload: value.suppressBeforeUnload === true,
-      updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : Date.now()
-    };
+    return parseOrNull(UnlockerSettingSchema, value);
   }
-  function normalizeScopedSettings(value, normalizer) {
-    const next = emptyScopedSettings();
-    const source = isRecord(value) ? value : {};
-    for (const [key, setting] of Object.entries(isRecord(source.pages) ? source.pages : {})) {
-      const normalized = normalizer(setting);
-      if (normalized) next.pages[key] = normalized;
-    }
-    for (const [key, setting] of Object.entries(isRecord(source.sites) ? source.sites : {})) {
-      const normalized = normalizer(setting);
-      if (normalized) next.sites[key] = normalized;
-    }
-    return next;
+  function normalizeScopedSettings(value, scopedSchema) {
+    return parse(scopedSchema, isRecord(value) ? value : {});
   }
   function normalizeSettings(value) {
-    const next = emptySettings();
     const source = isRecord(value) ? value : {};
     const refreshSource = isRecord(source.refresh) ? source.refresh : { pages: source.pages, sites: source.sites };
-    const unlockerSource = isRecord(source.unlocker) ? source.unlocker : {};
-    next.refresh = normalizeScopedSettings(refreshSource, normalizeRefreshSetting);
-    next.unlocker = normalizeScopedSettings(unlockerSource, normalizeUnlockerSetting);
-    return next;
+    return {
+      ...emptySettings(),
+      refresh: normalizeScopedSettings(refreshSource, RefreshScopedSchema),
+      unlocker: normalizeScopedSettings(source.unlocker, UnlockerScopedSchema)
+    };
   }
   function hasUnlockerAction(setting) {
     return Boolean(
@@ -144,7 +423,7 @@
     );
   }
   function resolveActiveRefreshSetting(sourceSettings, keys) {
-    const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, normalizeRefreshSetting);
+    const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, RefreshScopedSchema);
     const pageSetting = normalizeRefreshSetting(refreshSettings.pages[keys.pageKey]);
     if (pageSetting) return { scope: "page", key: keys.pageKey, setting: pageSetting };
     const siteSetting = normalizeRefreshSetting(refreshSettings.sites[keys.siteKey]);
@@ -152,7 +431,7 @@
     return null;
   }
   function resolveActiveUnlockerSetting(sourceSettings, keys) {
-    const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, normalizeUnlockerSetting);
+    const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, UnlockerScopedSchema);
     const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[keys.pageKey]);
     if (hasUnlockerAction(pageSetting)) return { scope: "page", key: keys.pageKey, setting: pageSetting };
     const siteSetting = normalizeUnlockerSetting(unlockerSettings.sites[keys.siteKey]);
@@ -363,9 +642,9 @@
       },
       // Applies one change to the latest stored settings instead of a copy held
       // since page load, so saves from other tabs are kept.
-      async updateSettings(transform) {
+      async updateSettings(transform2) {
         const latest = await readSettingsWithSource();
-        const next = transform(latest.settings);
+        const next = transform2(latest.settings);
         return writeSettingsTo(next, { primary: latest.source !== "fallback-after-primary-failure" });
       },
       // Calls onChange when another tab changes the settings. Returns an
@@ -1207,10 +1486,25 @@
     style.textContent = `      #${rootId} .part-backdrop {
       position: fixed;
 	        inset: 0;
-	        display: grid;
+	        width: auto;
+	        height: auto;
+	        max-width: none;
+	        max-height: none;
+	        margin: 0;
+	        border: 0;
+	        color: inherit;
+	        overflow: visible;
 	        place-items: center;
 	        padding: 18px;
 	        background: oklch(28% 0.025 242 / 0.42);
+	      }
+
+	      #${rootId} .part-backdrop[open] {
+	        display: grid;
+	      }
+
+	      #${rootId} .part-backdrop::backdrop {
+	        background: transparent;
 	      }
 
 	      #${rootId} .part-dialog {
@@ -1696,14 +1990,12 @@
   function createDialogElement({ documentObject, model }) {
     if (!documentObject) throw new Error(`${LIB_NAME3}: documentObject is required.`);
     if (!model) throw new Error(`${LIB_NAME3}: dialog model is required.`);
-    const dialog = documentObject.createElement("div");
+    const dialog = documentObject.createElement("dialog");
     dialog.className = "part-backdrop";
+    dialog.setAttribute("aria-labelledby", "part-dialog-title");
     dialog.dataset.partAction = "close-dialog";
     const panel = documentObject.createElement("section");
     panel.className = "part-dialog";
-    panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-modal", "true");
-    panel.setAttribute("aria-labelledby", "part-dialog-title");
     panel.dataset.partDialogPanel = "true";
     panel.innerHTML = `
     <div class="part-dialog-header">
@@ -3701,7 +3993,6 @@ ${root} :focus-visible {
   var PANEL_WIDTH = 248;
   var PANEL_MIN_WIDTH = 52;
   var PANEL_SAFE_MARGIN2 = 12;
-  var FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
   var PRESETS = [
     { label: "30 秒", ms: 30 * 1e3 },
     { label: "1 分钟", ms: 60 * 1e3 },
@@ -3792,8 +4083,6 @@ ${root} :focus-visible {
     let editRevision = 0;
     let dialogReturnFocus = null;
     let themeCleanup = null;
-    let inertObserver = null;
-    let inertOwnership = /* @__PURE__ */ new Map();
     let initializationError = null;
     let disposed = false;
     let openPromise = null;
@@ -3994,39 +4283,6 @@ ${root} :focus-visible {
       if (panel && preserved.scrollTop) panel.scrollTop = preserved.scrollTop;
       if (preserved.focusSelector) dialog.querySelector(preserved.focusSelector)?.focus?.();
     }
-    function processInertMutations(records) {
-      for (const record of records) {
-        const ownership = inertOwnership.get(record.target);
-        if (ownership) ownership.changed = true;
-      }
-    }
-    function applyBackgroundInert() {
-      if (inertObserver || inertOwnership.size) return;
-      const owned = [];
-      for (const child of Array.from(documentObject.body?.children || [])) {
-        if (child === root || child.hasAttribute("inert")) continue;
-        child.setAttribute("inert", "");
-        inertOwnership.set(child, { changed: false });
-        owned.push(child);
-      }
-      const Observer = windowObject.MutationObserver;
-      if (!Observer || !owned.length) return;
-      inertObserver = new Observer(processInertMutations);
-      for (const element of owned) {
-        inertObserver.observe(element, { attributes: true, attributeFilter: ["inert"], attributeOldValue: true });
-      }
-    }
-    function releaseBackgroundInert() {
-      if (inertObserver) {
-        processInertMutations(inertObserver.takeRecords());
-        inertObserver.disconnect();
-        inertObserver = null;
-      }
-      for (const [element, ownership] of inertOwnership) {
-        if (!ownership.changed && element.getAttribute("inert") === "") element.removeAttribute("inert");
-      }
-      inertOwnership = /* @__PURE__ */ new Map();
-    }
     function setMessage(text, tone = "info") {
       const messageNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.message));
       if (!messageNode) return;
@@ -4046,7 +4302,6 @@ ${root} :focus-visible {
       if (!dialog) {
         const active = documentObject.activeElement;
         dialogReturnFocus = active && root.contains(active) ? active : widgetButton || null;
-        applyBackgroundInert();
       } else {
         dialog.remove();
         dialog = null;
@@ -4056,8 +4311,9 @@ ${root} :focus-visible {
       dialog = createDialogElement({ documentObject, model });
       dialogGeneration += 1;
       editRevision = 0;
-      dialog.addEventListener("keydown", handleDialogKeydown);
+      dialog.addEventListener("cancel", handleDialogCancel);
       root.append(dialog);
+      dialog.showModal?.();
       dialogContract.applyModel(dialog, model, PRESETS);
       restoreDialogState(preserved);
       setMessage(initializationError || model.message, initializationError ? "error" : tone);
@@ -4066,38 +4322,17 @@ ${root} :focus-visible {
     function closeDialog({ restoreFocus = true } = {}) {
       if (!dialog) return;
       dialogGeneration += 1;
-      dialog.remove();
+      const closing = dialog;
       dialog = null;
-      releaseBackgroundInert();
+      if (closing.open) closing.close?.();
+      closing.remove();
       const returnTarget = dialogReturnFocus;
       dialogReturnFocus = null;
       if (restoreFocus && returnTarget?.isConnected !== false) returnTarget?.focus?.();
     }
-    function handleDialogKeydown(event) {
-      if (!dialog) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        closeDialog();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const panel = dialog.querySelector(".part-dialog");
-      if (!panel) return;
-      const focusables = [...panel.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
-        (element) => !element.disabled && !element.closest("[hidden]")
-      );
-      if (!focusables.length) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const active = documentObject.activeElement;
-      if (event.shiftKey && (active === first || !panel.contains(active))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
-        event.preventDefault();
-        first.focus();
-      }
+    function handleDialogCancel(event) {
+      event.preventDefault();
+      closeDialog();
     }
     function updateDialogStatus() {
       if (!dialog) return;

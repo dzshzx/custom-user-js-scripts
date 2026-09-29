@@ -231,15 +231,13 @@ function createDialogElement({ documentObject, model }) {
   if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
   if (!model) throw new Error(`${LIB_NAME}: dialog model is required.`);
 
-  const dialog = documentObject.createElement('div');
+  const dialog = documentObject.createElement('dialog');
   dialog.className = 'part-backdrop';
+  dialog.setAttribute('aria-labelledby', 'part-dialog-title');
   dialog.dataset.partAction = 'close-dialog';
 
   const panel = documentObject.createElement('section');
   panel.className = 'part-dialog';
-  panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-modal', 'true');
-  panel.setAttribute('aria-labelledby', 'part-dialog-title');
   panel.dataset.partDialogPanel = 'true';
 
   panel.innerHTML = `

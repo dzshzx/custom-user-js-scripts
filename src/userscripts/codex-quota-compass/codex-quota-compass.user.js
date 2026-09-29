@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.9
+// @version      0.5.10
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -493,15 +493,15 @@
   // node_modules/@date-fns/utc/date/index.js
   var UTCDate = class extends UTCDateMini {
     toString() {
-      const date = this.toDateString();
+      const date2 = this.toDateString();
       const time = this.toTimeString();
-      return `${date} ${time}`;
+      return `${date2} ${time}`;
     }
     toDateString() {
       const weekday = weekdayFormat.format(this);
-      const date = dateFormat.format(this);
+      const date2 = dateFormat.format(this);
       const year = this.getFullYear();
-      return `${weekday} ${date} ${year}`;
+      return `${weekday} ${date2} ${year}`;
     }
     toTimeString() {
       const time = timeFormat.format(this);
@@ -556,11 +556,11 @@
   var constructFromSymbol = /* @__PURE__ */ Symbol.for("constructDateFrom");
 
   // node_modules/date-fns/constructFrom.js
-  function constructFrom(date, value) {
-    if (typeof date === "function") return date(value);
-    if (date && typeof date === "object" && constructFromSymbol in date)
-      return date[constructFromSymbol](value);
-    if (date instanceof Date) return new date.constructor(value);
+  function constructFrom(date2, value) {
+    if (typeof date2 === "function") return date2(value);
+    if (date2 && typeof date2 === "object" && constructFromSymbol in date2)
+      return date2[constructFromSymbol](value);
+    if (date2 instanceof Date) return new date2.constructor(value);
     return new Date(value);
   }
 
@@ -570,9 +570,9 @@
   }
 
   // node_modules/date-fns/addDays.js
-  function addDays(date, amount, options) {
-    const _date = toDate(date, options?.in);
-    if (isNaN(amount)) return constructFrom(options?.in || date, NaN);
+  function addDays(date2, amount, options) {
+    const _date = toDate(date2, options?.in);
+    if (isNaN(amount)) return constructFrom(options?.in || date2, NaN);
     if (!amount) return _date;
     _date.setDate(_date.getDate() + amount);
     return _date;
@@ -584,8 +584,8 @@
   }
 
   // node_modules/date-fns/isValid.js
-  function isValid(date) {
-    return !(!isDate(date) && typeof date !== "number" || isNaN(+toDate(date)));
+  function isValid(date2) {
+    return !(!isDate(date2) && typeof date2 !== "number" || isNaN(+toDate(date2)));
   }
 
   // node_modules/date-fns/_lib/addLeadingZeros.js
@@ -598,23 +598,23 @@
   // node_modules/date-fns/_lib/format/lightFormatters.js
   var lightFormatters = {
     // Year
-    y(date, token) {
-      const signedYear = date.getFullYear();
+    y(date2, token) {
+      const signedYear = date2.getFullYear();
       const year = signedYear > 0 ? signedYear : 1 - signedYear;
       return addLeadingZeros(token === "yy" ? year % 100 : year, token.length);
     },
     // Month
-    M(date, token) {
-      const month = date.getMonth();
+    M(date2, token) {
+      const month = date2.getMonth();
       return token === "M" ? String(month + 1) : addLeadingZeros(month + 1, 2);
     },
     // Day of the month
-    d(date, token) {
-      return addLeadingZeros(date.getDate(), token.length);
+    d(date2, token) {
+      return addLeadingZeros(date2.getDate(), token.length);
     },
     // AM or PM
-    a(date, token) {
-      const dayPeriodEnumValue = date.getHours() / 12 >= 1 ? "pm" : "am";
+    a(date2, token) {
+      const dayPeriodEnumValue = date2.getHours() / 12 >= 1 ? "pm" : "am";
       switch (token) {
         case "a":
         case "aa":
@@ -629,25 +629,25 @@
       }
     },
     // Hour [1-12]
-    h(date, token) {
-      return addLeadingZeros(date.getHours() % 12 || 12, token.length);
+    h(date2, token) {
+      return addLeadingZeros(date2.getHours() % 12 || 12, token.length);
     },
     // Hour [0-23]
-    H(date, token) {
-      return addLeadingZeros(date.getHours(), token.length);
+    H(date2, token) {
+      return addLeadingZeros(date2.getHours(), token.length);
     },
     // Minute
-    m(date, token) {
-      return addLeadingZeros(date.getMinutes(), token.length);
+    m(date2, token) {
+      return addLeadingZeros(date2.getMinutes(), token.length);
     },
     // Second
-    s(date, token) {
-      return addLeadingZeros(date.getSeconds(), token.length);
+    s(date2, token) {
+      return addLeadingZeros(date2.getSeconds(), token.length);
     },
     // Fraction of second
-    S(date, token) {
+    S(date2, token) {
       const numberOfDigits = token.length;
-      const milliseconds = date.getMilliseconds();
+      const milliseconds = date2.getMilliseconds();
       const fractionalSeconds = Math.trunc(
         milliseconds * Math.pow(10, numberOfDigits - 3)
       );
@@ -660,8 +660,8 @@
   var escapedStringRegExp = /^'([^]*?)'?$/;
   var doubleQuoteRegExp = /''/g;
   var unescapedLatinCharacterRegExp = /[a-zA-Z]/;
-  function lightFormat(date, formatStr) {
-    const date_ = toDate(date);
+  function lightFormat(date2, formatStr) {
+    const date_ = toDate(date2);
     if (!isValid(date_)) {
       throw new RangeError("Invalid time value");
     }
@@ -1766,6 +1766,577 @@ ${text.slice(0, 800)}`);
     }
   }
 
+  // node_modules/valibot/dist/index.mjs
+  var store$4;
+  var DEFAULT_CONFIG = {
+    lang: void 0,
+    message: void 0,
+    abortEarly: void 0,
+    abortPipeEarly: void 0
+  };
+  // @__NO_SIDE_EFFECTS__
+  function getGlobalConfig(config$1) {
+    if (!config$1 && !store$4) return DEFAULT_CONFIG;
+    return {
+      lang: config$1?.lang ?? store$4?.lang,
+      message: config$1?.message,
+      abortEarly: config$1?.abortEarly ?? store$4?.abortEarly,
+      abortPipeEarly: config$1?.abortPipeEarly ?? store$4?.abortPipeEarly
+    };
+  }
+  var store$3;
+  // @__NO_SIDE_EFFECTS__
+  function getGlobalMessage(lang) {
+    return store$3?.get(lang);
+  }
+  var store$2;
+  // @__NO_SIDE_EFFECTS__
+  function getSchemaMessage(lang) {
+    return store$2?.get(lang);
+  }
+  var store$1;
+  // @__NO_SIDE_EFFECTS__
+  function getSpecificMessage(reference, lang) {
+    return store$1?.get(reference)?.get(lang);
+  }
+  // @__NO_SIDE_EFFECTS__
+  function _stringify(input) {
+    const type = typeof input;
+    if (type === "string") return `"${input}"`;
+    if (type === "number" || type === "bigint" || type === "boolean") return `${input}`;
+    if (type === "object" || type === "function") return (input && Object.getPrototypeOf(input)?.constructor?.name) ?? "null";
+    return type;
+  }
+  function _addIssue(context, label, dataset, config$1, other) {
+    const input = other && "input" in other ? other.input : dataset.value;
+    const expected = other?.expected ?? context.expects ?? null;
+    const received = other?.received ?? /* @__PURE__ */ _stringify(input);
+    const issue = {
+      kind: context.kind,
+      type: context.type,
+      input,
+      expected,
+      received,
+      message: `Invalid ${label}: ${expected ? `Expected ${expected} but r` : "R"}eceived ${received}`,
+      requirement: context.requirement,
+      path: other?.path,
+      issues: other?.issues,
+      lang: config$1.lang,
+      abortEarly: config$1.abortEarly,
+      abortPipeEarly: config$1.abortPipeEarly
+    };
+    const isSchema = context.kind === "schema";
+    const message$1 = other?.message ?? context.message ?? /* @__PURE__ */ getSpecificMessage(context.reference, issue.lang) ?? (isSchema ? /* @__PURE__ */ getSchemaMessage(issue.lang) : null) ?? config$1.message ?? /* @__PURE__ */ getGlobalMessage(issue.lang);
+    if (message$1 !== void 0) issue.message = typeof message$1 === "function" ? message$1(issue) : message$1;
+    if (isSchema) dataset.typed = false;
+    if (dataset.issues) dataset.issues.push(issue);
+    else dataset.issues = [issue];
+  }
+  // @__NO_SIDE_EFFECTS__
+  function _isSameValueZero(value1, value2) {
+    return value1 === value2 || Number.isNaN(value1) && Number.isNaN(value2);
+  }
+  // @__NO_SIDE_EFFECTS__
+  function _isValidObjectKey(object$1, key) {
+    return Object.prototype.hasOwnProperty.call(object$1, key) && key !== "__proto__" && key !== "prototype" && key !== "constructor";
+  }
+  // @__NO_SIDE_EFFECTS__
+  function _joinExpects(values$1, separator) {
+    const list = [...new Set(values$1)];
+    if (list.length > 1) return `(${list.join(` ${separator} `)})`;
+    return list[0] ?? "never";
+  }
+  function _standardSchema(schema) {
+    schema["~standard"] = {
+      version: 1,
+      vendor: "valibot",
+      validate: (value$1) => schema["~run"]({ value: value$1 }, /* @__PURE__ */ getGlobalConfig())
+    };
+    return schema;
+  }
+  var ValiError = class extends Error {
+    /**
+    * Creates a Valibot error with useful information.
+    *
+    * @param issues The error issues.
+    */
+    constructor(issues) {
+      super(issues[0].message);
+      this.name = "ValiError";
+      this.issues = issues;
+    }
+  };
+  // @__NO_SIDE_EFFECTS__
+  function check(requirement, message$1) {
+    return {
+      kind: "validation",
+      type: "check",
+      reference: check,
+      async: false,
+      expects: null,
+      requirement,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (dataset.typed && !this.requirement(dataset.value)) _addIssue(this, "input", dataset, config$1);
+        return dataset;
+      }
+    };
+  }
+  // @__NO_SIDE_EFFECTS__
+  function transform(operation) {
+    return {
+      kind: "transformation",
+      type: "transform",
+      reference: transform,
+      async: false,
+      operation,
+      "~run"(dataset) {
+        dataset.value = this.operation(dataset.value);
+        return dataset;
+      }
+    };
+  }
+  var ABORT_EARLY_CONFIG = { abortEarly: true };
+  // @__NO_SIDE_EFFECTS__
+  function getFallback(schema, dataset, config$1) {
+    return typeof schema.fallback === "function" ? schema.fallback(dataset, config$1) : schema.fallback;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function fallback(schema, fallback$1) {
+    return _standardSchema({
+      ...schema,
+      fallback: fallback$1,
+      "~run"(dataset, config$1) {
+        const outputDataset = schema["~run"](dataset, config$1);
+        return outputDataset.issues ? {
+          typed: true,
+          value: /* @__PURE__ */ getFallback(this, outputDataset, config$1)
+        } : outputDataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function getDefault(schema, dataset, config$1) {
+    return typeof schema.default === "function" ? schema.default(dataset, config$1) : schema.default;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function is(schema, input) {
+    return !schema["~run"]({ value: input }, ABORT_EARLY_CONFIG).issues;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function array(item, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "array",
+      reference: array,
+      expects: "Array",
+      async: false,
+      item,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        const input = dataset.value;
+        if (Array.isArray(input)) {
+          dataset.typed = true;
+          dataset.value = [];
+          for (let key = 0; key < input.length; key++) {
+            const value$1 = input[key];
+            const itemDataset = this.item["~run"]({ value: value$1 }, config$1);
+            if (itemDataset.issues) {
+              const pathItem = {
+                type: "array",
+                origin: "value",
+                input,
+                key,
+                value: value$1
+              };
+              for (const issue of itemDataset.issues) {
+                if (issue.path) issue.path.unshift(pathItem);
+                else issue.path = [pathItem];
+                dataset.issues?.push(issue);
+              }
+              if (!dataset.issues) dataset.issues = itemDataset.issues;
+              if (config$1.abortEarly) {
+                dataset.typed = false;
+                break;
+              }
+            }
+            if (!itemDataset.typed) dataset.typed = false;
+            dataset.value.push(itemDataset.value);
+          }
+        } else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function boolean(message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "boolean",
+      reference: boolean,
+      expects: "boolean",
+      async: false,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (typeof dataset.value === "boolean") dataset.typed = true;
+        else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function custom(check$1, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "custom",
+      reference: custom,
+      expects: "unknown",
+      async: false,
+      check: check$1,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (this.check(dataset.value)) dataset.typed = true;
+        else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function date(message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "date",
+      reference: date,
+      expects: "Date",
+      async: false,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (dataset.value instanceof Date) if (!isNaN(dataset.value)) dataset.typed = true;
+        else _addIssue(this, "type", dataset, config$1, { received: '"Invalid Date"' });
+        else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function lazy(getter) {
+    return _standardSchema({
+      kind: "schema",
+      type: "lazy",
+      reference: lazy,
+      expects: "unknown",
+      async: false,
+      getter,
+      "~run"(dataset, config$1) {
+        return this.getter(dataset.value)["~run"](dataset, config$1);
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function literal(literal_, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "literal",
+      reference: literal,
+      expects: /* @__PURE__ */ _stringify(literal_),
+      async: false,
+      literal: literal_,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (/* @__PURE__ */ _isSameValueZero(dataset.value, this.literal)) dataset.typed = true;
+        else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function null_(message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "null",
+      reference: null_,
+      expects: "null",
+      async: false,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (dataset.value === null) dataset.typed = true;
+        else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function object(entries$1, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "object",
+      reference: object,
+      expects: "Object",
+      async: false,
+      entries: entries$1,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        const input = dataset.value;
+        if (input && typeof input === "object") {
+          dataset.typed = true;
+          dataset.value = {};
+          for (const key in this.entries) {
+            const valueSchema = this.entries[key];
+            if (key in input || (valueSchema.type === "exact_optional" || valueSchema.type === "optional" || valueSchema.type === "nullish") && valueSchema.default !== void 0) {
+              const value$1 = key in input ? input[key] : /* @__PURE__ */ getDefault(valueSchema);
+              const valueDataset = valueSchema["~run"]({ value: value$1 }, config$1);
+              if (valueDataset.issues) {
+                const pathItem = {
+                  type: "object",
+                  origin: "value",
+                  input,
+                  key,
+                  value: value$1
+                };
+                for (const issue of valueDataset.issues) {
+                  if (issue.path) issue.path.unshift(pathItem);
+                  else issue.path = [pathItem];
+                  dataset.issues?.push(issue);
+                }
+                if (!dataset.issues) dataset.issues = valueDataset.issues;
+                if (config$1.abortEarly) {
+                  dataset.typed = false;
+                  break;
+                }
+              }
+              if (!valueDataset.typed) dataset.typed = false;
+              dataset.value[key] = valueDataset.value;
+            } else if (valueSchema.fallback !== void 0) dataset.value[key] = /* @__PURE__ */ getFallback(valueSchema);
+            else if (valueSchema.type !== "exact_optional" && valueSchema.type !== "optional" && valueSchema.type !== "nullish") {
+              _addIssue(this, "key", dataset, config$1, {
+                input: void 0,
+                expected: `"${key}"`,
+                path: [{
+                  type: "object",
+                  origin: "key",
+                  input,
+                  key,
+                  value: input[key]
+                }]
+              });
+              if (config$1.abortEarly) break;
+            }
+          }
+        } else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function optional(wrapped, default_) {
+    return _standardSchema({
+      kind: "schema",
+      type: "optional",
+      reference: optional,
+      expects: `(${wrapped.expects} | undefined)`,
+      async: false,
+      wrapped,
+      default: default_,
+      "~run"(dataset, config$1) {
+        if (dataset.value === void 0) {
+          if (this.default !== void 0) dataset.value = /* @__PURE__ */ getDefault(this, dataset, config$1);
+          if (dataset.value === void 0) {
+            dataset.typed = true;
+            return dataset;
+          }
+        }
+        return this.wrapped["~run"](dataset, config$1);
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function picklist(options, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "picklist",
+      reference: picklist,
+      expects: /* @__PURE__ */ _joinExpects(options.map(_stringify), "|"),
+      async: false,
+      options,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (this.options.includes(dataset.value)) dataset.typed = true;
+        else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function record(key, value$1, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "record",
+      reference: record,
+      expects: "Object",
+      async: false,
+      key,
+      value: value$1,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        const input = dataset.value;
+        if (input && typeof input === "object") {
+          dataset.typed = true;
+          dataset.value = {};
+          for (const entryKey in input) if (/* @__PURE__ */ _isValidObjectKey(input, entryKey)) {
+            const entryValue = input[entryKey];
+            const keyDataset = this.key["~run"]({ value: entryKey }, config$1);
+            if (keyDataset.issues) {
+              const pathItem = {
+                type: "object",
+                origin: "key",
+                input,
+                key: entryKey,
+                value: entryValue
+              };
+              for (const issue of keyDataset.issues) {
+                issue.path = [pathItem];
+                dataset.issues?.push(issue);
+              }
+              if (!dataset.issues) dataset.issues = keyDataset.issues;
+              if (config$1.abortEarly) {
+                dataset.typed = false;
+                break;
+              }
+            }
+            const valueDataset = this.value["~run"]({ value: entryValue }, config$1);
+            if (valueDataset.issues) {
+              const pathItem = {
+                type: "object",
+                origin: "value",
+                input,
+                key: entryKey,
+                value: entryValue
+              };
+              for (const issue of valueDataset.issues) {
+                if (issue.path) issue.path.unshift(pathItem);
+                else issue.path = [pathItem];
+                dataset.issues?.push(issue);
+              }
+              if (!dataset.issues) dataset.issues = valueDataset.issues;
+              if (config$1.abortEarly) {
+                dataset.typed = false;
+                break;
+              }
+            }
+            if (!keyDataset.typed || !valueDataset.typed) dataset.typed = false;
+            if (keyDataset.typed) dataset.value[keyDataset.value] = valueDataset.value;
+          }
+        } else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function string(message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "string",
+      reference: string,
+      expects: "string",
+      async: false,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        if (typeof dataset.value === "string") dataset.typed = true;
+        else _addIssue(this, "type", dataset, config$1);
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function _subIssues(datasets) {
+    let issues;
+    if (datasets) for (const dataset of datasets) if (issues) for (const issue of dataset.issues) issues.push(issue);
+    else issues = dataset.issues;
+    return issues;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function union(options, message$1) {
+    return _standardSchema({
+      kind: "schema",
+      type: "union",
+      reference: union,
+      expects: /* @__PURE__ */ _joinExpects(options.map((option) => option.expects), "|"),
+      async: false,
+      options,
+      message: message$1,
+      "~run"(dataset, config$1) {
+        let validDataset;
+        let typedDatasets;
+        let untypedDatasets;
+        for (const schema of this.options) {
+          const optionDataset = schema["~run"]({ value: dataset.value }, config$1);
+          if (optionDataset.typed) if (optionDataset.issues) if (typedDatasets) typedDatasets.push(optionDataset);
+          else typedDatasets = [optionDataset];
+          else {
+            validDataset = optionDataset;
+            break;
+          }
+          else if (untypedDatasets) untypedDatasets.push(optionDataset);
+          else untypedDatasets = [optionDataset];
+        }
+        if (validDataset) return validDataset;
+        if (typedDatasets) {
+          if (typedDatasets.length === 1) return typedDatasets[0];
+          _addIssue(this, "type", dataset, config$1, { issues: /* @__PURE__ */ _subIssues(typedDatasets) });
+          dataset.typed = true;
+        } else if (untypedDatasets?.length === 1) return untypedDatasets[0];
+        else _addIssue(this, "type", dataset, config$1, { issues: /* @__PURE__ */ _subIssues(untypedDatasets) });
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function unknown() {
+    return _standardSchema({
+      kind: "schema",
+      type: "unknown",
+      reference: unknown,
+      expects: "unknown",
+      async: false,
+      "~run"(dataset) {
+        dataset.typed = true;
+        return dataset;
+      }
+    });
+  }
+  function parse(schema, input, config$1) {
+    const dataset = schema["~run"]({ value: input }, /* @__PURE__ */ getGlobalConfig(config$1));
+    if (dataset.issues) throw new ValiError(dataset.issues);
+    return dataset.value;
+  }
+  // @__NO_SIDE_EFFECTS__
+  function pipe(...pipe$1) {
+    return _standardSchema({
+      ...pipe$1[0],
+      pipe: pipe$1,
+      "~run"(dataset, config$1) {
+        for (const item of pipe$1) if (item.kind !== "metadata") {
+          if (dataset.issues && (item.kind === "schema" || item.kind === "transformation")) {
+            dataset.typed = false;
+            break;
+          }
+          if (!dataset.issues || !config$1.abortEarly && !config$1.abortPipeEarly) dataset = item["~run"](dataset, config$1);
+        }
+        return dataset;
+      }
+    });
+  }
+  // @__NO_SIDE_EFFECTS__
+  function safeParse(schema, input, config$1) {
+    const dataset = schema["~run"]({ value: input }, /* @__PURE__ */ getGlobalConfig(config$1));
+    return {
+      typed: dataset.typed,
+      success: !dataset.issues,
+      output: dataset.value,
+      issues: dataset.issues
+    };
+  }
+
   // src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.js
   var DAY_MS = 24 * 60 * 60 * 1e3;
   var SETTLE_BUFFER_MS = 15 * 60 * 1e3;
@@ -1795,10 +2366,10 @@ ${text.slice(0, 800)}`);
     if (!Number.isFinite(end) || !Number.isFinite(nowMs)) return false;
     return nowMs >= end + buffer;
   }
-  function makeRecord(date, credits, usdPerCredit, settled, settledAt) {
+  function makeRecord(date2, credits, usdPerCredit, settled, settledAt) {
     const creditsNum = toNumber2(credits);
     return {
-      date,
+      date: date2,
       credits: creditsNum,
       usd: round2(creditsNum * usdPerCredit),
       settled: Boolean(settled),
@@ -1807,22 +2378,22 @@ ${text.slice(0, 800)}`);
   }
   function upsertLedgerRow(ledger, row, nowMs, options = {}) {
     if (!isPlainObject(ledger) || !isPlainObject(row)) return ledger;
-    const date = isDateKey(row.date) ? row.date : null;
-    if (!date) return ledger;
+    const date2 = isDateKey(row.date) ? row.date : null;
+    if (!date2) return ledger;
     const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit : DEFAULT_USD_PER_CREDIT;
     const buffer = Number.isFinite(options.buffer) ? options.buffer : SETTLE_BUFFER_MS;
     const nowIso = options.nowIso || (Number.isFinite(nowMs) ? new Date(nowMs).toISOString() : null);
     const credits = toNumber2(row.credits);
-    const settledNow = isSettled(date, nowMs, buffer);
-    const existing = ledger[date];
+    const settledNow = isSettled(date2, nowMs, buffer);
+    const existing = ledger[date2];
     if (!existing) {
-      ledger[date] = makeRecord(date, credits, usdPerCredit, settledNow, nowIso);
+      ledger[date2] = makeRecord(date2, credits, usdPerCredit, settledNow, nowIso);
       return ledger;
     }
     const nextCredits = Math.max(toNumber2(existing.credits), credits);
     const settled = existing.settled || settledNow;
     const settledAt = existing.settled ? existing.settledAt : settledNow ? nowIso : null;
-    ledger[date] = makeRecord(date, nextCredits, usdPerCredit, settled, settledAt);
+    ledger[date2] = makeRecord(date2, nextCredits, usdPerCredit, settled, settledAt);
     return ledger;
   }
   function foldDailyRowsIntoLedger(ledger, rows, nowMs, options = {}) {
@@ -1840,9 +2411,9 @@ ${text.slice(0, 800)}`);
       const buckets = details?.[key]?.dailyBuckets;
       if (!Array.isArray(buckets)) continue;
       for (const bucket of buckets) {
-        const date = bucket?.["日期桶"];
-        if (!isDateKey(date)) continue;
-        rows.push({ date, credits: toNumber2(bucket?.Credits ?? bucket?.credits) });
+        const date2 = bucket?.["日期桶"];
+        if (!isDateKey(date2)) continue;
+        rows.push({ date: date2, credits: toNumber2(bucket?.Credits ?? bucket?.credits) });
       }
     }
     return rows;
@@ -1859,15 +2430,15 @@ ${text.slice(0, 800)}`);
     const ledger = {};
     if (!isPlainObject(rawLedger)) return ledger;
     const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit : DEFAULT_USD_PER_CREDIT;
-    for (const [date, record] of Object.entries(rawLedger)) {
-      if (!isDateKey(date) || !isPlainObject(record)) continue;
-      const settled = Boolean(record.settled);
-      ledger[date] = {
-        date,
-        credits: toNumber2(record.credits),
-        usd: Number.isFinite(Number(record.usd)) ? round2(Number(record.usd)) : round2(toNumber2(record.credits) * usdPerCredit),
+    for (const [date2, record2] of Object.entries(rawLedger)) {
+      if (!isDateKey(date2) || !isPlainObject(record2)) continue;
+      const settled = Boolean(record2.settled);
+      ledger[date2] = {
+        date: date2,
+        credits: toNumber2(record2.credits),
+        usd: Number.isFinite(Number(record2.usd)) ? round2(Number(record2.usd)) : round2(toNumber2(record2.credits) * usdPerCredit),
         settled,
-        settledAt: settled ? typeof record.settledAt === "string" ? record.settledAt : null : null
+        settledAt: settled ? typeof record2.settledAt === "string" ? record2.settledAt : null : null
       };
     }
     return ledger;
@@ -1876,20 +2447,20 @@ ${text.slice(0, 800)}`);
     const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit : DEFAULT_USD_PER_CREDIT;
     const out = normalizeLedger(left, { usdPerCredit });
     const other = normalizeLedger(right, { usdPerCredit });
-    for (const [date, record] of Object.entries(other)) {
-      const existing = out[date];
+    for (const [date2, record2] of Object.entries(other)) {
+      const existing = out[date2];
       if (!existing) {
-        out[date] = record;
+        out[date2] = record2;
         continue;
       }
-      const credits = Math.max(existing.credits, record.credits);
-      const settled = existing.settled || record.settled;
+      const credits = Math.max(existing.credits, record2.credits);
+      const settled = existing.settled || record2.settled;
       let settledAt = null;
       if (settled) {
-        const candidates = [existing.settledAt, record.settledAt].filter(Boolean).sort();
+        const candidates = [existing.settledAt, record2.settledAt].filter(Boolean).sort();
         settledAt = candidates[0] || null;
       }
-      out[date] = makeRecord(date, credits, usdPerCredit, settled, settledAt);
+      out[date2] = makeRecord(date2, credits, usdPerCredit, settled, settledAt);
     }
     return out;
   }
@@ -1898,9 +2469,9 @@ ${text.slice(0, 800)}`);
   }
   function sumRecords(records) {
     return records.reduce(
-      (acc, record) => {
-        acc.totalCredits += toNumber2(record.credits);
-        acc.totalUsd += toNumber2(record.usd);
+      (acc, record2) => {
+        acc.totalCredits += toNumber2(record2.credits);
+        acc.totalUsd += toNumber2(record2.usd);
         return acc;
       },
       { totalCredits: 0, totalUsd: 0 }
@@ -1931,9 +2502,9 @@ ${text.slice(0, 800)}`);
     return { month, from: `${month}-01`, to };
   }
   function sumRangeRaw(ledger, { from, to } = {}) {
-    const records = Object.values(normalizeLedger(ledger)).filter((record) => {
-      if (from && record.date < from) return false;
-      if (to && record.date > to) return false;
+    const records = Object.values(normalizeLedger(ledger)).filter((record2) => {
+      if (from && record2.date < from) return false;
+      if (to && record2.date > to) return false;
       return true;
     });
     return sumRecords(records);
@@ -2001,19 +2572,19 @@ ${text.slice(0, 800)}`);
   function splitSettled(records, nowMs, buffer = SETTLE_BUFFER_MS) {
     const settled = [];
     let inProgress = null;
-    for (const record of records) {
-      if (record.settled || isSettled(record.date, nowMs, buffer)) {
-        settled.push({ ...record, settled: true });
-      } else if (!inProgress || record.date > inProgress.date) {
-        inProgress = { ...record, settled: false };
+    for (const record2 of records) {
+      if (record2.settled || isSettled(record2.date, nowMs, buffer)) {
+        settled.push({ ...record2, settled: true });
+      } else if (!inProgress || record2.date > inProgress.date) {
+        inProgress = { ...record2, settled: false };
       }
     }
     return { settled, inProgress };
   }
   function aggregateRange(ledger, { from, to, nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
-    const inRange = sortedRecordsDesc(ledger).filter((record) => {
-      if (from && record.date < from) return false;
-      if (to && record.date > to) return false;
+    const inRange = sortedRecordsDesc(ledger).filter((record2) => {
+      if (from && record2.date < from) return false;
+      if (to && record2.date > to) return false;
       return true;
     });
     const { settled, inProgress } = splitSettled(inRange, nowMs, buffer);
@@ -2043,51 +2614,88 @@ ${text.slice(0, 800)}`);
   function isPlainObject2(value) {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
   }
+  var JsonValueSchema = lazy(
+    () => union([
+      pipe(
+        date(),
+        transform((date2) => date2.toISOString())
+      ),
+      array(JsonValueSchema),
+      record(string(), JsonValueSchema),
+      pipe(
+        custom((value) => typeof value === "number"),
+        transform((value) => Number.isFinite(value) ? value : null)
+      ),
+      string(),
+      boolean(),
+      null_(),
+      pipe(
+        unknown(),
+        transform((value) => value == null ? null : String(value))
+      )
+    ])
+  );
   function sanitizeValue(value) {
-    if (Array.isArray(value)) {
-      return value.map(sanitizeValue);
-    }
-    if (isPlainObject2(value)) {
-      return Object.fromEntries(Object.entries(value).map(([key, nestedValue]) => [key, sanitizeValue(nestedValue)]));
-    }
-    if (value instanceof Date) return value.toISOString();
-    if (typeof value === "number") return Number.isFinite(value) ? value : null;
-    if (typeof value === "string" || typeof value === "boolean" || value === null) {
-      return value;
-    }
-    return value == null ? null : String(value);
+    return parse(JsonValueSchema, value);
   }
   function sortSnapshotsByCaptureTime(snapshots) {
     return snapshots.slice().sort((left, right) => String(left.capturedAt || "").localeCompare(String(right.capturedAt || "")));
   }
-  function normalizeDailyRows(rows) {
-    return Array.isArray(rows) ? rows.map((row) => sanitizeValue(row)) : [];
-  }
+  var coerce = (transform2) => pipe(
+    optional(unknown(), () => void 0),
+    transform(transform2)
+  );
+  var plainObjectValue = coerce((value) => sanitizeValue(isPlainObject2(value) ? value : {}));
+  var nullableString = fallback(string(), null);
+  var SnapshotSchema = pipe(
+    custom(isPlainObject2),
+    object({
+      snapshotId: coerce((value) => typeof value === "string" && value.trim() ? value.trim() : null),
+      capturedAt: pipe(
+        string(),
+        check((value) => value.trim() !== "")
+      ),
+      scriptVersion: fallback(string(), ""),
+      sourceContext: plainObjectValue,
+      windowSnapshot: fallback(array(JsonValueSchema), []),
+      periodSummaries: plainObjectValue,
+      periodDetails: plainObjectValue
+    })
+  );
+  var SnapshotArchiveSchema = object({
+    createdAt: nullableString,
+    updatedAt: nullableString,
+    ledger: coerce((ledger) => normalizeLedger(ledger)),
+    snapshots: coerce((snapshots) => Array.isArray(snapshots) ? snapshots.map(normalizeSnapshot).filter(Boolean) : [])
+  });
+  var SupportedExportDocumentSchema = object({
+    format: literal(EXPORT_FORMAT),
+    version: picklist([...SUPPORTED_EXPORT_VERSIONS])
+  });
   function normalizeSnapshot(input) {
-    if (!isPlainObject2(input)) return null;
-    const snapshotId = typeof input.snapshotId === "string" && input.snapshotId.trim() ? input.snapshotId.trim() : null;
-    const capturedAt = typeof input.capturedAt === "string" && input.capturedAt.trim() ? input.capturedAt : null;
-    if (!capturedAt) return null;
+    const result = safeParse(SnapshotSchema, input);
+    if (!result.success) return null;
+    const snapshot = result.output;
     return {
-      snapshotId,
-      capturedAt,
-      scriptVersion: typeof input.scriptVersion === "string" ? input.scriptVersion : "",
+      snapshotId: snapshot.snapshotId,
+      capturedAt: snapshot.capturedAt,
+      scriptVersion: snapshot.scriptVersion,
       storageSchemaVersion: ARCHIVE_SCHEMA_VERSION,
-      sourceContext: sanitizeValue(isPlainObject2(input.sourceContext) ? input.sourceContext : {}),
-      windowSnapshot: normalizeDailyRows(input.windowSnapshot),
-      periodSummaries: sanitizeValue(isPlainObject2(input.periodSummaries) ? input.periodSummaries : {}),
-      periodDetails: sanitizeValue(isPlainObject2(input.periodDetails) ? input.periodDetails : {})
+      sourceContext: snapshot.sourceContext,
+      windowSnapshot: snapshot.windowSnapshot,
+      periodSummaries: snapshot.periodSummaries,
+      periodDetails: snapshot.periodDetails
     };
   }
   function normalizeSnapshotArchive(rawArchive) {
     const archiveObject = Array.isArray(rawArchive) ? { snapshots: rawArchive } : isPlainObject2(rawArchive) ? rawArchive : {};
-    const snapshots = Array.isArray(archiveObject.snapshots) ? archiveObject.snapshots.map(normalizeSnapshot).filter(Boolean) : [];
+    const archive = parse(SnapshotArchiveSchema, archiveObject);
     return {
       schemaVersion: ARCHIVE_SCHEMA_VERSION,
-      createdAt: typeof archiveObject.createdAt === "string" ? archiveObject.createdAt : null,
-      updatedAt: typeof archiveObject.updatedAt === "string" ? archiveObject.updatedAt : null,
-      ledger: normalizeLedger(archiveObject.ledger),
-      snapshots: sortSnapshotsByCaptureTime(snapshots)
+      createdAt: archive.createdAt,
+      updatedAt: archive.updatedAt,
+      ledger: archive.ledger,
+      snapshots: sortSnapshotsByCaptureTime(archive.snapshots)
     };
   }
   function archiveUsdPerCredit(snapshots) {
@@ -2256,7 +2864,7 @@ ${text.slice(0, 800)}`);
     };
   }
   function previewImportArchiveDocument(currentArchive, documentObject, nowMs = Date.now()) {
-    if (!isPlainObject2(documentObject) || documentObject.format !== EXPORT_FORMAT || !SUPPORTED_EXPORT_VERSIONS.has(documentObject.version)) {
+    if (!isPlainObject2(documentObject) || !is(SupportedExportDocumentSchema, documentObject)) {
       throw new Error("Unsupported Snapshot Export document.");
     }
     const incomingSnapshots = Array.isArray(documentObject.snapshots) ? documentObject.snapshots : [];
@@ -2311,10 +2919,10 @@ ${text.slice(0, 800)}`);
       const startDate = query.startDate || "";
       const endDate = query.endDate || "";
       const filtered = dayRows.filter((row) => {
-        const date = String(row?.日期桶 || "");
-        if (!date) return false;
-        if (startDate && date < startDate) return false;
-        if (endDate && date >= endDate) return false;
+        const date2 = String(row?.日期桶 || "");
+        if (!date2) return false;
+        if (startDate && date2 < startDate) return false;
+        if (endDate && date2 >= endDate) return false;
         return true;
       }).map((row) => ({
         date: row?.日期桶 || "",
@@ -2511,19 +3119,32 @@ ${text.slice(0, 800)}`);
     const trimmed = String(filename || "").trim();
     return trimmed || GIST_FILENAME;
   }
+  var coerce2 = (transform2) => pipe(
+    optional(unknown(), () => void 0),
+    transform(transform2)
+  );
+  var RemoteSyncSettingsSchema = object({
+    enabled: coerce2(Boolean),
+    provider: coerce2(() => "github-gist"),
+    token: fallback(string(), ""),
+    gistId: coerce2(normalizeGistId),
+    filename: coerce2(normalizeFilename),
+    clientId: fallback(
+      pipe(
+        string(),
+        check((value) => value.trim() !== "")
+      ),
+      createClientId
+    ),
+    lastSyncedAt: fallback(string(), ""),
+    lastError: fallback(string(), "")
+  });
+  var SupportedExportDocumentSchema2 = object({
+    format: literal(EXPORT_FORMAT),
+    version: picklist([...SUPPORTED_IMPORT_VERSIONS])
+  });
   function normalizeSettings(rawSettings) {
-    const source = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
-    const token = typeof source.token === "string" ? source.token : "";
-    return {
-      enabled: Boolean(source.enabled),
-      provider: "github-gist",
-      token,
-      gistId: normalizeGistId(source.gistId),
-      filename: normalizeFilename(source.filename),
-      clientId: typeof source.clientId === "string" && source.clientId.trim() ? source.clientId : createClientId(),
-      lastSyncedAt: typeof source.lastSyncedAt === "string" ? source.lastSyncedAt : "",
-      lastError: typeof source.lastError === "string" ? source.lastError : ""
-    };
+    return parse(RemoteSyncSettingsSchema, rawSettings && typeof rawSettings === "object" ? rawSettings : {});
   }
   function createGmSettingsStore(options = {}) {
     async function readRaw() {
@@ -2665,7 +3286,7 @@ ${text.slice(0, 800)}`);
     ) || null;
   }
   function validateArchiveDocument(documentObject) {
-    if (documentObject?.format !== EXPORT_FORMAT || !SUPPORTED_IMPORT_VERSIONS.has(documentObject?.version)) {
+    if (!is(SupportedExportDocumentSchema2, documentObject)) {
       throw new Error("GitHub Gist archive file is not a supported Snapshot Export.");
     }
     return documentObject;
@@ -2904,15 +3525,15 @@ ${text.slice(0, 800)}`);
         };
       } catch (error) {
         if (error?.superseded) return supersededResult(error.latest);
-        const unknown = remoteWritePending && !error?.status;
-        const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
+        const unknown2 = remoteWritePending && !error?.status;
+        const failure = unknown2 ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
         const message = await markSyncFailure(settings, failure).catch(
           () => "GitHub Gist sync failed; status could not be saved."
         );
         throw Object.assign(new Error(message), {
           localMerged,
           phase,
-          remoteState: unknown ? "unknown" : "failed"
+          remoteState: unknown2 ? "unknown" : "failed"
         });
       }
     }
@@ -4566,8 +5187,8 @@ ${text.slice(0, 800)}`);
       throw new Error("Quota panel renderer requires a translator function.");
     }
     const formatLocalTimestamp = typeof formatTimestamp === "function" ? formatTimestamp : (value) => {
-      const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+      const date2 = new Date(value);
+      return Number.isNaN(date2.getTime()) ? String(value) : date2.toLocaleString();
     };
     function displayTimestamp(value) {
       if (!value || value === "-") return "-";
@@ -8457,7 +9078,7 @@ ${root} :focus-visible {
     const DEBUG_KEY = "__codexQuotaCompassDebug";
     const LAST_RESULT_KEY = "__codexQuotaCompassLastResult";
     const RUNNING_KEY = "__codexQuotaCompassRunning";
-    const SCRIPT_VERSION = "0.5.9";
+    const SCRIPT_VERSION = "0.5.10";
     const { t: t2 } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,

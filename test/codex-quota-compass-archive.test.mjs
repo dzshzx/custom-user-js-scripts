@@ -496,3 +496,31 @@ test('content key is independent of key order and treats undefined fields like J
   assert.equal(exportDocumentContentKey({}), exportDocumentContentKey({ ledger: null, snapshots: 'x' }));
   assert.equal(archiveContentKey({ snapshots: [] }), archiveContentKey({ snapshots: [], createdAt: 'ignored' }));
 });
+
+test('normalizeSnapshotArchive coerces snapshot payloads to JSON-safe values and drops unusable snapshots', () => {
+  const archive = normalizeSnapshotArchive({
+    createdAt: 42,
+    snapshots: [
+      {
+        snapshotId: '  keep  ',
+        capturedAt: '2026-09-01T00:00:00.000Z',
+        scriptVersion: 7,
+        sourceContext: { at: new Date('2026-09-01T00:00:00Z'), ratio: Number.NaN, missing: undefined, big: 1n },
+        windowSnapshot: 'not-an-array',
+        periodSummaries: ['not', 'an', 'object'],
+      },
+      { snapshotId: 'blank-capture', capturedAt: '   ' },
+      'not-a-snapshot',
+    ],
+  });
+
+  assert.equal(archive.createdAt, null);
+  assert.equal(archive.snapshots.length, 1);
+  const [snapshot] = archive.snapshots;
+  assert.equal(snapshot.snapshotId, 'keep');
+  assert.equal(snapshot.scriptVersion, '');
+  assert.deepEqual(snapshot.sourceContext, { at: '2026-09-01T00:00:00.000Z', ratio: null, missing: null, big: '1' });
+  assert.deepEqual(snapshot.windowSnapshot, []);
+  assert.deepEqual(snapshot.periodSummaries, {});
+  assert.deepEqual(snapshot.periodDetails, {});
+});

@@ -122,10 +122,11 @@ test(
     harness.window.document.body.append(sibling);
     await harness.view.openSettings();
     assert.equal(harness.host.getAttribute('inert'), 'host-before-open');
-    assert.equal(sibling.getAttribute('inert'), '');
+    assert.equal(sibling.hasAttribute('inert'), false, 'the native modal dialog never writes inert');
 
     sibling.setAttribute('inert', 'host-during-open');
     dialogOf(harness.window).querySelector('[data-part-action="close-dialog"]').click();
+    assert.equal(dialogOf(harness.window), null);
     assert.equal(harness.host.getAttribute('inert'), 'host-before-open');
     assert.equal(sibling.getAttribute('inert'), 'host-during-open');
     harness.view.dispose();

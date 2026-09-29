@@ -60,7 +60,8 @@ test('dialog close button uses the shared Lucide x icon', { skip: domSkip }, () 
   const closeButton = dialog.querySelector('[data-part-action="close-dialog"]');
   assert.ok(closeButton.querySelector('.wk-icon-x'));
   assert.equal(dialog.querySelector('.part-close-icon'), null);
-  assert.equal(dialog.querySelector('.part-dialog').getAttribute('aria-modal'), 'true');
+  assert.equal(dialog.tagName, 'DIALOG');
+  assert.equal(dialog.getAttribute('aria-labelledby'), 'part-dialog-title');
 });
 
 test('base styles bridge part tokens onto the shared kit tokens', { skip: domSkip }, () => {

@@ -1,3 +1,5 @@
+import * as v from 'valibot';
+
 const MIN_INTERVAL_MS = 1000;
 const MAX_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_UNLOCKER_OPTIONS = {
@@ -30,66 +32,76 @@ function isValidIntervalMs(value) {
   return Number.isFinite(value) && value >= MIN_INTERVAL_MS && value <= MAX_INTERVAL_MS;
 }
 
-function emptyScopedSettings() {
-  return {
-    pages: {},
-    sites: {},
-  };
+// Missing keys still run through the transform, so defaults apply uniformly.
+const coerce = (transform) =>
+  v.pipe(
+    v.optional(v.unknown(), () => undefined),
+    v.transform(transform),
+  );
+const record = (entries) => v.pipe(v.custom(isRecord), v.object(entries));
+
+function timestampOrNow(value) {
+  return Number.isFinite(Number(value)) ? Number(value) : Date.now();
+}
+
+const RefreshSettingSchema = record({
+  intervalMs: v.pipe(coerce(Number), v.check(isValidIntervalMs), v.transform(Math.round)),
+  updatedAt: coerce(timestampOrNow),
+});
+
+const UnlockerSettingSchema = record({
+  enabled: coerce(Boolean),
+  allowSelection: coerce((value) => value !== false),
+  allowCopy: coerce((value) => value !== false),
+  allowContextMenu: coerce((value) => value !== false),
+  allowDrag: coerce((value) => value === true),
+  suppressBeforeUnload: coerce((value) => value === true),
+  updatedAt: coerce(timestampOrNow),
+});
+
+// Invalid entries are dropped individually; an invalid bucket reads as empty.
+const scopedBucket = (settingSchema) =>
+  coerce((bucket) => {
+    const next = {};
+    for (const [key, setting] of Object.entries(isRecord(bucket) ? bucket : {})) {
+      const result = v.safeParse(settingSchema, setting);
+      if (result.success) next[key] = result.output;
+    }
+    return next;
+  });
+
+const scopedSettingsSchema = (settingSchema) =>
+  v.object({ pages: scopedBucket(settingSchema), sites: scopedBucket(settingSchema) });
+
+const RefreshScopedSchema = scopedSettingsSchema(RefreshSettingSchema);
+const UnlockerScopedSchema = scopedSettingsSchema(UnlockerSettingSchema);
+
+function parseOrNull(schema, value) {
+  const result = v.safeParse(schema, value);
+  return result.success ? result.output : null;
 }
 
 function normalizeRefreshSetting(value) {
-  if (!isRecord(value)) return null;
-
-  const intervalMs = Number(value.intervalMs);
-  if (!isValidIntervalMs(intervalMs)) return null;
-
-  return {
-    intervalMs: Math.round(intervalMs),
-    updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : Date.now(),
-  };
+  return parseOrNull(RefreshSettingSchema, value);
 }
 
 function normalizeUnlockerSetting(value) {
-  if (!isRecord(value)) return null;
-
-  return {
-    enabled: Boolean(value.enabled),
-    allowSelection: value.allowSelection !== false,
-    allowCopy: value.allowCopy !== false,
-    allowContextMenu: value.allowContextMenu !== false,
-    allowDrag: value.allowDrag === true,
-    suppressBeforeUnload: value.suppressBeforeUnload === true,
-    updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : Date.now(),
-  };
+  return parseOrNull(UnlockerSettingSchema, value);
 }
 
-function normalizeScopedSettings(value, normalizer) {
-  const next = emptyScopedSettings();
-  const source = isRecord(value) ? value : {};
-
-  for (const [key, setting] of Object.entries(isRecord(source.pages) ? source.pages : {})) {
-    const normalized = normalizer(setting);
-    if (normalized) next.pages[key] = normalized;
-  }
-
-  for (const [key, setting] of Object.entries(isRecord(source.sites) ? source.sites : {})) {
-    const normalized = normalizer(setting);
-    if (normalized) next.sites[key] = normalized;
-  }
-
-  return next;
+function normalizeScopedSettings(value, scopedSchema) {
+  return v.parse(scopedSchema, isRecord(value) ? value : {});
 }
 
 function normalizeSettings(value) {
-  const next = emptySettings();
   const source = isRecord(value) ? value : {};
+  // Version 1 stored refresh buckets at the top level.
   const refreshSource = isRecord(source.refresh) ? source.refresh : { pages: source.pages, sites: source.sites };
-  const unlockerSource = isRecord(source.unlocker) ? source.unlocker : {};
-
-  next.refresh = normalizeScopedSettings(refreshSource, normalizeRefreshSetting);
-  next.unlocker = normalizeScopedSettings(unlockerSource, normalizeUnlockerSetting);
-
-  return next;
+  return {
+    ...emptySettings(),
+    refresh: normalizeScopedSettings(refreshSource, RefreshScopedSchema),
+    unlocker: normalizeScopedSettings(source.unlocker, UnlockerScopedSchema),
+  };
 }
 
 function hasUnlockerAction(setting) {
@@ -104,7 +116,7 @@ function hasUnlockerAction(setting) {
 }
 
 function resolveActiveRefreshSetting(sourceSettings, keys) {
-  const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, normalizeRefreshSetting);
+  const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, RefreshScopedSchema);
   const pageSetting = normalizeRefreshSetting(refreshSettings.pages[keys.pageKey]);
   if (pageSetting) return { scope: 'page', key: keys.pageKey, setting: pageSetting };
 
@@ -115,7 +127,7 @@ function resolveActiveRefreshSetting(sourceSettings, keys) {
 }
 
 function resolveActiveUnlockerSetting(sourceSettings, keys) {
-  const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, normalizeUnlockerSetting);
+  const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, UnlockerScopedSchema);
   const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[keys.pageKey]);
   if (hasUnlockerAction(pageSetting)) return { scope: 'page', key: keys.pageKey, setting: pageSetting };
 

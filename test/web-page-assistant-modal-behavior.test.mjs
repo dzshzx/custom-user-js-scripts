@@ -73,28 +73,20 @@ test('dialog traps Tab focus, closes on Escape, inerts the page, and returns foc
   button.click();
   await flush();
 
+  // Tab containment and page inertness come from the native modal <dialog>;
+  // real focus behavior is covered by the Chromium acceptance test.
   const dialog = dialogOf(root);
-  const panel = dialog.querySelector('.part-dialog');
-  assert.equal(pageContent.hasAttribute('inert'), true);
+  assert.equal(dialog.tagName, 'DIALOG');
+  assert.equal(dialog.open, true);
+  assert.equal(pageContent.hasAttribute('inert'), false, 'page inertness is left to the platform');
   assert.ok(dialog.contains(window.document.activeElement));
 
-  // Shift+Tab on the first focusable wraps to the last one inside the panel.
-  const focusables = [...panel.querySelectorAll('button, [href], input, select, textarea')].filter(
-    (el) => !el.disabled && !el.closest('[hidden]'),
-  );
-  const first = focusables[0];
-  const last = focusables[focusables.length - 1];
-  first.focus();
-  first.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
-  assert.equal(window.document.activeElement, last);
-  last.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
-  assert.equal(window.document.activeElement, first);
-
-  // Escape closes through the same path as the close button.
-  last.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  // Escape arrives as the native `cancel` event and closes through the same path as the close button.
+  const cancel = new window.Event('cancel', { cancelable: true });
+  dialog.dispatchEvent(cancel);
   await flush();
+  assert.equal(cancel.defaultPrevented, true);
   assert.equal(dialogOf(root), null);
-  assert.equal(pageContent.hasAttribute('inert'), false);
   assert.equal(window.document.activeElement, button);
 });
 

@@ -12,10 +12,25 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
   style.textContent = `      #${rootId} .part-backdrop {
       position: fixed;
 	        inset: 0;
-	        display: grid;
+	        width: auto;
+	        height: auto;
+	        max-width: none;
+	        max-height: none;
+	        margin: 0;
+	        border: 0;
+	        color: inherit;
+	        overflow: visible;
 	        place-items: center;
 	        padding: 18px;
 	        background: oklch(28% 0.025 242 / 0.42);
+	      }
+
+	      #${rootId} .part-backdrop[open] {
+	        display: grid;
+	      }
+
+	      #${rootId} .part-backdrop::backdrop {
+	        background: transparent;
 	      }
 
 	      #${rootId} .part-dialog {

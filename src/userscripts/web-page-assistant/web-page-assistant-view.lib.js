@@ -21,7 +21,6 @@ const WIDGET_DEFAULT_OFFSET = 18;
 const PANEL_WIDTH = 248;
 const PANEL_MIN_WIDTH = 52;
 const PANEL_SAFE_MARGIN = 12;
-const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 const PRESETS = [
   { label: '30 秒', ms: 30 * 1000 },
   { label: '1 分钟', ms: 60 * 1000 },
@@ -120,8 +119,6 @@ function createWebPageAssistantView({
   let editRevision = 0;
   let dialogReturnFocus = null;
   let themeCleanup = null;
-  let inertObserver = null;
-  let inertOwnership = new Map();
   let initializationError = null;
   let disposed = false;
   let openPromise = null;
@@ -342,42 +339,6 @@ function createWebPageAssistantView({
     if (preserved.focusSelector) dialog.querySelector(preserved.focusSelector)?.focus?.();
   }
 
-  function processInertMutations(records) {
-    for (const record of records) {
-      const ownership = inertOwnership.get(record.target);
-      if (ownership) ownership.changed = true;
-    }
-  }
-
-  function applyBackgroundInert() {
-    if (inertObserver || inertOwnership.size) return;
-    const owned = [];
-    for (const child of Array.from(documentObject.body?.children || [])) {
-      if (child === root || child.hasAttribute('inert')) continue;
-      child.setAttribute('inert', '');
-      inertOwnership.set(child, { changed: false });
-      owned.push(child);
-    }
-    const Observer = windowObject.MutationObserver;
-    if (!Observer || !owned.length) return;
-    inertObserver = new Observer(processInertMutations);
-    for (const element of owned) {
-      inertObserver.observe(element, { attributes: true, attributeFilter: ['inert'], attributeOldValue: true });
-    }
-  }
-
-  function releaseBackgroundInert() {
-    if (inertObserver) {
-      processInertMutations(inertObserver.takeRecords());
-      inertObserver.disconnect();
-      inertObserver = null;
-    }
-    for (const [element, ownership] of inertOwnership) {
-      if (!ownership.changed && element.getAttribute('inert') === '') element.removeAttribute('inert');
-    }
-    inertOwnership = new Map();
-  }
-
   function setMessage(text, tone = 'info') {
     const messageNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.message));
     if (!messageNode) return;
@@ -399,7 +360,6 @@ function createWebPageAssistantView({
     if (!dialog) {
       const active = documentObject.activeElement;
       dialogReturnFocus = active && root.contains(active) ? active : widgetButton || null;
-      applyBackgroundInert();
     } else {
       dialog.remove();
       dialog = null;
@@ -409,8 +369,11 @@ function createWebPageAssistantView({
     dialog = createDialogElement({ documentObject, model });
     dialogGeneration += 1;
     editRevision = 0;
-    dialog.addEventListener('keydown', handleDialogKeydown);
+    // Native modal dialog: the platform makes the rest of the page inert
+    // (including nodes added later) and turns Escape into a `cancel` event.
+    dialog.addEventListener('cancel', handleDialogCancel);
     root.append(dialog);
+    dialog.showModal?.();
     dialogContract.applyModel(dialog, model, PRESETS);
     restoreDialogState(preserved);
     setMessage(initializationError || model.message, initializationError ? 'error' : tone);
@@ -420,39 +383,18 @@ function createWebPageAssistantView({
   function closeDialog({ restoreFocus = true } = {}) {
     if (!dialog) return;
     dialogGeneration += 1;
-    dialog.remove();
+    const closing = dialog;
     dialog = null;
-    releaseBackgroundInert();
+    if (closing.open) closing.close?.();
+    closing.remove();
     const returnTarget = dialogReturnFocus;
     dialogReturnFocus = null;
     if (restoreFocus && returnTarget?.isConnected !== false) returnTarget?.focus?.();
   }
 
-  function handleDialogKeydown(event) {
-    if (!dialog) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      closeDialog();
-      return;
-    }
-    if (event.key !== 'Tab') return;
-    const panel = dialog.querySelector('.part-dialog');
-    if (!panel) return;
-    const focusables = [...panel.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
-      (element) => !element.disabled && !element.closest('[hidden]'),
-    );
-    if (!focusables.length) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = documentObject.activeElement;
-    if (event.shiftKey && (active === first || !panel.contains(active))) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
-      event.preventDefault();
-      first.focus();
-    }
+  function handleDialogCancel(event) {
+    event.preventDefault();
+    closeDialog();
   }
 
   function updateDialogStatus() {

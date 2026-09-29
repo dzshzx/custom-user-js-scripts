@@ -1,4 +1,5 @@
 import pLimit from 'p-limit';
+import * as v from 'valibot';
 import { resolveGmApi } from '../shared/shared-gm.lib.js';
 import {
   EXPORT_FORMAT,
@@ -54,20 +55,37 @@ function normalizeFilename(filename) {
   return trimmed || GIST_FILENAME;
 }
 
-function normalizeSettings(rawSettings) {
-  const source = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
-  const token = typeof source.token === 'string' ? source.token : '';
+// Missing keys still run through the transform, so defaults apply uniformly.
+const coerce = (transform) =>
+  v.pipe(
+    v.optional(v.unknown(), () => undefined),
+    v.transform(transform),
+  );
 
-  return {
-    enabled: Boolean(source.enabled),
-    provider: 'github-gist',
-    token,
-    gistId: normalizeGistId(source.gistId),
-    filename: normalizeFilename(source.filename),
-    clientId: typeof source.clientId === 'string' && source.clientId.trim() ? source.clientId : createClientId(),
-    lastSyncedAt: typeof source.lastSyncedAt === 'string' ? source.lastSyncedAt : '',
-    lastError: typeof source.lastError === 'string' ? source.lastError : '',
-  };
+const RemoteSyncSettingsSchema = v.object({
+  enabled: coerce(Boolean),
+  provider: coerce(() => 'github-gist'),
+  token: v.fallback(v.string(), ''),
+  gistId: coerce(normalizeGistId),
+  filename: coerce(normalizeFilename),
+  clientId: v.fallback(
+    v.pipe(
+      v.string(),
+      v.check((value) => value.trim() !== ''),
+    ),
+    createClientId,
+  ),
+  lastSyncedAt: v.fallback(v.string(), ''),
+  lastError: v.fallback(v.string(), ''),
+});
+
+const SupportedExportDocumentSchema = v.object({
+  format: v.literal(EXPORT_FORMAT),
+  version: v.picklist([...SUPPORTED_IMPORT_VERSIONS]),
+});
+
+function normalizeSettings(rawSettings) {
+  return v.parse(RemoteSyncSettingsSchema, rawSettings && typeof rawSettings === 'object' ? rawSettings : {});
 }
 
 function createGmSettingsStore(options = {}) {
@@ -241,7 +259,7 @@ function pickArchiveGist(gists, filename) {
 }
 
 function validateArchiveDocument(documentObject) {
-  if (documentObject?.format !== EXPORT_FORMAT || !SUPPORTED_IMPORT_VERSIONS.has(documentObject?.version)) {
+  if (!v.is(SupportedExportDocumentSchema, documentObject)) {
     throw new Error('GitHub Gist archive file is not a supported Snapshot Export.');
   }
   return documentObject;
