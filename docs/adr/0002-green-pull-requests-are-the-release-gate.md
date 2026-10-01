@@ -121,3 +121,20 @@ that reaches `master` has green CI"; only the client that walks it changes:
    updates only, no `@version` change) auto-merge by rebase once `ci-ok` is
    green; the rebase gives the landed commit a new sha, which is the one
    accepted exception to the exact-sha rule.
+
+## Amendment: publication checks and manual dependency updates (2026-10-01)
+
+Candidates and pull requests retain the full version-plan, build, lint and test
+gate before their exact commit can reach `master`. The server-side `ci-ok`
+requirement remains active. `master` pushes no longer start a second CI run;
+the previous post-publication deduplication job is removed.
+
+Dependabot continues to open grouped weekly updates with the existing three-day
+cooldown. Automatic merging is disabled and its write-token workflow is retired.
+The owner validates updates and lands them through the same candidate gate;
+there is no automatic rebase exception to the admitted commit identity.
+
+The `ci-ok` summary requires the verification job to succeed. Failure,
+cancellation or a skipped verification cannot satisfy the gate. Userscript
+metadata, install paths, version policy and publication authorization remain
+owned by the existing release contract.
