@@ -13,6 +13,26 @@ import {
   aggregateMonthlyList,
   aggregateAllTime,
 } from './codex-quota-compass-ledger.lib.ts';
+import type { LedgerTotals } from './codex-quota-compass-ledger.lib.ts';
+import type {
+  ArchivePeriodDetailsProjection,
+  ArchivePeriodKey,
+  ArchivePeriodSummaryProjection,
+  ArchiveSourceContext,
+} from './codex-quota-compass-contract.lib.ts';
+import type { QuotaWindowRow } from './codex-quota-compass-core.lib.ts';
+
+/** A JSON-safe value as produced by `sanitizeValue`. */
+export type JsonValue = string | number | boolean | null | JsonArray | JsonObject;
+export interface JsonArray extends Array<JsonValue> {}
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+/** Archived (sanitized, possibly old-version) projections: every field may be missing. */
+export type ArchivedSourceContext = Partial<ArchiveSourceContext>;
+export type ArchivedPeriodSummaries = Partial<Record<ArchivePeriodKey, Partial<ArchivePeriodSummaryProjection>>>;
+export type ArchivedPeriodDetails = Partial<Record<ArchivePeriodKey, Partial<ArchivePeriodDetailsProjection>>>;
+type ArchivedWindowRow = Partial<QuotaWindowRow> | null | undefined;
 
 const ARCHIVE_SCHEMA_VERSION = 2;
 const EXPORT_FORMAT = 'codex-quota-compass.snapshot-archive';
@@ -21,13 +41,13 @@ const SUPPORTED_EXPORT_VERSIONS = new Set([1, 2]);
 const MAX_RETAINED_SNAPSHOTS = 5;
 const DEFAULT_USD_PER_CREDIT = 40 / 1000;
 
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 // JSON-safe value: Dates become ISO strings, non-finite numbers become null,
 // undefined becomes null and any other primitive is stringified.
-const JsonValueSchema = v.lazy(() =>
+const JsonValueSchema: v.GenericSchema<unknown, JsonValue> = v.lazy(() =>
   v.union([
     v.pipe(
       v.date(),
@@ -36,7 +56,7 @@ const JsonValueSchema = v.lazy(() =>
     v.array(JsonValueSchema),
     v.record(v.string(), JsonValueSchema),
     v.pipe(
-      v.custom((value) => typeof value === 'number'),
+      v.custom<number>((value) => typeof value === 'number'),
       v.transform((value) => (Number.isFinite(value) ? value : null)),
     ),
     v.string(),
@@ -49,28 +69,28 @@ const JsonValueSchema = v.lazy(() =>
   ]),
 );
 
-function sanitizeValue(value) {
+function sanitizeValue(value: unknown): JsonValue {
   return v.parse(JsonValueSchema, value);
 }
 
-function sortSnapshotsByCaptureTime(snapshots) {
+function sortSnapshotsByCaptureTime<T extends { capturedAt?: string | null }>(snapshots: readonly T[]): T[] {
   return snapshots
     .slice()
     .sort((left, right) => String(left.capturedAt || '').localeCompare(String(right.capturedAt || '')));
 }
 
 // Missing keys still run through the transform, so defaults apply uniformly.
-const coerce = (transform) =>
+const coerce = <T>(transform: (value: unknown) => T) =>
   v.pipe(
     v.optional(v.unknown(), () => undefined),
     v.transform(transform),
   );
-const plainObjectValue = coerce((value) => sanitizeValue(isPlainObject(value) ? value : {}));
-const nullableString = v.fallback(v.string(), null);
+const plainObjectValue = coerce((value) => sanitizeValue(isPlainObject(value) ? value : {}) as JsonObject);
+const nullableString: v.GenericSchema<unknown, string | null> = v.fallback(v.string(), null as never);
 
 // A snapshot without a usable capture time is dropped (silently when reading an archive).
 const SnapshotSchema = v.pipe(
-  v.custom(isPlainObject),
+  v.custom<Record<string, unknown>>(isPlainObject),
   v.object({
     snapshotId: coerce((value) => (typeof value === 'string' && value.trim() ? value.trim() : null)),
     capturedAt: v.pipe(
@@ -98,7 +118,83 @@ const SupportedExportDocumentSchema = v.object({
   version: v.picklist([...SUPPORTED_EXPORT_VERSIONS]),
 });
 
-function normalizeSnapshot(input) {
+type SnapshotSchemaOutput = v.InferOutput<typeof SnapshotSchema>;
+/** One retained Quota Snapshot in the Snapshot Archive. */
+export type QuotaSnapshot = Omit<SnapshotSchemaOutput, 'sourceContext' | 'periodSummaries' | 'periodDetails'> & {
+  storageSchemaVersion: number;
+  sourceContext: ArchivedSourceContext;
+  periodSummaries: ArchivedPeriodSummaries;
+  periodDetails: ArchivedPeriodDetails;
+};
+/** Normalized Snapshot Archive (ledger + retained snapshots). */
+export type SnapshotArchive = Omit<v.InferOutput<typeof SnapshotArchiveSchema>, 'snapshots'> & {
+  schemaVersion: number;
+  snapshots: QuotaSnapshot[];
+};
+export interface ArchiveMergeReport {
+  added: number;
+  skipped: number;
+  invalid: number;
+}
+export interface ArchiveMergeResult {
+  archive: SnapshotArchive;
+  report: ArchiveMergeReport;
+}
+export interface LedgerCostOptions {
+  nowMs?: number;
+  cycleStartDate?: string | null;
+  dailyLimit?: number;
+  month?: string;
+  weekCount?: number;
+  monthCount?: number;
+}
+export type LedgerCostViews = ReturnType<typeof buildLedgerCostViews>;
+export type SnapshotArchiveSummary = ReturnType<typeof summarizeSnapshotArchive>;
+export type SnapshotExportDocument = ReturnType<typeof buildSnapshotExportDocument>;
+export type ArchiveImportPreview = ReturnType<typeof previewImportArchiveDocument>;
+export interface ArchiveUsageRow {
+  date: string;
+  credits: number;
+  usd: number;
+}
+export interface ArchiveUsageSummary extends LedgerTotals {
+  startDate?: string | null;
+  endDateExclusive?: string | null;
+  periodDays?: number | null;
+}
+export interface ArchiveUsageView {
+  mode: string;
+  rows: ArchiveUsageRow[];
+  summary: ArchiveUsageSummary;
+}
+export interface ArchiveUsageQuery {
+  mode?: string;
+  startDate?: string;
+  endDate?: string;
+  periodDays?: unknown;
+  limit?: number;
+  timelineLimit?: number;
+}
+export type SnapshotArchiveQuery = ReturnType<typeof createSnapshotArchiveQuery>;
+export interface SnapshotArchiveStoreOptions {
+  read: () => unknown;
+  write: (archive: SnapshotArchive) => unknown;
+  now?: () => string;
+  createId?: () => string;
+  scriptVersion?: string;
+}
+interface SaveSnapshotOptions {
+  capturedAt?: string;
+  snapshotId?: string;
+}
+interface SumRowLike {
+  credits?: unknown;
+  Credits?: unknown;
+  usd?: unknown;
+  折算USD?: unknown;
+}
+
+function normalizeSnapshot(input: unknown): QuotaSnapshot | null {
   const result = v.safeParse(SnapshotSchema, input);
   if (!result.success) return null;
   const snapshot = result.output;
@@ -107,14 +203,14 @@ function normalizeSnapshot(input) {
     capturedAt: snapshot.capturedAt,
     scriptVersion: snapshot.scriptVersion,
     storageSchemaVersion: ARCHIVE_SCHEMA_VERSION,
-    sourceContext: snapshot.sourceContext,
+    sourceContext: snapshot.sourceContext as ArchivedSourceContext,
     windowSnapshot: snapshot.windowSnapshot,
-    periodSummaries: snapshot.periodSummaries,
-    periodDetails: snapshot.periodDetails,
+    periodSummaries: snapshot.periodSummaries as ArchivedPeriodSummaries,
+    periodDetails: snapshot.periodDetails as ArchivedPeriodDetails,
   };
 }
 
-function normalizeSnapshotArchive(rawArchive) {
+function normalizeSnapshotArchive(rawArchive: unknown): SnapshotArchive {
   const archiveObject = Array.isArray(rawArchive)
     ? { snapshots: rawArchive }
     : isPlainObject(rawArchive)
@@ -127,11 +223,11 @@ function normalizeSnapshotArchive(rawArchive) {
     createdAt: archive.createdAt,
     updatedAt: archive.updatedAt,
     ledger: archive.ledger,
-    snapshots: sortSnapshotsByCaptureTime(archive.snapshots),
+    snapshots: sortSnapshotsByCaptureTime(archive.snapshots as QuotaSnapshot[]),
   };
 }
 
-function archiveUsdPerCredit(snapshots) {
+function archiveUsdPerCredit(snapshots: readonly QuotaSnapshot[]): number {
   const latest = Array.isArray(snapshots) ? snapshots[snapshots.length - 1] : null;
   const value = Number(latest?.sourceContext?.usdPerCredit);
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_USD_PER_CREDIT;
@@ -139,7 +235,7 @@ function archiveUsdPerCredit(snapshots) {
 
 // Fold all snapshots into the ledger (idempotent) and cap retained raw snapshots.
 // `nowMs` drives the settle rule, so this runs where a clock is available.
-function migrateArchive(rawArchive, nowMs = Date.now()) {
+function migrateArchive(rawArchive: unknown, nowMs: number = Date.now()): SnapshotArchive {
   const normalized = normalizeSnapshotArchive(rawArchive);
   const usdPerCredit = archiveUsdPerCredit(normalized.snapshots);
   const ledger = foldSnapshotsIntoLedger(normalized.ledger, normalized.snapshots, nowMs, { usdPerCredit });
@@ -152,17 +248,19 @@ function migrateArchive(rawArchive, nowMs = Date.now()) {
   };
 }
 
-function cycleStartDateFromArchive(archive) {
+function cycleStartDateFromArchive(archive: unknown): string | null {
   const snapshots = normalizeSnapshotArchive(archive).snapshots;
   const latest = snapshots[snapshots.length - 1];
-  const win = Array.isArray(latest?.windowSnapshot) ? latest.windowSnapshot.find(isMainSevenDayWindow) : null;
+  const win = (
+    Array.isArray(latest?.windowSnapshot) ? latest.windowSnapshot.find(isMainSevenDayWindow) : null
+  ) as ArchivedWindowRow;
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(win?.['本轮开始_UTC'] || ''));
   return match ? match[1] : null;
 }
 
-function buildLedgerCostViews(archive, options = {}) {
+function buildLedgerCostViews(archive: unknown, options: LedgerCostOptions = {}) {
   const migrated = migrateArchive(archive, options.nowMs);
-  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
+  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs! : Date.now();
   const cycleStartDate = options.cycleStartDate || cycleStartDateFromArchive(migrated);
   return {
     cycleStartDate,
@@ -175,7 +273,7 @@ function buildLedgerCostViews(archive, options = {}) {
   };
 }
 
-function summarizeSnapshotArchive(archive) {
+function summarizeSnapshotArchive(archive: unknown) {
   const normalized = normalizeSnapshotArchive(archive);
   const first = normalized.snapshots[0] || null;
   const last = normalized.snapshots[normalized.snapshots.length - 1] || null;
@@ -199,11 +297,11 @@ function summarizeSnapshotArchive(archive) {
   };
 }
 
-function snapshotFallbackKey(snapshot) {
-  const sinceReset = snapshot?.periodSummaries?.sinceReset || {};
-  const primaryWindow = Array.isArray(snapshot?.windowSnapshot)
-    ? snapshot.windowSnapshot.find(isMainSevenDayWindow)
-    : null;
+function snapshotFallbackKey(snapshot: QuotaSnapshot): string {
+  const sinceReset: Partial<ArchivePeriodSummaryProjection> = snapshot?.periodSummaries?.sinceReset || {};
+  const primaryWindow = (
+    Array.isArray(snapshot?.windowSnapshot) ? snapshot.windowSnapshot.find(isMainSevenDayWindow) : null
+  ) as ArchivedWindowRow;
 
   return JSON.stringify({
     capturedAt: snapshot?.capturedAt || '',
@@ -215,7 +313,7 @@ function snapshotFallbackKey(snapshot) {
   });
 }
 
-function createQuotaSnapshot({ result, capturedAt, scriptVersion, snapshotId }) {
+function createQuotaSnapshot({ result, capturedAt, scriptVersion, snapshotId }: QuotaSnapshotInput) {
   if (!isPlainObject(result)) {
     throw new Error('Cannot create Quota Snapshot without a result object.');
   }
@@ -228,7 +326,7 @@ function createQuotaSnapshot({ result, capturedAt, scriptVersion, snapshotId }) 
   });
 }
 
-function mergeSnapshots(currentArchive, incomingSnapshots) {
+function mergeSnapshots(currentArchive: unknown, incomingSnapshots: readonly unknown[]): ArchiveMergeResult {
   const archive = normalizeSnapshotArchive(currentArchive);
   const existingIds = new Set(archive.snapshots.map((snapshot) => snapshot.snapshotId).filter(Boolean));
   const existingFallbackKeys = new Set(
@@ -283,24 +381,26 @@ function mergeSnapshots(currentArchive, incomingSnapshots) {
 // The single content key for sync convergence: ledger + retained snapshots,
 // serialized independent of key order. Undefined object fields are dropped
 // (JSON semantics), so a local object and its JSON round-trip compare equal.
-function contentKey(ledger, snapshots) {
+function contentKey(ledger: unknown, snapshots: unknown): string {
   return stableStringify({
     ledger: isPlainObject(ledger) ? ledger : {},
     snapshots: Array.isArray(snapshots) ? snapshots : [],
   });
 }
 
-function archiveContentKey(archive) {
+function archiveContentKey(archive: unknown): string {
   const normalized = normalizeSnapshotArchive(archive);
   return contentKey(normalized.ledger, normalized.snapshots);
 }
 
 // Export documents are already normalized; compare them without re-normalizing.
-function exportDocumentContentKey(documentObject) {
+function exportDocumentContentKey(
+  documentObject: { ledger?: unknown; snapshots?: unknown } | null | undefined,
+): string {
   return contentKey(documentObject?.ledger, documentObject?.snapshots);
 }
 
-function mergeSnapshotArchives(primary, incoming, { nowMs = Date.now() } = {}) {
+function mergeSnapshotArchives(primary: unknown, incoming: unknown, { nowMs = Date.now() }: { nowMs?: number } = {}) {
   const current = normalizeSnapshotArchive(primary);
   const other = normalizeSnapshotArchive(incoming);
   const merged = mergeSnapshots(current, other.snapshots);
@@ -321,7 +421,7 @@ function mergeSnapshotArchives(primary, incoming, { nowMs = Date.now() } = {}) {
   return { archive, report: merged.report, changed: archiveContentKey(current) !== archiveContentKey(archive) };
 }
 
-function buildSnapshotExportDocument(archive, exportedAt) {
+function buildSnapshotExportDocument(archive: unknown, exportedAt: string) {
   const migrated = migrateArchive(archive, Date.parse(exportedAt) || Date.now());
 
   return {
@@ -334,12 +434,14 @@ function buildSnapshotExportDocument(archive, exportedAt) {
   };
 }
 
-function previewImportArchiveDocument(currentArchive, documentObject, nowMs = Date.now()) {
+function previewImportArchiveDocument(currentArchive: unknown, documentObject: unknown, nowMs: number = Date.now()) {
   if (!isPlainObject(documentObject) || !v.is(SupportedExportDocumentSchema, documentObject)) {
     throw new Error('Unsupported Snapshot Export document.');
   }
 
-  const incomingSnapshots = Array.isArray(documentObject.snapshots) ? documentObject.snapshots : [];
+  const incomingSnapshots: unknown[] = Array.isArray((documentObject as Record<string, unknown>).snapshots)
+    ? ((documentObject as Record<string, unknown>).snapshots as unknown[])
+    : [];
   const merged = mergeSnapshotArchives(currentArchive, documentObject, { nowMs });
   const { archive } = merged;
   merged.report.invalid = incomingSnapshots.filter((snapshot) => !normalizeSnapshot(snapshot)).length;
@@ -352,12 +454,12 @@ function previewImportArchiveDocument(currentArchive, documentObject, nowMs = Da
   };
 }
 
-function toNumber(value) {
+function toNumber(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function sumRows(rows) {
+function sumRows(rows: readonly SumRowLike[]): LedgerTotals {
   return rows.reduce(
     (acc, row) => {
       acc.totalCredits += toNumber(row?.credits ?? row?.Credits);
@@ -368,17 +470,17 @@ function sumRows(rows) {
   );
 }
 
-function createSnapshotArchiveQuery(archive) {
+function createSnapshotArchiveQuery(archive: unknown) {
   const normalized = normalizeSnapshotArchive(archive);
   const latest = normalized.snapshots[normalized.snapshots.length - 1];
 
-  function emptyUsage(mode = 'day') {
+  function emptyUsage(mode = 'day'): ArchiveUsageView {
     return { mode, rows: [], summary: { totalCredits: 0, totalUsd: 0 } };
   }
 
-  function periodSummary(periodKey, extra = {}) {
+  function periodSummary(periodKey: ArchivePeriodKey, extra: { periodDays?: number | null } = {}): ArchiveUsageView {
     if (!latest) return emptyUsage(periodKey);
-    const period = latest.periodSummaries?.[periodKey] || {};
+    const period: Partial<ArchivePeriodSummaryProjection> = latest.periodSummaries?.[periodKey] || {};
     return {
       mode: periodKey === 'monthToDate' ? 'month' : periodKey,
       rows: [],
@@ -392,7 +494,7 @@ function createSnapshotArchiveQuery(archive) {
     };
   }
 
-  function dailyUsageForLatestSinceReset(query = {}) {
+  function dailyUsageForLatestSinceReset(query: ArchiveUsageQuery = {}): ArchiveUsageView {
     if (!latest) return emptyUsage('day');
     const dayRows = Array.isArray(latest.periodDetails?.sinceReset?.dailyBuckets)
       ? latest.periodDetails.sinceReset.dailyBuckets
@@ -425,7 +527,7 @@ function createSnapshotArchiveQuery(archive) {
     };
   }
 
-  function queryPeriodSummaries(query = {}) {
+  function queryPeriodSummaries(query: ArchiveUsageQuery = {}) {
     return {
       rolling: periodSummary('rolling', { periodDays: Number(query.periodDays) || null }),
       month: periodSummary('monthToDate'),
@@ -433,7 +535,7 @@ function createSnapshotArchiveQuery(archive) {
     };
   }
 
-  function queryTimeline(query = {}) {
+  function queryTimeline(query: ArchiveUsageQuery = {}) {
     const count = Math.max(0, Number(query.limit ?? query.timelineLimit ?? 12) || 0);
     return normalized.snapshots
       .slice(count ? -count : 0)
@@ -448,7 +550,7 @@ function createSnapshotArchiveQuery(archive) {
       }));
   }
 
-  function queryLatestUsage(query = {}) {
+  function queryLatestUsage(query: ArchiveUsageQuery = {}): ArchiveUsageView {
     const mode = query.mode || 'day';
     const periods = queryPeriodSummaries(query);
     if (mode === 'rolling') return periods.rolling;
@@ -461,7 +563,7 @@ function createSnapshotArchiveQuery(archive) {
   // view reads Cost Ledger projections instead, but removing this public
   // query shape would break integrations that still consume Snapshot Archive
   // history directly.
-  function queryHistory(query = {}) {
+  function queryHistory(query: ArchiveUsageQuery = {}) {
     const periods = queryPeriodSummaries(query);
     return {
       day: dailyUsageForLatestSinceReset(query),
@@ -483,7 +585,7 @@ function createSnapshotArchiveQuery(archive) {
   };
 }
 
-function queryArchiveUsage(archive, query = {}) {
+function queryArchiveUsage(archive: unknown, query: ArchiveUsageQuery = {}): ArchiveUsageView {
   return createSnapshotArchiveQuery(archive).queryLatestUsage(query);
 }
 
@@ -496,21 +598,21 @@ function createSnapshotArchiveStore({
       ? globalThis.crypto.randomUUID()
       : `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
   scriptVersion = '',
-}) {
+}: SnapshotArchiveStoreOptions) {
   if (typeof read !== 'function' || typeof write !== 'function') {
     throw new Error('Snapshot Archive store requires read and write functions.');
   }
 
-  function nowMs() {
+  function nowMs(): number {
     const parsed = Date.parse(now());
     return Number.isFinite(parsed) ? parsed : Date.now();
   }
 
-  async function loadArchive() {
+  async function loadArchive(): Promise<SnapshotArchive> {
     return migrateArchive(await read(), nowMs());
   }
 
-  async function writeArchive(archive) {
+  async function writeArchive(archive: unknown): Promise<SnapshotArchive> {
     const migrated = migrateArchive(archive, nowMs());
     if (!migrated.createdAt) {
       migrated.createdAt = now();
@@ -525,7 +627,7 @@ function createSnapshotArchiveStore({
       return loadArchive();
     },
 
-    async saveSnapshot(result, options = {}) {
+    async saveSnapshot(result: unknown, options: SaveSnapshotOptions = {}) {
       const archive = await loadArchive();
       const capturedAt = options.capturedAt || now();
       const snapshot = createQuotaSnapshot({
@@ -549,11 +651,11 @@ function createSnapshotArchiveStore({
       return buildSnapshotExportDocument(await loadArchive(), now());
     },
 
-    async previewImportArchiveDocument(documentObject) {
+    async previewImportArchiveDocument(documentObject: unknown) {
       return previewImportArchiveDocument(await loadArchive(), documentObject, nowMs());
     },
 
-    async queryLedgerCost(options = {}) {
+    async queryLedgerCost(options: LedgerCostOptions = {}) {
       const archive = await loadArchive();
       return buildLedgerCostViews(archive, {
         nowMs: nowMs(),
@@ -561,7 +663,7 @@ function createSnapshotArchiveStore({
       });
     },
 
-    async readView(options = {}) {
+    async readView(options: LedgerCostOptions = {}) {
       const timestamp = nowMs();
       const archive = migrateArchive(await read(), timestamp);
       return {
@@ -570,7 +672,7 @@ function createSnapshotArchiveStore({
       };
     },
 
-    async importArchiveDocument(documentObject) {
+    async importArchiveDocument(documentObject: unknown) {
       const merged = previewImportArchiveDocument(await loadArchive(), documentObject, nowMs());
       const nextArchive = merged.changed ? await writeArchive(merged.archive) : merged.archive;
 
@@ -585,11 +687,11 @@ function createSnapshotArchiveStore({
       return summarizeSnapshotArchive(await loadArchive());
     },
 
-    async queryArchiveUsage(query) {
+    async queryArchiveUsage(query?: ArchiveUsageQuery) {
       return createSnapshotArchiveQuery(await loadArchive()).queryLatestUsage(query || {});
     },
 
-    async queryHistory(query) {
+    async queryHistory(query?: ArchiveUsageQuery) {
       return createSnapshotArchiveQuery(await loadArchive()).queryHistory(query || {});
     },
   };
@@ -597,9 +699,43 @@ function createSnapshotArchiveStore({
   // Operations call private implementations, never their queued public siblings.
   const queue = pLimit(1);
   return Object.fromEntries(
-    Object.entries(operations).map(([name, operation]) => [name, (...args) => queue(() => operation(...args))]),
-  );
+    Object.entries<Op>(operations).map(([name, operation]) => [name, (...args: A) => queue(() => operation(...args))]),
+  ) as SnapshotArchiveStore;
 }
+
+// Arguments are forwarded opaquely. Short aliases keep the queued-wrapper line (and so the bundle layout) unchanged.
+type A = never[];
+type Op = (...args: A) => Promise<unknown>;
+interface QuotaSnapshotInput {
+  result: unknown;
+  capturedAt: string;
+  scriptVersion: string;
+  snapshotId?: string | null;
+}
+/** Every operation is serialized through one local queue. */
+// A type alias, not an interface: the queued wrapper is built through Object.fromEntries and cast here.
+export type SnapshotArchiveStore = {
+  loadArchive(): Promise<SnapshotArchive>;
+  saveSnapshot(
+    result: unknown,
+    options?: SaveSnapshotOptions,
+  ): Promise<{
+    archive: SnapshotArchive;
+    snapshot: QuotaSnapshot | null;
+    report: ArchiveMergeReport;
+    summary: SnapshotArchiveSummary;
+  }>;
+  buildExportDocument(): Promise<SnapshotExportDocument>;
+  previewImportArchiveDocument(documentObject: unknown): Promise<ArchiveImportPreview>;
+  queryLedgerCost(options?: LedgerCostOptions): Promise<LedgerCostViews>;
+  readView(options?: LedgerCostOptions): Promise<{ summary: SnapshotArchiveSummary; ledgerCost: LedgerCostViews }>;
+  importArchiveDocument(
+    documentObject: unknown,
+  ): Promise<{ archive: SnapshotArchive; summary: SnapshotArchiveSummary; report: ArchiveMergeReport }>;
+  summarizeArchive(): Promise<SnapshotArchiveSummary>;
+  queryArchiveUsage(query?: ArchiveUsageQuery): Promise<ArchiveUsageView>;
+  queryHistory(query?: ArchiveUsageQuery): Promise<ReturnType<SnapshotArchiveQuery['queryHistory']>>;
+};
 
 export {
   ARCHIVE_SCHEMA_VERSION,

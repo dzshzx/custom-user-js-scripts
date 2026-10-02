@@ -1,4 +1,31 @@
-function createDefaultQuotaRuntimeConfig(overrides = {}) {
+import type {
+  QuotaCalculatorConfig,
+  QuotaSnapshotResult,
+  createQuotaCalculator,
+} from './codex-quota-compass-core.lib.ts';
+
+export interface QuotaRuntimeConfig extends QuotaCalculatorConfig {
+  DEBUG: boolean;
+  MANUAL_ACCESS_TOKEN: string;
+  USAGE_PATH: string;
+  DAILY_USAGE_PATH: string;
+  DAILY_TOKEN_BREAKDOWN_PATH: string;
+  RESET_CREDITS_PATH: string;
+}
+export interface QuotaRuntimeOptions {
+  config?: QuotaRuntimeConfig;
+  coreLib: { createQuotaCalculator: typeof createQuotaCalculator };
+  fetchImpl?: typeof fetch;
+  location?: Pick<Location, 'hostname'> | null;
+  now?: () => number;
+  formatLocalTime?: (ms: number) => string;
+  getBrowserTimeZone?: () => string;
+}
+export interface QuotaRuntime {
+  run(): Promise<QuotaSnapshotResult>;
+}
+
+function createDefaultQuotaRuntimeConfig(overrides: Partial<QuotaRuntimeConfig> = {}): QuotaRuntimeConfig {
   return {
     DEBUG: false,
     DATE_BUCKET_MODE: 'utc',
@@ -13,17 +40,17 @@ function createDefaultQuotaRuntimeConfig(overrides = {}) {
   };
 }
 
-function stripBearer(value) {
+function stripBearer(value: unknown): string {
   return String(value || '')
     .replace(/^Bearer\s+/i, '')
     .trim();
 }
 
-function looksLikeJwt(value) {
+function looksLikeJwt(value: unknown): value is string {
   return typeof value === 'string' && value.length > 100 && value.split('.').length >= 3;
 }
 
-function findAccessToken(input, depth = 0) {
+function findAccessToken(input: unknown, depth = 0): string {
   if (!input || typeof input !== 'object' || depth > 8) return '';
 
   for (const [key, value] of Object.entries(input)) {
@@ -40,7 +67,7 @@ function findAccessToken(input, depth = 0) {
   return '';
 }
 
-function createUnauthorizedError(path) {
+function createUnauthorizedError(path: string): Error {
   return new Error(
     [
       `HTTP 401 Unauthorized: ${path}`,
@@ -57,15 +84,17 @@ function createUnauthorizedError(path) {
   );
 }
 
-function createQuotaRuntime({
-  config = createDefaultQuotaRuntimeConfig(),
-  coreLib,
-  fetchImpl = globalThis.fetch?.bind(globalThis),
-  location = globalThis.location,
-  now = () => Date.now(),
-  formatLocalTime = (ms) => new Date(ms).toLocaleString(),
-  getBrowserTimeZone = () => globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || '未知',
-} = {}) {
+function createQuotaRuntime(
+  {
+    config = createDefaultQuotaRuntimeConfig(),
+    coreLib,
+    fetchImpl = globalThis.fetch?.bind(globalThis),
+    location = globalThis.location,
+    now = () => Date.now(),
+    formatLocalTime = (ms) => new Date(ms).toLocaleString(),
+    getBrowserTimeZone = () => globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || '未知',
+  }: QuotaRuntimeOptions = {} as QuotaRuntimeOptions,
+): QuotaRuntime {
   if (!coreLib?.createQuotaCalculator) {
     throw new Error('CodexQuotaCompassCoreLib calculator is unavailable.');
   }
@@ -73,7 +102,7 @@ function createQuotaRuntime({
     throw new Error('Codex quota runtime requires fetchImpl.');
   }
 
-  async function getAccessToken() {
+  async function getAccessToken(): Promise<string> {
     const manual = stripBearer(config.MANUAL_ACCESS_TOKEN);
     if (manual) return manual;
 
@@ -97,13 +126,14 @@ function createQuotaRuntime({
     }
 
     const accessToken = await getAccessToken();
-    const headers = { accept: 'application/json' };
+    const headers: Record<string, string> = { accept: 'application/json' };
 
     if (accessToken) {
       headers.authorization = `Bearer ${accessToken}`;
     }
 
-    async function apiGet(path) {
+    // Parsed backend JSON; the payload type is taken from the calculator callback it feeds.
+    async function apiGet<T>(path: string): Promise<T> {
       const response = await fetchImpl(path, {
         method: 'GET',
         credentials: 'include',
@@ -123,7 +153,7 @@ function createQuotaRuntime({
       return response.json();
     }
 
-    function dailyRangeQuery(startDate, endExclusiveDate) {
+    function dailyRangeQuery(startDate: string, endExclusiveDate: string): URLSearchParams {
       return new URLSearchParams({
         start_date: startDate,
         end_date: endExclusiveDate,

@@ -1,3 +1,7 @@
+/** A plural message: `Intl.PluralRules` categories, `other` required. */
+export type PluralMessage = Partial<Record<Intl.LDMLPluralRule, string>> & { other: string };
+export type MessageValue = string | PluralMessage;
+
 const DEFAULT_LOCALE = 'zh-CN';
 const messages = {
   'zh-CN': {
@@ -306,19 +310,33 @@ const messages = {
     importReadFailed: 'Failed to read import file.',
     alreadyRunning: 'Codex Quota Compass is already running. Please wait and retry.',
   },
-};
+} satisfies Record<string, Record<string, MessageValue>>;
+
+export type QuotaLocale = keyof typeof messages;
+export type QuotaMessageKey = keyof (typeof messages)[typeof DEFAULT_LOCALE];
+export type TranslationVariables = Record<string, unknown>;
+export type QuotaTranslate = (key: QuotaMessageKey, variables?: TranslationVariables) => string;
+export interface ResolveLocaleOptions {
+  locale?: string | null;
+  navigator?: Pick<Navigator, 'language'> | null;
+  defaultLocale?: QuotaLocale;
+}
+export interface QuotaCompassTranslator {
+  locale: QuotaLocale;
+  t: QuotaTranslate;
+}
 
 function resolveLocale({
   locale,
   navigator: navigatorObject = globalThis.navigator,
   defaultLocale = DEFAULT_LOCALE,
-} = {}) {
+}: ResolveLocaleOptions = {}): QuotaLocale {
   const requestedLocale = String(locale || navigatorObject?.language || '').toLowerCase();
   if (requestedLocale.startsWith('en')) return 'en';
   return defaultLocale;
 }
 
-function createQuotaCompassTranslator(options = {}) {
+function createQuotaCompassTranslator(options: ResolveLocaleOptions = {}): QuotaCompassTranslator {
   const defaultLocale = options.defaultLocale || DEFAULT_LOCALE;
   const activeLocale = resolveLocale({ ...options, defaultLocale });
 
@@ -326,14 +344,14 @@ function createQuotaCompassTranslator(options = {}) {
 
   // Plural messages are `{ one, other, ... }` objects keyed by Intl.PluralRules
   // categories, selected by the numeric `count` (or `total`) variable.
-  function selectForm(entry, variables) {
+  function selectForm(entry: MessageValue | undefined, variables: TranslationVariables): string | undefined {
     if (!entry || typeof entry !== 'object') return entry;
     const quantity = Number(variables.count ?? variables.total);
     const category = Number.isFinite(quantity) ? pluralRules.select(quantity) : 'other';
     return entry[category] ?? entry.other;
   }
 
-  function t(key, variables = {}) {
+  function t(key: QuotaMessageKey, variables: TranslationVariables = {}): string {
     const template =
       selectForm(messages[activeLocale]?.[key], variables) ||
       selectForm(messages[defaultLocale]?.[key], variables) ||

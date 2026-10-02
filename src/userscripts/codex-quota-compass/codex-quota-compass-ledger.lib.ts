@@ -2,39 +2,125 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const SETTLE_BUFFER_MS = 15 * 60 * 1000;
 const DEFAULT_USD_PER_CREDIT = 40 / 1000;
 
-function isPlainObject(value) {
+/** One settled-or-in-progress UTC day of the Cost Ledger. */
+export interface LedgerRecord {
+  date: string;
+  credits: number;
+  usd: number;
+  settled: boolean;
+  settledAt: string | null;
+}
+/** Cost Ledger keyed by `YYYY-MM-DD` UTC date. */
+export type Ledger = Record<string, LedgerRecord>;
+export interface LedgerOptions {
+  usdPerCredit?: number;
+  buffer?: number;
+  nowIso?: string | null;
+}
+export interface LedgerRowInput {
+  date?: unknown;
+  credits?: unknown;
+}
+export interface LedgerDailyRow {
+  date: string;
+  credits: number;
+}
+interface LedgerBucketLike {
+  日期桶?: unknown;
+  Credits?: unknown;
+  credits?: unknown;
+}
+type LedgerPeriodDetailsLike = Record<string, { dailyBuckets?: (LedgerBucketLike | null)[] | null } | undefined>;
+/** The part of a Quota Snapshot the ledger reads. */
+export interface LedgerSnapshotInput {
+  capturedAt?: unknown;
+  periodDetails?: unknown;
+}
+export interface LedgerTotals {
+  totalCredits: number;
+  totalUsd: number;
+}
+export interface LedgerRangeAggregate extends LedgerTotals {
+  days: LedgerRecord[];
+  inProgress: LedgerRecord | null;
+}
+export interface LedgerDateRange {
+  from?: string | null;
+  to?: string | null;
+}
+export interface LedgerAggregateOptions {
+  nowMs?: number;
+  buffer?: number;
+}
+export interface LedgerRangeOptions extends LedgerDateRange, LedgerAggregateOptions {}
+export interface LedgerDailyOptions extends LedgerAggregateOptions {
+  limit?: number;
+}
+export interface LedgerListOptions extends LedgerAggregateOptions {
+  count?: number;
+}
+export interface LedgerWeekBlock extends LedgerTotals {
+  from: string;
+  to: string;
+  settled: boolean;
+}
+export interface LedgerWeeklyAggregate {
+  current: LedgerWeekBlock | null;
+  blocks: LedgerWeekBlock[];
+}
+export interface LedgerMonthBlock extends LedgerWeekBlock {
+  month: string;
+}
+export interface LedgerMonthlyAggregate {
+  current: LedgerMonthBlock | null;
+  months: LedgerMonthBlock[];
+}
+export interface LedgerAllTimeAggregate extends LedgerTotals {
+  coverDays: number;
+  fromDate: string | null;
+  toDate: string | null;
+  inProgress: LedgerRecord | null;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function toNumber(value) {
+function toNumber(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function round2(value) {
+function round2(value: unknown): number {
   return Number(Number(value).toFixed(2));
 }
 
-function isDateKey(value) {
+function isDateKey(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function utcDayStartMs(dateStr) {
+function utcDayStartMs(dateStr: string): number {
   return Date.parse(`${dateStr}T00:00:00Z`);
 }
 
-function utcDayEndMs(dateStr) {
+function utcDayEndMs(dateStr: string): number {
   return utcDayStartMs(dateStr) + DAY_MS;
 }
 
-function isSettled(dateStr, nowMs, buffer = SETTLE_BUFFER_MS) {
+function isSettled(dateStr: unknown, nowMs: number | undefined, buffer: number = SETTLE_BUFFER_MS): boolean {
   if (!isDateKey(dateStr)) return false;
   const end = utcDayEndMs(dateStr);
   if (!Number.isFinite(end) || !Number.isFinite(nowMs)) return false;
-  return nowMs >= end + buffer;
+  return nowMs! >= end + buffer;
 }
 
-function makeRecord(date, credits, usdPerCredit, settled, settledAt) {
+function makeRecord(
+  date: string,
+  credits: unknown,
+  usdPerCredit: number,
+  settled: unknown,
+  settledAt: string | null | undefined,
+): LedgerRecord {
   const creditsNum = toNumber(credits);
   return {
     date,
@@ -46,13 +132,13 @@ function makeRecord(date, credits, usdPerCredit, settled, settledAt) {
 }
 
 // Insert / grow-by-max / lock-when-settled. Mutates and returns `ledger`.
-function upsertLedgerRow(ledger, row, nowMs, options = {}) {
+function upsertLedgerRow(ledger: Ledger, row: LedgerRowInput, nowMs: number, options: LedgerOptions = {}): Ledger {
   if (!isPlainObject(ledger) || !isPlainObject(row)) return ledger;
   const date = isDateKey(row.date) ? row.date : null;
   if (!date) return ledger;
 
-  const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit : DEFAULT_USD_PER_CREDIT;
-  const buffer = Number.isFinite(options.buffer) ? options.buffer : SETTLE_BUFFER_MS;
+  const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit! : DEFAULT_USD_PER_CREDIT;
+  const buffer = Number.isFinite(options.buffer) ? options.buffer! : SETTLE_BUFFER_MS;
   const nowIso = options.nowIso || (Number.isFinite(nowMs) ? new Date(nowMs).toISOString() : null);
   const credits = toNumber(row.credits);
   const settledNow = isSettled(date, nowMs, buffer);
@@ -72,7 +158,12 @@ function upsertLedgerRow(ledger, row, nowMs, options = {}) {
   return ledger;
 }
 
-function foldDailyRowsIntoLedger(ledger, rows, nowMs, options = {}) {
+function foldDailyRowsIntoLedger(
+  ledger: Ledger,
+  rows: readonly LedgerRowInput[],
+  nowMs: number,
+  options: LedgerOptions = {},
+): Ledger {
   if (!Array.isArray(rows)) return ledger;
   for (const row of rows) {
     upsertLedgerRow(ledger, row, nowMs, options);
@@ -81,10 +172,12 @@ function foldDailyRowsIntoLedger(ledger, rows, nowMs, options = {}) {
 }
 
 // Pull {date, credits} rows from a snapshot's periodDetails (rolling widest, others fill gaps).
-function extractDailyRowsFromSnapshot(snapshot) {
-  const details = isPlainObject(snapshot?.periodDetails) ? snapshot.periodDetails : {};
+function extractDailyRowsFromSnapshot(snapshot: LedgerSnapshotInput | null | undefined): LedgerDailyRow[] {
+  const details: LedgerPeriodDetailsLike = isPlainObject(snapshot?.periodDetails)
+    ? (snapshot.periodDetails as LedgerPeriodDetailsLike)
+    : {};
   const periods = ['rolling', 'monthToDate', 'sinceReset'];
-  const rows = [];
+  const rows: LedgerDailyRow[] = [];
   for (const key of periods) {
     const buckets = details?.[key]?.dailyBuckets;
     if (!Array.isArray(buckets)) continue;
@@ -97,7 +190,12 @@ function extractDailyRowsFromSnapshot(snapshot) {
   return rows;
 }
 
-function foldSnapshotsIntoLedger(ledger, snapshots, nowMs, options = {}) {
+function foldSnapshotsIntoLedger(
+  ledger: Ledger,
+  snapshots: readonly (LedgerSnapshotInput | null | undefined)[],
+  nowMs: number,
+  options: LedgerOptions = {},
+): Ledger {
   if (!Array.isArray(snapshots)) return ledger;
   const ordered = snapshots
     .slice()
@@ -108,10 +206,10 @@ function foldSnapshotsIntoLedger(ledger, snapshots, nowMs, options = {}) {
   return ledger;
 }
 
-function normalizeLedger(rawLedger, options = {}) {
-  const ledger = {};
+function normalizeLedger(rawLedger: unknown, options: LedgerOptions = {}): Ledger {
+  const ledger: Ledger = {};
   if (!isPlainObject(rawLedger)) return ledger;
-  const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit : DEFAULT_USD_PER_CREDIT;
+  const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit! : DEFAULT_USD_PER_CREDIT;
   for (const [date, record] of Object.entries(rawLedger)) {
     if (!isDateKey(date) || !isPlainObject(record)) continue;
     const settled = Boolean(record.settled);
@@ -129,8 +227,8 @@ function normalizeLedger(rawLedger, options = {}) {
 }
 
 // Cross-device merge: per-date max credits, OR settled, earliest settledAt.
-function mergeLedgers(left, right, options = {}) {
-  const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit : DEFAULT_USD_PER_CREDIT;
+function mergeLedgers(left: unknown, right: unknown, options: LedgerOptions = {}): Ledger {
+  const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit! : DEFAULT_USD_PER_CREDIT;
   const out = normalizeLedger(left, { usdPerCredit });
   const other = normalizeLedger(right, { usdPerCredit });
   for (const [date, record] of Object.entries(other)) {
@@ -141,7 +239,7 @@ function mergeLedgers(left, right, options = {}) {
     }
     const credits = Math.max(existing.credits, record.credits);
     const settled = existing.settled || record.settled;
-    let settledAt = null;
+    let settledAt: string | null = null;
     if (settled) {
       const candidates = [existing.settledAt, record.settledAt].filter(Boolean).sort();
       settledAt = candidates[0] || null;
@@ -154,11 +252,11 @@ function mergeLedgers(left, right, options = {}) {
   return out;
 }
 
-function sortedRecordsDesc(ledger) {
+function sortedRecordsDesc(ledger: unknown): LedgerRecord[] {
   return Object.values(normalizeLedger(ledger)).sort((a, b) => b.date.localeCompare(a.date));
 }
 
-function sumRecords(records) {
+function sumRecords(records: readonly LedgerRecord[]): LedgerTotals {
   return records.reduce(
     (acc, record) => {
       acc.totalCredits += toNumber(record.credits);
@@ -169,19 +267,19 @@ function sumRecords(records) {
   );
 }
 
-function currentUtcDate(nowMs) {
-  return new Date(Number.isFinite(nowMs) ? nowMs : Date.now()).toISOString().slice(0, 10);
+function currentUtcDate(nowMs?: number): string {
+  return new Date(Number.isFinite(nowMs) ? nowMs! : Date.now()).toISOString().slice(0, 10);
 }
 
 // Shift a YYYY-MM-DD key by whole UTC days.
-function shiftDateKey(dateStr, deltaDays) {
+function shiftDateKey(dateStr: string, deltaDays: number): string {
   if (!isDateKey(dateStr)) return dateStr;
   const ms = utcDayStartMs(dateStr) + deltaDays * DAY_MS;
   return new Date(ms).toISOString().slice(0, 10);
 }
 
 // Shift a YYYY-MM month key by whole months.
-function shiftMonthKey(monthStr, deltaMonths) {
+function shiftMonthKey(monthStr: string, deltaMonths: number): string {
   const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(monthStr || ''));
   if (!match) return monthStr;
   const index = Number(match[1]) * 12 + (Number(match[2]) - 1) + deltaMonths;
@@ -190,7 +288,10 @@ function shiftMonthKey(monthStr, deltaMonths) {
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
 }
 
-function utcMonthRange(monthStr, nowMs) {
+function utcMonthRange(
+  monthStr: string | null | undefined,
+  nowMs?: number,
+): { month: string; from: string; to: string } {
   const fallbackMonth = currentUtcDate(nowMs).slice(0, 7);
   const requestedMonth = String(monthStr || '');
   const month = /^(\d{4})-(0[1-9]|1[0-2])$/.test(requestedMonth) ? requestedMonth : fallbackMonth;
@@ -202,7 +303,7 @@ function utcMonthRange(monthStr, nowMs) {
 // Raw range sum over ALL records (no settle filter). Used only for the
 // in-progress estimate buckets (current rolling week / current month), which
 // are explicitly labelled estimates and must include today's unsettled usage.
-function sumRangeRaw(ledger, { from, to } = {}) {
+function sumRangeRaw(ledger: unknown, { from, to }: LedgerDateRange = {}): LedgerTotals {
   const records = Object.values(normalizeLedger(ledger)).filter((record) => {
     if (from && record.date < from) return false;
     if (to && record.date > to) return false;
@@ -215,10 +316,13 @@ function sumRangeRaw(ledger, { from, to } = {}) {
 // `count` is the total number of rows incl. the in-progress current block.
 // Block 0 = [today-6 .. today] (contains today -> in-progress estimate);
 // block i = [today-7i-6 .. today-7i] (fully past -> settled).
-function aggregateWeekly(ledger, { nowMs, count = 8, buffer = SETTLE_BUFFER_MS } = {}) {
+function aggregateWeekly(
+  ledger: unknown,
+  { nowMs, count = 8, buffer = SETTLE_BUFFER_MS }: LedgerListOptions = {},
+): LedgerWeeklyAggregate {
   const today = currentUtcDate(nowMs);
-  let current = null;
-  const blocks = [];
+  let current: LedgerWeekBlock | null = null;
+  const blocks: LedgerWeekBlock[] = [];
   for (let i = 0; i < count; i += 1) {
     const to = shiftDateKey(today, -7 * i);
     const from = shiftDateKey(today, -7 * i - 6);
@@ -235,10 +339,13 @@ function aggregateWeekly(ledger, { nowMs, count = 8, buffer = SETTLE_BUFFER_MS }
 
 // Recent natural UTC months, newest first. `count` is total rows incl. the
 // in-progress current month (raw estimate); prior months are settled.
-function aggregateMonthlyList(ledger, { nowMs, count = 6, buffer = SETTLE_BUFFER_MS } = {}) {
+function aggregateMonthlyList(
+  ledger: unknown,
+  { nowMs, count = 6, buffer = SETTLE_BUFFER_MS }: LedgerListOptions = {},
+): LedgerMonthlyAggregate {
   const currentMonth = currentUtcDate(nowMs).slice(0, 7);
-  let current = null;
-  const months = [];
+  let current: LedgerMonthBlock | null = null;
+  const months: LedgerMonthBlock[] = [];
   for (let i = 0; i < count; i += 1) {
     const month = shiftMonthKey(currentMonth, -i);
     const { from, to } = utcMonthRange(month, nowMs);
@@ -269,7 +376,10 @@ function aggregateMonthlyList(ledger, { nowMs, count = 6, buffer = SETTLE_BUFFER
 
 // All settled days as a single total, plus coverage metadata for the
 // "全量" view header.
-function aggregateAllTime(ledger, { nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
+function aggregateAllTime(
+  ledger: unknown,
+  { nowMs, buffer = SETTLE_BUFFER_MS }: LedgerAggregateOptions = {},
+): LedgerAllTimeAggregate {
   const result = aggregateRange(ledger, { nowMs, buffer });
   const days = result.days;
   return {
@@ -282,9 +392,13 @@ function aggregateAllTime(ledger, { nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
   };
 }
 
-function splitSettled(records, nowMs, buffer = SETTLE_BUFFER_MS) {
-  const settled = [];
-  let inProgress = null;
+function splitSettled(
+  records: readonly LedgerRecord[],
+  nowMs: number | undefined,
+  buffer: number = SETTLE_BUFFER_MS,
+): { settled: LedgerRecord[]; inProgress: LedgerRecord | null } {
+  const settled: LedgerRecord[] = [];
+  let inProgress: LedgerRecord | null = null;
   for (const record of records) {
     // Single source of truth for "settled": the record is already locked
     // settled, or the settle rule (UTC day end + buffer) has elapsed. A day
@@ -300,7 +414,10 @@ function splitSettled(records, nowMs, buffer = SETTLE_BUFFER_MS) {
   return { settled, inProgress };
 }
 
-function aggregateRange(ledger, { from, to, nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
+function aggregateRange(
+  ledger: unknown,
+  { from, to, nowMs, buffer = SETTLE_BUFFER_MS }: LedgerRangeOptions = {},
+): LedgerRangeAggregate {
   const inRange = sortedRecordsDesc(ledger).filter((record) => {
     if (from && record.date < from) return false;
     if (to && record.date > to) return false;
@@ -310,18 +427,29 @@ function aggregateRange(ledger, { from, to, nowMs, buffer = SETTLE_BUFFER_MS } =
   return { ...sumRecords(settled), days: settled, inProgress };
 }
 
-function aggregateDaily(ledger, { limit, nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
+function aggregateDaily(
+  ledger: unknown,
+  { limit, nowMs, buffer = SETTLE_BUFFER_MS }: LedgerDailyOptions = {},
+): LedgerRangeAggregate {
   const result = aggregateRange(ledger, { nowMs, buffer });
-  const days = Number.isFinite(limit) && limit > 0 ? result.days.slice(0, limit) : result.days;
+  const days = Number.isFinite(limit) && limit! > 0 ? result.days.slice(0, limit) : result.days;
   return { ...result, days };
 }
 
-function aggregateCycle(ledger, cycleStartDate, { nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
+function aggregateCycle(
+  ledger: unknown,
+  cycleStartDate: string | null | undefined,
+  { nowMs, buffer = SETTLE_BUFFER_MS }: LedgerAggregateOptions = {},
+): LedgerRangeAggregate {
   const from = isDateKey(cycleStartDate) ? cycleStartDate : null;
   return aggregateRange(ledger, { from, to: currentUtcDate(nowMs), nowMs, buffer });
 }
 
-function aggregateMonth(ledger, yyyymm, { nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
+function aggregateMonth(
+  ledger: unknown,
+  yyyymm: string | null | undefined,
+  { nowMs, buffer = SETTLE_BUFFER_MS }: LedgerAggregateOptions = {},
+): LedgerRangeAggregate {
   const range = utcMonthRange(yyyymm, nowMs);
   return aggregateRange(ledger, { from: range.from, to: range.to, nowMs, buffer });
 }

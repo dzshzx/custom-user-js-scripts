@@ -7,6 +7,104 @@ import {
   exportDocumentContentKey,
   previewImportArchiveDocument,
 } from './codex-quota-compass-archive.lib.ts';
+import type { GmOverrides } from '../shared/shared-gm.lib.ts';
+import type {
+  ArchiveMergeReport,
+  SnapshotArchive,
+  SnapshotArchiveStore,
+  SnapshotArchiveSummary,
+  SnapshotExportDocument,
+} from './codex-quota-compass-archive.lib.ts';
+
+export type RemoteSyncSettings = v.InferOutput<typeof RemoteSyncSettingsSchema>;
+export type RemoteSyncSettingsPatch = Partial<RemoteSyncSettings>;
+export interface RemoteSyncSettingsStore {
+  read(): Promise<RemoteSyncSettings>;
+  write(nextSettings: unknown): Promise<RemoteSyncSettings>;
+}
+export type RemoteState = 'idle' | 'failed' | 'unknown';
+/** Credential-free view of the sync settings. */
+export interface RemoteSyncStatus {
+  enabled: boolean;
+  configured: boolean;
+  provider: string;
+  providerLabel: string;
+  endpoint: string;
+  gistId: string;
+  filename: string;
+  clientId: string;
+  hasToken: boolean;
+  lastSyncedAt: string;
+  lastError: string;
+  remoteState: RemoteState;
+}
+export type HttpMethod = 'GET' | 'POST' | 'PATCH';
+export interface JsonRequest {
+  method: HttpMethod;
+  url: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  timeout?: number;
+}
+export type RequestJson = (request: JsonRequest) => Promise<unknown>;
+export interface FetchRequesterOptions {
+  fetchImpl?: typeof fetch | null;
+}
+interface HttpError extends Error {
+  status?: number;
+}
+interface GistFilePayload {
+  truncated?: boolean;
+  raw_url?: string;
+  content?: string;
+}
+export interface GistPayload {
+  id?: string;
+  description?: string;
+  files?: Record<string, GistFilePayload | undefined>;
+}
+export type RemoteSyncArchiveStore = Pick<
+  SnapshotArchiveStore,
+  'loadArchive' | 'importArchiveDocument' | 'summarizeArchive'
+>;
+export interface RemoteSyncClientOptions {
+  archiveStore: RemoteSyncArchiveStore;
+  settingsStore?: RemoteSyncSettingsStore;
+  requestJson?: RequestJson;
+  now?: () => string;
+}
+export type RemoteSyncOutcome =
+  | { status: 'disabled' | 'unconfigured' | 'superseded'; settings: RemoteSyncStatus }
+  | {
+      status: 'synced';
+      settings: RemoteSyncStatus;
+      remoteReport: { created: boolean; updated?: boolean; gistId?: string };
+      localReport: ArchiveMergeReport;
+      summary: SnapshotArchiveSummary;
+      archive: SnapshotArchive;
+    };
+export type SyncPhase = 'persistence' | 'sync';
+/** Error thrown by `syncNow` after recording the failure. */
+export interface RemoteSyncFailure extends Error {
+  localMerged: boolean;
+  phase: SyncPhase;
+  remoteState: 'unknown' | 'failed';
+}
+type SyncCaughtError = (HttpError & { superseded?: boolean; latest?: RemoteSyncSettings }) | null | undefined;
+export interface RemoteSyncFormValues {
+  token?: string | null;
+  gistId?: string | null;
+  enabled?: unknown;
+}
+export type RemoteSyncSavePlan =
+  | { ok: false; reason: 'token-required' }
+  | { ok: true; patch: { enabled: boolean; gistId: string; token?: string }; syncAfter: boolean };
+export type RemoteSyncClient = ReturnType<typeof createRemoteSyncClient>;
+interface GistApiOptions {
+  requestJson: RequestJson;
+  token: string;
+  filename: string;
+}
 
 const REMOTE_SYNC_SETTINGS_KEY = 'codexQuotaCompassRemoteSyncSettings';
 const GITHUB_API_BASE = 'https://api.github.com';
@@ -17,11 +115,13 @@ const GIST_FILENAME = 'codex-quota-compass-snapshot-archive.v1.json';
 const SUPPORTED_IMPORT_VERSIONS = new Set([1, 2]);
 const UNKNOWN_WRITE_PREFIX = 'Remote write outcome unknown. Verify the Gist before retrying. ';
 
-function maybePromise(value) {
-  return value && typeof value.then === 'function' ? value : Promise.resolve(value);
+function maybePromise(value: unknown): Promise<unknown> {
+  return value && typeof (value as PromiseLike<unknown>).then === 'function'
+    ? (value as Promise<unknown>)
+    : Promise.resolve(value);
 }
 
-function describeHttpStatus(status) {
+function describeHttpStatus(status: number): string {
   if (status === 401) {
     return 'GitHub rejected the token (HTTP 401). Check the token and its Gists permission.';
   }
@@ -34,28 +134,28 @@ function describeHttpStatus(status) {
   return `GitHub Gist sync request failed with HTTP ${status}.`;
 }
 
-function httpError(status) {
-  const error = new Error(describeHttpStatus(status));
+function httpError(status: number): HttpError {
+  const error: HttpError = new Error(describeHttpStatus(status));
   error.status = status;
   return error;
 }
 
-function createClientId() {
+function createClientId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function normalizeGistId(gistId) {
+function normalizeGistId(gistId: unknown): string {
   return String(gistId || '').trim();
 }
 
-function normalizeFilename(filename) {
+function normalizeFilename(filename: unknown): string {
   const trimmed = String(filename || '').trim();
   return trimmed || GIST_FILENAME;
 }
 
 // Missing keys still run through the transform, so defaults apply uniformly.
-const coerce = (transform) =>
+const coerce = <T>(transform: (value: unknown) => T) =>
   v.pipe(
     v.optional(v.unknown(), () => undefined),
     v.transform(transform),
@@ -83,12 +183,12 @@ const SupportedExportDocumentSchema = v.object({
   version: v.picklist([...SUPPORTED_IMPORT_VERSIONS]),
 });
 
-function normalizeSettings(rawSettings) {
+function normalizeSettings(rawSettings: unknown): RemoteSyncSettings {
   return v.parse(RemoteSyncSettingsSchema, rawSettings && typeof rawSettings === 'object' ? rawSettings : {});
 }
 
-function createGmSettingsStore(options = {}) {
-  async function readRaw() {
+function createGmSettingsStore(options: GmOverrides = {}): RemoteSyncSettingsStore {
+  async function readRaw(): Promise<unknown> {
     const { getValue } = resolveGmApi(options);
     if (getValue) {
       return maybePromise(getValue(REMOTE_SYNC_SETTINGS_KEY, null));
@@ -97,7 +197,7 @@ function createGmSettingsStore(options = {}) {
     throw new Error('GM storage is required for remote sync settings.');
   }
 
-  async function writeRaw(settings) {
+  async function writeRaw(settings: RemoteSyncSettings): Promise<RemoteSyncSettings> {
     const { setValue } = resolveGmApi(options);
     if (setValue) {
       await maybePromise(setValue(REMOTE_SYNC_SETTINGS_KEY, settings));
@@ -112,7 +212,7 @@ function createGmSettingsStore(options = {}) {
       return normalizeSettings(await readRaw());
     },
 
-    async write(nextSettings) {
+    async write(nextSettings: unknown) {
       const normalized = normalizeSettings(nextSettings);
       await writeRaw(normalized);
       return normalized;
@@ -120,14 +220,14 @@ function createGmSettingsStore(options = {}) {
   };
 }
 
-function createFetchJsonRequester(options = {}) {
+function createFetchJsonRequester(options: FetchRequesterOptions = {}): RequestJson {
   const fetchImpl =
     options.fetchImpl || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
   if (typeof fetchImpl !== 'function') {
     throw new Error('fetch is required for GitHub Gist sync.');
   }
 
-  return async function requestJson({ method, url, headers = {}, body, timeout = 15000 }) {
+  return async function requestJson({ method, url, headers = {}, body, timeout = 15000 }: JsonRequest) {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timeoutId = controller ? globalThis.setTimeout(() => controller.abort(), timeout) : null;
 
@@ -148,7 +248,7 @@ function createFetchJsonRequester(options = {}) {
       const text = await response.text();
       return text ? JSON.parse(text) : null;
     } catch (error) {
-      if (error?.name === 'AbortError') {
+      if ((error as Error | null)?.name === 'AbortError') {
         throw new Error('GitHub Gist sync request timed out.', { cause: error });
       }
       if (error instanceof SyntaxError) {
@@ -161,17 +261,17 @@ function createFetchJsonRequester(options = {}) {
   };
 }
 
-function getGmXmlHttpRequest(options = {}) {
+function getGmXmlHttpRequest(options: GmOverrides = {}) {
   return resolveGmApi(options).xmlHttpRequest;
 }
 
-function createGmJsonRequester(options = {}) {
+function createGmJsonRequester(options: GmOverrides = {}): RequestJson {
   const gmXmlhttpRequest = getGmXmlHttpRequest(options);
   if (!gmXmlhttpRequest) {
     throw new Error('GM_xmlhttpRequest is required for GitHub Gist sync.');
   }
 
-  return function requestJson({ method, url, headers = {}, body, timeout = 15000 }) {
+  return function requestJson({ method, url, headers = {}, body, timeout = 15000 }: JsonRequest) {
     return new Promise((resolve, reject) => {
       gmXmlhttpRequest({
         method,
@@ -195,26 +295,26 @@ function createGmJsonRequester(options = {}) {
         },
         onerror: () => reject(new Error('GitHub Gist sync network request failed.')),
         ontimeout: () => reject(new Error('GitHub Gist sync request timed out.')),
-      });
+      } as Tampermonkey.Request);
     });
   };
 }
 
-function createJsonRequester(options = {}) {
+function createJsonRequester(options: GmOverrides & FetchRequesterOptions = {}): RequestJson {
   return getGmXmlHttpRequest(options) ? createGmJsonRequester(options) : createFetchJsonRequester(options);
 }
 
-function createArchiveExportDocument(archive, exportedAt) {
+function createArchiveExportDocument(archive: unknown, exportedAt: string): SnapshotExportDocument {
   // Delegate to the archive lib so the pushed payload is the compact v2 shape
   // (per-day ledger + last 5 snapshots) instead of full per-snapshot history.
   return buildSnapshotExportDocument(archive || { snapshots: [] }, exportedAt);
 }
 
-function createEmptyExportDocument(exportedAt) {
+function createEmptyExportDocument(exportedAt: string): SnapshotExportDocument {
   return createArchiveExportDocument({ snapshots: [] }, exportedAt);
 }
 
-function publicStatus(settings) {
+function publicStatus(settings: RemoteSyncSettings): RemoteSyncStatus {
   const gistLabel = settings.gistId ? `GitHub Gist ${settings.gistId}` : 'GitHub Gist';
   return {
     enabled: Boolean(settings.enabled),
@@ -236,7 +336,7 @@ function publicStatus(settings) {
   };
 }
 
-function gitHubHeaders(token, extra = {}) {
+function gitHubHeaders(token: string, extra: Record<string, string> = {}): Record<string, string> {
   return {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${token}`,
@@ -245,11 +345,11 @@ function gitHubHeaders(token, extra = {}) {
   };
 }
 
-function gistHasArchiveFile(gist, filename) {
+function gistHasArchiveFile(gist: GistPayload | null | undefined, filename: string): boolean {
   return Boolean(gist?.files?.[filename]);
 }
 
-function pickArchiveGist(gists, filename) {
+function pickArchiveGist(gists: unknown, filename: string): GistPayload | null {
   return (
     (Array.isArray(gists) ? gists : []).find(
       (gist) => gist?.description === GIST_DESCRIPTION && gistHasArchiveFile(gist, filename),
@@ -257,14 +357,19 @@ function pickArchiveGist(gists, filename) {
   );
 }
 
-function validateArchiveDocument(documentObject) {
+function validateArchiveDocument(documentObject: unknown) {
   if (!v.is(SupportedExportDocumentSchema, documentObject)) {
     throw new Error('GitHub Gist archive file is not a supported Snapshot Export.');
   }
   return documentObject;
 }
 
-async function archiveDocumentFromGist(gist, filename, now, requestJson) {
+async function archiveDocumentFromGist(
+  gist: GistPayload,
+  filename: string,
+  now: () => string,
+  requestJson: RequestJson,
+): Promise<unknown> {
   const file = gist?.files?.[filename];
   if (!file) return createEmptyExportDocument(now());
   if (file.truncated) {
@@ -287,7 +392,7 @@ async function archiveDocumentFromGist(gist, filename, now, requestJson) {
   return validateArchiveDocument(JSON.parse(content));
 }
 
-function archiveFilePayload(archive, exportedAt) {
+function archiveFilePayload(archive: unknown, exportedAt: string): string {
   // Compact (no pretty-print) to keep the synced blob small.
   return JSON.stringify(createArchiveExportDocument(archive, exportedAt));
 }
@@ -296,15 +401,15 @@ function archiveFilePayload(archive, exportedAt) {
 // convergence (ledger + retained snapshots), ignoring the always-changing
 // `exportedAt` / `snapshotCount` envelope fields so an unchanged archive is
 // not re-pushed on every page open.
-function sameArchiveContent(left, right) {
+function sameArchiveContent(left: SnapshotExportDocument, right: SnapshotExportDocument): boolean {
   return exportDocumentContentKey(left) === exportDocumentContentKey(right);
 }
 
 const GIST_PAGE_SIZE = 100;
 const GIST_MAX_PAGES = 10;
 
-function createGitHubGistApi({ requestJson, token, filename }) {
-  function listGistsPage(page) {
+function createGitHubGistApi({ requestJson, token, filename }: GistApiOptions) {
+  function listGistsPage(page: number): Promise<unknown> {
     const url =
       page <= 1
         ? `${GITHUB_API_BASE}/gists?per_page=${GIST_PAGE_SIZE}`
@@ -312,15 +417,15 @@ function createGitHubGistApi({ requestJson, token, filename }) {
     return requestJson({ method: 'GET', url, headers: gitHubHeaders(token) });
   }
 
-  async function getGist(gistId) {
+  async function getGist(gistId: string): Promise<GistPayload> {
     return requestJson({
       method: 'GET',
       url: `${GITHUB_API_BASE}/gists/${encodeURIComponent(gistId)}`,
       headers: gitHubHeaders(token),
-    });
+    }) as Promise<GistPayload>;
   }
 
-  async function createGist(archive, exportedAt) {
+  async function createGist(archive: unknown, exportedAt: string): Promise<GistPayload> {
     return requestJson({
       method: 'POST',
       url: `${GITHUB_API_BASE}/gists`,
@@ -334,10 +439,10 @@ function createGitHubGistApi({ requestJson, token, filename }) {
           },
         },
       },
-    });
+    }) as Promise<GistPayload>;
   }
 
-  async function updateGist(gistId, archive, exportedAt) {
+  async function updateGist(gistId: string, archive: unknown, exportedAt: string): Promise<GistPayload> {
     return requestJson({
       method: 'PATCH',
       url: `${GITHUB_API_BASE}/gists/${encodeURIComponent(gistId)}`,
@@ -349,10 +454,10 @@ function createGitHubGistApi({ requestJson, token, filename }) {
           },
         },
       },
-    });
+    }) as Promise<GistPayload>;
   }
 
-  async function findExistingArchiveGist() {
+  async function findExistingArchiveGist(): Promise<GistPayload | null> {
     // Paginate so users with more than one page of gists do not silently miss
     // their archive gist and create a duplicate on every sync.
     for (let page = 1; page <= GIST_MAX_PAGES; page += 1) {
@@ -373,30 +478,32 @@ function createGitHubGistApi({ requestJson, token, filename }) {
   };
 }
 
-function createRemoteSyncClient({
-  archiveStore,
-  settingsStore = createGmSettingsStore(),
-  requestJson = createJsonRequester(),
-  now = () => new Date().toISOString(),
-} = {}) {
+function createRemoteSyncClient(
+  {
+    archiveStore,
+    settingsStore = createGmSettingsStore(),
+    requestJson = createJsonRequester(),
+    now = () => new Date().toISOString(),
+  }: RemoteSyncClientOptions = {} as RemoteSyncClientOptions,
+) {
   if (!archiveStore?.loadArchive || !archiveStore?.importArchiveDocument) {
     throw new Error('Remote sync requires a Snapshot Archive store.');
   }
 
   const queue = pLimit(1);
-  function enqueue(operation) {
+  function enqueue<T>(operation: () => Promise<T>): Promise<T> {
     return queue(operation);
   }
 
-  async function getSettings() {
+  async function getSettings(): Promise<RemoteSyncSettings> {
     return settingsStore.read();
   }
 
-  async function saveSettings(nextSettings) {
+  async function saveSettings(nextSettings: unknown): Promise<RemoteSyncSettings> {
     return settingsStore.write(nextSettings);
   }
 
-  async function configure(patch = {}) {
+  async function configure(patch: RemoteSyncSettingsPatch = {}): Promise<RemoteSyncStatus> {
     const current = await getSettings();
     const next = {
       ...current,
@@ -411,14 +518,14 @@ function createRemoteSyncClient({
     return publicStatus(await saveSettings(next));
   }
 
-  async function getStatus() {
+  async function getStatus(): Promise<RemoteSyncStatus> {
     return publicStatus(await getSettings());
   }
 
   // A sync belongs to the settings it started with. Another tab may disable
   // sync or change the token, Gist or file while requests are in flight; the
   // stored settings then win and this sync's outcome is discarded.
-  function isSameSyncTarget(started, latest) {
+  function isSameSyncTarget(started: RemoteSyncSettings, latest: RemoteSyncSettings): boolean {
     return (
       latest.enabled &&
       Boolean(latest.token) &&
@@ -428,37 +535,40 @@ function createRemoteSyncClient({
     );
   }
 
-  function supersededError(latest) {
+  function supersededError(latest: RemoteSyncSettings) {
     return Object.assign(new Error('GitHub Gist sync settings changed during sync.'), {
       superseded: true,
       latest,
     });
   }
 
-  async function assertSyncTargetCurrent(started) {
+  async function assertSyncTargetCurrent(started: RemoteSyncSettings): Promise<void> {
     const latest = await getSettings();
     if (!isSameSyncTarget(started, latest)) throw supersededError(latest);
   }
 
   // Writes only the fields a sync produces, onto the latest stored settings.
-  async function saveSyncOutcome(started, outcome) {
+  async function saveSyncOutcome(
+    started: RemoteSyncSettings,
+    outcome: RemoteSyncSettingsPatch,
+  ): Promise<RemoteSyncSettings> {
     const latest = await getSettings();
     if (!isSameSyncTarget(started, latest)) return latest;
     return saveSettings({ ...latest, ...outcome });
   }
 
-  async function markSyncFailure(settings, error) {
-    const rawMessage = error?.message || String(error);
+  async function markSyncFailure(settings: RemoteSyncSettings, error: unknown): Promise<string> {
+    const rawMessage = (error as Error | null)?.message || String(error);
     const message = settings.token ? rawMessage.split(settings.token).join('[redacted]') : rawMessage;
     await saveSyncOutcome(settings, { lastError: message });
     return message;
   }
 
-  function supersededResult(latest) {
+  function supersededResult(latest: RemoteSyncSettings): RemoteSyncOutcome {
     return { status: latest.enabled ? 'superseded' : 'disabled', settings: publicStatus(latest) };
   }
 
-  async function syncNow() {
+  async function syncNow(): Promise<RemoteSyncOutcome> {
     const settings = await getSettings();
     if (!settings.enabled) {
       return { status: 'disabled', settings: publicStatus(settings) };
@@ -469,7 +579,7 @@ function createRemoteSyncClient({
 
     let localMerged = false;
     let remoteWritePending = false;
-    let phase = 'persistence';
+    let phase: SyncPhase = 'persistence';
     try {
       await archiveStore.loadArchive();
       phase = 'sync';
@@ -479,14 +589,14 @@ function createRemoteSyncClient({
         token: settings.token,
         filename: settings.filename,
       });
-      let gist = null;
+      let gist: GistPayload | null = null;
       if (settings.gistId) {
         try {
           gist = await gistApi.getGist(settings.gistId);
         } catch (error) {
           // A stored gist id can go stale if the gist was deleted remotely.
           // Recover by rediscovering or recreating instead of failing forever.
-          if (error?.status !== 404) throw error;
+          if ((error as SyncCaughtError)?.status !== 404) throw error;
           gist = null;
         }
       }
@@ -505,7 +615,7 @@ function createRemoteSyncClient({
         gist = await gistApi.createGist(localArchive, exportedAt);
         remoteWritePending = false;
         const savedSettings = await saveSyncOutcome(settings, {
-          gistId: gist.id,
+          gistId: gist.id!,
           lastSyncedAt: exportedAt,
           lastError: '',
         });
@@ -543,7 +653,7 @@ function createRemoteSyncClient({
       const remoteNeedsUpdate = !sameArchiveContent(mergedDocument, remoteNormalized);
       if (remoteNeedsUpdate) await assertSyncTargetCurrent(settings);
       remoteWritePending = remoteNeedsUpdate;
-      const updatedGist = remoteNeedsUpdate ? await gistApi.updateGist(gist.id, imported.archive, now()) : gist;
+      const updatedGist = remoteNeedsUpdate ? await gistApi.updateGist(gist.id!, imported.archive, now()) : gist;
       remoteWritePending = false;
       const savedSettings = await saveSyncOutcome(settings, {
         gistId: updatedGist.id || gist.id,
@@ -561,9 +671,11 @@ function createRemoteSyncClient({
       };
     } catch (error) {
       // Nothing was pushed; a completed local merge stays, as on any failure.
-      if (error?.superseded) return supersededResult(error.latest);
-      const unknown = remoteWritePending && !error?.status;
-      const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
+      if ((error as SyncCaughtError)?.superseded) return supersededResult((error as SyncCaughtError)!.latest!);
+      const unknown = remoteWritePending && !(error as SyncCaughtError)?.status;
+      const failure = unknown
+        ? new Error(UNKNOWN_WRITE_PREFIX + ((error as SyncCaughtError)?.message || String(error)))
+        : error;
       const message = await markSyncFailure(settings, failure).catch(
         () => 'GitHub Gist sync failed; status could not be saved.',
       );
@@ -576,14 +688,17 @@ function createRemoteSyncClient({
   }
 
   return {
-    configure: (patch) => enqueue(() => configure(patch)),
+    configure: (patch?: RemoteSyncSettingsPatch) => enqueue(() => configure(patch)),
     getSettings: () => enqueue(getSettings),
     getStatus: () => enqueue(getStatus),
     syncNow: () => enqueue(syncNow),
   };
 }
 
-function planRemoteSyncSave(formValues = {}, currentStatus = {}) {
+function planRemoteSyncSave(
+  formValues: RemoteSyncFormValues = {},
+  currentStatus: Partial<Pick<RemoteSyncStatus, 'hasToken'>> = {},
+): RemoteSyncSavePlan {
   const token = String(formValues.token || '').trim();
   const gistId = String(formValues.gistId || '').trim();
   const enabled = Boolean(formValues.enabled);
