@@ -37,6 +37,8 @@ try {
   command('git', ['diff', '--exit-code', '--', 'dist', 'src']);
   command('sh', ['-c', 'test -z "$(git status --porcelain dist)"']);
   command(process.execPath, ['scripts/check-userscripts.mjs']);
+  // tsconfig.json sets noEmit: a type check only, the bundle comes from esbuild.
+  command(process.execPath, ['node_modules/typescript/bin/tsc', '-p', '.']);
   command(process.execPath, ['node_modules/eslint/bin/eslint.js', '.']);
   command('bash', ['scripts/format.sh', '--check']);
   report.stages.checks = 'passed';
