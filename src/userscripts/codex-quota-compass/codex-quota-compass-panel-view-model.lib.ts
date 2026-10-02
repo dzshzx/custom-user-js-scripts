@@ -1,7 +1,230 @@
 import { createQuotaSnapshotAccess } from './codex-quota-compass-contract.lib.ts';
+import type { QuotaPeriodAccess, QuotaSnapshotAccess } from './codex-quota-compass-contract.lib.ts';
+import type { QuotaMessageKey } from './codex-quota-compass-i18n.lib.ts';
+import type { ArchiveMergeReport, LedgerCostViews, SnapshotArchiveSummary } from './codex-quota-compass-archive.lib.ts';
+import type { LedgerMonthBlock, LedgerRecord, LedgerWeekBlock } from './codex-quota-compass-ledger.lib.ts';
+import type { RemoteSyncStatus } from './codex-quota-compass-remote-sync.lib.ts';
+import type { StorageBackendInfo } from './codex-quota-compass-storage.lib.ts';
+import type { QuotaSnapshotResult } from './codex-quota-compass-core.lib.ts';
 
-function normalizePanelSyncStatus(syncStatus, storageBackend) {
-  const source = syncStatus || storageBackend || { id: 'pending', label: 'pending' };
+/** Loose union of the sync-status shapes the panel accepts (backend info or a richer sync status). */
+interface PanelSyncStatusInput {
+  id?: string;
+  label?: string;
+  backendId?: string;
+  backendLabel?: string;
+  crossDeviceCapable?: unknown;
+  localOnly?: unknown;
+  reason?: string;
+}
+export interface PanelSyncStatus {
+  backendId: string;
+  backendLabel: string;
+  crossDeviceCapable: boolean;
+  localOnly: boolean;
+  reason: string;
+}
+type RemoteSyncStatusInput = Partial<Record<keyof RemoteSyncStatus, unknown>>;
+export interface PanelRemoteSyncStatus {
+  enabled: boolean;
+  configured: boolean;
+  endpoint: string;
+  gistId: string;
+  hasToken: boolean;
+  lastSyncedAt: string;
+  lastError: string;
+}
+export type PanelTone = 'warning' | 'success' | 'muted';
+export interface PanelSyncBanner {
+  tone: PanelTone;
+  titleKey: QuotaMessageKey;
+  detailKey: QuotaMessageKey;
+  backendLabel: string;
+  endpoint?: string;
+  lastSyncedAt?: string;
+  lastError?: string;
+}
+export type PanelTransferActionId = 'export-archive' | 'import-archive';
+export interface PanelTransferAction {
+  action: PanelTransferActionId;
+  labelKey: QuotaMessageKey;
+}
+export type DataColumnPriority = 'primary' | 'secondary' | 'debug';
+export interface DataColumnOptions {
+  label?: string;
+  labelKey?: QuotaMessageKey;
+  priority?: DataColumnPriority;
+  truncate?: boolean;
+  wrap?: boolean;
+  compact?: boolean;
+}
+export interface DataColumn {
+  key: string;
+  label: string;
+  labelKey: QuotaMessageKey | '';
+  priority: DataColumnPriority;
+  truncate: boolean;
+  wrap: boolean;
+  compact: boolean;
+}
+/** A table row: a record keyed by column key (Chinese result field names). */
+export type DataRow = object;
+export interface DataViewOptions {
+  emptyKey?: QuotaMessageKey;
+  compactOnMobile?: boolean;
+  limit?: number;
+}
+export interface DataViewSection {
+  type: 'dataView';
+  id: string;
+  titleKey: QuotaMessageKey;
+  rows: DataRow[];
+  columns: DataColumn[];
+  emptyKey: QuotaMessageKey;
+  compactOnMobile: boolean;
+  limit: number | undefined;
+}
+export interface PanelCreditMetric {
+  id: string;
+  type: 'credit';
+  labelKey: QuotaMessageKey;
+  label: string;
+  usd: number | undefined;
+  resetHours?: number;
+}
+export interface PanelValueMetric {
+  id: string;
+  type: 'value';
+  labelKey: QuotaMessageKey;
+  label: string;
+  value: string;
+}
+export type PanelMetric = PanelCreditMetric | PanelValueMetric;
+export interface MetricsSection {
+  type: 'metrics';
+  titleKey: QuotaMessageKey;
+  metrics: PanelMetric[];
+}
+export type DetailsSection = MetricsSection | DataViewSection;
+export type ArchiveWorkspaceSection =
+  | { type: 'syncForm' }
+  | { type: 'archiveSummary' }
+  | { type: 'note'; noteKey: QuotaMessageKey }
+  | { type: 'actions'; actions: PanelTransferAction[] };
+export type PanelSection = DetailsSection | ArchiveWorkspaceSection;
+export type PanelViewId = 'details' | 'stats' | 'archive';
+export interface PanelTab {
+  id: PanelViewId;
+  labelKey: QuotaMessageKey;
+}
+export interface PanelTransfer {
+  noteKey: QuotaMessageKey;
+  syncStatus: PanelSyncStatus;
+  remoteSyncStatus: PanelRemoteSyncStatus;
+  actions: PanelTransferAction[];
+}
+export interface PanelStatsView {
+  id: 'stats';
+  labelKey: QuotaMessageKey;
+  kind: 'stats';
+}
+export interface PanelSectionsView {
+  id: 'details';
+  labelKey: QuotaMessageKey;
+  kind: 'sections';
+  sections: DetailsSection[];
+}
+export interface PanelArchiveView {
+  id: 'archive';
+  labelKey: QuotaMessageKey;
+  kind: 'archiveWorkspace';
+  actionIds: PanelTransferActionId[];
+  sections: ArchiveWorkspaceSection[];
+}
+export type PanelView = PanelStatsView | PanelSectionsView | PanelArchiveView;
+export interface PanelViews {
+  tabs: PanelTab[];
+  views: { stats: PanelStatsView; details: PanelSectionsView; archive: PanelArchiveView };
+}
+type WeeklyEstimate = QuotaPeriodAccess['weeklyEstimate'];
+type PeriodSummary = QuotaPeriodAccess['summary'];
+interface DetailsSectionsInput {
+  weekly: WeeklyEstimate;
+  sinceReset: PeriodSummary;
+  month: PeriodSummary;
+  rolling: PeriodSummary;
+  windows: QuotaSnapshotAccess['windows'];
+  modelSummaries: QuotaPeriodAccess['modelSummaries'];
+  resetCredits: QuotaSnapshotAccess['resetCredits'];
+  detailMetrics: PanelMetric[];
+}
+interface PanelViewsInput extends DetailsSectionsInput {
+  transfer: PanelTransfer;
+}
+export interface CostDayRow {
+  date: string;
+  credits: number;
+  usd: number;
+}
+type LedgerBucketInput = LedgerWeekBlock & Partial<LedgerMonthBlock>;
+export interface CostBucket {
+  from: string;
+  to: string;
+  month: string | undefined;
+  credits: number;
+  usd: number;
+}
+export interface CostViewModel {
+  cycleStartDate: string | null;
+  today: CostDayRow | null;
+  day: { rows: CostDayRow[]; today: CostDayRow | null };
+  week: { current: CostBucket | null; blocks: CostBucket[] };
+  month: { current: CostBucket | null; rows: CostBucket[] };
+  all: {
+    totalCredits: number;
+    totalUsd: number;
+    coverDays: number;
+    fromDate: string | null;
+    toDate: string | null;
+    rows: CostDayRow[];
+  };
+  allDays: CostDayRow[];
+}
+interface WeeklyInput {
+  weekly: WeeklyEstimate;
+}
+interface HeroMetricInput extends WeeklyInput {
+  mainSevenDayWindow: QuotaSnapshotAccess['mainSevenDayWindow'];
+}
+interface DetailMetricsInput extends WeeklyInput {
+  sinceReset: PeriodSummary;
+  month: PeriodSummary;
+  resetCredits: QuotaSnapshotAccess['resetCredits'];
+}
+export interface PanelArchiveHealth {
+  isLoaded: boolean;
+  snapshotCount: number;
+  hasSnapshots: boolean;
+  earliestCapturedAt: string | null;
+  latestCapturedAt: string | null;
+  storageBackendLabel: string;
+  importReport: ArchiveMergeReport | null | undefined;
+}
+export interface QuotaPanelViewModelInput {
+  result: QuotaSnapshotResult | Record<string, unknown> | null | undefined;
+  ledgerCost?: LedgerCostViews | null;
+  archiveSummary?: SnapshotArchiveSummary | null;
+  importReport?: ArchiveMergeReport | null;
+  storageBackend?: StorageBackendInfo | null;
+  syncStatus?: PanelSyncStatusInput | null;
+  remoteSyncStatus?: RemoteSyncStatusInput | RemoteSyncStatus | null;
+}
+
+function normalizePanelSyncStatus(
+  syncStatus: PanelSyncStatusInput | null | undefined,
+  storageBackend: StorageBackendInfo | null | undefined,
+): PanelSyncStatus {
+  const source: PanelSyncStatusInput = syncStatus || storageBackend || { id: 'pending', label: 'pending' };
   const backendId = source.backendId || source.id || 'pending';
   const backendLabel = source.backendLabel || source.label || backendId;
 
@@ -14,8 +237,9 @@ function normalizePanelSyncStatus(syncStatus, storageBackend) {
   };
 }
 
-function normalizeRemoteSyncStatus(remoteSyncStatus) {
-  const source = remoteSyncStatus && typeof remoteSyncStatus === 'object' ? remoteSyncStatus : {};
+function normalizeRemoteSyncStatus(remoteSyncStatus: RemoteSyncStatusInput | null | undefined): PanelRemoteSyncStatus {
+  const source: RemoteSyncStatusInput =
+    remoteSyncStatus && typeof remoteSyncStatus === 'object' ? remoteSyncStatus : {};
 
   return {
     enabled: Boolean(source.enabled),
@@ -28,7 +252,7 @@ function normalizeRemoteSyncStatus(remoteSyncStatus) {
   };
 }
 
-function createSyncBanner(syncStatus, remoteSyncStatus) {
+function createSyncBanner(syncStatus: PanelSyncStatus, remoteSyncStatus: PanelRemoteSyncStatus): PanelSyncBanner {
   if (remoteSyncStatus.enabled && remoteSyncStatus.configured) {
     if (remoteSyncStatus.lastError) {
       return {
@@ -88,7 +312,7 @@ function createSyncBanner(syncStatus, remoteSyncStatus) {
   };
 }
 
-function createTransferActions() {
+function createTransferActions(): PanelTransferAction[] {
   // Gist sync configuration now lives in the in-panel sync form; only the
   // manual backup paths remain as footer actions.
   return [
@@ -97,7 +321,7 @@ function createTransferActions() {
   ];
 }
 
-function dataColumn(key, options = {}) {
+function dataColumn(key: string, options: DataColumnOptions = {}): DataColumn {
   return {
     key,
     label: options.label || key,
@@ -109,7 +333,13 @@ function dataColumn(key, options = {}) {
   };
 }
 
-function dataView(id, titleKey, rows, columns, options = {}) {
+function dataView(
+  id: string,
+  titleKey: QuotaMessageKey,
+  rows: readonly DataRow[] | null | undefined,
+  columns: DataColumn[],
+  options: DataViewOptions = {},
+): DataViewSection {
   return {
     type: 'dataView',
     id,
@@ -131,7 +361,7 @@ function createDetailsSections({
   modelSummaries,
   resetCredits,
   detailMetrics,
-}) {
+}: DetailsSectionsInput): DetailsSection[] {
   return [
     { type: 'metrics', titleKey: 'sectionKeyMetrics', metrics: detailMetrics },
     dataView(
@@ -212,8 +442,8 @@ function createPanelViews({
   resetCredits,
   transfer,
   detailMetrics,
-}) {
-  const tabs = [
+}: PanelViewsInput): PanelViews {
+  const tabs: PanelTab[] = [
     { id: 'details', labelKey: 'tabDetails' },
     { id: 'stats', labelKey: 'tabStats' },
     { id: 'archive', labelKey: 'tabArchiveWorkspace' },
@@ -258,11 +488,11 @@ function createPanelViews({
   };
 }
 
-function mapDailyRow(row) {
+function mapDailyRow(row: LedgerRecord): CostDayRow {
   return { date: row?.date, credits: row?.credits || 0, usd: row?.usd || 0 };
 }
 
-function mapBucket(bucket) {
+function mapBucket(bucket: LedgerBucketInput | null | undefined): CostBucket | null {
   if (!bucket) return null;
   return {
     from: bucket.from,
@@ -276,11 +506,11 @@ function mapBucket(bucket) {
 // Shape the ledger-derived cost views into the structure the Statistics tab
 // (CodexQuotaCompassPanelStatsLib.buildStatsView) consumes: four dimensions
 // plus a flat allDays list used for in-panel drill-down filtering.
-function buildCostViewModel(ledgerCost) {
+function buildCostViewModel(ledgerCost: LedgerCostViews | null | undefined): CostViewModel | null {
   if (!ledgerCost) return null;
   const allDays = (ledgerCost.daily?.days || []).map(mapDailyRow);
   const today = ledgerCost.daily?.inProgress ? mapDailyRow(ledgerCost.daily.inProgress) : null;
-  const allTime = ledgerCost.allTime || {};
+  const allTime: Partial<LedgerCostViews['allTime']> = ledgerCost.allTime || {};
 
   return {
     cycleStartDate: ledgerCost.cycleStartDate || null,
@@ -291,11 +521,11 @@ function buildCostViewModel(ledgerCost) {
     },
     week: {
       current: mapBucket(ledgerCost.weekly?.current),
-      blocks: (ledgerCost.weekly?.blocks || []).map(mapBucket),
+      blocks: (ledgerCost.weekly?.blocks || []).map(mapBucket) as CostBucket[],
     },
     month: {
       current: mapBucket(ledgerCost.monthly?.current),
-      rows: (ledgerCost.monthly?.months || []).map(mapBucket),
+      rows: (ledgerCost.monthly?.months || []).map(mapBucket) as CostBucket[],
     },
     all: {
       totalCredits: allTime.totalCredits || 0,
@@ -312,7 +542,7 @@ function buildCostViewModel(ledgerCost) {
 // First-screen hierarchy: one hero metric (remaining USD incl reset day, with
 // the reset countdown as its sub-line), two compact secondary metrics, and the
 // remaining figures demoted to a grid at the top of the Details tab.
-function createHeroMetric({ weekly, mainSevenDayWindow }) {
+function createHeroMetric({ weekly, mainSevenDayWindow }: HeroMetricInput): PanelCreditMetric {
   return {
     id: 'remainingUsdIncludingReset',
     type: 'credit',
@@ -323,7 +553,7 @@ function createHeroMetric({ weekly, mainSevenDayWindow }) {
   };
 }
 
-function createSecondaryMetrics({ weekly }) {
+function createSecondaryMetrics({ weekly }: WeeklyInput): PanelMetric[] {
   return [
     {
       id: 'remainingUsdExcludingReset',
@@ -342,8 +572,8 @@ function createSecondaryMetrics({ weekly }) {
   ];
 }
 
-function createDetailMetrics({ weekly, sinceReset, month, resetCredits }) {
-  const metrics = [
+function createDetailMetrics({ weekly, sinceReset, month, resetCredits }: DetailMetricsInput): PanelMetric[] {
+  const metrics: PanelMetric[] = [
     {
       id: 'weeklyTotalIncludingReset',
       type: 'credit',
@@ -393,7 +623,7 @@ function createQuotaPanelViewModel({
   storageBackend,
   syncStatus,
   remoteSyncStatus,
-}) {
+}: QuotaPanelViewModelInput) {
   const snapshotAccess = createQuotaSnapshotAccess(result);
   const rollingKey = snapshotAccess.rollingKey;
   const weekly = snapshotAccess.sinceReset.weeklyEstimate;
@@ -411,7 +641,7 @@ function createQuotaPanelViewModel({
     : [];
   const normalizedSyncStatus = normalizePanelSyncStatus(syncStatus, storageBackend);
   const normalizedRemoteSyncStatus = normalizeRemoteSyncStatus(remoteSyncStatus);
-  const archiveHealth = {
+  const archiveHealth: PanelArchiveHealth = {
     isLoaded: Boolean(archiveSummary),
     snapshotCount: archiveSummary?.snapshotCount || 0,
     hasSnapshots: Boolean((archiveSummary?.snapshotCount || 0) > 0),
@@ -421,7 +651,7 @@ function createQuotaPanelViewModel({
     importReport,
   };
 
-  const transfer = {
+  const transfer: PanelTransfer = {
     noteKey: 'transferNote',
     syncStatus: normalizedSyncStatus,
     remoteSyncStatus: normalizedRemoteSyncStatus,
@@ -480,5 +710,7 @@ function createQuotaPanelViewModel({
     },
   };
 }
+
+export type QuotaPanelViewModel = ReturnType<typeof createQuotaPanelViewModel>;
 
 export { createQuotaPanelViewModel };

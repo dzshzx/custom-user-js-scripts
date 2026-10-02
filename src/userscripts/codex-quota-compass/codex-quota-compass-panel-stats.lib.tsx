@@ -1,22 +1,52 @@
+import type { ComponentType } from 'preact';
+import type { QuotaMessageKey, QuotaTranslate } from './codex-quota-compass-i18n.lib.ts';
+import type { CostDayRow, CostViewModel } from './codex-quota-compass-panel-view-model.lib.ts';
+import type { DataTableProps, SectionProps } from './codex-quota-compass-panel-renderer.lib.tsx';
+import type { QuotaPeriodAccess } from './codex-quota-compass-contract.lib.ts';
+
+export type StatsPeriod = 'day' | 'week' | 'month' | 'all';
+/** In-panel drill-down range (inclusive `YYYY-MM-DD` bounds). */
+export interface StatsDrill {
+  from: string;
+  to: string;
+  label?: string;
+}
+export interface StatsViewProps {
+  cost: CostViewModel | null | undefined;
+  rolling: QuotaPeriodAccess['summary'] | null | undefined;
+  period: string | null | undefined;
+  drill: StatsDrill | null | undefined;
+  t: QuotaTranslate;
+  Section: ComponentType<SectionProps>;
+  DataTable: ComponentType<DataTableProps>;
+}
+interface DrillableItem {
+  from: string;
+  to: string;
+  label: string | undefined;
+  usd: number;
+  credits: number;
+}
+
 const LIB_NAME = 'CodexQuotaCompassPanelStatsLib';
-const PERIODS = ['day', 'week', 'month', 'all'];
-const PERIOD_TABS = [
+const PERIODS: readonly StatsPeriod[] = ['day', 'week', 'month', 'all'];
+const PERIOD_TABS: readonly (readonly [StatsPeriod, QuotaMessageKey])[] = [
   ['day', 'statsPeriodDay'],
   ['week', 'statsPeriodWeek'],
   ['month', 'statsPeriodMonth'],
   ['all', 'statsPeriodAll'],
 ];
 
-function round(value) {
+function round(value: unknown): number {
   return Math.round(Number(value || 0));
 }
 
-function usd(value) {
+function usd(value: unknown): string {
   return Number(value || 0).toFixed(2);
 }
 
-function normalizePeriod(period) {
-  return PERIODS.includes(period) ? period : 'day';
+function normalizePeriod(period: string | null | undefined): StatsPeriod {
+  return PERIODS.includes(period as StatsPeriod) ? (period as StatsPeriod) : 'day';
 }
 
 // Statistics view component. Receives the renderer's Section and DataTable
@@ -24,7 +54,7 @@ function normalizePeriod(period) {
 // stays testable with stub components. Drillable rows are real <button>s
 // carrying a data-action payload the shell's event delegation routes back to
 // the controller.
-function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
+function StatsView({ cost, rolling, period, drill, t, Section, DataTable }: StatsViewProps) {
   if (typeof t !== 'function' || typeof Section !== 'function' || typeof DataTable !== 'function') {
     throw new Error(`${LIB_NAME}.StatsView requires t/Section/DataTable.`);
   }
@@ -64,7 +94,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
   // Last-30-days settled USD as pure CSS bars; the daily table below is the
   // text equivalent, so the chart itself is hidden from assistive technology.
   function chart() {
-    const days = (cost.allDays || []).slice(-30);
+    const days = (cost!.allDays || []).slice(-30);
     if (!days.length) return null;
     const max = Math.max(...days.map((row) => Number(row.usd) || 0));
     if (!(max > 0)) return null;
@@ -81,7 +111,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
     );
   }
 
-  function dailyTable(rows) {
+  function dailyTable(rows: CostDayRow[] | undefined) {
     const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
       date: row.date,
       credits: round(row.credits),
@@ -102,7 +132,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
     );
   }
 
-  function estimateLine(label, range, creditsValue, usdValue) {
+  function estimateLine(label: string, range: string | undefined, creditsValue: number, usdValue: number) {
     return (
       <div class="cqc-stats-estimate">
         <span class="cqc-stats-estimate-label">{label}</span>
@@ -117,7 +147,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
 
   // Drillable list of period buckets. Each row is a real button whose
   // data-from/data-to/data-label drive the in-panel drill-down.
-  function drillableList(items) {
+  function drillableList(items: DrillableItem[]) {
     if (!items.length) return empty;
     return (
       <div class="cqc-stats-list">
@@ -141,7 +171,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
   }
 
   function dayBody() {
-    const day = cost.day || {};
+    const day = cost!.day || {};
     return (
       <Section title={t('statsPeriodDay')}>
         {day.today ? estimateLine(t('costTodayLabel'), day.today.date, day.today.credits, day.today.usd) : null}
@@ -151,7 +181,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
   }
 
   function weekBody() {
-    const week = cost.week || {};
+    const week = cost!.week || {};
     return (
       <Section title={t('statsPeriodWeek')}>
         {week.current
@@ -176,7 +206,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
   }
 
   function monthBody() {
-    const month = cost.month || {};
+    const month = cost!.month || {};
     return (
       <Section title={t('statsPeriodMonth')}>
         {month.current
@@ -196,7 +226,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
   }
 
   function allBody() {
-    const all = cost.all || {};
+    const all = cost!.all || {};
     return (
       <Section title={t('statsPeriodAll')}>
         <div class="cqc-stats-all-total">
@@ -211,13 +241,13 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }) {
   }
 
   function drillBody() {
-    const rows = (cost.allDays || []).filter((row) => row.date >= drill.from && row.date <= drill.to);
+    const rows = (cost!.allDays || []).filter((row) => row.date >= drill!.from && row.date <= drill!.to);
     return (
       <div class="cqc-stats-drill">
         <button type="button" class="cqc-stats-back" data-action="stats-drill-back">
           {t('statsDrillBack')}
         </button>
-        <div class="cqc-stats-drill-title">{drill.label || `${drill.from} ~ ${drill.to}`}</div>
+        <div class="cqc-stats-drill-title">{drill!.label || `${drill!.from} ~ ${drill!.to}`}</div>
         {dailyTable(rows)}
       </div>
     );

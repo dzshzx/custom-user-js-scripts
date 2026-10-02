@@ -4,11 +4,67 @@ import { createQuotaPanelRenderer } from './codex-quota-compass-panel-renderer.l
 import { createFloatingPanelShell } from './codex-quota-compass-panel-shell.lib.tsx';
 import { buildTokenCss } from '../shared/shared-tokens.lib.ts';
 import { createToaster } from '../shared/shared-toast.lib.tsx';
+import type { QuotaMessageKey, QuotaTranslate, TranslationVariables } from './codex-quota-compass-i18n.lib.ts';
+import type {
+  QuotaApplication,
+  QuotaApplicationState,
+  QuotaOperationOutcome,
+} from './codex-quota-compass-application.lib.ts';
+import type { RemoteSyncStatus } from './codex-quota-compass-remote-sync.lib.ts';
+import type { PanelSyncStatus } from './codex-quota-compass-panel-view-model.lib.ts';
+import type { PanelPresentation, PanelRenderState, SyncDraft } from './codex-quota-compass-panel-renderer.lib.tsx';
+import type { StatsDrill } from './codex-quota-compass-panel-stats.lib.tsx';
+
+/** Backend descriptor: storage backend info or an already-normalized sync status. */
+interface SnapshotBackendInput {
+  id?: string;
+  label?: string;
+  backendId?: string;
+  backendLabel?: string;
+}
+export type QuotaFilePick = { status: 'cancelled' } | { status: 'selected'; text: string };
+export interface QuotaFileChooseOptions {
+  signal?: AbortSignal;
+}
+/** Browser file adapter: JSON picker + download, owning their DOM/URL resources. */
+export interface QuotaPanelFiles {
+  chooseText(options?: QuotaFileChooseOptions): Promise<QuotaFilePick | null>;
+  downloadText(filename: string, content: string): void | Promise<void>;
+  dispose?(): void;
+}
+export interface BrowserQuotaFilesOptions {
+  document: Document;
+  window: Window & typeof globalThis;
+  t: QuotaTranslate;
+}
+/** Outcome of one panel command; extends the application outcome with panel-only steps. */
+export type PanelOperationOutcome = Omit<QuotaOperationOutcome, 'completed'> & {
+  completed?: string[];
+  stage?: string;
+  count?: number;
+};
+export type PanelCommandType = 'open' | 'refresh' | 'sync' | 'save-remote-sync' | 'import-archive' | 'export-archive';
+export interface PanelCommand {
+  type: PanelCommandType | string;
+  open?: boolean;
+  view?: string;
+}
+export interface QuotaPanelControllerOptions {
+  application: Pick<QuotaApplication, 'run' | 'sync' | 'configureSync' | 'importArchive' | 'exportArchive'>;
+  document: Document;
+  window: Window & typeof globalThis;
+  storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
+  t: QuotaTranslate;
+  files: QuotaPanelFiles;
+  onRefreshSettled?: (outcome: PanelOperationOutcome) => unknown;
+}
+type MaybeTranslationVars = TranslationVariables | undefined;
+type OperationError = { message?: string; stage?: string } | null | undefined;
 
 const ROOT_ID = 'codex-quota-compass-root';
 const EXPORT_NAME = 'codex-quota-compass-snapshot-archive.v1.json';
 
-function createSnapshotSyncStatus(backendInfo) {
+function createSnapshotSyncStatus(backendInfo: SnapshotBackendInput | null | undefined): PanelSyncStatus {
   const backendId = backendInfo?.backendId || backendInfo?.id || 'unavailable';
   const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
   const localOnly = backendId === 'gm' || backendId === 'localStorage';
@@ -25,11 +81,11 @@ function createSnapshotSyncStatus(backendInfo) {
 
 // Browser file resources are owned by one adapter. Abort settles a pending
 // picker and removes its reader/input; a late change can no longer import.
-function createBrowserQuotaFiles({ document, window, t }) {
-  const activeUrls = new Set();
-  const activePickers = new Set();
-  function chooseText({ signal } = {}) {
-    return new Promise((resolve, reject) => {
+function createBrowserQuotaFiles({ document, window, t }: BrowserQuotaFilesOptions) {
+  const activeUrls = new Set<string>();
+  const activePickers = new Set<() => void>();
+  function chooseText({ signal }: QuotaFileChooseOptions = {}) {
+    return new Promise<QuotaFilePick | null>((resolve, reject) => {
       if (signal?.aborted) {
         resolve({ status: 'cancelled' });
         return;
@@ -39,11 +95,11 @@ function createBrowserQuotaFiles({ document, window, t }) {
       input.accept = 'application/json,.json';
       input.style.display = 'none';
       document.body.append(input);
-      let reader;
+      let reader: FileReader | undefined;
       let settled = false;
       let pickerActive = true;
-      let focusTimer;
-      function finish(value, error) {
+      let focusTimer: number | undefined;
+      function finish(value: QuotaFilePick | null, error?: unknown) {
         if (settled) return;
         settled = true;
         input.removeEventListener('change', changed);
@@ -80,11 +136,11 @@ function createBrowserQuotaFiles({ document, window, t }) {
         }
         reader = new window.FileReader();
         reader.onerror = () => finish(null, Object.assign(new Error(t('importReadFailed')), { stage: 'read' }));
-        reader.onload = () => finish({ status: 'selected', text: String(reader.result || '') });
+        reader.onload = () => finish({ status: 'selected', text: String(reader!.result || '') });
         try {
           reader.readAsText(file, 'utf-8');
         } catch (error) {
-          finish(null, Object.assign(error, { stage: 'read' }));
+          finish(null, Object.assign(error as Error, { stage: 'read' }));
         }
       }
       input.addEventListener('change', changed);
@@ -95,11 +151,11 @@ function createBrowserQuotaFiles({ document, window, t }) {
       try {
         input.click();
       } catch (error) {
-        finish(null, Object.assign(error, { stage: 'select' }));
+        finish(null, Object.assign(error as Error, { stage: 'select' }));
       }
     });
   }
-  function downloadText(filename, content) {
+  function downloadText(filename: string, content: string) {
     const url = window.URL.createObjectURL(new window.Blob([content], { type: 'application/json;charset=utf-8' }));
     activeUrls.add(url);
     const anchor = document.createElement('a');
@@ -123,23 +179,25 @@ function createBrowserQuotaFiles({ document, window, t }) {
   return { chooseText, downloadText, dispose };
 }
 
-function createQuotaPanelController({ application, document, window, storage, t, files, onRefreshSettled = () => {} }) {
+// Kept on one line: esbuild preserves the destructured parameter layout in the bundle.
+// prettier-ignore
+function createQuotaPanelController({ application, document, window, storage, t, files, onRefreshSettled = () => {} }: QuotaPanelControllerOptions) {
   let disposed = false;
-  let snapshot = null;
+  let snapshot: QuotaApplicationState | null = null;
   let activePanelView = 'details';
   let activeStatsPeriod = 'day';
-  let statsDrill = null;
+  let statsDrill: StatsDrill | null = null;
   // Sync form draft: null until the user edits the form. It survives every
   // background refresh; only a completed save of the same edit revision in
   // the same form generation, or leaving the view, discards it.
-  let syncDraft = null;
+  let syncDraft: SyncDraft | null = null;
   let formGeneration = 0;
   let editRevision = 0;
   let foreground = 0;
-  let presentation = 'snapshot';
-  let presentationError = null;
-  const expandedViews = new Set();
-  const inFlight = new Map();
+  let presentation: PanelPresentation = 'snapshot';
+  let presentationError: string | null | undefined = null;
+  const expandedViews = new Set<string>();
+  const inFlight = new Map<string, Promise<PanelOperationOutcome>>();
   const abortFiles = new AbortController();
   const renderer = createQuotaPanelRenderer({ t });
   renderer.installStyles(document, ROOT_ID);
@@ -179,7 +237,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
     document.head.append(style);
   }
 
-  function renderState(overrides = {}) {
+  function renderState(overrides: Partial<PanelRenderState> = {}): PanelRenderState {
     return { activePanelView, statsPeriod: activeStatsPeriod, statsDrill, expandedViews, ...overrides };
   }
   function createViewModel() {
@@ -197,7 +255,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
         : snapshot.syncStatus,
     });
   }
-  function setSyncDraft(next) {
+  function setSyncDraft(next: SyncDraft) {
     if (disposed) return;
     syncDraft = next;
     editRevision++;
@@ -222,31 +280,31 @@ function createQuotaPanelController({ application, document, window, storage, t,
     );
     shell.schedulePanelResize();
   }
-  function update(nextSnapshot) {
+  function update(nextSnapshot: QuotaApplicationState) {
     if (disposed) return;
     snapshot = nextSnapshot;
     commitPresentation();
   }
-  function notice(message, tone = 'info') {
+  function notice(message: string, tone = 'info') {
     if (!disposed) toaster?.show({ message, tone });
   }
-  function foregroundStatus(sequence, status, tone) {
+  function foregroundStatus(sequence: number, status: QuotaMessageKey, tone: string) {
     if (!disposed && sequence === foreground) shell.setStatus(t(status), tone);
   }
-  function settleRefresh(outcome) {
+  function settleRefresh(outcome: PanelOperationOutcome) {
     try {
-      const returned = onRefreshSettled(outcome);
+      const returned = onRefreshSettled(outcome) as Promise<unknown> | null | undefined;
       if (returned?.then) void returned.catch(() => {});
     } catch {
       /* Debug adapters must not change the operation result. */
     }
   }
-  function once(type, perform) {
-    if (inFlight.has(type)) return inFlight.get(type);
+  function once(type: string, perform: () => Promise<PanelOperationOutcome>): Promise<PanelOperationOutcome> {
+    if (inFlight.has(type)) return inFlight.get(type)!;
     const operation = Promise.resolve()
       .then(perform)
-      .catch((error) => {
-        const outcome = {
+      .catch((error: OperationError) => {
+        const outcome: PanelOperationOutcome = {
           status: 'error',
           completed: [],
           error: error?.message || String(error),
@@ -278,7 +336,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
     inFlight.set(type, operation);
     return operation;
   }
-  function startRefresh({ open = true } = {}) {
+  function startRefresh({ open = true }: { open?: boolean } = {}) {
     return once('refresh', async () => {
       const sequence = ++foreground;
       presentation = 'loading';
@@ -309,7 +367,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
       return outcome;
     });
   }
-  function open(view) {
+  function open(view?: string): Promise<PanelOperationOutcome> {
     if (view && ['details', 'stats', 'archive'].includes(view)) activePanelView = view;
     if (!snapshot?.result || snapshot?.calculationError) return startRefresh({ open: true });
     presentation = 'snapshot';
@@ -340,7 +398,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
     return once('save-remote-sync', async () => {
       if (!content?.querySelector('[data-sync-form]'))
         return { status: 'skipped', reason: 'form-unavailable', completed: [] };
-      const status = snapshot?.syncStatus || {};
+      const status: Partial<RemoteSyncStatus> = snapshot?.syncStatus || {};
       const values = syncDraft || { token: '', gistId: status.gistId || '', enabled: Boolean(status.enabled) };
       const generation = formGeneration;
       const revision = editRevision;
@@ -370,17 +428,17 @@ function createQuotaPanelController({ application, document, window, storage, t,
       const picked = await files.chooseText({ signal: abortFiles.signal });
       if (disposed || picked?.status === 'cancelled' || picked == null)
         return { status: 'skipped', reason: disposed ? 'disposed' : 'cancelled', completed: [] };
-      let imported;
+      let imported: unknown;
       try {
         imported = JSON.parse(picked.text);
       } catch (error) {
-        const outcome = { status: 'error', completed: ['select'], stage: 'parse', error: error.message };
+        const outcome = { status: 'error', completed: ['select'], stage: 'parse', error: (error as Error).message };
         notice(t('importFailed', { error: outcome.error }), 'error');
-        return outcome;
+        return outcome as PanelOperationOutcome;
       }
       const outcome = await application.importArchive(imported);
       if (!disposed) {
-        if (outcome.status === 'ok') notice(t('importDone', outcome.report), 'success');
+        if (outcome.status === 'ok') notice(t('importDone', outcome.report as MaybeTranslationVars), 'success');
         else if (outcome.status === 'partial') notice(t('importPartial', { error: outcome.error }), 'error');
         else if (outcome.status === 'error') notice(t('importFailed', { error: outcome.error }), 'error');
         presentation = 'snapshot';
@@ -396,11 +454,11 @@ function createQuotaPanelController({ application, document, window, storage, t,
       try {
         await files.downloadText(EXPORT_NAME, JSON.stringify(exported, null, 2));
       } catch (error) {
-        const outcome = {
+        const outcome: PanelOperationOutcome = {
           status: 'error',
           completed: ['export'],
           stage: 'download',
-          error: error?.message || String(error),
+          error: (error as OperationError)?.message || String(error),
         };
         notice(t('exportFailed', { error: outcome.error }), 'error');
         return outcome;
@@ -409,18 +467,18 @@ function createQuotaPanelController({ application, document, window, storage, t,
       return { status: 'ok', completed: ['export', 'download'], count: exported.snapshotCount };
     });
   }
-  function dispatch(command) {
+  function dispatch(command: PanelCommand | string): Promise<PanelOperationOutcome> {
     if (disposed) return Promise.resolve({ status: 'skipped', reason: 'disposed', completed: [] });
     const type = typeof command === 'string' ? command : command?.type;
-    if (type === 'open') return open(command?.view);
-    if (type === 'refresh') return startRefresh({ open: command?.open !== false });
+    if (type === 'open') return open((command as PanelCommand)?.view);
+    if (type === 'refresh') return startRefresh({ open: (command as PanelCommand)?.open !== false });
     if (type === 'sync') return sync();
     if (type === 'save-remote-sync') return saveSettings();
     if (type === 'import-archive') return importArchive();
     if (type === 'export-archive') return exportArchive();
     return Promise.resolve({ status: 'skipped', reason: 'unknown-command', completed: [] });
   }
-  function rerenderActive(nextView) {
+  function rerenderActive(nextView?: string) {
     if (disposed || !content) return;
     if (nextView && nextView !== activePanelView) {
       syncDraft = null;
@@ -430,7 +488,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
     }
     commitPresentation();
   }
-  function handleAction(action, event) {
+  function handleAction(action: string, event: MouseEvent) {
     if (disposed || action === 'toggle') return;
     if (action === 'close') {
       shell.closePanel();
@@ -452,13 +510,13 @@ function createQuotaPanelController({ application, document, window, storage, t,
       void dispatch({ type: action });
       return;
     }
-    const target = event.target;
+    const target = event.target as Element;
     if (action === 'switch-view') {
-      rerenderActive(target.closest('[data-view]')?.dataset.view);
+      rerenderActive(target.closest<HTMLElement>('[data-view]')?.dataset.view);
       return;
     }
     if (action === 'toggle-rows') {
-      const id = target.closest('[data-view-id]')?.dataset.viewId;
+      const id = target.closest<HTMLElement>('[data-view-id]')?.dataset.viewId;
       if (id) {
         if (expandedViews.has(id)) expandedViews.delete(id);
         else expandedViews.add(id);
@@ -466,12 +524,12 @@ function createQuotaPanelController({ application, document, window, storage, t,
       }
     }
     if (action === 'switch-stats-period') {
-      activeStatsPeriod = target.closest('[data-period]')?.dataset.period || activeStatsPeriod;
+      activeStatsPeriod = target.closest<HTMLElement>('[data-period]')?.dataset.period || activeStatsPeriod;
       statsDrill = null;
       rerenderActive();
     }
     if (action === 'stats-drill') {
-      const node = target.closest('[data-from]');
+      const node = target.closest<HTMLElement>('[data-from]');
       if (node?.dataset.from && node?.dataset.to) {
         statsDrill = {
           from: node.dataset.from,
@@ -497,5 +555,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
   }
   return { update, dispatch, dispose };
 }
+
+export type QuotaPanelController = ReturnType<typeof createQuotaPanelController>;
 
 export { createQuotaPanelController, createBrowserQuotaFiles };

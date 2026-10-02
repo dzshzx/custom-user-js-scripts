@@ -7,7 +7,7 @@ const BUTTON_HEIGHT = 42;
 // [data-wk-theme="dark"] set by applyTheme — no prefers-color-scheme block
 // lives here anymore. Only accent derivates without a --wk-* counterpart keep
 // local values, flipped per theme below.
-function createShellStyles(rootId) {
+function createShellStyles(rootId: string): string {
   return `
     #${rootId} {
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;

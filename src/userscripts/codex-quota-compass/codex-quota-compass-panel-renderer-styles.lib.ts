@@ -516,7 +516,7 @@ function createQuotaPanelRendererStyles(rootId = 'codex-quota-compass-root') {
     `;
 }
 
-function installQuotaPanelRendererStyles(documentObject, rootId) {
+function installQuotaPanelRendererStyles(documentObject: Document, rootId: string) {
   if (!documentObject?.createElement || !documentObject?.head) {
     throw new Error('Quota panel renderer requires a document adapter.');
   }

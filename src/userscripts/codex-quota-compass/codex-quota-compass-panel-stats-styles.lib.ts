@@ -1,6 +1,6 @@
 const LIB_NAME = 'CodexQuotaCompassPanelStatsStylesLib';
 
-function createQuotaPanelStatsStyles(rootId) {
+function createQuotaPanelStatsStyles(rootId: string): string {
   if (!rootId) {
     throw new Error(`${LIB_NAME}.createQuotaPanelStatsStyles requires rootId.`);
   }

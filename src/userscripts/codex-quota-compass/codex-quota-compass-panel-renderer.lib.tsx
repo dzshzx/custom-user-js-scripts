@@ -1,7 +1,154 @@
 import { installQuotaPanelRendererStyles } from './codex-quota-compass-panel-renderer-styles.lib.ts';
 import { StatsView } from './codex-quota-compass-panel-stats.lib.tsx';
+import type { ComponentChildren } from 'preact';
+import type { QuotaMessageKey, QuotaTranslate } from './codex-quota-compass-i18n.lib.ts';
+import type { StatsDrill } from './codex-quota-compass-panel-stats.lib.tsx';
+import type {
+  DataRow,
+  DetailsSection,
+  PanelCreditMetric,
+  PanelMetric,
+  PanelRemoteSyncStatus,
+  PanelSyncBanner,
+  PanelValueMetric,
+  PanelViewId,
+  QuotaPanelViewModel,
+} from './codex-quota-compass-panel-view-model.lib.ts';
 
-function formatValue(value) {
+/** A column as accepted by DataView: a bare key or a (partial) column descriptor. */
+export type DataColumnInput =
+  | string
+  | {
+      key?: string;
+      label?: string;
+      labelKey?: QuotaMessageKey | '';
+      priority?: string;
+      truncate?: boolean;
+      wrap?: boolean;
+      compact?: boolean;
+    };
+interface NormalizedColumn {
+  key: string;
+  label: string;
+  labelKey?: string;
+  priority: string;
+  truncate?: boolean;
+  wrap?: boolean;
+  compact: boolean;
+}
+type DataRecord = Record<string, unknown>;
+interface DataViewModel {
+  id?: string;
+  rows?: readonly DataRow[] | null;
+  columns?: DataColumnInput[];
+  limit?: number;
+  emptyKey?: QuotaMessageKey;
+  compactOnMobile?: boolean;
+}
+export interface SyncDraft {
+  token: string;
+  gistId: string;
+  enabled: boolean;
+}
+export interface PanelForm {
+  draft?: SyncDraft | null;
+  onDraft?: (next: SyncDraft) => void;
+}
+export interface PanelRenderState {
+  activePanelView?: string;
+  statsPeriod?: string;
+  statsDrill?: StatsDrill | null;
+  expandedViews?: Set<string>;
+}
+export type PanelPresentation = 'loading' | 'error' | 'snapshot';
+export interface PanelProps {
+  presentation?: PanelPresentation;
+  error?: unknown;
+  viewModel?: QuotaPanelViewModel | null;
+  state?: PanelRenderState;
+  form?: PanelForm;
+}
+export interface SectionProps {
+  title: ComponentChildren;
+  children?: ComponentChildren;
+}
+export interface DataTableProps {
+  rows: readonly DataRow[];
+  id?: string;
+  columns?: DataColumnInput[];
+  limit?: number;
+  compactOnMobile?: boolean;
+}
+export interface QuotaPanelRendererOptions {
+  t: QuotaTranslate;
+  formatTimestamp?: (value: string) => string;
+}
+interface RendererTab {
+  id: string;
+  labelKey?: QuotaMessageKey;
+  label?: string;
+}
+interface RendererAction {
+  action: string;
+  labelKey?: QuotaMessageKey;
+  label?: string;
+}
+interface ResetMetric {
+  id?: string;
+  type: 'reset';
+  labelKey?: QuotaMessageKey;
+  label?: string;
+  hours?: number;
+}
+type RendererMetric = PanelMetric | ResetMetric;
+type HeroMetric = PanelCreditMetric | (PanelValueMetric & { resetHours?: number });
+type RendererSection = (
+  | DetailsSection
+  | { type: 'syncForm' }
+  | { type: 'syncBanner' }
+  | { type: 'archiveSummary' }
+  | { type: 'note'; noteKey?: QuotaMessageKey }
+  | { type: 'actions'; actions?: RendererAction[] }
+) & { id?: string };
+interface SectionsHolder {
+  sections?: RendererSection[];
+}
+interface ViewProps {
+  viewModel?: QuotaPanelViewModel | null;
+  state?: PanelRenderState;
+  form?: PanelForm;
+}
+interface MetricsProps {
+  metrics: RendererMetric[] | null | undefined;
+  secondary?: boolean;
+}
+interface PanelTabsProps {
+  model: QuotaPanelViewModel | null | undefined;
+  activePanelView: string;
+}
+interface ModelSectionProps extends ViewProps {
+  section: RendererSection | null | undefined;
+}
+interface DataViewProps {
+  view?: DataViewModel;
+  state?: PanelRenderState;
+}
+interface MetricProps {
+  label: string;
+  value: unknown;
+  hint?: string;
+}
+interface SyncFormProps {
+  status?: Partial<PanelRemoteSyncStatus>;
+  draft?: SyncDraft | null;
+  onDraft?: (next: SyncDraft) => void;
+}
+interface ArchiveSummaryProps {
+  model?: Partial<QuotaPanelViewModel['archive']>;
+  state?: PanelRenderState;
+}
+
+function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return '-';
   if (typeof value === 'number')
     return Number.isInteger(value)
@@ -10,15 +157,15 @@ function formatValue(value) {
   return String(value);
 }
 
-function safeRows(rows, limit = 12) {
+function safeRows<T>(rows: readonly T[] | null | undefined, limit = 12): T[] {
   return Array.isArray(rows) ? rows.slice(0, limit) : [];
 }
 
-function classes(...names) {
+function classes(...names: (string | false | null | undefined)[]): string {
   return names.filter(Boolean).join(' ');
 }
 
-const DEFAULT_TABS = [
+const DEFAULT_TABS: RendererTab[] = [
   { id: 'details', labelKey: 'tabDetails' },
   { id: 'stats', labelKey: 'tabStats' },
   { id: 'archive', labelKey: 'tabArchiveWorkspace' },
@@ -28,7 +175,7 @@ const DEFAULT_TABS = [
 // The controller renders <Panel> into the panel content node; preact diffs
 // every update in place, so background refreshes and tab switches never
 // rebuild unrelated nodes (focus, scroll and form drafts survive).
-function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
+function createQuotaPanelRenderer({ t, formatTimestamp }: QuotaPanelRendererOptions = {} as QuotaPanelRendererOptions) {
   if (typeof t !== 'function') {
     throw new Error('Quota panel renderer requires a translator function.');
   }
@@ -39,19 +186,19 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   const formatLocalTimestamp =
     typeof formatTimestamp === 'function'
       ? formatTimestamp
-      : (value) => {
+      : (value: string) => {
           const date = new Date(value);
           return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
         };
 
   // Guards empty/placeholder values (new Date(null) would wrongly become 1970)
   // before localizing a captured/synced timestamp.
-  function displayTimestamp(value) {
+  function displayTimestamp(value: string | null | undefined): string {
     if (!value || value === '-') return '-';
     return formatLocalTimestamp(value);
   }
 
-  function normalizeDataColumns(rows, columns) {
+  function normalizeDataColumns(rows: DataRecord[], columns: DataColumnInput[] | undefined): NormalizedColumn[] {
     if (Array.isArray(columns) && columns.length) {
       return columns
         .map((column) =>
@@ -78,15 +225,15 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     }));
   }
 
-  function columnLabel(column) {
-    return column.labelKey ? t(column.labelKey) : column.label;
+  function columnLabel(column: NormalizedColumn): string {
+    return column.labelKey ? t(column.labelKey as QuotaMessageKey) : column.label;
   }
 
-  function DataView({ view = {}, state = {} }) {
-    const rows = Array.isArray(view.rows) ? view.rows : [];
+  function DataView({ view = {}, state = {} }: DataViewProps) {
+    const rows = (Array.isArray(view.rows) ? view.rows : []) as DataRecord[];
     const limit = view.limit ?? 12;
     const expandable = rows.length > limit;
-    const expanded = expandable && Boolean(state.expandedViews?.has?.(view.id));
+    const expanded = expandable && Boolean(state.expandedViews?.has?.(view.id as string));
     const visibleRows = expanded ? rows : safeRows(rows, limit);
     const columns = normalizeDataColumns(visibleRows, view.columns);
 
@@ -177,11 +324,11 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function DataTable({ rows, id = '', columns, limit, compactOnMobile }) {
+  function DataTable({ rows, id = '', columns, limit, compactOnMobile }: DataTableProps) {
     return <DataView view={{ id, rows, columns, limit, compactOnMobile }} />;
   }
 
-  function Metric({ label, value, hint = '' }) {
+  function Metric({ label, value, hint = '' }: MetricProps) {
     return (
       <div class="cqc-metric">
         <div class="cqc-metric-label">{label}</div>
@@ -191,7 +338,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function formatMetricDecimal(value) {
+  function formatMetricDecimal(value: unknown): string {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return '-';
     return numericValue.toLocaleString(undefined, {
@@ -200,11 +347,11 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     });
   }
 
-  function usdMetricValue(value) {
+  function usdMetricValue(value: unknown): string {
     return value === null || value === undefined || value === '' ? '-' : `$${formatMetricDecimal(value)}`;
   }
 
-  function formatHoursDuration(hours) {
+  function formatHoursDuration(hours: unknown): string {
     const numericHours = Number(hours);
     if (!Number.isFinite(numericHours)) return '-';
 
@@ -218,7 +365,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     return t('durationMinutes', { minutes });
   }
 
-  function ModelMetric({ metric }) {
+  function ModelMetric({ metric }: { metric: RendererMetric | null | undefined }) {
     const label = metric?.labelKey ? t(metric.labelKey) : metric?.label || '-';
     if (metric?.type === 'credit') return <Metric label={label} value={usdMetricValue(metric.usd)} />;
     if (metric?.type === 'reset')
@@ -226,7 +373,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     return <Metric label={label} value={metric?.value} />;
   }
 
-  function Hero({ metric }) {
+  function Hero({ metric }: { metric: HeroMetric | null | undefined }) {
     if (!metric) return null;
     const label = metric.labelKey ? t(metric.labelKey) : metric.label || '-';
     const value = metric.type === 'credit' ? usdMetricValue(metric.usd) : formatValue(metric.value);
@@ -242,7 +389,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function Metrics({ metrics, secondary = false }) {
+  function Metrics({ metrics, secondary = false }: MetricsProps) {
     const list = Array.isArray(metrics) ? metrics : [];
     if (!list.length) return null;
     return (
@@ -254,7 +401,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function SyncBanner({ banner }) {
+  function SyncBanner({ banner }: { banner: PanelSyncBanner | null | undefined }) {
     if (!banner) return null;
     const variables = {
       backend: banner.backendLabel || '-',
@@ -273,7 +420,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   // The sync form is controlled by the controller-owned draft: background
   // refreshes re-render it with fresh status while the draft keeps whatever
   // the user has typed. `draft` is null until the first edit.
-  function SyncForm({ status = {}, draft = null, onDraft = () => {} }) {
+  function SyncForm({ status = {}, draft = null, onDraft = () => {} }: SyncFormProps) {
     const enabled = draft ? draft.enabled : Boolean(status.enabled);
     const hasToken = Boolean(status.hasToken);
     const configured = Boolean(status.configured);
@@ -282,7 +429,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     const lastSyncedAt = status.lastSyncedAt || '';
     const lastError = status.lastError || '';
     const current = { token, gistId, enabled };
-    const edit = (changes) => onDraft({ ...current, ...changes });
+    const edit = (changes: Partial<SyncDraft>) => onDraft({ ...current, ...changes });
 
     // A plain container (not a <form>) so pressing Enter never submits/reloads
     // the host page, and no inline event handlers trip the site CSP.
@@ -350,7 +497,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function Section({ title, children }) {
+  function Section({ title, children }: SectionProps) {
     return (
       <section class="cqc-section">
         <h3>{title}</h3>
@@ -359,7 +506,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function DetailActions({ actions }) {
+  function DetailActions({ actions }: { actions: { action: string; label: string | undefined }[] }) {
     return (
       <div class="cqc-detail-footnote">
         {actions.map((item) => (
@@ -371,7 +518,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function ArchiveSummary({ model = {}, state }) {
+  function ArchiveSummary({ model = {}, state }: ArchiveSummaryProps) {
     if (!model.isLoaded) {
       return <div class="cqc-empty">{t('archiveEmpty')}</div>;
     }
@@ -448,8 +595,8 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function PanelTabs({ model, activePanelView }) {
-    const tabs = Array.isArray(model?.tabs) && model.tabs.length ? model.tabs : DEFAULT_TABS;
+  function PanelTabs({ model, activePanelView }: PanelTabsProps) {
+    const tabs: RendererTab[] = Array.isArray(model?.tabs) && model.tabs.length ? model.tabs : DEFAULT_TABS;
     return (
       <div class="cqc-tabs">
         {tabs.map((tab) => (
@@ -467,7 +614,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function ModelSection({ section, viewModel, state, form }) {
+  function ModelSection({ section, viewModel, state, form }: ModelSectionProps) {
     if (!section) return null;
     if (section.type === 'metrics') return <Metrics metrics={section.metrics} />;
     if (section.type === 'dataView') {
@@ -503,7 +650,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     return null;
   }
 
-  function SectionsView({ view, viewModel, state, form }) {
+  function SectionsView({ view, viewModel, state, form }: ViewProps & { view: SectionsHolder | null | undefined }) {
     return (view?.sections || []).map((section, index) => (
       <ModelSection
         key={`${section?.type}:${section?.id || index}`}
@@ -515,7 +662,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     ));
   }
 
-  function ArchiveView({ viewModel, state, form }) {
+  function ArchiveView({ viewModel, state, form }: ViewProps) {
     const view = viewModel?.views?.archive;
     if (view) return <SectionsView view={view} viewModel={viewModel} state={state} form={form} />;
     return (
@@ -535,8 +682,8 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function ActiveView({ viewModel, activePanelView, state = {}, form }) {
-    const view = viewModel?.views?.[activePanelView] || viewModel?.views?.details;
+  function ActiveView({ viewModel, activePanelView, state = {}, form }: ViewProps & { activePanelView: string }) {
+    const view = viewModel?.views?.[activePanelView as PanelViewId] || viewModel?.views?.details;
     if (view?.kind === 'archiveWorkspace') return <ArchiveView viewModel={viewModel} state={state} form={form} />;
     if (view?.kind === 'stats') {
       return (
@@ -555,7 +702,10 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     return <SectionsView view={sectionsView} viewModel={viewModel} state={state} form={form} />;
   }
 
-  function normalizeActivePanelView(viewModel, requestedPanelView) {
+  function normalizeActivePanelView(
+    viewModel: QuotaPanelViewModel | null | undefined,
+    requestedPanelView: string | undefined,
+  ): string {
     const tabs = Array.isArray(viewModel?.tabs) ? viewModel.tabs : [];
     if (tabs.length && !tabs.some((tab) => tab.id === requestedPanelView)) {
       return tabs[0].id;
@@ -563,7 +713,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     return requestedPanelView || 'details';
   }
 
-  function Result({ viewModel, state = {}, form }) {
+  function Result({ viewModel, state = {}, form }: ViewProps) {
     const activePanelView = normalizeActivePanelView(viewModel, state.activePanelView);
     return (
       <>
@@ -589,11 +739,11 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
     );
   }
 
-  function ErrorState({ error }) {
+  function ErrorState({ error }: { error: unknown }) {
     return (
       <div class="cqc-error">
         <strong>{t('errorTitle')}</strong>
-        <p>{error?.message || error || t('errorUnknown')}</p>
+        <p>{(error as { message?: string } | null)?.message || (error as string) || t('errorUnknown')}</p>
         <button type="button" class="cqc-refresh" data-action="refresh">
           {t('actionRetry')}
         </button>
@@ -604,18 +754,20 @@ function createQuotaPanelRenderer({ t, formatTimestamp } = {}) {
   // One entry component for every panel presentation.
   //   presentation: 'loading' | 'error' | 'snapshot'
   //   form: { draft, onDraft } for the sync form (see SyncForm)
-  function Panel({ presentation = 'snapshot', error = null, viewModel = null, state = {}, form }) {
+  function Panel({ presentation = 'snapshot', error = null, viewModel = null, state = {}, form }: PanelProps) {
     if (presentation === 'loading') return <Loading />;
     if (presentation === 'error') return <ErrorState error={error} />;
     if (!viewModel) return null;
     return <Result viewModel={viewModel} state={state} form={form} />;
   }
 
-  function installStyles(documentObject, rootId) {
+  function installStyles(documentObject: Document, rootId: string) {
     installQuotaPanelRendererStyles(documentObject, rootId);
   }
 
   return { Panel, normalizeActivePanelView, installStyles };
 }
+
+export type QuotaPanelRenderer = ReturnType<typeof createQuotaPanelRenderer>;
 
 export { createQuotaPanelRenderer };

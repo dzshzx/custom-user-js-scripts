@@ -38,6 +38,16 @@ import {
 import { createRemoteSyncClient } from './codex-quota-compass-remote-sync.lib.ts';
 import { createQuotaApplication } from './codex-quota-compass-application.lib.ts';
 import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quota-compass-panel-controller.lib.tsx';
+import type { QuotaPanelController } from './codex-quota-compass-panel-controller.lib.tsx';
+import type { QuotaSnapshotResult } from './codex-quota-compass-core.lib.ts';
+
+declare global {
+  interface Window {
+    __codexQuotaCompassDebug?: boolean;
+    __codexQuotaCompassLastResult?: QuotaSnapshotResult;
+    __codexQuotaCompassRunning?: boolean;
+  }
+}
 
 (function () {
   'use strict';
@@ -59,7 +69,7 @@ import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quo
     scriptVersion: SCRIPT_VERSION,
   });
   const remoteSyncClient = createRemoteSyncClient({ archiveStore });
-  let panel;
+  let panel: QuotaPanelController | undefined;
   const application = createQuotaApplication({
     runtime: {
       run: () =>
