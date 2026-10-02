@@ -2,21 +2,37 @@ import filenamify from 'filenamify/browser';
 import mime from 'mime/lite';
 
 import { readPreviewImage } from './feishu-preview-image-export-extraction.lib.ts';
+import type { PreviewImageCandidate } from './feishu-preview-image-export-extraction.lib.ts';
+import type { GmDownload } from '../shared/shared-gm.lib.ts';
+
+export interface ImageExportRuntimeOptions {
+  documentObject: Document;
+  fetchImpl?: typeof fetch | null;
+  gmDownload?: GmDownload | null;
+}
+
+type RuntimeOptions = ImageExportRuntimeOptions;
+
+export interface ImageExportRuntime {
+  exportMainImage(): Promise<{ filename: string } | null>;
+  getVisibleImages(): PreviewImageCandidate[];
+  getDocumentTitle(): string;
+}
 
 const LIB_NAME = 'FeishuPreviewImageExportLogicLib';
 
-function sanitizeFilePart(value, fallback) {
+function sanitizeFilePart(value: unknown, fallback: string): string {
   const text = String(value || '').trim();
   return text ? filenamify(text, { replacement: '-' }) : fallback;
 }
 
 // image/jpeg -> jpg; parameters such as "; charset=binary" are ignored; unknown types -> bin.
-function extensionFromMime(type) {
+function extensionFromMime(type: unknown): string {
   return mime.getExtension(String(type || '')) || 'bin';
 }
 
 // 内部错误保持英文进 console；给用户的是这里映射的中文文案。
-function toUserMessage(error) {
+function toUserMessage(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
   const httpMatch = /^Failed to fetch image: (\d+)/.exec(text);
   if (httpMatch) {
@@ -40,7 +56,7 @@ function toUserMessage(error) {
   return `导出失败：${text}`;
 }
 
-function createImageExportRuntime({ documentObject, fetchImpl, gmDownload } = {}) {
+function createImageExportRuntime({ documentObject, fetchImpl, gmDownload }: RuntimeOptions = {} as RuntimeOptions) {
   if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
   function getDocumentTitle() {
     const raw = documentObject.title.replace(/\s*-\s*飞书云文档\s*$/u, '').trim();
@@ -51,7 +67,7 @@ function createImageExportRuntime({ documentObject, fetchImpl, gmDownload } = {}
     return readPreviewImage({ profile: 'userscript-v1', mode: 'inspect' }, { documentObject }).items;
   }
 
-  function fallbackDownload(url, filename) {
+  function fallbackDownload(url: string, filename: string) {
     const anchor = documentObject.createElement('a');
     anchor.href = url;
     anchor.download = filename;
@@ -61,9 +77,9 @@ function createImageExportRuntime({ documentObject, fetchImpl, gmDownload } = {}
     anchor.remove();
   }
 
-  function gmDownloadPromise(url, filename) {
-    return new Promise((resolve, reject) => {
-      gmDownload({
+  function gmDownloadPromise(url: string, filename: string) {
+    return new Promise<void>((resolve, reject) => {
+      gmDownload!({
         url,
         name: filename,
         saveAs: true,

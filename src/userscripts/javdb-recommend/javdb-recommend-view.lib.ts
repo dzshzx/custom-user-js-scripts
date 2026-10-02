@@ -1,5 +1,30 @@
 import { createPeriodSection } from './javdb-recommend-period-section.lib.ts';
 import { createSiteChrome } from './javdb-recommend-site-chrome.lib.ts';
+import type { ArchiveData, Movie, Period, PeriodLease, SearchJob } from './javdb-recommend-data.lib.ts';
+import type { PeriodSection } from './javdb-recommend-period-section.lib.ts';
+
+export interface ArchivePageView {
+  dispose(): void;
+}
+
+type StyledElement = Element & ElementCSSInlineStyle;
+
+interface CopiedStyleRecord {
+  previousValue: string;
+  previousPriority: string;
+  writtenValue?: string;
+  writtenPriority?: string;
+}
+
+interface CompatibleGridLayout {
+  template: string;
+  columnGap: string;
+  rowGap: string;
+  columns: string;
+  objectFit?: string;
+  objectPosition?: string;
+  aspectRatio?: string;
+}
 
 var BASE = location.origin;
 /* ================= 官网资源约定 ================= */
@@ -12,7 +37,7 @@ var ICON_PATHS = {
   'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
 };
 
-function iconSvg(name, size) {
+function iconSvg(name: keyof typeof ICON_PATHS, size: number) {
   return (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="' +
@@ -26,10 +51,10 @@ function iconSvg(name, size) {
   );
 }
 
-var periods = [],
+var periods: Period[] = [],
   searching = false;
 var LS_KEY = 'javdb_recommend_last_period';
-export function bootArchivePage(data) {
+export function bootArchivePage(data: ArchiveData): ArchivePageView {
   var disposed = false;
   document.title = '佳片推荐 · 历史期数 - JavDB';
   // 只清理可识别的官网 404 内容与本脚本旧根；保留其他脚本先挂载的节点和 body 状态。
@@ -159,35 +184,35 @@ export function bootArchivePage(data) {
     '<div class="jdb-ra-stream" id="jdb-ra-stream"></div>' +
     '<button type="button" class="jdb-ra-sentinel" id="jdb-ra-sentinel" disabled>加载期数列表中…</button>' +
     '</div></section>';
-  document.body.appendChild(rootHost.firstElementChild);
+  document.body.appendChild(rootHost.firstElementChild!);
 
-  var $ = function (id) {
-    return document.getElementById(id);
+  var $ = function <T extends HTMLElement = HTMLElement>(id: string) {
+    return document.getElementById(id) as T;
   };
   var statusEl = $('jdb-ra-status'),
     streamEl = $('jdb-ra-stream'),
     resultsEl = $('jdb-ra-results'),
-    sentinel = $('jdb-ra-sentinel'),
-    select = $('jdb-ra-select');
+    sentinel = $<HTMLButtonElement>('jdb-ra-sentinel'),
+    select = $<HTMLSelectElement>('jdb-ra-select');
 
   /* ---------- 多脚本布局兼容 ----------
        第三方 JavDB 增强脚本可能只接管动态流中的第一块 movie-list。
        一旦检测到它的 javdb-card-grid 标记，就把其实际列数与间距同步到本归档页的全部期区块。 */
   var gridSyncScheduled = false;
-  var gridResizeObserver = null;
-  var observedGridSource = null;
-  var lastCompatibleGridLayout = null;
-  var copiedGridStyles = new WeakMap();
-  var archiveMutationObserver = null;
+  var gridResizeObserver: ResizeObserver | null = null;
+  var observedGridSource: Element | null = null;
+  var lastCompatibleGridLayout: CompatibleGridLayout | null = null;
+  var copiedGridStyles = new WeakMap<StyledElement, Record<string, CopiedStyleRecord>>();
+  var archiveMutationObserver: MutationObserver | null = null;
 
-  function enhancedGrid(list) {
+  function enhancedGrid(list: Element) {
     return list.matches('.javdb-card-grid,[data-laosiji-grid="1"]');
   }
 
-  function setCopiedStyle(el, name, value) {
+  function setCopiedStyle(el: StyledElement, name: string, value: string) {
     var owned = copiedGridStyles.get(el);
     if (!owned) {
-      owned = {};
+      owned = {} as Record<string, CopiedStyleRecord>;
       copiedGridStyles.set(el, owned);
     }
     if (!owned[name]) {
@@ -206,11 +231,11 @@ export function bootArchivePage(data) {
     owned[name].writtenPriority = 'important';
   }
 
-  function releaseCopiedStyles(el) {
+  function releaseCopiedStyles(el: StyledElement) {
     var owned = copiedGridStyles.get(el);
     if (!owned) return;
     Object.keys(owned).forEach(function (name) {
-      var record = owned[name];
+      var record = owned![name];
       if (
         el.style.getPropertyValue(name) !== record.writtenValue ||
         el.style.getPropertyPriority(name) !== record.writtenPriority
@@ -222,9 +247,9 @@ export function bootArchivePage(data) {
     copiedGridStyles.delete(el);
   }
 
-  function releaseCopiedCardStyles(root) {
+  function releaseCopiedCardStyles(root: Element) {
     root
-      .querySelectorAll(
+      .querySelectorAll<HTMLElement>(
         '.jav-card-cover,.javdb-cover-frame,.jav-card-image,.javdb-card-image,' +
           '.item[data-laosiji-grid-card="1"] .cover,.item[data-laosiji-grid-card="1"] img',
       )
@@ -233,14 +258,14 @@ export function bootArchivePage(data) {
       });
   }
 
-  function releaseCopiedGridStyles(list) {
+  function releaseCopiedGridStyles(list: StyledElement) {
     releaseCopiedStyles(list);
-    list.querySelectorAll('.cover,img').forEach(function (node) {
+    list.querySelectorAll<HTMLElement>('.cover,img').forEach(function (node) {
       releaseCopiedStyles(node);
     });
   }
 
-  function countGridTracks(template) {
+  function countGridTracks(template: unknown) {
     var value = String(template || '').trim();
     if (!value || value === 'none') return 0;
     var repeated = /^repeat\(\s*(\d+)\s*,/i.exec(value);
@@ -262,7 +287,7 @@ export function bootArchivePage(data) {
     return count + (inTrack ? 1 : 0);
   }
 
-  function observeGridSource(source) {
+  function observeGridSource(source: Element) {
     if (observedGridSource === source) return;
     if (gridResizeObserver) gridResizeObserver.disconnect();
     observedGridSource = source;
@@ -303,23 +328,24 @@ export function bootArchivePage(data) {
       observedGridSource = null;
     }
     if (!lastCompatibleGridLayout) return;
-    document.querySelectorAll('.jdb-ra .movie-list').forEach(function (list) {
+    document.querySelectorAll<HTMLElement>('.jdb-ra .movie-list').forEach(function (list) {
       if (enhancedGrid(list)) {
         releaseCopiedGridStyles(list);
         return;
       }
       releaseCopiedCardStyles(list);
-      setCopiedStyle(list, 'grid-template-columns', lastCompatibleGridLayout.template);
-      setCopiedStyle(list, '--jav-card-columns', lastCompatibleGridLayout.columns);
-      setCopiedStyle(list, 'column-gap', lastCompatibleGridLayout.columnGap);
-      setCopiedStyle(list, 'row-gap', lastCompatibleGridLayout.rowGap);
-      list.querySelectorAll('.item:not([data-laosiji-grid-card="1"]) .cover img').forEach(function (image) {
-        if (lastCompatibleGridLayout.objectFit) setCopiedStyle(image, 'object-fit', lastCompatibleGridLayout.objectFit);
-        if (lastCompatibleGridLayout.objectPosition)
-          setCopiedStyle(image, 'object-position', lastCompatibleGridLayout.objectPosition);
-        var cover = image.closest('.cover');
-        if (cover && lastCompatibleGridLayout.aspectRatio && lastCompatibleGridLayout.aspectRatio !== 'auto') {
-          setCopiedStyle(cover, 'aspect-ratio', lastCompatibleGridLayout.aspectRatio);
+      setCopiedStyle(list, 'grid-template-columns', lastCompatibleGridLayout!.template);
+      setCopiedStyle(list, '--jav-card-columns', lastCompatibleGridLayout!.columns);
+      setCopiedStyle(list, 'column-gap', lastCompatibleGridLayout!.columnGap);
+      setCopiedStyle(list, 'row-gap', lastCompatibleGridLayout!.rowGap);
+      // prettier-ignore
+      list.querySelectorAll<HTMLElement>('.item:not([data-laosiji-grid-card="1"]) .cover img').forEach(function (image) {
+        if (lastCompatibleGridLayout!.objectFit) setCopiedStyle(image, 'object-fit', lastCompatibleGridLayout!.objectFit);
+        if (lastCompatibleGridLayout!.objectPosition)
+          setCopiedStyle(image, 'object-position', lastCompatibleGridLayout!.objectPosition);
+        var cover = image.closest<HTMLElement>('.cover');
+        if (cover && lastCompatibleGridLayout!.aspectRatio && lastCompatibleGridLayout!.aspectRatio !== 'auto') {
+          setCopiedStyle(cover, 'aspect-ratio', lastCompatibleGridLayout!.aspectRatio);
         }
       });
     });
@@ -333,7 +359,7 @@ export function bootArchivePage(data) {
 
   if (typeof window.MutationObserver === 'function') {
     archiveMutationObserver = new window.MutationObserver(scheduleArchiveGridSync);
-    archiveMutationObserver.observe(document.querySelector('.jdb-ra'), {
+    archiveMutationObserver.observe(document.querySelector('.jdb-ra')!, {
       childList: true,
       subtree: true,
       attributes: true,
@@ -342,7 +368,7 @@ export function bootArchivePage(data) {
   }
   window.addEventListener('resize', scheduleArchiveGridSync, { passive: true });
 
-  function setStatus(t) {
+  function setStatus(t: string) {
     statusEl.textContent = t;
   }
   function readyText() {
@@ -367,7 +393,7 @@ export function bootArchivePage(data) {
       });
   }
 
-  function finish(list, sourceLabel) {
+  function finish(list: Period[], sourceLabel: string) {
     if (disposed) return;
     periods = list;
     renderSelect();
@@ -400,22 +426,22 @@ export function bootArchivePage(data) {
   var sentinelVisible = false;
   var streamGeneration = 0;
   var navigationGeneration = 0;
-  var streamLease = null;
-  var streamIntersectionObserver = null;
-  var loadedSections = {}; // period -> section 元素
+  var streamLease: PeriodLease | null = null;
+  var streamIntersectionObserver: IntersectionObserver | null = null;
+  var loadedSections: Record<string, PeriodSection> = {}; // period -> section 元素
   var currentIdx = 0;
 
-  function setSentinel(t, disabled) {
+  function setSentinel(t: string, disabled: boolean) {
     sentinel.textContent = t;
     sentinel.disabled = !!disabled;
   }
 
   function currentQuery() {
-    return $('jdb-ra-search').value.trim().toLowerCase();
+    return $<HTMLInputElement>('jdb-ra-search').value.trim().toLowerCase();
   }
 
   // 已加载内容的即时过滤：隐藏不匹配的卡片与空区块
-  function applyFilter(q) {
+  function applyFilter(q: string) {
     var hits = 0;
     Object.keys(loadedSections).forEach(function (period) {
       hits += loadedSections[period].filter(q);
@@ -423,7 +449,7 @@ export function bootArchivePage(data) {
     return hits;
   }
 
-  function appendNext(generation) {
+  function appendNext(generation?: number): Promise<boolean> {
     if (generation === undefined) generation = streamGeneration;
     if (disposed) return Promise.resolve(false);
     if (generation !== streamGeneration) return Promise.resolve(false);
@@ -470,7 +496,7 @@ export function bootArchivePage(data) {
   }
 
   function startStream() {
-    var saved = parseInt(localStorage.getItem(LS_KEY), 10);
+    var saved = parseInt(localStorage.getItem(LS_KEY) as string, 10);
     var idx = periods.findIndex(function (p) {
       return p.period === saved;
     });
@@ -493,7 +519,7 @@ export function bootArchivePage(data) {
     appendNext();
   }
 
-  function reanchorStream(index) {
+  function reanchorStream(index: number) {
     if (streamLease) streamLease.release();
     var generation = streamGeneration + 1;
     streamGeneration = generation;
@@ -507,7 +533,7 @@ export function bootArchivePage(data) {
   }
 
   /* ---------- 期数导航：已加载的滚动到位，相邻追加，远距直接重定位 ---------- */
-  function gotoPeriod(period) {
+  function gotoPeriod(period: number) {
     var navigation = navigationGeneration + 1;
     navigationGeneration = navigation;
     var idx = periods.findIndex(function (p) {
@@ -540,13 +566,13 @@ export function bootArchivePage(data) {
     });
   }
 
-  function scrollToPeriod(period) {
+  function scrollToPeriod(period: number) {
     var section = loadedSections[period];
     if (section) section.element.scrollIntoView();
   }
 
   // periods 为降序（最新在前）：dir=1 → 更早一期；dir=-1 → 更新一期
-  function stepPeriod(dir) {
+  function stepPeriod(dir: number) {
     if (!periods.length) return;
     var t = currentIdx + dir;
     if (t < 0 || t >= periods.length) {
@@ -566,17 +592,17 @@ export function bootArchivePage(data) {
   });
   $('jdb-ra-jump').addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
-    var v = parseInt(e.target.value, 10);
+    var v = parseInt((e.target as HTMLInputElement).value, 10);
     if (v > 0) {
       gotoPeriod(v);
-      e.target.value = '';
+      (e.target as HTMLInputElement).value = '';
     }
   });
 
   /* ---------- 搜索 ---------- */
   // 搜索范围分段控件：已加载 = 输入即过滤当前流；全部期数 = 回车/按钮触发全期搜索
   function searchScope() {
-    var radios = document.querySelectorAll('input[name="jdb-ra-scope"]');
+    var radios = document.querySelectorAll<HTMLInputElement>('input[name="jdb-ra-scope"]');
     for (var i = 0; i < radios.length; i += 1) {
       if (radios[i].checked) return radios[i].value === 'all' ? 'all' : 'loaded';
     }
@@ -589,7 +615,7 @@ export function bootArchivePage(data) {
     sentinel.style.display = 'none';
   }
 
-  var resultSections = [];
+  var resultSections: PeriodSection[] = [];
 
   function exitResultsMode() {
     resultsEl.hidden = true;
@@ -602,9 +628,9 @@ export function bootArchivePage(data) {
     sentinel.style.display = '';
   }
 
-  var debounceTimer = null;
+  var debounceTimer: ReturnType<typeof setTimeout> | null = null;
   $('jdb-ra-search').addEventListener('input', function () {
-    clearTimeout(debounceTimer);
+    clearTimeout(debounceTimer as number | undefined);
     debounceTimer = setTimeout(function () {
       if (searching) return; // 全期搜索进行中不打断
       if (searchScope() === 'all') {
@@ -641,9 +667,9 @@ export function bootArchivePage(data) {
   });
 
   var searchGeneration = 0;
-  var activeSearch = null;
+  var activeSearch: SearchJob | null = null;
 
-  function stopSearch(label) {
+  function stopSearch(label?: string) {
     searching = false;
     searchGeneration += 1;
     if (activeSearch) activeSearch.cancel();
@@ -652,7 +678,7 @@ export function bootArchivePage(data) {
     if (label) setStatus(label);
   }
 
-  function appendSearchGroup(period, periodIndex, movies) {
+  function appendSearchGroup(period: number, periodIndex: number, movies: Movie[]) {
     if (!movies.length) return;
     var section = createPeriodSection({
       document: document,
@@ -663,8 +689,8 @@ export function bootArchivePage(data) {
     });
     section.element.dataset.periodIndex = String(periodIndex);
     section.update({ movies: movies });
-    var before = Array.prototype.find.call(resultsEl.querySelectorAll('.jdb-ra-sec'), function (item) {
-      return parseInt(item.dataset.periodIndex, 10) > periodIndex;
+    var before = Array.prototype.find.call(resultsEl.querySelectorAll('.jdb-ra-sec'), function (item: Element) {
+      return parseInt((item as HTMLElement).dataset.periodIndex!, 10) > periodIndex;
     });
     resultsEl.insertBefore(section.element, before || null);
     resultSections.push(section);
@@ -763,7 +789,7 @@ export function bootArchivePage(data) {
     dispose: function () {
       if (disposed) return;
       disposed = true;
-      clearTimeout(debounceTimer);
+      clearTimeout(debounceTimer as number | undefined);
       streamGeneration += 1;
       navigationGeneration += 1;
       searchGeneration += 1;

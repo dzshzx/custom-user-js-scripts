@@ -1,4 +1,74 @@
-function readPreviewImage(options = {}, environment = {}) {
+export type PreviewImageProfile = 'userscript-v1' | 'cli-v1';
+export type PreviewImageMode = 'read' | 'inspect';
+
+export interface PreviewImageOptions {
+  profile?: PreviewImageProfile;
+  mode?: PreviewImageMode;
+}
+
+export interface PreviewImageEnvironment {
+  documentObject?: Document;
+  fetchImpl?: typeof fetch | null;
+  FileReaderCtor?: typeof FileReader;
+  btoaImpl?: (data: string) => string;
+}
+
+export interface PreviewImageCandidate {
+  src: string;
+  width: number;
+  height: number;
+  area: number;
+}
+
+export interface PreviewImageCandidates {
+  kind: 'candidates';
+  items: PreviewImageCandidate[];
+}
+
+export interface PreviewImageEmpty {
+  kind: 'empty';
+  reason: 'no-candidate' | 'invalid-data-url';
+}
+
+export interface PreviewImagePayload {
+  encoding: 'data-url' | 'base64';
+  data: string;
+}
+
+export interface PreviewImageRead {
+  kind: 'image';
+  mime: string;
+  width: number;
+  height: number;
+  mode: 'data-url' | 'fetched';
+  payload: PreviewImagePayload;
+}
+
+export type PreviewImageReadResult = PreviewImageEmpty | PreviewImageRead;
+
+export interface PreviewImageDiagnosticError extends Error {
+  code?: string;
+  phase?: string;
+}
+
+type PreviewImageHost = Partial<Pick<typeof globalThis, 'document' | 'fetch' | 'FileReader' | 'btoa'>>;
+
+function readPreviewImage(
+  options: PreviewImageOptions & { mode: 'inspect' },
+  environment?: PreviewImageEnvironment,
+): PreviewImageCandidates;
+function readPreviewImage(
+  options?: PreviewImageOptions & { mode?: 'read' },
+  environment?: PreviewImageEnvironment,
+): Promise<PreviewImageReadResult>;
+function readPreviewImage(
+  options?: PreviewImageOptions,
+  environment?: PreviewImageEnvironment,
+): PreviewImageCandidates | Promise<PreviewImageReadResult>;
+function readPreviewImage(
+  options: PreviewImageOptions = {},
+  environment: PreviewImageEnvironment = {},
+): PreviewImageCandidates | Promise<PreviewImageReadResult> {
   const profile = options.profile;
   const mode = options.mode || 'read';
 
@@ -9,13 +79,13 @@ function readPreviewImage(options = {}, environment = {}) {
     throw new Error(`Unknown image mode: ${mode}`);
   }
 
-  const attachDiagnostic = (cause, code, phase) => {
-    const error = cause instanceof Error ? cause : new Error(String(cause));
+  const attachDiagnostic = (cause: unknown, code: string, phase: string): PreviewImageDiagnosticError => {
+    const error: PreviewImageDiagnosticError = cause instanceof Error ? cause : new Error(String(cause));
     try {
       error.code = code;
       error.phase = phase;
     } catch {
-      const wrapped = new Error(error.message, { cause: error });
+      const wrapped: PreviewImageDiagnosticError = new Error(error.message, { cause: error });
       wrapped.code = code;
       wrapped.phase = phase;
       return wrapped;
@@ -23,9 +93,9 @@ function readPreviewImage(options = {}, environment = {}) {
     return error;
   };
 
-  const host = typeof globalThis === 'object' && globalThis ? globalThis : {};
-  const documentObject = environment.documentObject || host.document;
-  const imageNodes =
+  const host: PreviewImageHost = typeof globalThis === 'object' && globalThis ? globalThis : {};
+  const documentObject = (environment.documentObject || host.document)!;
+  const imageNodes: HTMLImageElement[] =
     profile === 'userscript-v1'
       ? [...(documentObject.images || documentObject.getElementsByTagName('img'))]
       : [...documentObject.querySelectorAll('img')];
@@ -50,13 +120,13 @@ function readPreviewImage(options = {}, environment = {}) {
       profile === 'userscript-v1' ? item.width > 0 && item.height > 0 && item.area >= 20_000 : item.area > 20_000,
     )
     .sort((left, right) => right.area - left.area || left.index - right.index)
-    .map(({ index: _index, ...item }) => item);
+    .map(({ index: _index, ...item }): PreviewImageCandidate => item);
 
   if (mode === 'inspect') {
-    return { kind: 'candidates', items };
+    return { kind: 'candidates', items } satisfies PreviewImageCandidates;
   }
 
-  return (async () => {
+  return (async (): Promise<PreviewImageReadResult> => {
     if (!items.length) {
       return { kind: 'empty', reason: 'no-candidate' };
     }
@@ -90,7 +160,7 @@ function readPreviewImage(options = {}, environment = {}) {
     if (typeof fetcher !== 'function') {
       throw attachDiagnostic(new Error('fetch unavailable'), 'FEISHU_IMAGE_FETCH_FAILED', 'fetch');
     }
-    let response;
+    let response: Response;
     try {
       response =
         profile === 'userscript-v1' ? await fetcher(source, { credentials: 'include' }) : await fetcher(source);
@@ -106,16 +176,16 @@ function readPreviewImage(options = {}, environment = {}) {
     }
 
     if (profile === 'userscript-v1') {
-      let blob;
+      let blob: Blob;
       try {
         blob = await response.blob();
       } catch (error) {
         throw attachDiagnostic(error, 'FEISHU_IMAGE_BLOB_READ_FAILED', 'blob-read');
       }
-      const FileReaderCtor = environment.FileReaderCtor || host.FileReader;
-      let data;
+      const FileReaderCtor = (environment.FileReaderCtor || host.FileReader)!;
+      let data: string;
       try {
-        data = await new Promise((resolve, reject) => {
+        data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReaderCtor();
           reader.onload = () => resolve(String(reader.result || ''));
           reader.onerror = () => reject(reader.error || new Error('Failed to read blob'));
@@ -134,7 +204,7 @@ function readPreviewImage(options = {}, environment = {}) {
       };
     }
 
-    let bytes;
+    let bytes: Uint8Array;
     try {
       bytes = new Uint8Array(await response.arrayBuffer());
     } catch (error) {
@@ -145,9 +215,9 @@ function readPreviewImage(options = {}, environment = {}) {
       binary += String.fromCharCode(byte);
     }
     const encode = environment.btoaImpl || host.btoa?.bind(host);
-    let data;
+    let data: string;
     try {
-      data = encode(binary);
+      data = encode!(binary);
     } catch (error) {
       throw attachDiagnostic(error, 'FEISHU_IMAGE_ENCODE_FAILED', 'encode');
     }

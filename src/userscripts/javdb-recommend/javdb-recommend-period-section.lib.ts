@@ -1,3 +1,39 @@
+import type { Movie, Period } from './javdb-recommend-data.lib.ts';
+
+export type PeriodSectionMode = 'browse' | 'search';
+
+export interface PeriodSectionOptions {
+  document: Document;
+  baseUrl: string;
+  period?: Period | null;
+  mode?: PeriodSectionMode;
+  loading?: boolean;
+}
+
+export interface PeriodSectionPayload {
+  movies?: readonly (Movie | null | undefined)[];
+  degraded?: boolean;
+  error?: { message?: string } | null;
+}
+
+export interface PeriodSection {
+  element: HTMLElement;
+  update(payload?: PeriodSectionPayload): boolean;
+  filter(nextQuery: unknown): number;
+  dispose(): void;
+}
+
+type MaybeMovie = Movie | null | undefined;
+
+interface CardOptions {
+  document: Document;
+  grid: Element;
+  baseUrl: string;
+  movie: MaybeMovie;
+}
+
+type SectionOpts = PeriodSectionOptions;
+
 const SITE_IMAGE_HOST = 'https://c0.jdbstatic.com';
 
 const ICON_PATHS = {
@@ -5,7 +41,7 @@ const ICON_PATHS = {
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
 
-function appendIcon(document, parent, name, size) {
+function appendIcon(document: Document, parent: Element, name: keyof typeof ICON_PATHS, size: number) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('fill', 'none');
@@ -22,12 +58,12 @@ function appendIcon(document, parent, name, size) {
   parent.appendChild(svg);
 }
 
-function displayInteger(value, { minimum = 0 } = {}) {
+function displayInteger(value: unknown, { minimum = 0 }: { minimum?: number } = {}) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= minimum ? String(parsed) : '—';
 }
 
-function displayDate(value) {
+function displayDate(value: unknown) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || '').trim());
   if (!match) return '—';
   const year = Number(match[1]);
@@ -39,20 +75,20 @@ function displayDate(value) {
     : '—';
 }
 
-function normalizedReleaseDate(value) {
+function normalizedReleaseDate(value: unknown) {
   const date = displayDate(value);
   return date === '—' ? '' : date;
 }
 
-function coverUrl(value) {
+function coverUrl(value: unknown) {
   const source = String(value || '');
   const match = /\/covers\/.*$/.exec(source);
   return match ? SITE_IMAGE_HOST + match[0] : source;
 }
 
-function movieSignature(movies) {
+function movieSignature(movies: unknown) {
   return JSON.stringify(
-    (Array.isArray(movies) ? movies : []).map((movie) => [
+    (Array.isArray(movies) ? movies : []).map((movie: MaybeMovie) => [
       movie && movie.id,
       movie && movie.number,
       movie && movie.title,
@@ -64,7 +100,7 @@ function movieSignature(movies) {
   );
 }
 
-function appendCard({ document, grid, baseUrl, movie }) {
+function appendCard({ document, grid, baseUrl, movie }: CardOptions) {
   const item = document.createElement('div');
   item.className = 'item';
   item.dataset.jdbRaCard = '1';
@@ -98,7 +134,7 @@ function appendCard({ document, grid, baseUrl, movie }) {
   titleElement.appendChild(document.createTextNode(title ? ` ${title}` : ''));
   anchor.appendChild(titleElement);
 
-  const metaParts = [];
+  const metaParts: { kind: 'score' | 'date'; value: string }[] = [];
   if (movie && movie.score) metaParts.push({ kind: 'score', value: String(movie.score) });
   const releaseDate = normalizedReleaseDate(movie && movie.release_date);
   if (releaseDate) metaParts.push({ kind: 'date', value: `发售 ${releaseDate}` });
@@ -124,7 +160,7 @@ function appendCard({ document, grid, baseUrl, movie }) {
   grid.appendChild(item);
 }
 
-function appendSkeletons(document, grid, count) {
+function appendSkeletons(document: Document, grid: Element, count: number) {
   for (let index = 0; index < count; index += 1) {
     const skeleton = document.createElement('div');
     skeleton.className = 'item jdb-ra-skel';
@@ -140,7 +176,7 @@ function appendSkeletons(document, grid, count) {
   }
 }
 
-export function createPeriodSection({ document, baseUrl, period, mode = 'browse', loading = false }) {
+export function createPeriodSection({ document, baseUrl, period, mode = 'browse', loading = false }: SectionOpts) {
   const section = document.createElement('section');
   section.className = 'jdb-ra-sec';
   section.dataset.period = String(period && period.period == null ? '' : period && period.period);
@@ -160,21 +196,21 @@ export function createPeriodSection({ document, baseUrl, period, mode = 'browse'
   grid.className = 'movie-list';
   section.append(heading, grid);
   if (loading) {
-    const requested = Number.parseInt(period && period.movies_count, 10);
+    const requested = Number.parseInt((period && period.movies_count) as string, 10);
     appendSkeletons(document, grid, Math.min(Math.max(requested || 4, 3), 6));
   }
 
   let disposed = false;
-  let signature = null;
+  let signature: string | null = null;
   let query = '';
 
-  function filter(nextQuery) {
+  function filter(nextQuery: unknown): number {
     if (disposed) return 0;
     query = String(nextQuery || '')
       .trim()
       .toLowerCase();
     let hits = 0;
-    const cards = grid.querySelectorAll(':scope > .item[data-jdb-ra-card="1"]');
+    const cards = grid.querySelectorAll<HTMLElement>(':scope > .item[data-jdb-ra-card="1"]');
     cards.forEach((card) => {
       const match = !query || String(card.dataset.q || '').includes(query);
       if (match) {
@@ -189,7 +225,7 @@ export function createPeriodSection({ document, baseUrl, period, mode = 'browse'
     return hits;
   }
 
-  function update(payload = {}) {
+  function update(payload: PeriodSectionPayload = {}): boolean {
     if (disposed) return false;
     section.dataset.degraded = String(Boolean(payload.degraded));
     if (payload.error) section.dataset.error = String(payload.error.message || payload.error);
@@ -214,8 +250,8 @@ export function createPeriodSection({ document, baseUrl, period, mode = 'browse'
     return true;
   }
 
-  function onCoverError(event) {
-    const image = event.target;
+  function onCoverError(event: Event) {
+    const image = event.target as HTMLImageElement | null;
     if (!image || image.tagName !== 'IMG' || !grid.contains(image)) return;
     const cover = image.closest('.cover');
     if (!cover || cover.querySelector('.jdb-ra-cover-ph')) return;
@@ -240,5 +276,5 @@ export function createPeriodSection({ document, baseUrl, period, mode = 'browse'
       section.removeEventListener('error', onCoverError, true);
       section.remove();
     },
-  };
+  } satisfies PeriodSection;
 }

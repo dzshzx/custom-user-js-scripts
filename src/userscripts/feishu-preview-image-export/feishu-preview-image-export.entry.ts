@@ -18,6 +18,7 @@
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
 import { createToaster } from '../shared/shared-toast.lib.tsx';
 import { resolveGmApi } from '../shared/shared-gm.lib.ts';
+import type { Toaster } from '../shared/shared-toast.lib.tsx';
 import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-export-logic.lib.ts';
 
 (function () {
@@ -27,7 +28,7 @@ import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-
   const ROOT_ID = 'feishu-pie-root';
   const STYLE_ID = `${ROOT_ID}-style`;
 
-  let toaster = null;
+  let toaster: Toaster | null = null;
 
   // Toast 容器挂在脚本自建 root 上；令牌由共享 kit 提供（飞书蓝 accent），
   // 主题跟随 prefers-color-scheme（不探测宿主）。

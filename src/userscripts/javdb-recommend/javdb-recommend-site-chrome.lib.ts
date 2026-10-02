@@ -1,7 +1,38 @@
+export interface SiteChromeClock {
+  now(): number;
+  setTimeout(handler: () => void, timeout: number): number;
+  clearTimeout(id: number): void;
+}
+
+export type SiteChromeResult =
+  | { status: 'fallback'; reason: string; httpStatus?: number }
+  | { status: 'native'; reason: 'ready'; stylesheets: number }
+  | { status: 'disposed'; reason: 'disposed' };
+
+export interface SiteChromeOptions {
+  document: Document;
+  window: Window & typeof globalThis;
+  fetch: typeof globalThis.fetch;
+  clock?: SiteChromeClock;
+  baseUrl: string;
+  onChange?: (result: SiteChromeResult) => void;
+}
+
+export interface SiteChrome {
+  start(): Promise<SiteChromeResult>;
+  dispose(): void;
+}
+
+interface SiteChromeError extends Error {
+  code?: 'timeout' | 'disposed';
+}
+
+type ChromeOpts = SiteChromeOptions;
+
 const CHROME_TIMEOUT_MS = 12_000;
 const ROUTE = '/recommend-archive';
 
-function defaultClock(window) {
+function defaultClock(window: Window): SiteChromeClock {
   return {
     now: () => Date.now(),
     setTimeout: window.setTimeout.bind(window),
@@ -10,41 +41,41 @@ function defaultClock(window) {
 }
 
 function timeoutError() {
-  const error = new Error('site chrome deadline exceeded');
+  const error: SiteChromeError = new Error('site chrome deadline exceeded');
   error.code = 'timeout';
   return error;
 }
 
 function disposedError() {
-  const error = new Error('site chrome disposed');
+  const error: SiteChromeError = new Error('site chrome disposed');
   error.code = 'disposed';
   return error;
 }
 
-function diagnostic(reason, details = {}) {
+function diagnostic(reason: string, details: { httpStatus?: number } = {}): SiteChromeResult {
   return { status: 'fallback', reason, ...details };
 }
 
-export function createSiteChrome({ document, window, fetch, clock, baseUrl, onChange = () => {} }) {
+export function createSiteChrome({ document, window, fetch, clock, baseUrl, onChange = () => {} }: ChromeOpts) {
   const timer = clock || defaultClock(window);
-  const ownedLinks = [];
-  const ownedListeners = [];
-  const ownedEntries = [];
-  let ownedNavigation = null;
-  let probe = null;
-  let startPromise = null;
+  const ownedLinks: HTMLLinkElement[] = [];
+  const ownedListeners: (() => void)[] = [];
+  const ownedEntries: HTMLAnchorElement[] = [];
+  let ownedNavigation: HTMLElement | null = null;
+  let probe: HTMLElement | null = null;
+  let startPromise: Promise<SiteChromeResult> | null = null;
   let disposed = false;
-  let fetchController = null;
+  let fetchController: AbortController | null = null;
   let deadline = 0;
   let ownedNativeClass = false;
   let ownedNavbarClass = false;
-  let ownedTheme = null;
-  let resolveDisposed;
-  const disposedSignal = new Promise((resolve) => {
+  let ownedTheme: string | null = null;
+  let resolveDisposed: () => void;
+  const disposedSignal = new Promise<void>((resolve) => {
     resolveDisposed = resolve;
   });
 
-  function publish(result) {
+  function publish(result: SiteChromeResult) {
     if (!disposed) {
       try {
         onChange(result);
@@ -59,10 +90,10 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     return Math.max(0, deadline - timer.now());
   }
 
-  function byDeadline(promise) {
+  function byDeadline<T>(promise: T | PromiseLike<T>): Promise<T> {
     const wait = remaining();
     if (wait <= 0) return Promise.reject(timeoutError());
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       const timeout = timer.setTimeout(() => reject(timeoutError()), wait);
       Promise.resolve(promise).then(
         (value) => {
@@ -81,7 +112,7 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     });
   }
 
-  function notifyDisposed() {
+  function notifyDisposed(): SiteChromeResult {
     return { status: 'disposed', reason: 'disposed' };
   }
 
@@ -103,7 +134,7 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     ownedTheme = null;
   }
 
-  function resolveHomepageBase(homeDocument, responseUrl) {
+  function resolveHomepageBase(homeDocument: Document, responseUrl: string) {
     const declaredBase = homeDocument.querySelector('base[href]')?.getAttribute('href');
     try {
       return declaredBase ? new window.URL(declaredBase, responseUrl).href : responseUrl;
@@ -112,7 +143,7 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     }
   }
 
-  function applicableStyles(homeDocument) {
+  function applicableStyles(homeDocument: Document) {
     return [...homeDocument.querySelectorAll('link[rel~="stylesheet"][href]')].filter((link) => {
       const media = String(link.getAttribute('media') || '').trim();
       if (!media || media.toLowerCase() === 'all') return true;
@@ -124,15 +155,15 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     });
   }
 
-  function prepareStyles(styles, homepageBase) {
+  function prepareStyles(styles: Element[], homepageBase: string) {
     return styles.map((source) => {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = new window.URL(source.getAttribute('href'), homepageBase).href;
+      link.href = new window.URL(source.getAttribute('href')!, homepageBase).href;
       link.dataset.jdbRaSiteChrome = 'stylesheet';
       const intendedMedia = source.getAttribute('media') || '';
       link.media = 'not all';
-      const loaded = new Promise((resolve, reject) => {
+      const loaded = new Promise<void>((resolve, reject) => {
         const onLoad = () => resolve();
         const onError = () => reject(new Error(`stylesheet failed: ${link.href}`));
         link.addEventListener('load', onLoad, { once: true });
@@ -174,28 +205,28 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     const navReady = navStyle.display === 'flex' || parseFloat(navStyle.minHeight) > 0;
     const buttonReady = /flex/.test(buttonStyle.display) || parseFloat(buttonStyle.paddingLeft) > 4;
     const boxReady = (boxStyle.boxShadow && boxStyle.boxShadow !== 'none') || parseFloat(boxStyle.paddingTop) > 0;
-    probe.remove();
+    probe!.remove();
     probe = null;
     return Boolean(navReady && buttonReady && boxReady);
   }
 
-  function absolutizeNavigation(navigation, homepageBase) {
+  function absolutizeNavigation(navigation: Element, homepageBase: string) {
     navigation.querySelectorAll('[href]').forEach((node) => {
       try {
-        node.setAttribute('href', new window.URL(node.getAttribute('href'), homepageBase).href);
+        node.setAttribute('href', new window.URL(node.getAttribute('href')!, homepageBase).href);
       } catch (error) {}
     });
     navigation.querySelectorAll('[src]').forEach((node) => {
       try {
-        node.setAttribute('src', new window.URL(node.getAttribute('src'), homepageBase).href);
+        node.setAttribute('src', new window.URL(node.getAttribute('src')!, homepageBase).href);
       } catch (error) {}
     });
   }
 
-  function installNavigation(homeDocument, homepageBase) {
-    let navigation = document.body.querySelector('nav.main-nav');
+  function installNavigation(homeDocument: Document, homepageBase: string) {
+    let navigation = document.body.querySelector<HTMLElement>('nav.main-nav');
     if (!navigation) {
-      const source = homeDocument.querySelector('nav.main-nav');
+      const source = homeDocument.querySelector<HTMLElement>('nav.main-nav');
       if (!source) return;
       navigation = document.importNode(source, true);
       navigation.dataset.jdbRaSiteChrome = 'navigation';
@@ -206,9 +237,9 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
       ownedNavigation = navigation;
     }
     navigation.querySelectorAll('[data-target]').forEach((button) => {
-      const click = (event) => {
+      const click = (event: Event) => {
         event.preventDefault();
-        const target = document.getElementById(button.getAttribute('data-target'));
+        const target = document.getElementById(button.getAttribute('data-target')!);
         button.classList.toggle('is-active');
         if (target) target.classList.toggle('is-active');
       };
@@ -279,9 +310,9 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     } catch (error) {
       if (disposed) return notifyDisposed();
       const reason =
-        error && error.code === 'timeout'
+        error && (error as SiteChromeError).code === 'timeout'
           ? 'timeout'
-          : /^stylesheet failed:/.test(String(error && error.message))
+          : /^stylesheet failed:/.test(String(error && (error as SiteChromeError).message))
             ? 'stylesheet-error'
             : 'homepage-fetch';
       cleanupResources();
@@ -290,7 +321,7 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
   }
 
   return {
-    start() {
+    start(): Promise<SiteChromeResult> {
       if (disposed) return Promise.resolve(notifyDisposed());
       if (!startPromise) startPromise = run();
       return startPromise;
@@ -302,5 +333,5 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
       if (fetchController) fetchController.abort();
       cleanupResources();
     },
-  };
+  } satisfies SiteChrome;
 }
