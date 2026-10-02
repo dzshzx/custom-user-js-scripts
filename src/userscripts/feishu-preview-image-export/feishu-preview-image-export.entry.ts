@@ -15,10 +15,10 @@
 // @license      MIT
 // ==/UserScript==
 
-import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
-import { createToaster } from '../shared/shared-toast.lib.jsx';
-import { resolveGmApi } from '../shared/shared-gm.lib.js';
-import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-export-logic.lib.js';
+import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
+import { createToaster } from '../shared/shared-toast.lib.tsx';
+import { resolveGmApi } from '../shared/shared-gm.lib.ts';
+import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-export-logic.lib.ts';
 
 (function () {
   'use strict';

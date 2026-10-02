@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createRefreshRuntime } from '../src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js';
+import { createRefreshRuntime } from '../src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.ts';
 
 function createHarness() {
   let nowMs = 0;

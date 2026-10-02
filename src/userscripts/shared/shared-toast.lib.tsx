@@ -1,5 +1,5 @@
 import { render } from 'preact';
-import { Icon } from './shared-icons.lib.jsx';
+import { Icon } from './shared-icons.lib.tsx';
 
 const TOAST_LIMIT = 3;
 const DEFAULT_DURATION_MS = 4000;

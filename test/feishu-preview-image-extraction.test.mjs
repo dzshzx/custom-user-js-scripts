@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { readPreviewImage } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js';
+import { readPreviewImage } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.ts';
 import { loadTestPlaywright } from '../scripts/test-playwright.mjs';
 
 function image({ src = '', currentSrc = '', width = 200, height = 100 } = {}) {

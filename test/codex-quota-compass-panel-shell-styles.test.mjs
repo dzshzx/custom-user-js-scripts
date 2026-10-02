@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createShellStyles } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js';
+import { createShellStyles } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.ts';
 
 test('createShellStyles bridges CQC variables onto the shared kit tokens', () => {
   const css = createShellStyles('quota-root');

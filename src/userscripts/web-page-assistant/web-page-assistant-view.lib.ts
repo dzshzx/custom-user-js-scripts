@@ -1,14 +1,14 @@
-import * as PageAssistantSettings from './web-page-assistant-settings.lib.js';
-import { installAssistantBaseStyles } from './web-page-assistant-presentation-base-styles.lib.js';
-import { installAssistantDialogStyles } from './web-page-assistant-presentation-dialog-styles.lib.js';
+import * as PageAssistantSettings from './web-page-assistant-settings.lib.ts';
+import { installAssistantBaseStyles } from './web-page-assistant-presentation-base-styles.lib.ts';
+import { installAssistantDialogStyles } from './web-page-assistant-presentation-dialog-styles.lib.ts';
 import {
   createPageAssistantDialogContract,
   createWidgetElement,
   createDialogElement,
   isCoarsePointer,
-} from './web-page-assistant-presentation.lib.js';
-import { createDragAnchor, createHoverExpansion, createPanelPlacement } from '../shared/shared-widget-shell.lib.js';
-import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.js';
+} from './web-page-assistant-presentation.lib.ts';
+import { createDragAnchor, createHoverExpansion, createPanelPlacement } from '../shared/shared-widget-shell.lib.ts';
+import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
 
 const SCRIPT_NAME = 'Web Page Assistant';
 const ROOT_ID = 'page-auto-refresh-timer-root';

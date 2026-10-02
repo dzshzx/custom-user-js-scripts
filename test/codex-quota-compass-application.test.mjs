@@ -1,21 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createQuotaApplication } from '../src/userscripts/codex-quota-compass/codex-quota-compass-application.lib.js';
+import { createQuotaApplication } from '../src/userscripts/codex-quota-compass/codex-quota-compass-application.lib.ts';
 import {
   createSnapshotArchiveStore,
   mergeSnapshotArchives,
   mergeSnapshots,
   EXPORT_FORMAT,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts';
 import {
   createSnapshotArchiveStoragePort,
   DEFAULT_ARCHIVE_FALLBACK_KEY,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts';
 import {
   createRemoteSyncClient,
   normalizeSettings,
   GIST_FILENAME,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.ts';
 
 const now = () => '2026-09-21T12:00:00.000Z';
 const tick = () => new Promise((resolve) => setImmediate(resolve));

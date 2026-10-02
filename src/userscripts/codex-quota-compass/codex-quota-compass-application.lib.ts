@@ -1,4 +1,4 @@
-import { planRemoteSyncSave } from './codex-quota-compass-remote-sync.lib.js';
+import { planRemoteSyncSave } from './codex-quota-compass-remote-sync.lib.ts';
 
 // One page instance owns complete operations and their public, credential-free view.
 function createQuotaApplication({

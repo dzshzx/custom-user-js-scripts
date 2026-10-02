@@ -186,6 +186,25 @@ test('a bundled entry requires matching bridge and dist metadata', async () => {
   assert.match(result.stderr, /does not match .* install identity and @version/);
 });
 
+test('a .entry.js baseline and a .entry.ts target form one unchanged plan', async () => {
+  const fixture = await fixtureRepository();
+  const stem = path.join(fixture.root, 'src/userscripts/fixture/fixture');
+  const dist = path.join(fixture.root, 'dist/fixture.user.js');
+  await mkdir(path.dirname(dist), { recursive: true });
+  for (const file of [`${stem}.entry.js`, `${stem}.user.js`, dist]) await writeFile(file, metadata('1.2.3'));
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-m', 'publish JavaScript entry');
+  git(fixture.root, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
+
+  git(fixture.root, 'mv', `${stem}.entry.js`, `${stem}.entry.ts`);
+  git(fixture.root, 'commit', '-m', 'migrate entry to TypeScript');
+  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD', '--json');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).transitions, [
+    { baseline: '1.2.3', namespace: 'https://example.test/userscripts :: Fixture', target: '1.2.3', kind: 'unchanged' },
+  ]);
+});
+
 test('an orphan dist installable makes the complete target set invalid', async () => {
   const fixture = await fixtureRepository();
   await mkdir(path.join(fixture.root, 'dist'), { recursive: true });

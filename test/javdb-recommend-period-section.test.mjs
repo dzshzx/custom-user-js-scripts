@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createPeriodSection } from '../src/userscripts/javdb-recommend/javdb-recommend-period-section.lib.js';
+import { createPeriodSection } from '../src/userscripts/javdb-recommend/javdb-recommend-period-section.lib.ts';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
 const MOVIES = [

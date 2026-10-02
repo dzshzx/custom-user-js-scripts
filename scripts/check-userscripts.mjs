@@ -47,11 +47,11 @@ for (const record of inventory.records) {
 }
 // Only the shared adapter probes the userscript manager API; scripts go
 // through resolveGmApi so GM_* / GM.* precedence stays in one place.
-const GM_ADAPTER = 'src/userscripts/shared/shared-gm.lib.js';
+const GM_ADAPTER = 'src/userscripts/shared/shared-gm.lib.ts';
 const GM_PROBE = /typeof\s+GM(?:_\w+)?\b/;
 for (const name of await readdir('src', { recursive: true })) {
   const file = `src/${name.replaceAll('\\', '/')}`;
-  if (!/\.(lib|entry)\.jsx?$/.test(file) || file === GM_ADAPTER) continue;
+  if (!/\.(lib|entry)\.[jt]sx?$/.test(file) || file === GM_ADAPTER) continue;
   if (GM_PROBE.test(await readFile(file, 'utf8'))) {
     report(file, `probes the GM API directly; use resolveGmApi from ${GM_ADAPTER}`);
   }

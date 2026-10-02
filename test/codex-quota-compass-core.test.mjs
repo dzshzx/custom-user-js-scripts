@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import * as CoreLib from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js';
-import { rollingPeriodKey } from '../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js';
+import * as CoreLib from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts';
+import { rollingPeriodKey } from '../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.ts';
 
 const { buildQuotaSnapshotResult, createQuotaCalculator } = CoreLib;
 

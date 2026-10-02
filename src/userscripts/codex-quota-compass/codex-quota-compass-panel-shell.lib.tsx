@@ -1,8 +1,8 @@
 import { render } from 'preact';
-import { Icon } from '../shared/shared-icons.lib.jsx';
-import { applyTheme } from '../shared/shared-tokens.lib.js';
-import { createWidgetShell } from '../shared/shared-widget-shell.lib.js';
-import { createShellStyles } from './codex-quota-compass-panel-shell-styles.lib.js';
+import { Icon } from '../shared/shared-icons.lib.tsx';
+import { applyTheme } from '../shared/shared-tokens.lib.ts';
+import { createWidgetShell } from '../shared/shared-widget-shell.lib.ts';
+import { createShellStyles } from './codex-quota-compass-panel-shell-styles.lib.ts';
 
 const DEFAULT_BUTTON_POSITION = { top: 76, right: 24 };
 

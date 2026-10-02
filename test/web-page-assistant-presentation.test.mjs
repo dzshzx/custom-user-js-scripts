@@ -5,9 +5,9 @@ import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 import {
   createWidgetElement,
   createDialogElement,
-} from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js';
-import { installAssistantBaseStyles } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.js';
-import { installAssistantDialogStyles } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation-dialog-styles.lib.js';
+} from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.ts';
+import { installAssistantBaseStyles } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.ts';
+import { installAssistantDialogStyles } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation-dialog-styles.lib.ts';
 
 test('enabled widget hides the per-second countdown from assistive technology', { skip: domSkip }, () => {
   const window = createDomWindow();

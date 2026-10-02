@@ -4,8 +4,8 @@ import { h } from 'preact';
 import { renderToString } from 'preact-render-to-string';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-import { StatsView } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.jsx';
-import { createQuotaPanelStatsStyles } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js';
+import { StatsView } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.tsx';
+import { createQuotaPanelStatsStyles } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.ts';
 
 // Stub the renderer components so the view can be exercised without the real
 // renderer. DataTable echoes its rows as JSON so assertions can read exactly

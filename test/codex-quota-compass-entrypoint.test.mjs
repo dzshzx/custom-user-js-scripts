@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
-import { DEFAULT_ARCHIVE_KEY } from '../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js';
+import { DEFAULT_ARCHIVE_KEY } from '../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts';
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 async function until(predicate) {

@@ -1,9 +1,9 @@
-import { createQuotaPanelViewModel } from './codex-quota-compass-panel-view-model.lib.js';
+import { createQuotaPanelViewModel } from './codex-quota-compass-panel-view-model.lib.ts';
 import { render } from 'preact';
-import { createQuotaPanelRenderer } from './codex-quota-compass-panel-renderer.lib.jsx';
-import { createFloatingPanelShell } from './codex-quota-compass-panel-shell.lib.jsx';
-import { buildTokenCss } from '../shared/shared-tokens.lib.js';
-import { createToaster } from '../shared/shared-toast.lib.jsx';
+import { createQuotaPanelRenderer } from './codex-quota-compass-panel-renderer.lib.tsx';
+import { createFloatingPanelShell } from './codex-quota-compass-panel-shell.lib.tsx';
+import { buildTokenCss } from '../shared/shared-tokens.lib.ts';
+import { createToaster } from '../shared/shared-toast.lib.tsx';
 
 const ROOT_ID = 'codex-quota-compass-root';
 const EXPORT_NAME = 'codex-quota-compass-snapshot-archive.v1.json';

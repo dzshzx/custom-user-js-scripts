@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { createWebPageAssistantStoragePort } from '../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js';
+import { createWebPageAssistantStoragePort } from '../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts';
 
 const entryPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.entry.js',
+  '../src/userscripts/web-page-assistant/web-page-assistant.entry.ts',
 );
 const entryContent = await readFile(entryPath, 'utf8');
 
@@ -65,7 +65,7 @@ function baseAdapters(overrides = {}) {
 }
 
 test('entry module imports the storage library', () => {
-  assert.equal(entryContent.includes(`from './web-page-assistant-storage.lib.js'`), true);
+  assert.equal(entryContent.includes(`from './web-page-assistant-storage.lib.ts'`), true);
   assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_STORAGE_PORT_START'), false);
 });
 

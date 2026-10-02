@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const { addDaysLocalMs, firstDayOfMonthLocal, firstDayOfMonthUTC, ymdLocal, ymdUTC } =
-  await import('../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js');
+  await import('../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts');
 
 test('local date buckets follow the wall clock across the spring-forward transition', () => {
   // 2026-03-08 02:00 EST -> 03:00 EDT.

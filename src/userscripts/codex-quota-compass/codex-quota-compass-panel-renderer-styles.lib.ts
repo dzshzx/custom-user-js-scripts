@@ -1,4 +1,4 @@
-import { createQuotaPanelStatsStyles } from './codex-quota-compass-panel-stats-styles.lib.js';
+import { createQuotaPanelStatsStyles } from './codex-quota-compass-panel-stats-styles.lib.ts';
 
 // All colors resolve from the CSS variables defined on the shell root
 // (codex-quota-compass-panel-shell-styles.lib.js). Dark mode flips those

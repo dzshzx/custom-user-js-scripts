@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
-import { md5 } from '../src/userscripts/javdb-recommend/javdb-recommend-request.lib.js';
+import { md5 } from '../src/userscripts/javdb-recommend/javdb-recommend-request.lib.ts';
 
 import { createDomWindow, createMemoryStorage, domSkip } from './helpers/dom-env.mjs';
 import { IDBFactory } from 'fake-indexeddb';
@@ -1101,7 +1101,7 @@ test('toolbar icons are inline Lucide SVGs and the source carries no emoji icons
     assert.equal(source.includes(emoji), false, `source still contains ${emoji}`);
   }
   const viewSource = await readFile(
-    new URL('../src/userscripts/javdb-recommend/javdb-recommend-view.lib.js', import.meta.url),
+    new URL('../src/userscripts/javdb-recommend/javdb-recommend-view.lib.ts', import.meta.url),
     'utf8',
   );
   assert.match(viewSource, /vendored from Lucide/);

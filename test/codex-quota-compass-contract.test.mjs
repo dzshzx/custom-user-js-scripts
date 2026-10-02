@@ -6,7 +6,7 @@ import {
   isMainSevenDayWindow,
   projectQuotaSnapshotForArchive,
   rollingPeriodKey,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.ts';
 
 function createFixtureResult() {
   return {

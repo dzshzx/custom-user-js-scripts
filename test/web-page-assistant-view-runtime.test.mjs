@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
-import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.js';
-import { createWebPageAssistantView } from '../src/userscripts/web-page-assistant/web-page-assistant-view.lib.js';
-import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js';
+import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.ts';
+import { createWebPageAssistantView } from '../src/userscripts/web-page-assistant/web-page-assistant-view.lib.ts';
+import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const deferred = () => {

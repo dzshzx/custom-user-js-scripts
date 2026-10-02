@@ -34,13 +34,14 @@
     "happy-dom": "20.14.5",
     "playwright": "1.63.0",
     "preact-render-to-string": "6.7.0",
-    "prettier": "3.9.9"
+    "prettier": "3.9.9",
+    "typescript": "6.0.3"
   },
   "allowScripts": {
     "esbuild@0.28.1": true
   },
   "engines": {
-    "node": ">=22.15"
+    "node": ">=22.18"
   },
   "dependencies": {
     "@date-fns/utc": "2.1.1",

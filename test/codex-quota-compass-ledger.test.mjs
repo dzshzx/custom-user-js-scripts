@@ -13,7 +13,7 @@ import {
   aggregateWeekly,
   aggregateMonthlyList,
   aggregateAllTime,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.ts';
 
 const USD = 0.04;
 const ms = (iso) => Date.parse(iso);

@@ -482,7 +482,7 @@
     }
   });
 
-  // src/userscripts/javdb-recommend/javdb-recommend-request.lib.js
+  // src/userscripts/javdb-recommend/javdb-recommend-request.lib.ts
   var import_spark_md5 = __toESM(require_spark_md5(), 1);
   var KEY = "30820";
   var B64_1 = "WzE3OCwyMTksMTI3LDE2MSwxODksMTYyLDEyMywxMDMsMTM3LDIxMCwxMjMsMjE5LDE4OSwxNzksMTIzLDIwMiwxMzksMTUwLDEzMywxNjAsMTI2LDIwNywxNjYsMTUxLDE0NiwxNTksMTg4LDEwMCwxMzgsMTM2LDE3NiwxNjEsMTQyLDEwMywxMzUsMTYwLDE0MiwxNzUsMTYwLDEwNCwxMzAsMTIxLDExOCwxMDYsMTMyLDEyNCwxMzAsMTA0LDEzMSwxMjEsMTI2LDE3MywxNDMsMTQwLDEzOCwxMDQsMTMwLDE1OSwxMTgsMTc1LDE0MiwxNTksMTYxLDE1OSwxNDMsMTI0LDEyMywxNjEsMTMxLDEzNywxMzQsMTAxLDEzMSwxNzUsMTU2LDEwMSwxMzEsMTc1LDE1NywxNTcsMTMwLDEzNywxNjAsMTA2LDE0MywxMzcsMTUzLDE2MCwxMzEsMTQwLDEyMiwxMDMsMTQzLDEzNywxMjMsMTU3LDEzMSwxMzcsMTUyLDEwMywxMzIsMTM3LDEyMiwxNzMsMTMwLDE1OSwxMzEsMTU5LDEzMCwxNDAsMTIyLDEwNiwxMzAsMTc1LDEyMywxNTksMTMwLDEyMSwxMzgsMTA0LDEzMiwxMjEsMTM0LDE3NCwxNDMsMTYyLDEyNiwxMDQsMTMwLDEwMywxMjcsMTU3LDEzMCwxMDMsMTI2LDE3NSwxNDIsMTc1LDE1NiwxNzUsMTQyLDE2MiwxMzEsMTYwLDEzMSwxNTksMTYxLDE1OSwxMzAsMTM3LDE1MywxNTksMTQyLDEwMywxNDIsMTczLDEzMSwxNzUsMTM0LDE3MiwxMzIsMTIxLDEyMywxNjEsMTMwLDEwMywxMzQsMTA1LDE0MiwxNDAsMTIyLDExNF0=";
@@ -912,7 +912,7 @@
     }
   };
 
-  // src/userscripts/javdb-recommend/javdb-recommend-data.lib.js
+  // src/userscripts/javdb-recommend/javdb-recommend-data.lib.ts
   var CATALOG = "javdb_recommend_periods_cache_v1";
   var LEGACY_DETAILS = "javdb_recommend_details_cache_v1";
   var DETAIL_LIMIT = 48;
@@ -1274,7 +1274,7 @@
     };
   }
 
-  // src/userscripts/javdb-recommend/javdb-recommend-period-section.lib.js
+  // src/userscripts/javdb-recommend/javdb-recommend-period-section.lib.ts
   var SITE_IMAGE_HOST = "https://c0.jdbstatic.com";
   var ICON_PATHS = {
     star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 1-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
@@ -1492,7 +1492,7 @@
     };
   }
 
-  // src/userscripts/javdb-recommend/javdb-recommend-site-chrome.lib.js
+  // src/userscripts/javdb-recommend/javdb-recommend-site-chrome.lib.ts
   var CHROME_TIMEOUT_MS = 12e3;
   var ROUTE = "/recommend-archive";
   function defaultClock(window2) {
@@ -1775,7 +1775,7 @@
     };
   }
 
-  // src/userscripts/javdb-recommend/javdb-recommend-view.lib.js
+  // src/userscripts/javdb-recommend/javdb-recommend-view.lib.ts
   var BASE = location.origin;
   var ICON_PATHS2 = {
     search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
@@ -2423,7 +2423,7 @@
     };
   }
 
-  // src/userscripts/javdb-recommend/javdb-recommend.entry.js
+  // src/userscripts/javdb-recommend/javdb-recommend.entry.ts
   var ROUTE2 = "/recommend-archive";
   function injectNavEntry() {
     var start = document.querySelector("nav.main-nav .navbar-start");

@@ -1,6 +1,6 @@
 import { clear, createStore, del, entries, get, set } from 'idb-keyval';
 import QuickLRU from 'quick-lru';
-import { cancelled, delay } from './javdb-recommend-request.lib.js';
+import { cancelled, delay } from './javdb-recommend-request.lib.ts';
 
 const CATALOG = 'javdb_recommend_periods_cache_v1';
 // Legacy localStorage details document; detail entries now live in IndexedDB.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.js';
-import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js';
+import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.ts';
+import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts';
 
 const deferred = () => {
   let resolve;

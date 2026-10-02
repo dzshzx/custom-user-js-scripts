@@ -1,4 +1,4 @@
-import { resolveGmApi } from '../shared/shared-gm.lib.js';
+import { resolveGmApi } from '../shared/shared-gm.lib.ts';
 
 function maybePromise(value) {
   return value && typeof value.then === 'function' ? value : Promise.resolve(value);

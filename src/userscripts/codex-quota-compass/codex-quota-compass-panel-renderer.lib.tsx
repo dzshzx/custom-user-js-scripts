@@ -1,5 +1,5 @@
-import { installQuotaPanelRendererStyles } from './codex-quota-compass-panel-renderer-styles.lib.js';
-import { StatsView } from './codex-quota-compass-panel-stats.lib.jsx';
+import { installQuotaPanelRendererStyles } from './codex-quota-compass-panel-renderer-styles.lib.ts';
+import { StatsView } from './codex-quota-compass-panel-stats.lib.tsx';
 
 function formatValue(value) {
   if (value === null || value === undefined || value === '') return '-';

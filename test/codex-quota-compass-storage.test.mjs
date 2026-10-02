@@ -5,7 +5,7 @@ import {
   DEFAULT_ARCHIVE_KEY,
   DEFAULT_ARCHIVE_FALLBACK_KEY,
   createSnapshotArchiveStoragePort,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts';
 
 function createLocalStorage(initial = {}) {
   const values = new Map(Object.entries(initial));

@@ -14,7 +14,7 @@ export async function worktreeSource(root) {
     const files = [];
     for (const entry of entries) {
       const file = `${relative}/${entry.name}`;
-      if (/\.(entry|user)\.js$/.test(file)) files.push(file);
+      if (/\.(entry\.[jt]s|user\.js)$/.test(file)) files.push(file);
       else if (entry.isDirectory()) files.push(...(await walk(file)));
     }
     return files;
@@ -41,7 +41,7 @@ export function refSource(root, ref) {
   return {
     files: output
       .split('\0')
-      .filter((file) => /\.(entry|user)\.js$/.test(file))
+      .filter((file) => /\.(entry\.[jt]s|user\.js)$/.test(file))
       .sort(),
     readText(file) {
       // Preserve bytes, including trailing newlines, just like the worktree reader.

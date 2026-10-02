@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import * as libraryContract from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js';
+import * as libraryContract from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts';
 
 const pageKey = 'https://example.com/path?a=1';
 const siteKey = 'example.com';
 const entryPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.entry.js',
+  '../src/userscripts/web-page-assistant/web-page-assistant.entry.ts',
 );
 
 const entryContent = await readFile(entryPath, 'utf8');
@@ -41,7 +41,7 @@ test('settings contract library exposes the stable interface', () => {
 });
 
 test('entry module imports the settings library', () => {
-  assert.equal(entryContent.includes(`from './web-page-assistant-settings.lib.js'`), true);
+  assert.equal(entryContent.includes(`from './web-page-assistant-settings.lib.ts'`), true);
   assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START'), false);
 });
 

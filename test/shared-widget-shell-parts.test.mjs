@@ -6,7 +6,7 @@ import {
   createDragAnchor,
   createHoverExpansion,
   createPanelPlacement,
-} from '../src/userscripts/shared/shared-widget-shell.lib.js';
+} from '../src/userscripts/shared/shared-widget-shell.lib.ts';
 
 const WIDGET_SIZE = { width: 154, height: 60 };
 

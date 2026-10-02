@@ -16,9 +16,9 @@
 // @downloadURL  https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js
 // @updateURL    https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js
 // ==/UserScript==
-import { createRequest } from './javdb-recommend-request.lib.js';
-import { createArchiveData, createDetailStore } from './javdb-recommend-data.lib.js';
-import { bootArchivePage } from './javdb-recommend-view.lib.js';
+import { createRequest } from './javdb-recommend-request.lib.ts';
+import { createArchiveData, createDetailStore } from './javdb-recommend-data.lib.ts';
+import { bootArchivePage } from './javdb-recommend-view.lib.ts';
 const ROUTE = '/recommend-archive';
 function injectNavEntry() {
   var start = document.querySelector('nav.main-nav .navbar-start');

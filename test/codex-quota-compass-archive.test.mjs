@@ -8,7 +8,7 @@ import {
   mergeSnapshots,
   normalizeSnapshotArchive,
   previewImportArchiveDocument,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts';
 
 function createFixtureResult(overrides = {}) {
   return {
@@ -487,7 +487,7 @@ test('repeated same-day saves do not multiply ledger rows or exceed the snapshot
 
 test('content key is independent of key order and treats undefined fields like JSON', async () => {
   const { archiveContentKey, exportDocumentContentKey } =
-    await import('../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js');
+    await import('../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts');
   const left = { ledger: { b: 1, a: { y: 2, x: 1 } }, snapshots: [{ q: 1, p: undefined }] };
   const right = { snapshots: [{ q: 1 }], ledger: { a: { x: 1, y: 2 }, b: 1 } };
   assert.equal(exportDocumentContentKey(left), exportDocumentContentKey(right));

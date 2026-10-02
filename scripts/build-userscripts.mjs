@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import esbuild from 'esbuild';
 import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource } from './lib/userscript-sources.mjs';
-import { JSX_OPTIONS } from './lib/jsx-build-options.mjs';
+import { TRANSFORM_OPTIONS } from './lib/jsx-build-options.mjs';
 
 import {
   REQUIRED_METADATA_FIELDS,
@@ -23,7 +23,7 @@ async function discoverEntries(rootDir) {
   const inventory = await readUserscriptInventory(await worktreeSource(rootDir));
   const fatal = inventory.issues.filter(
     (issue) =>
-      (issue.type === 'read-failed' && issue.file.endsWith('.entry.js')) ||
+      (issue.type === 'read-failed' && /\.entry\.[jt]s$/.test(issue.file)) ||
       ['ownership-conflict', 'invalid-entry-path'].includes(issue.type),
   );
   if (fatal.length) throw new Error(fatal.map((issue) => issue.message).join('\n'));
@@ -73,7 +73,7 @@ function validateEntryMetadata({ scriptId, entryPath, entrySource }) {
 
 async function assertNoOrphanLibs({ rootDir, scriptDir, entryPath, metafile }) {
   const bundledInputs = new Set(Object.keys(metafile.inputs).map((input) => path.resolve(rootDir, input)));
-  const libFiles = (await readdir(scriptDir)).filter((name) => /\.lib\.jsx?$/.test(name));
+  const libFiles = (await readdir(scriptDir)).filter((name) => /\.lib\.[jt]sx?$/.test(name));
   const orphans = libFiles.filter((name) => !bundledInputs.has(path.join(scriptDir, name)));
   if (orphans.length) {
     throw new Error(
@@ -95,7 +95,7 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
       format: 'iife',
       platform: 'browser',
       target: 'es2022',
-      ...JSX_OPTIONS,
+      ...TRANSFORM_OPTIONS,
       minify: false,
       charset: 'utf8',
       sourcemap: false,
@@ -126,7 +126,7 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const results = await buildAll({});
   if (!results.length) {
-    console.log('Nothing to build: no <script-id>.entry.js modules found under src/userscripts/.');
+    console.log('Nothing to build: no <script-id>.entry.ts modules found under src/userscripts/.');
   } else {
     for (const { scriptId, distPath } of results) {
       console.log(`Built ${scriptId} -> ${path.relative(process.cwd(), distPath)}`);

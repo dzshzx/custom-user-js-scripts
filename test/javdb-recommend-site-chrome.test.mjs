@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createSiteChrome } from '../src/userscripts/javdb-recommend/javdb-recommend-site-chrome.lib.js';
+import { createSiteChrome } from '../src/userscripts/javdb-recommend/javdb-recommend-site-chrome.lib.ts';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
 function response(html, url = 'https://mirror.example/home') {

@@ -1,4 +1,4 @@
-import { createQuotaSnapshotAccess } from './codex-quota-compass-contract.lib.js';
+import { createQuotaSnapshotAccess } from './codex-quota-compass-contract.lib.ts';
 
 function normalizePanelSyncStatus(syncStatus, storageBackend) {
   const source = syncStatus || storageBackend || { id: 'pending', label: 'pending' };

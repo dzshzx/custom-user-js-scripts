@@ -1,5 +1,5 @@
-import * as Settings from './web-page-assistant-settings.lib.js';
-import { createRefreshRuntime } from './web-page-assistant-refresh.lib.js';
+import * as Settings from './web-page-assistant-settings.lib.ts';
+import { createRefreshRuntime } from './web-page-assistant-refresh.lib.ts';
 
 // Settings and applied capabilities have one owner. Only persisted commands
 // and refreshes from storage enter the FIFO; pause remains available while a

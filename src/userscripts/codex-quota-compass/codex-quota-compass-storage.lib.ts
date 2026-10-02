@@ -1,4 +1,4 @@
-import { resolveGmApi } from '../shared/shared-gm.lib.js';
+import { resolveGmApi } from '../shared/shared-gm.lib.ts';
 
 const DEFAULT_ARCHIVE_KEY = 'codexQuotaCompassSnapshotArchive';
 const DEFAULT_ARCHIVE_FALLBACK_KEY = 'codexQuotaCompassSnapshotArchiveFallback';

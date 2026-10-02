@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-import { applyTheme, buildTokenCss, resolveTheme } from '../src/userscripts/shared/shared-tokens.lib.js';
+import { applyTheme, buildTokenCss, resolveTheme } from '../src/userscripts/shared/shared-tokens.lib.ts';
 
 function withStubbedMatchMedia(media, run) {
   const previous = globalThis.window;

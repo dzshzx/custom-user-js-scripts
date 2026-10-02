@@ -1,5 +1,5 @@
-import { createPeriodSection } from './javdb-recommend-period-section.lib.js';
-import { createSiteChrome } from './javdb-recommend-site-chrome.lib.js';
+import { createPeriodSection } from './javdb-recommend-period-section.lib.ts';
+import { createSiteChrome } from './javdb-recommend-site-chrome.lib.ts';
 
 var BASE = location.origin;
 /* ================= 官网资源约定 ================= */

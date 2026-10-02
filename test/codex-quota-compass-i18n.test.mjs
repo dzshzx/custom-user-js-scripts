@@ -6,7 +6,7 @@ import {
   messages,
   createQuotaCompassTranslator,
   resolveLocale,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.ts';
 
 test('createQuotaCompassTranslator uses zh-CN as the default locale', () => {
   const translator = createQuotaCompassTranslator({

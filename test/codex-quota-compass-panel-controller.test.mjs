@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
-import { buildQuotaSnapshotResult } from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js';
-import { createQuotaCompassTranslator } from '../src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.js';
-import { createQuotaPanelController } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.jsx';
+import { buildQuotaSnapshotResult } from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts';
+import { createQuotaCompassTranslator } from '../src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.ts';
+import { createQuotaPanelController } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.tsx';
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 function deferred() {

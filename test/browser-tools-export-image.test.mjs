@@ -11,7 +11,7 @@ import {
   parseArgs,
   runExportImage,
 } from '../scripts/browser-tools/export-image.mjs';
-import { readPreviewImage } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js';
+import { readPreviewImage } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.ts';
 
 test('CLI module imports without running and retains argument behavior', () => {
   assert.equal(isMain(new URL('../scripts/browser-tools/export-image.mjs', import.meta.url).href), false);

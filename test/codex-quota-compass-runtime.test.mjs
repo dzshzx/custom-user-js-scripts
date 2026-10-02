@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import * as CoreLib from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js';
+import * as CoreLib from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts';
 import {
   createDefaultQuotaRuntimeConfig,
   createQuotaRuntime,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.ts';
 
 function jsonResponse(body, options = {}) {
   return {

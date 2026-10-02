@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js';
-import { createWebPageAssistantStoragePort } from '../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js';
-import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.js';
+import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts';
+import { createWebPageAssistantStoragePort } from '../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts';
+import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.ts';
 
 const STORAGE_KEY = 'pageAutoRefreshTimerSettings';
 const FALLBACK_KEY = `__${STORAGE_KEY}`;

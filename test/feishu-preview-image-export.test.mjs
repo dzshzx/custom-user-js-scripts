@@ -9,7 +9,7 @@ import {
   extensionFromMime,
   sanitizeFilePart,
   toUserMessage,
-} from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.js';
+} from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.ts';
 
 const distPath = path.resolve(import.meta.dirname, '../dist/feishu-preview-image-export.user.js');
 const distSource = await readFile(distPath, 'utf8');

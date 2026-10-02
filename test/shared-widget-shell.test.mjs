@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-import { createWidgetShell } from '../src/userscripts/shared/shared-widget-shell.lib.js';
+import { createWidgetShell } from '../src/userscripts/shared/shared-widget-shell.lib.ts';
 
 const POSITION_KEY = 'wk-test:position';
 

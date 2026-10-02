@@ -5,7 +5,7 @@ import { firstMetadataValue, installIdentity, parseMetadataBlock } from './users
 // at their stage. No source module is imported or evaluated.
 export async function readUserscriptInventory({ files, readText }) {
   const paths = [...new Set(files.map((file) => path.posix.normalize(file.replaceAll('\\', '/'))))]
-    .filter((file) => /\.(entry|user)\.js$/.test(file) && /^(src\/|dist\/)/.test(file))
+    .filter((file) => /\.(entry\.[jt]s|user\.js)$/.test(file) && /^(src\/|dist\/)/.test(file))
     .sort();
   const facts = new Map();
   const issues = [];
@@ -35,7 +35,7 @@ export async function readUserscriptInventory({ files, readText }) {
   }
   function add(owner, entry, bridge, dist, single) {
     const record = {
-      scriptId: path.posix.basename(owner.path).replace(/\.(entry|user)\.js$/, ''),
+      scriptId: path.posix.basename(owner.path).replace(/\.(entry\.[jt]s|user\.js)$/, ''),
       identity: owner.metadata ? installIdentity(owner.metadata) : '',
       metadataOwner: owner,
       entry,
@@ -76,12 +76,15 @@ export async function readUserscriptInventory({ files, readText }) {
     }
     return record;
   }
-  for (const file of paths.filter((file) => file.startsWith('src/') && file.endsWith('.entry.js'))) {
+  // Entries are TypeScript (<id>.entry.ts); .entry.js stays readable so Git refs
+  // from before the TypeScript migration still form a complete version baseline.
+  for (const file of paths.filter((file) => file.startsWith('src/') && /\.entry\.[jt]s$/.test(file))) {
     const entry = fact(file);
     if (!entry.exists) continue;
-    const stem = file.slice(0, -'.entry.js'.length);
-    if (file !== `src/userscripts/${path.posix.basename(stem)}/${path.posix.basename(stem)}.entry.js`) {
-      issue('invalid-entry-path', file, 'entry path must be src/userscripts/<script-id>/<script-id>.entry.js');
+    const extension = file.slice(-'.entry.ts'.length);
+    const stem = file.slice(0, -extension.length);
+    if (file !== `src/userscripts/${path.posix.basename(stem)}/${path.posix.basename(stem)}${extension}`) {
+      issue('invalid-entry-path', file, 'entry path must be src/userscripts/<script-id>/<script-id>.entry.ts');
     }
     add(entry, entry, fact(`${stem}.user.js`), fact(`dist/${path.posix.basename(stem)}.user.js`), null);
   }

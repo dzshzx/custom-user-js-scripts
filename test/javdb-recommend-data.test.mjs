@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createArchiveData } from '../src/userscripts/javdb-recommend/javdb-recommend-data.lib.js';
-import { createRequest } from '../src/userscripts/javdb-recommend/javdb-recommend-request.lib.js';
+import { createArchiveData } from '../src/userscripts/javdb-recommend/javdb-recommend-data.lib.ts';
+import { createRequest } from '../src/userscripts/javdb-recommend/javdb-recommend-request.lib.ts';
 const C = 'javdb_recommend_periods_cache_v1',
   D = 'javdb_recommend_details_cache_v1',
   I = 'javdb_recommend_search_index_v1_';

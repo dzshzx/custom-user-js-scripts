@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createPageAssistantDialogContract } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js';
+import { createPageAssistantDialogContract } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.ts';
 
 function createSettingsContract() {
   return {

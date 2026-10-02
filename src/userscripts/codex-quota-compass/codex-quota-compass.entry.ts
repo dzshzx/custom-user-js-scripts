@@ -25,19 +25,19 @@
 // @license      MIT
 // ==/UserScript==
 
-import { createQuotaCompassTranslator } from './codex-quota-compass-i18n.lib.js';
-import * as CoreLib from './codex-quota-compass-core.lib.js';
-import { createQuotaRuntime, createDefaultQuotaRuntimeConfig } from './codex-quota-compass-runtime.lib.js';
-import { createSnapshotArchiveStoragePort } from './codex-quota-compass-storage.lib.js';
-import { resolveGmApi } from '../shared/shared-gm.lib.js';
+import { createQuotaCompassTranslator } from './codex-quota-compass-i18n.lib.ts';
+import * as CoreLib from './codex-quota-compass-core.lib.ts';
+import { createQuotaRuntime, createDefaultQuotaRuntimeConfig } from './codex-quota-compass-runtime.lib.ts';
+import { createSnapshotArchiveStoragePort } from './codex-quota-compass-storage.lib.ts';
+import { resolveGmApi } from '../shared/shared-gm.lib.ts';
 import {
   normalizeSnapshotArchive,
   mergeSnapshotArchives,
   createSnapshotArchiveStore,
-} from './codex-quota-compass-archive.lib.js';
-import { createRemoteSyncClient } from './codex-quota-compass-remote-sync.lib.js';
-import { createQuotaApplication } from './codex-quota-compass-application.lib.js';
-import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quota-compass-panel-controller.lib.jsx';
+} from './codex-quota-compass-archive.lib.ts';
+import { createRemoteSyncClient } from './codex-quota-compass-remote-sync.lib.ts';
+import { createQuotaApplication } from './codex-quota-compass-application.lib.ts';
+import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quota-compass-panel-controller.lib.tsx';
 
 (function () {
   'use strict';

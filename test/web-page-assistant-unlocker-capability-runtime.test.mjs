@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createUnlockerRuntime } from '../src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.js';
+import { createUnlockerRuntime } from '../src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.ts';
 
 function createTarget() {
   const listeners = [];

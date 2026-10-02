@@ -31,11 +31,11 @@
 // @license      MIT
 // ==/UserScript==
 
-import * as PageAssistantSettings from './web-page-assistant-settings.lib.js';
-import { createWebPageAssistantStoragePort } from './web-page-assistant-storage.lib.js';
-import { createWebPageAssistantSession } from './web-page-assistant-session.lib.js';
-import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.js';
-import { createWebPageAssistantView } from './web-page-assistant-view.lib.js';
+import * as PageAssistantSettings from './web-page-assistant-settings.lib.ts';
+import { createWebPageAssistantStoragePort } from './web-page-assistant-storage.lib.ts';
+import { createWebPageAssistantSession } from './web-page-assistant-session.lib.ts';
+import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.ts';
+import { createWebPageAssistantView } from './web-page-assistant-view.lib.ts';
 
 (function () {
   'use strict';

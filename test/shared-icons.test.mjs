@@ -4,7 +4,7 @@ import { h } from 'preact';
 import { renderToString } from 'preact-render-to-string';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
-import { ICON_NAMES, Icon, mountIcon } from '../src/userscripts/shared/shared-icons.lib.jsx';
+import { ICON_NAMES, Icon, mountIcon } from '../src/userscripts/shared/shared-icons.lib.tsx';
 
 test('ICON_NAMES lists the icons scripts use', () => {
   assert.deepEqual([...ICON_NAMES].sort(), ['alert-triangle', 'check', 'loader', 'refresh-cw', 'settings', 'x']);

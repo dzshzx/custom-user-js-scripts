@@ -5,19 +5,19 @@ import path from 'node:path';
 import { h } from 'preact';
 import { renderToString } from 'preact-render-to-string';
 
-import { createQuotaPanelRenderer } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.jsx';
+import { createQuotaPanelRenderer } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.tsx';
 
 const entryPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/codex-quota-compass/codex-quota-compass.entry.js',
+  '../src/userscripts/codex-quota-compass/codex-quota-compass.entry.ts',
 );
 const rendererLibPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.jsx',
+  '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.tsx',
 );
 const rendererStylesLibPath = path.resolve(
   import.meta.dirname,
-  '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js',
+  '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.ts',
 );
 const entryContent = await readFile(entryPath, 'utf8');
 const rendererLibContent = await readFile(rendererLibPath, 'utf8');
@@ -85,8 +85,8 @@ function createRenderer() {
 test('renderer module imports statistics styles before renderer styles', () => {
   // The module graph (not a flat @require order) now enforces this: the renderer
   // lib imports its own styles, which in turn import the statistics styles.
-  assert.equal(rendererLibContent.includes(`from './codex-quota-compass-panel-renderer-styles.lib.js'`), true);
-  assert.equal(rendererStylesLibContent.includes(`from './codex-quota-compass-panel-stats-styles.lib.js'`), true);
+  assert.equal(rendererLibContent.includes(`from './codex-quota-compass-panel-renderer-styles.lib.ts'`), true);
+  assert.equal(rendererStylesLibContent.includes(`from './codex-quota-compass-panel-stats-styles.lib.ts'`), true);
 });
 
 test('installable metadata and Snapshot Archive version stay synchronized', () => {

@@ -1,4 +1,4 @@
-import { mountIcon } from '../shared/shared-icons.lib.jsx';
+import { mountIcon } from '../shared/shared-icons.lib.tsx';
 
 const LIB_NAME = 'WebPageAssistantPresentationLib';
 

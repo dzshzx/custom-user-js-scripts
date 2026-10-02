@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { createCli, integerValue, parseCli, requireValue } from './cli-args.mjs';
 import { resolvePlaywrightImport } from './playwright-loader.mjs';
-import { readPreviewImage } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.js';
-import { extensionFromMime } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.js';
+import { readPreviewImage } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.ts';
+import { extensionFromMime } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.ts';
 
 const DEFAULT_URL = 'https://mi.feishu.cn/file/UxkDbtSZqo9Ya4xCGNZcWOmWnlf';
 const DEFAULT_PROFILE_DIR = path.join(

@@ -12,11 +12,11 @@ import {
   createRemoteSyncClient,
   normalizeSettings,
   planRemoteSyncSave,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.ts';
 import {
   createSnapshotArchiveStore,
   normalizeSnapshotArchive,
-} from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js';
+} from '../src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts';
 
 const distPath = path.resolve(import.meta.dirname, '../dist/codex-quota-compass.user.js');
 const distContent = await readFile(distPath, 'utf8');

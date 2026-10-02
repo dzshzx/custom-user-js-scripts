@@ -117,7 +117,7 @@
     }
   });
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.ts
   var DEFAULT_LOCALE = "zh-CN";
   var messages = {
     "zh-CN": {
@@ -457,7 +457,7 @@
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts
   var codex_quota_compass_core_lib_exports = {};
   __export(codex_quota_compass_core_lib_exports, {
     addDaysLocalMs: () => addDaysLocalMs,
@@ -694,7 +694,7 @@
     return matches[1].replace(doubleQuoteRegExp, "'");
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts
   var MAIN_PRIMARY_WINDOW_KEY = "main.primaryWindow";
   var MAIN_SEVEN_DAY_WINDOW_KEY = "main.sevenDayWindow";
   function toNumber(value) {
@@ -1150,7 +1150,7 @@
     return { run };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.ts
   function createDefaultQuotaRuntimeConfig(overrides = {}) {
     return {
       DEBUG: false,
@@ -1275,7 +1275,7 @@ ${text.slice(0, 800)}`);
     return { run };
   }
 
-  // src/userscripts/shared/shared-gm.lib.js
+  // src/userscripts/shared/shared-gm.lib.ts
   function pickFunction(override, legacy) {
     if (typeof override === "function") return override;
     if (typeof legacy === "function") return legacy;
@@ -1328,7 +1328,7 @@ ${text.slice(0, 800)}`);
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts
   var DEFAULT_ARCHIVE_KEY = "codexQuotaCompassSnapshotArchive";
   var DEFAULT_ARCHIVE_FALLBACK_KEY = "codexQuotaCompassSnapshotArchiveFallback";
   var STORAGE_BACKENDS = {
@@ -1493,7 +1493,7 @@ ${text.slice(0, 800)}`);
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts
   var import_fast_json_stable_stringify = __toESM(require_fast_json_stable_stringify(), 1);
 
   // node_modules/yocto-queue/index.js
@@ -2236,7 +2236,7 @@ ${text.slice(0, 800)}`);
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.ts
   var MAIN_SEVEN_DAY_WINDOW_KEY2 = "main.sevenDayWindow";
   var SINCE_RESET_KEY = "主7天窗口_上次重置至今";
   var MONTH_TO_DATE_KEY = "本月初至今";
@@ -2337,7 +2337,7 @@ ${text.slice(0, 800)}`);
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-ledger.lib.ts
   var DAY_MS = 24 * 60 * 60 * 1e3;
   var SETTLE_BUFFER_MS = 15 * 60 * 1e3;
   var DEFAULT_USD_PER_CREDIT = 40 / 1e3;
@@ -2604,7 +2604,7 @@ ${text.slice(0, 800)}`);
     return aggregateRange(ledger, { from: range.from, to: range.to, nowMs, buffer });
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts
   var ARCHIVE_SCHEMA_VERSION = 2;
   var EXPORT_FORMAT = "codex-quota-compass.snapshot-archive";
   var EXPORT_VERSION = 2;
@@ -3080,7 +3080,7 @@ ${text.slice(0, 800)}`);
     );
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.ts
   var REMOTE_SYNC_SETTINGS_KEY = "codexQuotaCompassRemoteSyncSettings";
   var GITHUB_API_BASE = "https://api.github.com";
   var GITHUB_API_VERSION = "2026-03-10";
@@ -3563,7 +3563,7 @@ ${text.slice(0, 800)}`);
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-application.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-application.lib.ts
   function createQuotaApplication({
     runtime,
     archiveStore,
@@ -3827,7 +3827,7 @@ ${text.slice(0, 800)}`);
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-view-model.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-view-model.lib.ts
   function normalizePanelSyncStatus(syncStatus, storageBackend) {
     const source = syncStatus || storageBackend || { id: "pending", label: "pending" };
     const backendId = source.backendId || source.id || "pending";
@@ -4559,7 +4559,7 @@ ${text.slice(0, 800)}`);
     return n2.__v.__b - l3.__v.__b;
   }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, a = "__a" + f, s = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.ts
   var LIB_NAME = "CodexQuotaCompassPanelStatsStylesLib";
   function createQuotaPanelStatsStyles(rootId) {
     if (!rootId) {
@@ -4752,7 +4752,7 @@ ${text.slice(0, 800)}`);
     `;
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer-styles.lib.ts
   function createQuotaPanelRendererStyles(rootId = "codex-quota-compass-root") {
     return `
       ${createQuotaPanelStatsStyles(rootId)}
@@ -5290,7 +5290,7 @@ ${text.slice(0, 800)}`);
     return l.vnode && l.vnode(l3), l3;
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.jsx
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats.lib.tsx
   var LIB_NAME2 = "CodexQuotaCompassPanelStatsLib";
   var PERIODS = ["day", "week", "month", "all"];
   var PERIOD_TABS = [
@@ -5502,7 +5502,7 @@ ${text.slice(0, 800)}`);
     ] });
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.jsx
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.tsx
   function formatValue(value) {
     if (value === null || value === void 0 || value === "") return "-";
     if (typeof value === "number")
@@ -6349,7 +6349,7 @@ ${text.slice(0, 800)}`);
   __iconData6.node;
   var X2 = createLucideIcon(__iconData6);
 
-  // src/userscripts/shared/shared-icons.lib.jsx
+  // src/userscripts/shared/shared-icons.lib.tsx
   var ICONS = {
     x: X2,
     "refresh-cw": RefreshCw,
@@ -6376,7 +6376,7 @@ ${text.slice(0, 800)}`);
     );
   }
 
-  // src/userscripts/shared/shared-tokens.lib.js
+  // src/userscripts/shared/shared-tokens.lib.ts
   var SAFE_COLOR_PATTERN = /^[#a-zA-Z0-9(),.\s%/+-]+$/;
   var UNSAFE_SELECTOR_CHARS = /[{};<@\\]/;
   var COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
@@ -7869,7 +7869,7 @@ ${root} :focus-visible {
     });
   };
 
-  // src/userscripts/shared/shared-widget-shell.lib.js
+  // src/userscripts/shared/shared-widget-shell.lib.ts
   var BUTTON_SAFE_MARGIN = 12;
   var DOCK_THRESHOLD = 32;
   var DOCK_OFFSET = 8;
@@ -8409,7 +8409,7 @@ ${root} :focus-visible {
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.ts
   var BUTTON_FULL_WIDTH = 168;
   var BUTTON_HEIGHT = 42;
   function createShellStyles(rootId) {
@@ -8625,7 +8625,7 @@ ${root} :focus-visible {
   `;
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.jsx
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.tsx
   var DEFAULT_BUTTON_POSITION = { top: 76, right: 24 };
   function detectHostTheme(documentObject = globalThis.document) {
     const host = documentObject?.documentElement;
@@ -8788,7 +8788,7 @@ ${root} :focus-visible {
     return api;
   }
 
-  // src/userscripts/shared/shared-toast.lib.jsx
+  // src/userscripts/shared/shared-toast.lib.tsx
   var TOAST_LIMIT = 3;
   var DEFAULT_DURATION_MS = 4e3;
   var ERROR_DURATION_MS = 6e3;
@@ -8990,7 +8990,7 @@ ${root} :focus-visible {
     };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.jsx
+  // src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.tsx
   var ROOT_ID = "codex-quota-compass-root";
   var EXPORT_NAME = "codex-quota-compass-snapshot-archive.v1.json";
   function createSnapshotSyncStatus(backendInfo) {
@@ -9454,7 +9454,7 @@ ${root} :focus-visible {
     return { update, dispatch, dispose };
   }
 
-  // src/userscripts/codex-quota-compass/codex-quota-compass.entry.js
+  // src/userscripts/codex-quota-compass/codex-quota-compass.entry.ts
   (function() {
     "use strict";
     const SCRIPT_NAME = "Codex Quota Compass";

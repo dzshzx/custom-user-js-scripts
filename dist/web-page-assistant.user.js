@@ -39,7 +39,7 @@
       __defProp(target, name, { get: all[name], enumerable: true });
   };
 
-  // src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts
   var web_page_assistant_settings_lib_exports = {};
   __export(web_page_assistant_settings_lib_exports, {
     DEFAULT_UNLOCKER_OPTIONS: () => DEFAULT_UNLOCKER_OPTIONS,
@@ -334,7 +334,7 @@
     };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-settings.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts
   var MIN_INTERVAL_MS = 1e3;
   var MAX_INTERVAL_MS = 60 * 60 * 1e3;
   var DEFAULT_UNLOCKER_OPTIONS = {
@@ -486,7 +486,7 @@
     return next;
   }
 
-  // src/userscripts/shared/shared-gm.lib.js
+  // src/userscripts/shared/shared-gm.lib.ts
   function pickFunction(override, legacy) {
     if (typeof override === "function") return override;
     if (typeof legacy === "function") return legacy;
@@ -539,7 +539,7 @@
     };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-storage.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts
   function maybePromise(value) {
     return value && typeof value.then === "function" ? value : Promise.resolve(value);
   }
@@ -716,7 +716,7 @@
     };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-refresh.lib.ts
   function createRefreshRuntime(adapters) {
     const {
       minIntervalMs,
@@ -824,7 +824,7 @@
     };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-session.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-session.lib.ts
   function createWebPageAssistantSession({
     keys,
     storage,
@@ -1044,7 +1044,7 @@
     return { start, dispatch, getState, dispose };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-unlocker.lib.ts
   function createUnlockerRuntime(adapters) {
     const {
       hasUnlockerAction: hasUnlockerAction2,
@@ -1136,7 +1136,7 @@
     };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.ts
   var LIB_NAME = "WebPageAssistantPresentationBaseStylesLib";
   function installAssistantBaseStyles({ documentObject, rootId, styleId }) {
     if (!documentObject || !rootId || !styleId) {
@@ -1474,7 +1474,7 @@
     documentObject.documentElement.append(style);
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-presentation-dialog-styles.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-presentation-dialog-styles.lib.ts
   var LIB_NAME2 = "WebPageAssistantPresentationDialogStylesLib";
   function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
     if (!documentObject || !rootId || !styleId) {
@@ -2435,7 +2435,7 @@
     return l.vnode && l.vnode(l3), l3;
   }
 
-  // src/userscripts/shared/shared-icons.lib.jsx
+  // src/userscripts/shared/shared-icons.lib.tsx
   var ICONS = {
     x: X2,
     "refresh-cw": RefreshCw,
@@ -2466,7 +2466,7 @@
     return slot;
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.ts
   var LIB_NAME3 = "WebPageAssistantPresentationLib";
   var ICON_OPTIONS = { size: 16, strokeWidth: 2.4 };
   function mountIcons(container) {
@@ -4122,7 +4122,7 @@
     });
   };
 
-  // src/userscripts/shared/shared-widget-shell.lib.js
+  // src/userscripts/shared/shared-widget-shell.lib.ts
   var BUTTON_SAFE_MARGIN = 12;
   var DOCK_THRESHOLD = 32;
   var DOCK_OFFSET = 8;
@@ -4485,7 +4485,7 @@
     };
   }
 
-  // src/userscripts/shared/shared-tokens.lib.js
+  // src/userscripts/shared/shared-tokens.lib.ts
   var SAFE_COLOR_PATTERN = /^[#a-zA-Z0-9(),.\s%/+-]+$/;
   var UNSAFE_SELECTOR_CHARS = /[{};<@\\]/;
   var COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
@@ -4652,7 +4652,7 @@ ${root} :focus-visible {
     };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant-view.lib.js
+  // src/userscripts/web-page-assistant/web-page-assistant-view.lib.ts
   var SCRIPT_NAME = "Web Page Assistant";
   var ROOT_ID = "page-auto-refresh-timer-root";
   var STYLE_ID = `${ROOT_ID}-style`;
@@ -5261,7 +5261,7 @@ ${root} :focus-visible {
     return { update, openSettings, dispose };
   }
 
-  // src/userscripts/web-page-assistant/web-page-assistant.entry.js
+  // src/userscripts/web-page-assistant/web-page-assistant.entry.ts
   (function() {
     "use strict";
     if (window.top !== window.self) return;

@@ -1,7 +1,7 @@
 import filenamify from 'filenamify/browser';
 import mime from 'mime/lite';
 
-import { readPreviewImage } from './feishu-preview-image-export-extraction.lib.js';
+import { readPreviewImage } from './feishu-preview-image-export-extraction.lib.ts';
 
 const LIB_NAME = 'FeishuPreviewImageExportLogicLib';
 

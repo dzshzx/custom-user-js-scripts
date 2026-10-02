@@ -1,7 +1,7 @@
 import stableStringify from 'fast-json-stable-stringify';
 import pLimit from 'p-limit';
 import * as v from 'valibot';
-import { isMainSevenDayWindow, projectQuotaSnapshotForArchive } from './codex-quota-compass-contract.lib.js';
+import { isMainSevenDayWindow, projectQuotaSnapshotForArchive } from './codex-quota-compass-contract.lib.ts';
 import {
   foldSnapshotsIntoLedger,
   mergeLedgers,
@@ -12,7 +12,7 @@ import {
   aggregateWeekly,
   aggregateMonthlyList,
   aggregateAllTime,
-} from './codex-quota-compass-ledger.lib.js';
+} from './codex-quota-compass-ledger.lib.ts';
 
 const ARCHIVE_SCHEMA_VERSION = 2;
 const EXPORT_FORMAT = 'codex-quota-compass.snapshot-archive';

@@ -1,12 +1,12 @@
 import pLimit from 'p-limit';
 import * as v from 'valibot';
-import { resolveGmApi } from '../shared/shared-gm.lib.js';
+import { resolveGmApi } from '../shared/shared-gm.lib.ts';
 import {
   EXPORT_FORMAT,
   buildSnapshotExportDocument,
   exportDocumentContentKey,
   previewImportArchiveDocument,
-} from './codex-quota-compass-archive.lib.js';
+} from './codex-quota-compass-archive.lib.ts';
 
 const REMOTE_SYNC_SETTINGS_KEY = 'codexQuotaCompassRemoteSyncSettings';
 const GITHUB_API_BASE = 'https://api.github.com';
