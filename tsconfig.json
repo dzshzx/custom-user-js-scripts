@@ -13,8 +13,8 @@
     "jsxImportSource": "preact",
     "noEmit": true,
     "skipLibCheck": true,
-    "strict": false,
-    "types": []
+    "strict": true,
+    "types": ["tampermonkey"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

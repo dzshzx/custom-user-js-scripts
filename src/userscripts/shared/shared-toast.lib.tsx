@@ -1,12 +1,42 @@
 import { render } from 'preact';
 import { Icon } from './shared-icons.lib.tsx';
+import type { IconName } from './shared-icons.lib.tsx';
 
 const TOAST_LIMIT = 3;
 const DEFAULT_DURATION_MS = 4000;
 const ERROR_DURATION_MS = 6000;
 const EXIT_ANIMATION_MS = 160;
 
-const TONE_ICONS = {
+export type ToastTone = 'success' | 'error' | 'info' | 'progress';
+
+interface ToastEntry {
+  id: number;
+  tone: ToastTone;
+  message: string;
+  leaving: boolean;
+}
+
+export interface ToastOptions {
+  message?: unknown;
+  // Anything but 'success' / 'error' / 'info' falls back to 'info'.
+  tone?: string;
+  duration?: number;
+}
+
+export interface ProgressToast {
+  update(nextMessage?: unknown): void;
+  done(successMessage?: unknown): void;
+  fail(errorMessage?: unknown): void;
+}
+
+export interface Toaster {
+  cssText: string;
+  show(options?: ToastOptions): Element | null;
+  showProgress(options?: { message?: unknown }): ProgressToast;
+  destroy(): void;
+}
+
+const TONE_ICONS: Partial<Record<ToastTone, IconName>> = {
   success: 'check',
   error: 'alert-triangle',
   progress: 'loader',
@@ -101,7 +131,7 @@ const TOAST_CSS = `
 // Rendering is a pure function of the toast list; the imperative API below only
 // mutates that list and re-renders synchronously (preact's top-level render()
 // commits before returning), so callers still get live DOM nodes back.
-function ToastItem({ toast }) {
+function ToastItem({ toast }: { toast: ToastEntry }) {
   const iconName = TONE_ICONS[toast.tone];
   const iconClass = toast.tone === 'progress' ? 'wk-toast-icon wk-spin' : 'wk-toast-icon';
   return (
@@ -114,11 +144,11 @@ function ToastItem({ toast }) {
   );
 }
 
-function ToastList({ toasts }) {
+function ToastList({ toasts }: { toasts: ToastEntry[] }) {
   return toasts.map((toast) => <ToastItem key={toast.id} toast={toast} />);
 }
 
-function createToaster({ root } = {}) {
+function createToaster({ root }: { root?: Element | null } = {}): Toaster {
   if (!root?.append) {
     throw new Error('shared-toast: createToaster requires a root element.');
   }
@@ -126,8 +156,8 @@ function createToaster({ root } = {}) {
   if (!documentObject?.createElement) {
     throw new Error('shared-toast: root must expose ownerDocument.');
   }
-  const timers = new Set();
-  let toasts = [];
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  let toasts: ToastEntry[] = [];
   let nextId = 1;
   let destroyed = false;
 
@@ -137,25 +167,25 @@ function createToaster({ root } = {}) {
   container.setAttribute('aria-live', 'polite');
   root.append(container);
 
-  function commit(nextToasts) {
+  function commit(nextToasts: ToastEntry[]) {
     if (destroyed) return;
     toasts = nextToasts;
     render(<ToastList toasts={toasts} />, container);
   }
 
-  function patch(id, changes) {
+  function patch(id: number, changes: Partial<ToastEntry>) {
     commit(toasts.map((toast) => (toast.id === id ? { ...toast, ...changes } : toast)));
   }
 
-  function has(id) {
+  function has(id: number) {
     return toasts.some((toast) => toast.id === id);
   }
 
-  function nodeFor(id) {
+  function nodeFor(id: number) {
     return container.querySelector(`[data-toast-id="${id}"]`);
   }
 
-  function schedule(callback, delay) {
+  function schedule(callback: () => void, delay: number) {
     const timer = setTimeout(() => {
       timers.delete(timer);
       callback();
@@ -163,13 +193,13 @@ function createToaster({ root } = {}) {
     timers.add(timer);
   }
 
-  function dismiss(id) {
+  function dismiss(id: number) {
     if (!has(id)) return;
     patch(id, { leaving: true });
     schedule(() => commit(toasts.filter((toast) => toast.id !== id)), EXIT_ANIMATION_MS);
   }
 
-  function add({ message, tone }) {
+  function add({ message, tone }: { message: unknown; tone: ToastTone }) {
     const id = nextId;
     nextId += 1;
     // Oldest toasts beyond the limit are dropped immediately.
@@ -177,24 +207,24 @@ function createToaster({ root } = {}) {
     return id;
   }
 
-  function autoDismiss(id, duration) {
+  function autoDismiss(id: number, duration: number) {
     if (Number.isFinite(duration) && duration > 0) {
       schedule(() => dismiss(id), duration);
     }
   }
 
-  function show({ message, tone = 'info', duration } = {}) {
-    const resolvedTone = ['success', 'error', 'info'].includes(tone) ? tone : 'info';
+  function show({ message, tone = 'info', duration }: ToastOptions = {}) {
+    const resolvedTone = (['success', 'error', 'info'].includes(tone) ? tone : 'info') as ToastTone;
     const id = add({ message, tone: resolvedTone });
     autoDismiss(id, duration ?? (resolvedTone === 'error' ? ERROR_DURATION_MS : DEFAULT_DURATION_MS));
     return nodeFor(id);
   }
 
-  function showProgress({ message } = {}) {
+  function showProgress({ message }: { message?: unknown } = {}): ProgressToast {
     const id = add({ message, tone: 'progress' });
 
     let settled = false;
-    function settle(tone, nextMessage, duration) {
+    function settle(tone: ToastTone, nextMessage: unknown, duration: number) {
       if (settled) return;
       settled = true;
       patch(id, nextMessage != null ? { tone, message: String(nextMessage) } : { tone });

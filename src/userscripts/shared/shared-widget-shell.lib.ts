@@ -1,4 +1,31 @@
 import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
+import type { ComputePositionReturn, Placement, ReferenceElement, Strategy } from '@floating-ui/dom';
+
+export type DockSide = 'left' | 'right';
+
+export interface AnchorPosition {
+  left: number;
+  top: number;
+  dockSide: DockSide | null;
+}
+
+// What applyPosition accepts: missing coordinates keep the current ones and an
+// unknown dockSide counts as undocked.
+export interface AnchorPositionInput {
+  left?: number;
+  top?: number;
+  dockSide?: unknown;
+}
+
+export interface WidgetSize {
+  width?: number;
+  height?: number;
+}
+
+export interface WidgetTimers {
+  setTimeout(callback: () => void, ms?: number): number;
+  clearTimeout(timer: number | null | undefined): void;
+}
 
 const BUTTON_SAFE_MARGIN = 12;
 const DOCK_THRESHOLD = 32;
@@ -12,21 +39,21 @@ const PANEL_ANIMATION_MS = 200;
 const PANEL_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-function isDockSide(value) {
+function isDockSide(value: unknown): value is DockSide {
   return value === 'left' || value === 'right';
 }
 
-function appendClasses(el, classes) {
+function appendClasses(el: Element, classes: unknown) {
   const list = String(classes ?? '')
     .split(/\s+/)
     .filter(Boolean);
   if (list.length) el.classList.add(...list);
 }
 
-function eventContainsNode(event, node) {
+function eventContainsNode(event: Event, node: Node | null | undefined) {
   if (!node) return false;
   const path = event.composedPath?.();
-  return Array.isArray(path) ? path.includes(node) : node.contains(event.target);
+  return Array.isArray(path) ? path.includes(node) : node.contains(event.target as Node | null);
 }
 
 const WIDGET_SHELL_CSS = `
@@ -133,16 +160,16 @@ const WIDGET_SHELL_CSS = `
 }
 `.trim();
 
-function windowTimers(windowObject) {
+function windowTimers(windowObject: Window | null | undefined): WidgetTimers {
   return {
     setTimeout:
       typeof windowObject?.setTimeout === 'function'
         ? windowObject.setTimeout.bind(windowObject)
-        : (callback, ms) => setTimeout(callback, ms),
+        : (callback: () => void, ms?: number) => setTimeout(callback, ms),
     clearTimeout:
       typeof windowObject?.clearTimeout === 'function'
         ? windowObject.clearTimeout.bind(windowObject)
-        : (timer) => clearTimeout(timer),
+        : (timer: number | null | undefined) => clearTimeout(timer as number | undefined),
   };
 }
 
@@ -153,33 +180,63 @@ function windowTimers(windowObject) {
  * same node for a plain floating button). Persistence stays with the caller
  * through `onDrop`, so each script keeps its own storage key and value shape.
  */
-function createDragAnchor({
-  anchorEl,
-  handleEl = anchorEl,
-  draggingEl = anchorEl,
-  windowObject,
-  measure,
-  dock = true,
-  timers = windowTimers(windowObject),
-  onDragStart,
-  onMove,
-  onDrop,
-} = {}) {
-  let position = { left: 0, top: 0, dockSide: null };
-  let dragState = null;
+export interface DragAnchorOptions {
+  anchorEl: HTMLElement;
+  handleEl?: HTMLElement;
+  draggingEl?: HTMLElement;
+  windowObject: Window;
+  measure?: () => WidgetSize | null | undefined;
+  dock?: boolean;
+  timers?: WidgetTimers;
+  onDragStart?: () => void;
+  onMove?: (position: AnchorPosition) => void;
+  onDrop?: (position: AnchorPosition) => void;
+}
+
+export interface DragAnchor {
+  applyPosition(next?: AnchorPositionInput | null): AnchorPosition;
+  clampPosition(left: number, top: number): { left: number; top: number };
+  getPosition(): AnchorPosition;
+  isDragSuppressed(): boolean;
+  destroy(): void;
+}
+
+function createDragAnchor(
+  {
+    anchorEl,
+    handleEl = anchorEl,
+    draggingEl = anchorEl,
+    windowObject,
+    measure,
+    dock = true,
+    timers = windowTimers(windowObject),
+    onDragStart,
+    onMove,
+    onDrop,
+  }: DragAnchorOptions = {} as DragAnchorOptions,
+): DragAnchor {
+  let position: AnchorPosition = { left: 0, top: 0, dockSide: null };
+  let dragState: {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+    moved: boolean;
+  } | null = null;
   let suppressed = false;
-  let suppressionTimer = null;
-  const cleanups = [];
+  let suppressionTimer: number | null = null;
+  const cleanups: Array<() => void> = [];
 
   const size = () => {
-    const measured = measure?.() || {};
+    const measured: WidgetSize = measure?.() || {};
     return {
       width: measured.width || FALLBACK_BUTTON_SIZE,
       height: measured.height || FALLBACK_BUTTON_SIZE,
     };
   };
 
-  function clampPosition(left, top) {
+  function clampPosition(left: number, top: number) {
     const { width, height } = size();
     const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
     const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
@@ -189,7 +246,7 @@ function createDragAnchor({
     };
   }
 
-  function dockedPosition(dockSide, top) {
+  function dockedPosition(dockSide: DockSide, top: number) {
     const { width } = size();
     return {
       left: dockSide === 'right' ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
@@ -197,14 +254,14 @@ function createDragAnchor({
     };
   }
 
-  function detectDockSide(left) {
+  function detectDockSide(left: number): DockSide | null {
     const { width } = size();
     if (left <= DOCK_THRESHOLD) return 'left';
     if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return 'right';
     return null;
   }
 
-  function applyPosition(next = position) {
+  function applyPosition(next: AnchorPositionInput | null | undefined = position): AnchorPosition {
     const dockSide = dock && isDockSide(next?.dockSide) ? next.dockSide : null;
     const resolved = dockSide
       ? dockedPosition(dockSide, next?.top ?? position.top)
@@ -229,12 +286,12 @@ function createDragAnchor({
     return position;
   }
 
-  function listen(type, handler) {
+  function listen<K extends keyof HTMLElementEventMap>(type: K, handler: (event: HTMLElementEventMap[K]) => void) {
     handleEl.addEventListener(type, handler);
     cleanups.push(() => handleEl.removeEventListener(type, handler));
   }
 
-  function releaseCapture(pointerId) {
+  function releaseCapture(pointerId: number) {
     try {
       if (handleEl.hasPointerCapture?.(pointerId)) handleEl.releasePointerCapture(pointerId);
     } catch {
@@ -273,7 +330,7 @@ function createDragAnchor({
     applyPosition({ left: dragState.startLeft + dx, top: dragState.startTop + dy, dockSide: null });
   });
 
-  function finishDrag(event) {
+  function finishDrag(event: PointerEvent) {
     if (!dragState || dragState.pointerId !== event.pointerId) return;
     const moved = dragState.moved;
     dragState = null;
@@ -318,27 +375,47 @@ function createDragAnchor({
  * toggle with a click on the trigger instead. Focus inside expands, focus
  * leaving collapses. `is-expanded` goes on the container.
  */
-function createHoverExpansion({
-  container,
-  trigger,
-  isCoarsePointer = () => false,
-  isSuppressed = () => false,
-  hoverIntentMs = HOVER_INTENT_MS,
-  timers,
-} = {}) {
-  let hoverTimer = null;
-  let active = true;
-  const cleanups = [];
+export interface HoverExpansionOptions {
+  container: HTMLElement;
+  trigger: HTMLElement;
+  isCoarsePointer?: () => boolean;
+  isSuppressed?: () => boolean;
+  hoverIntentMs?: number;
+  timers: WidgetTimers;
+}
 
-  function listen(target, type, handler) {
-    const guarded = (event) => {
+export interface HoverExpansion {
+  setExpanded(isExpanded: boolean): void;
+  destroy(): void;
+}
+
+function createHoverExpansion(
+  {
+    container,
+    trigger,
+    isCoarsePointer = () => false,
+    isSuppressed = () => false,
+    hoverIntentMs = HOVER_INTENT_MS,
+    timers,
+  }: HoverExpansionOptions = {} as HoverExpansionOptions,
+): HoverExpansion {
+  let hoverTimer: number | null = null;
+  let active = true;
+  const cleanups: Array<() => void> = [];
+
+  function listen<K extends keyof HTMLElementEventMap>(
+    target: HTMLElement,
+    type: K,
+    handler: (event: HTMLElementEventMap[K]) => void,
+  ) {
+    const guarded = (event: HTMLElementEventMap[K]) => {
       if (active) handler(event);
     };
     target.addEventListener(type, guarded);
     cleanups.push(() => target.removeEventListener(type, guarded));
   }
 
-  function setExpanded(isExpanded) {
+  function setExpanded(isExpanded: boolean) {
     if (isExpanded && isSuppressed()) return;
     container.classList.toggle('is-expanded', isExpanded);
   }
@@ -368,7 +445,7 @@ function createHoverExpansion({
   }
   listen(container, 'focusin', () => setExpanded(true));
   listen(container, 'focusout', (event) => {
-    if (!event.relatedTarget || !container.contains(event.relatedTarget)) setExpanded(false);
+    if (!event.relatedTarget || !container.contains(event.relatedTarget as Node)) setExpanded(false);
   });
 
   return {
@@ -389,16 +466,34 @@ function createHoverExpansion({
  * resizes (autoUpdate); `update()` places it once. `apply` receives the
  * floating-ui result and writes the coordinates the host CSS expects.
  */
-function createPanelPlacement({
-  reference,
-  floating,
-  placement = 'bottom-end',
-  strategy = 'fixed',
-  gap = PANEL_GAP,
-  margin = PANEL_SAFE_MARGIN,
-  apply,
-} = {}) {
-  let stopAutoUpdate = null;
+export interface PanelPlacementOptions {
+  reference: ReferenceElement;
+  floating: HTMLElement;
+  placement?: Placement;
+  strategy?: Strategy;
+  gap?: number;
+  margin?: number;
+  apply: (result: ComputePositionReturn) => void;
+}
+
+export interface PanelPlacement {
+  update(): Promise<ComputePositionReturn | null>;
+  start(): void;
+  stop(): void;
+}
+
+function createPanelPlacement(
+  {
+    reference,
+    floating,
+    placement = 'bottom-end',
+    strategy = 'fixed',
+    gap = PANEL_GAP,
+    margin = PANEL_SAFE_MARGIN,
+    apply,
+  }: PanelPlacementOptions = {} as PanelPlacementOptions,
+): PanelPlacement {
+  let stopAutoUpdate: (() => void) | null = null;
   let generation = 0;
 
   async function update() {
@@ -436,24 +531,65 @@ function createPanelPlacement({
   };
 }
 
-function createWidgetShell({
-  root,
-  buttonId,
-  buttonAriaLabel,
-  buttonContent,
-  buttonClass,
-  panelClass,
-  panelWidth = 560,
-  panelMaxHeight = 760,
-  storage,
-  positionKey,
-  defaultPosition = { top: 76, right: 24 },
-  dock = true,
-  onOpen,
-  onClose,
-  renderPanelHeader,
-  renderPanelBody,
-} = {}) {
+type PersistedPosition = { left: number; top: number; dockSide?: DockSide };
+
+export interface WidgetShellStorage {
+  get?(key: string): unknown;
+  set?(key: string, value: string): unknown;
+}
+
+export interface WidgetShellOptions {
+  root: HTMLElement;
+  buttonId?: string;
+  buttonAriaLabel?: string;
+  buttonContent?: string | Node | null;
+  buttonClass?: string;
+  panelClass?: string;
+  panelWidth?: number;
+  panelMaxHeight?: number;
+  storage?: WidgetShellStorage | null;
+  positionKey?: string;
+  // Non-finite values fall back to the defaults.
+  defaultPosition?: { top: number; right: number };
+  dock?: boolean;
+  onOpen?: () => void;
+  onClose?: () => void;
+  renderPanelHeader?: (headerEl: HTMLDivElement) => void;
+  renderPanelBody?: (bodyEl: HTMLDivElement) => void;
+}
+
+export interface WidgetShell {
+  cssText: string;
+  buttonEl: HTMLButtonElement;
+  panelEl: HTMLDivElement;
+  open(): void;
+  close(): void;
+  toggle(): void;
+  reposition(): Promise<ComputePositionReturn | null>;
+  isOpen(): boolean;
+  destroy(): void;
+}
+
+function createWidgetShell(
+  {
+    root,
+    buttonId,
+    buttonAriaLabel,
+    buttonContent,
+    buttonClass,
+    panelClass,
+    panelWidth = 560,
+    panelMaxHeight = 760,
+    storage,
+    positionKey,
+    defaultPosition = { top: 76, right: 24 },
+    dock = true,
+    onOpen,
+    onClose,
+    renderPanelHeader,
+    renderPanelBody,
+  }: WidgetShellOptions = {} as WidgetShellOptions,
+): WidgetShell {
   if (!root?.append) {
     throw new Error('shared-widget-shell: createWidgetShell requires a root element.');
   }
@@ -468,7 +604,7 @@ function createWidgetShell({
   const requestFrame =
     typeof windowObject.requestAnimationFrame === 'function'
       ? windowObject.requestAnimationFrame.bind(windowObject)
-      : (callback) => scheduleTimeout(callback, 16);
+      : (callback: () => void) => scheduleTimeout(callback, 16);
 
   const buttonEl = documentObject.createElement('button');
   buttonEl.type = 'button';
@@ -502,7 +638,7 @@ function createWidgetShell({
   root.append(buttonEl, panelEl);
 
   let isOpenState = false;
-  let closeTimer = null;
+  let closeTimer: number | null = null;
 
   function measureButton() {
     const rect = buttonEl.getBoundingClientRect?.();
@@ -555,7 +691,7 @@ function createWidgetShell({
   async function persistPosition() {
     if (!storage?.set || !positionKey) return;
     const position = anchor.getPosition();
-    const value = { left: Math.round(position.left), top: Math.round(position.top) };
+    const value: PersistedPosition = { left: Math.round(position.left), top: Math.round(position.top) };
     if (position.dockSide) value.dockSide = position.dockSide;
     try {
       await storage.set(positionKey, JSON.stringify(value));
@@ -609,7 +745,7 @@ function createWidgetShell({
     requestFrame(() => {
       if (isOpenState) panelEl.classList.add('is-open');
     });
-    const focusTarget = panelEl.querySelector(FOCUSABLE_SELECTOR);
+    const focusTarget = panelEl.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
     focusTarget?.focus?.();
     onOpen?.();
   }
@@ -638,13 +774,13 @@ function createWidgetShell({
     }
   }
 
-  function onDocumentPointerDown(event) {
+  function onDocumentPointerDown(event: PointerEvent) {
     if (!isOpenState) return;
     if (eventContainsNode(event, panelEl) || eventContainsNode(event, buttonEl)) return;
     close();
   }
 
-  function onDocumentKeydown(event) {
+  function onDocumentKeydown(event: KeyboardEvent) {
     if (!isOpenState) return;
     if (event.key === 'Escape') close();
   }

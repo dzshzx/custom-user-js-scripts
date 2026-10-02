@@ -4,20 +4,63 @@
 // never touch the globals themselves. Explicit overrides win, which is how tests
 // and hosts inject fakes.
 
-function pickFunction(override, legacy) {
+// The adapter's own contract: what callers may rely on whichever manager family
+// answered. Results stay `unknown` where the families differ (sync vs promise).
+export type GmValueChangeListener = (name: string, oldValue: unknown, newValue: unknown, remote: boolean) => void;
+export type GmListenerId = number | Promise<number>;
+export type GmGetValue = (key: string, defaultValue?: Tampermonkey.StorageValue) => unknown;
+export type GmSetValue = (key: string, value: Tampermonkey.StorageValue) => unknown;
+export type GmAddValueChangeListener = (name: string, listener: GmValueChangeListener) => GmListenerId;
+export type GmRemoveValueChangeListener = (listenerId: number) => unknown;
+export type GmRegisterMenuCommand = (caption: string, onClick: () => void) => unknown;
+export type GmXmlHttpRequest = (details: Tampermonkey.Request) => unknown;
+export type GmDownload = (details: Tampermonkey.DownloadRequest) => unknown;
+// The promise-based `GM.*` object, or a test fake standing in for it.
+export type GmModernApi = { readonly [method: string]: unknown };
+
+export interface GmValueChange {
+  add: GmAddValueChangeListener;
+  remove: GmRemoveValueChangeListener | null;
+}
+
+export interface GmApi {
+  getValue: GmGetValue | null;
+  setValue: GmSetValue | null;
+  valueChange: GmValueChange | null;
+  registerMenuCommand: GmRegisterMenuCommand | null;
+  xmlHttpRequest: GmXmlHttpRequest | null;
+  download: GmDownload | null;
+}
+
+export interface GmOverrides {
+  gm?: GmModernApi | null;
+  gmApi?: GmModernApi | null;
+  gmGetValue?: GmGetValue | null;
+  gmSetValue?: GmSetValue | null;
+  gmAddValueChangeListener?: GmAddValueChangeListener | null;
+  gmRemoveValueChangeListener?: GmRemoveValueChangeListener | null;
+  gmRegisterMenuCommand?: GmRegisterMenuCommand | null;
+  gmXmlhttpRequest?: GmXmlHttpRequest | null;
+  gmDownload?: GmDownload | null;
+}
+
+function pickFunction<T>(override: T | null | undefined, legacy: T | null): T | null {
   if (typeof override === 'function') return override;
   if (typeof legacy === 'function') return legacy;
   return null;
 }
 
-function bindModern(gm, ...names) {
+function bindModern<T>(gm: GmModernApi | null, ...names: string[]): T | null {
   for (const name of names) {
-    if (typeof gm?.[name] === 'function') return gm[name].bind(gm);
+    if (typeof gm?.[name] === 'function') return (gm[name] as (...args: never[]) => unknown).bind(gm) as T;
   }
   return null;
 }
 
-function legacyGlobals() {
+function legacyGlobals(): Omit<GmApi, 'valueChange'> & {
+  addValueChangeListener: GmAddValueChangeListener | null;
+  removeValueChangeListener: GmRemoveValueChangeListener | null;
+} {
   return {
     getValue: typeof GM_getValue === 'function' ? GM_getValue : null,
     setValue: typeof GM_setValue === 'function' ? GM_setValue : null,
@@ -29,7 +72,7 @@ function legacyGlobals() {
   };
 }
 
-function modernGlobal() {
+function modernGlobal(): GmModernApi | null {
   return typeof GM !== 'undefined' ? GM : null;
 }
 
@@ -45,12 +88,12 @@ function modernGlobal() {
  * ids are not interchangeable between them; the modern `add` may return a
  * promise of the id.
  */
-function resolveGmApi(overrides = {}) {
+function resolveGmApi(overrides: GmOverrides = {}): GmApi {
   const legacy = legacyGlobals();
   const gm = overrides.gm || overrides.gmApi || modernGlobal();
 
   const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
-  let valueChange = null;
+  let valueChange: GmValueChange | null = null;
   if (legacyAdd) {
     valueChange = {
       add: legacyAdd,
@@ -59,7 +102,7 @@ function resolveGmApi(overrides = {}) {
   } else if (typeof gm?.addValueChangeListener === 'function') {
     valueChange = {
       add: gm.addValueChangeListener.bind(gm),
-      remove: bindModern(gm, 'removeValueChangeListener'),
+      remove: bindModern<GmRemoveValueChangeListener>(gm, 'removeValueChangeListener'),
     };
   }
 

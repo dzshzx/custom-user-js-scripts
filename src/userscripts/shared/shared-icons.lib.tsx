@@ -13,9 +13,17 @@ const ICONS = {
   loader: Loader,
 };
 
-const ICON_NAMES = Object.keys(ICONS);
+export type IconName = keyof typeof ICONS;
 
-function Icon({ name, size = 16, strokeWidth = 2 }) {
+const ICON_NAMES = Object.keys(ICONS) as IconName[];
+
+export interface IconProps {
+  name: IconName;
+  size?: number;
+  strokeWidth?: number;
+}
+
+function Icon({ name, size = 16, strokeWidth = 2 }: IconProps) {
   const Glyph = ICONS[name];
   if (!Glyph) {
     throw new Error(`shared-icons: unknown icon "${name}". Available: ${ICON_NAMES.join(', ')}`);
@@ -32,7 +40,11 @@ function Icon({ name, size = 16, strokeWidth = 2 }) {
 }
 
 // For markup still built as strings: render the icon into an existing slot.
-function mountIcon(slot, name, options = {}) {
+function mountIcon<T extends Element | null | undefined>(
+  slot: T,
+  name: IconName,
+  options: Omit<IconProps, 'name'> = {},
+): T {
   if (slot) render(<Icon name={name} {...options} />, slot);
   return slot;
 }

@@ -4,7 +4,7 @@ const COLOR_SCHEME_QUERY = '(prefers-color-scheme: dark)';
 
 // Dynamic values land inside a CSS text block: reject anything that could
 // break out of a declaration or ruleset.
-function assertSafeColor(value, name) {
+function assertSafeColor(value: unknown, name: string): string {
   const color = String(value ?? '').trim();
   if (!color || !SAFE_COLOR_PATTERN.test(color)) {
     throw new Error(`shared-tokens: invalid ${name} color ${JSON.stringify(value)}`);
@@ -12,7 +12,7 @@ function assertSafeColor(value, name) {
   return color;
 }
 
-function assertSafeSelector(value) {
+function assertSafeSelector(value: unknown): string {
   const selector = String(value ?? '').trim();
   if (!selector || UNSAFE_SELECTOR_CHARS.test(selector)) {
     throw new Error(`shared-tokens: invalid rootSelector ${JSON.stringify(value)}`);
@@ -20,7 +20,13 @@ function assertSafeSelector(value) {
   return selector;
 }
 
-function buildTokenCss({ rootSelector, accent, accentDark } = {}) {
+export interface TokenCssOptions {
+  rootSelector?: string;
+  accent?: string;
+  accentDark?: string | null;
+}
+
+function buildTokenCss({ rootSelector, accent, accentDark }: TokenCssOptions = {}): string {
   const root = assertSafeSelector(rootSelector);
   const lightAccent = assertSafeColor(accent, 'accent');
   const darkAccent = accentDark == null ? lightAccent : assertSafeColor(accentDark, 'accentDark');
@@ -108,7 +114,11 @@ function systemPrefersDark() {
   return false;
 }
 
-function resolveTheme(detectHost) {
+export type Theme = 'light' | 'dark';
+// Host probes may answer anything; only 'light' / 'dark' count.
+export type HostThemeDetector = () => unknown;
+
+function resolveTheme(detectHost?: HostThemeDetector | null): Theme {
   if (typeof detectHost === 'function') {
     try {
       const detected = detectHost();
@@ -120,7 +130,12 @@ function resolveTheme(detectHost) {
   return systemPrefersDark() ? 'dark' : 'light';
 }
 
-function applyTheme(root, { detectHost, observeHost = false } = {}) {
+export interface ApplyThemeOptions {
+  detectHost?: HostThemeDetector | null;
+  observeHost?: boolean;
+}
+
+function applyTheme(root: HTMLElement, { detectHost, observeHost = false }: ApplyThemeOptions = {}): () => void {
   if (!root) {
     throw new Error('shared-tokens: applyTheme requires a root element.');
   }
@@ -130,7 +145,7 @@ function applyTheme(root, { detectHost, observeHost = false } = {}) {
   };
   apply();
 
-  let media = null;
+  let media: MediaQueryList | null = null;
   const onChange = () => apply();
   try {
     const matchMedia = globalThis.window?.matchMedia;
@@ -151,7 +166,7 @@ function applyTheme(root, { detectHost, observeHost = false } = {}) {
   // Hosts that signal theme through a class or inline color-scheme on
   // <html> (e.g. chatgpt.com) never fire a media change, so watch those
   // attributes when asked.
-  let observer = null;
+  let observer: MutationObserver | null = null;
   if (observeHost) {
     try {
       const documentObject = root.ownerDocument ?? globalThis.document;
