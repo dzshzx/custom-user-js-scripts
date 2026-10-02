@@ -9,6 +9,104 @@ import {
 } from './web-page-assistant-presentation.lib.ts';
 import { createDragAnchor, createHoverExpansion, createPanelPlacement } from '../shared/shared-widget-shell.lib.ts';
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
+import type { DragAnchor, HoverExpansion, PanelPlacement, WidgetTimers } from '../shared/shared-widget-shell.lib.ts';
+import type { DialogTab } from './web-page-assistant-presentation.lib.ts';
+import type { Scope, ScopeKeys, UnlockerOption, UnlockerSetting } from './web-page-assistant-settings.lib.ts';
+import type {
+  SessionChange,
+  SessionCommand,
+  SessionResult,
+  SessionResultCode,
+  SessionState,
+  WebPageAssistantSession,
+} from './web-page-assistant-session.lib.ts';
+import type { WidgetPosition } from './web-page-assistant-storage.lib.ts';
+
+export interface WidgetPositionStore {
+  get?: () => WidgetPosition | null;
+  normalize: (value: unknown) => WidgetPosition | null;
+  write: (position: WidgetPosition) => Promise<unknown>;
+}
+
+/** What opening the settings waits for: the session start result, or a failure stand-in. */
+export interface StartupOutcome {
+  ok: boolean;
+  code?: string | null;
+  message?: string;
+  state?: SessionState;
+}
+
+export interface OpenSettingsResult {
+  ok: boolean;
+  code?: string | null;
+}
+
+export interface OpenSettingsOptions {
+  tab?: DialogTab | null;
+  scope?: Scope | null;
+}
+
+export interface WebPageAssistantViewOptions {
+  session: Pick<WebPageAssistantSession, 'getState' | 'dispatch'>;
+  keys: ScopeKeys;
+  document: Document;
+  window: Window;
+  positions: WidgetPositionStore;
+  ready: () => StartupOutcome | Promise<StartupOutcome>;
+  clock?: Partial<WidgetTimers> | null;
+}
+
+export interface WebPageAssistantView {
+  update(snapshot: SessionState, change?: Partial<SessionChange>): void;
+  openSettings(options?: OpenSettingsOptions): Promise<OpenSettingsResult>;
+  dispose(): void;
+}
+
+type Btn = HTMLButtonElement;
+type MessageTone = 'info' | 'error';
+
+interface RenderDialogOptions {
+  message?: string;
+  tone?: MessageTone;
+  scope?: Scope | null;
+  tab?: string | null;
+}
+
+interface OpenIntent {
+  tab: DialogTab | null;
+  scope: Scope | null;
+}
+
+interface PreservedDialogState {
+  scrollTop: number;
+  focusSelector: string | null;
+}
+
+interface CustomIntervalResult {
+  error?: string;
+  intervalMs?: number;
+}
+
+/** Commands built from DOM actions; the session validates the shape at runtime. */
+interface ViewCommand {
+  type: string;
+  scope: Scope;
+  intervalMs?: number;
+  setting?: UnlockerSetting | null;
+}
+
+interface Submission {
+  generation: number;
+  revision: number;
+  dialog: HTMLDialogElement | null;
+}
+
+interface WidgetShellParts {
+  anchor: DragAnchor;
+  expansion: HoverExpansion;
+  placement: PanelPlacement | null;
+  panel: HTMLElement | null;
+}
 
 const SCRIPT_NAME = 'Web Page Assistant';
 const ROOT_ID = 'page-auto-refresh-timer-root';
@@ -42,7 +140,7 @@ const WRITE_ACTIONS = new Set([
   'disable-active',
 ]);
 
-function formatInterval(ms) {
+function formatInterval(ms: number): string {
   const totalSeconds = Math.round(ms / 1000);
   if (totalSeconds < 60) return `${totalSeconds} 秒`;
   const minutes = Math.floor(totalSeconds / 60);
@@ -50,7 +148,7 @@ function formatInterval(ms) {
   return seconds ? `${minutes} 分钟 ${seconds} 秒` : `${minutes} 分钟`;
 }
 
-function formatCountdown(ms) {
+function formatCountdown(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -59,11 +157,11 @@ function formatCountdown(ms) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function scopeLabel(scope) {
+function scopeLabel(scope: Scope | null | undefined): string {
   return scope === 'page' ? '当前页面' : '整个站点';
 }
 
-function unlockerStatusText(snapshot, scope) {
+function unlockerStatusText(snapshot: SessionState, scope: Scope | null | undefined): string {
   const setting = snapshot.appliedUnlocker?.setting;
   if (!setting?.enabled) return '当前未启用网页限制解除。';
   const labels = [
@@ -73,7 +171,7 @@ function unlockerStatusText(snapshot, scope) {
     ['allowDrag', '拖拽'],
     ['suppressBeforeUnload', '离开提示'],
   ]
-    .filter(([option]) => setting[option])
+    .filter(([option]) => setting[option as UnlockerOption])
     .map(([, label]) => label);
   if (!labels.length) return '网页限制解除已保存，但没有启用任何能力。';
   return `${scopeLabel(snapshot.appliedUnlocker?.scope || scope)}已启用：${labels.join('、')}。`;
@@ -87,8 +185,8 @@ function createWebPageAssistantView({
   positions,
   ready,
   clock,
-}) {
-  const timers = {
+}: WebPageAssistantViewOptions): WebPageAssistantView {
+  const timers: WidgetTimers = {
     setTimeout: clock?.setTimeout || windowObject.setTimeout.bind(windowObject),
     clearTimeout: clock?.clearTimeout || windowObject.clearTimeout.bind(windowObject),
   };
@@ -105,42 +203,42 @@ function createWebPageAssistantView({
   });
 
   let latestSnapshot = session.getState();
-  let root = null;
-  let widget = null;
-  let widgetButton = null;
-  let countdownNodes = [];
-  let widgetStatusNode = null;
+  let root: HTMLElement | null = null;
+  let widget: HTMLElement | null = null;
+  let widgetButton: HTMLButtonElement | null = null;
+  let countdownNodes: HTMLElement[] = [];
+  let widgetStatusNode: HTMLElement | null = null;
   let lastWidgetStatusText = '';
-  let widgetPosition = positions.get?.() || null;
+  let widgetPosition: WidgetPosition | null = positions.get?.() || null;
   let hasMountedWidget = false;
-  let dialog = null;
-  let activeDialogTab = 'refresh';
+  let dialog: HTMLDialogElement | null = null;
+  let activeDialogTab: DialogTab = 'refresh';
   let dialogGeneration = 0;
   let editRevision = 0;
-  let dialogReturnFocus = null;
-  let themeCleanup = null;
-  let initializationError = null;
+  let dialogReturnFocus: HTMLElement | null = null;
+  let themeCleanup: (() => void) | null = null;
+  let initializationError: string | null = null;
   let disposed = false;
-  let openPromise = null;
-  let pendingOpenIntent = null;
-  const pendingSubmissions = new Set();
-  const pendingActionTokens = new WeakMap();
-  const ownedStyleIds = new Set();
-  let finishDisposed;
-  const disposedPromise = new Promise((resolve) => {
+  let openPromise: Promise<OpenSettingsResult> | null = null;
+  let pendingOpenIntent: OpenIntent | null = null;
+  const pendingSubmissions = new Set<Submission>();
+  const pendingActionTokens = new WeakMap<Element, object>();
+  const ownedStyleIds = new Set<string>();
+  let finishDisposed: (value: OpenSettingsResult) => void;
+  const disposedPromise = new Promise<OpenSettingsResult>((resolve) => {
     finishDisposed = resolve;
   });
 
-  let widgetShell = null;
+  let widgetShell: WidgetShellParts | null = null;
 
-  function defaultWidgetPosition() {
+  function defaultWidgetPosition(): WidgetPosition {
     return {
       left: windowObject.innerWidth - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
       top: windowObject.innerHeight - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET,
     };
   }
 
-  function sizeWidgetPanel(panel) {
+  function sizeWidgetPanel(panel: HTMLElement) {
     const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN * 2));
     panel.style.setProperty('--part-panel-width', `${Math.round(width)}px`);
   }
@@ -150,10 +248,10 @@ function createWebPageAssistantView({
   // through floating-ui against the widget box.
   function attachWidgetShell() {
     detachWidgetShell();
-    const panel = widget.querySelector('.part-widget-panel');
+    const panel = widget!.querySelector<HTMLElement>('.part-widget-panel');
     const anchor = createDragAnchor({
-      anchorEl: widget,
-      handleEl: widgetButton,
+      anchorEl: widget!,
+      handleEl: widgetButton!,
       windowObject,
       measure: () => WIDGET_SIZE,
       dock: false,
@@ -172,15 +270,15 @@ function createWebPageAssistantView({
       },
     });
     const expansion = createHoverExpansion({
-      container: widget,
-      trigger: widgetButton,
+      container: widget!,
+      trigger: widgetButton!,
       isCoarsePointer: () => isCoarsePointer(windowObject),
       isSuppressed: () => anchor.isDragSuppressed(),
       timers,
     });
     const placement = panel
       ? createPanelPlacement({
-          reference: widget,
+          reference: widget!,
           floating: panel,
           placement: 'top-end',
           strategy: 'absolute',
@@ -210,13 +308,13 @@ function createWebPageAssistantView({
     widgetShell.placement?.update().catch(() => {});
   }
 
-  function currentStatusText(snapshot = latestSnapshot) {
+  function currentStatusText(snapshot: SessionState = latestSnapshot): string {
     const activeMatch = snapshot.refresh.activeMatch;
     if (!activeMatch) return '当前未启用自动刷新。';
     return `${scopeLabel(activeMatch.scope)}已启用，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
   }
 
-  function widgetStatusText(snapshot = latestSnapshot) {
+  function widgetStatusText(snapshot: SessionState = latestSnapshot): string {
     const runtimeState = snapshot.refresh;
     if (!runtimeState.activeMatch) return '当前未启用自动刷新。';
     if (runtimeState.isPaused) {
@@ -240,7 +338,7 @@ function createWebPageAssistantView({
     installAssistantDialogStyles({ documentObject, rootId: ROOT_ID, styleId: DIALOG_STYLE_ID });
   }
 
-  function ensureRoot() {
+  function ensureRoot(): HTMLElement | null {
     if (disposed) return null;
     if (root && root.isConnected !== false) return root;
     installStyles();
@@ -277,10 +375,10 @@ function createWebPageAssistantView({
     countdownNodes = rendered.countdownNodes;
     widgetStatusNode = rendered.statusNode;
     lastWidgetStatusText = '';
-    root.append(widget);
+    root!.append(widget);
     attachWidgetShell();
     placeWidget();
-    widgetShell.placement?.start();
+    widgetShell!.placement?.start();
     hasMountedWidget = true;
     if (returnToWidget) dialogReturnFocus = widgetButton;
     updatePauseButton();
@@ -292,7 +390,11 @@ function createWebPageAssistantView({
     return dialogContract.readSelectedScope(dialog);
   }
 
-  function createDialogViewModel(message = '', preferredScope = null, preferredTab = null) {
+  function createDialogViewModel(
+    message = '',
+    preferredScope: Scope | null = null,
+    preferredTab: string | null = null,
+  ) {
     return dialogContract.createViewModel({
       message,
       preferredScope,
@@ -308,19 +410,19 @@ function createWebPageAssistantView({
     });
   }
 
-  function captureDialogState() {
+  function captureDialogState(): PreservedDialogState | null {
     if (!dialog) return null;
     const panel = dialog.querySelector('.part-dialog');
-    let focusSelector = null;
+    let focusSelector: string | null = null;
     const active = documentObject.activeElement;
     if (active && dialog.contains(active)) {
-      const roleNode = active.closest?.('[data-part-role]');
-      const actionNode = active.closest?.('[data-part-action]');
-      if (roleNode) focusSelector = dialogContract.roleSelector(roleNode.dataset.partRole);
+      const roleNode = active.closest?.<HTMLElement>('[data-part-role]');
+      const actionNode = active.closest?.<HTMLElement>('[data-part-action]');
+      if (roleNode) focusSelector = dialogContract.roleSelector(roleNode.dataset.partRole!);
       else if (active.matches?.('input[name="part-scope"]')) {
-        focusSelector = `input[name="part-scope"][value="${active.value}"]`;
+        focusSelector = `input[name="part-scope"][value="${(active as HTMLInputElement).value}"]`;
       } else if (actionNode) {
-        focusSelector = dialogContract.actionSelector(actionNode.dataset.partAction);
+        focusSelector = dialogContract.actionSelector(actionNode.dataset.partAction!);
         for (const [datasetKey, attribute] of [
           ['partTab', 'data-part-tab'],
           ['intervalMs', 'data-interval-ms'],
@@ -332,15 +434,15 @@ function createWebPageAssistantView({
     return { scrollTop: panel?.scrollTop || 0, focusSelector };
   }
 
-  function restoreDialogState(preserved) {
+  function restoreDialogState(preserved: PreservedDialogState | null) {
     if (!preserved || !dialog) return;
     const panel = dialog.querySelector('.part-dialog');
     if (panel && preserved.scrollTop) panel.scrollTop = preserved.scrollTop;
-    if (preserved.focusSelector) dialog.querySelector(preserved.focusSelector)?.focus?.();
+    if (preserved.focusSelector) dialog.querySelector<HTMLElement>(preserved.focusSelector)?.focus?.();
   }
 
-  function setMessage(text, tone = 'info') {
-    const messageNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.message));
+  function setMessage(text: string, tone: MessageTone = 'info') {
+    const messageNode = dialog?.querySelector<HTMLElement>(dialogContract.roleSelector(dialogContract.roles.message));
     if (!messageNode) return;
     messageNode.textContent = text;
     messageNode.dataset.tone = tone;
@@ -349,17 +451,17 @@ function createWebPageAssistantView({
   function disableDialogWrites() {
     if (!dialog) return;
     for (const action of WRITE_ACTIONS) {
-      for (const node of dialog.querySelectorAll(dialogContract.actionSelector(action))) node.disabled = true;
+      for (const node of dialog.querySelectorAll<Btn>(dialogContract.actionSelector(action))) node.disabled = true;
     }
   }
 
-  function renderDialog({ message = '', tone = 'info', scope = null, tab = null } = {}) {
+  function renderDialog({ message = '', tone = 'info', scope = null, tab = null }: RenderDialogOptions = {}) {
     if (disposed) return;
     ensureRoot();
     const preserved = captureDialogState();
     if (!dialog) {
       const active = documentObject.activeElement;
-      dialogReturnFocus = active && root.contains(active) ? active : widgetButton || null;
+      dialogReturnFocus = active && root!.contains(active) ? (active as HTMLElement) : widgetButton || null;
     } else {
       dialog.remove();
       dialog = null;
@@ -372,7 +474,7 @@ function createWebPageAssistantView({
     // Native modal dialog: the platform makes the rest of the page inert
     // (including nodes added later) and turns Escape into a `cancel` event.
     dialog.addEventListener('cancel', handleDialogCancel);
-    root.append(dialog);
+    root!.append(dialog);
     dialog.showModal?.();
     dialogContract.applyModel(dialog, model, PRESETS);
     restoreDialogState(preserved);
@@ -380,7 +482,7 @@ function createWebPageAssistantView({
     if (initializationError) disableDialogWrites();
   }
 
-  function closeDialog({ restoreFocus = true } = {}) {
+  function closeDialog({ restoreFocus = true }: { restoreFocus?: boolean } = {}) {
     if (!dialog) return;
     dialogGeneration += 1;
     const closing = dialog;
@@ -392,7 +494,7 @@ function createWebPageAssistantView({
     if (restoreFocus && returnTarget?.isConnected !== false) returnTarget?.focus?.();
   }
 
-  function handleDialogCancel(event) {
+  function handleDialogCancel(event: Event) {
     event.preventDefault();
     closeDialog();
   }
@@ -413,11 +515,11 @@ function createWebPageAssistantView({
     }
   }
 
-  function parseCustomInterval() {
+  function parseCustomInterval(): CustomIntervalResult {
     const valueNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.customValue));
     const unitNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.customUnit));
-    const amount = Number(valueNode?.value);
-    const unit = unitNode?.value === 'minutes' ? 'minutes' : 'seconds';
+    const amount = Number((valueNode as HTMLInputElement | null | undefined)?.value);
+    const unit = (unitNode as HTMLSelectElement | null | undefined)?.value === 'minutes' ? 'minutes' : 'seconds';
     const ms = amount * (unit === 'minutes' ? 60 * 1000 : 1000);
     if (!Number.isFinite(amount) || amount <= 0) return { error: '请输入大于 0 的刷新时间。' };
     if (!PageAssistantSettings.isValidIntervalMs(ms)) return { error: '自定义刷新时间必须在 1 秒到 60 分钟之间。' };
@@ -443,31 +545,32 @@ function createWebPageAssistantView({
     widgetStatusNode.textContent = text;
   }
 
-  function operationError(result) {
-    const reasons = {
+  function operationError(result: SessionResult): string {
+    const reasons: Record<SessionResultCode, string> = {
       'invalid-input': '设置无效。',
       'not-ready': '设置尚未读取完成。',
       disposed: '会话已结束。',
       'storage-failed': '设置保存失败。',
       'application-failed': '设置已保存，但应用失败。',
     };
-    return `${reasons[result.code] || '操作失败。'}${result.message || result.state.applicationError || ''}`;
+    return `${reasons[result.code as SessionResultCode] || '操作失败。'}${result.message || result.state.applicationError || ''}`;
   }
 
-  async function dispatchAction(action, node) {
+  async function dispatchAction(action: string, node: HTMLElement) {
     if (action === 'open-settings') return openSettings({ tab: 'refresh' });
     if (action === 'switch-tab') return renderDialog({ scope: getSelectedScope(), tab: node.dataset.partTab });
     if (action === 'close-dialog') return closeDialog();
     if (initializationError) throw new Error(initializationError);
     let scope = getSelectedScope();
-    let command = { type: action, scope };
+    let command: ViewCommand = { type: action, scope };
     let tab = 'refresh';
     let message = '';
     if (action === 'save-preset' || action === 'save-custom') {
-      const parsed = action === 'save-custom' ? parseCustomInterval() : { intervalMs: Number(node.dataset.intervalMs) };
+      const parsed: CustomIntervalResult =
+        action === 'save-custom' ? parseCustomInterval() : { intervalMs: Number(node.dataset.intervalMs) };
       if (parsed.error) throw new Error(parsed.error);
       command = { type: 'save-refresh', scope, intervalMs: parsed.intervalMs };
-      message = `已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`;
+      message = `已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs!)} 刷新一次。`;
     } else if (action === 'delete-page' || action === 'delete-site') {
       scope = action === 'delete-page' ? 'page' : 'site';
       command = { type: 'delete-refresh', scope };
@@ -484,9 +587,9 @@ function createWebPageAssistantView({
     }
     const submission = { generation: dialogGeneration, revision: editRevision, dialog };
     if (WRITE_ACTIONS.has(action)) pendingSubmissions.add(submission);
-    let result;
+    let result: SessionResult;
     try {
-      result = await session.dispatch(command);
+      result = await session.dispatch(command as SessionCommand);
     } finally {
       pendingSubmissions.delete(submission);
     }
@@ -516,10 +619,10 @@ function createWebPageAssistantView({
     return result;
   }
 
-  async function handleRootClick(event) {
-    const actionNode = event.target?.closest?.('[data-part-action]');
+  async function handleRootClick(event: Event) {
+    const actionNode = (event.target as Element | null)?.closest?.<HTMLElement>('[data-part-action]');
     if (!actionNode || !root?.contains(actionNode)) return;
-    const action = actionNode.dataset.partAction;
+    const action = actionNode.dataset.partAction!;
     if (!WRITE_ACTIONS.has(action) && !['open-settings', 'switch-tab', 'close-dialog', 'toggle-pause'].includes(action))
       return;
     if (action === 'close-dialog' && dialog && actionNode === dialog && event.target === dialog) {
@@ -542,7 +645,7 @@ function createWebPageAssistantView({
     const actionToken = {};
     if (isWrite) {
       pendingActionTokens.set(actionNode, actionToken);
-      actionNode.disabled = true;
+      (actionNode as HTMLButtonElement).disabled = true;
       actionNode.textContent = '处理中…';
     }
     try {
@@ -555,25 +658,25 @@ function createWebPageAssistantView({
         dialogGeneration === actionGeneration &&
         !dialog?.querySelector('[data-part-role="message"]')?.textContent
       ) {
-        setMessage(`操作失败：${error?.message || error}`, 'error');
+        setMessage(`操作失败：${(error as Error | null)?.message || error}`, 'error');
       }
     } finally {
       if (isWrite && pendingActionTokens.get(actionNode) === actionToken) {
         pendingActionTokens.delete(actionNode);
         if (!disposed && actionNode.isConnected !== false) {
-          actionNode.disabled = false;
+          (actionNode as HTMLButtonElement).disabled = false;
           actionNode.textContent = pendingLabel;
         }
       }
     }
   }
 
-  function handleRootInput(event) {
-    if (dialog?.contains(event.target)) editRevision += 1;
+  function handleRootInput(event: Event) {
+    if (dialog?.contains(event.target as Node | null)) editRevision += 1;
   }
 
-  function handleRootChange(event) {
-    const target = event.target;
+  function handleRootChange(event: Event) {
+    const target = event.target as Element | null;
     if (!target?.matches?.('input[name="part-scope"]')) return;
     const selectedScope = getSelectedScope();
     renderDialog({ message: `将保存到${scopeLabel(selectedScope)}。`, scope: selectedScope, tab: activeDialogTab });
@@ -583,7 +686,7 @@ function createWebPageAssistantView({
     if (!disposed) placeWidget();
   }
 
-  function update(snapshot, change = {}) {
+  function update(snapshot: SessionState, change: Partial<SessionChange> = {}) {
     latestSnapshot = snapshot;
     if (disposed) return;
     if (snapshot.lifecycle === 'error') {
@@ -596,7 +699,10 @@ function createWebPageAssistantView({
     }
     if (snapshot.lifecycle !== 'ready') return;
     initializationError = null;
-    if (change.kind === 'lifecycle' || (change.kind === 'settings' && ['refresh', 'all'].includes(change.area)))
+    if (
+      change.kind === 'lifecycle' ||
+      (change.kind === 'settings' && ['refresh', 'all'].includes(change.area as string))
+    )
       renderWidget();
     updatePauseButton();
     updateCountdownText();
@@ -608,26 +714,26 @@ function createWebPageAssistantView({
     }
   }
 
-  function mergeIntent(next = {}) {
+  function mergeIntent(next: OpenSettingsOptions = {}) {
     pendingOpenIntent = {
       tab: next.tab ?? pendingOpenIntent?.tab ?? null,
       scope: next.scope ?? pendingOpenIntent?.scope ?? null,
     };
   }
 
-  function openSettings(options = {}) {
+  function openSettings(options: OpenSettingsOptions = {}): Promise<OpenSettingsResult> {
     if (disposed) return Promise.resolve({ ok: false, code: 'disposed' });
     mergeIntent(options);
     if (openPromise) return openPromise;
-    const opening = (async () => {
-      let startup;
+    const opening = (async (): Promise<OpenSettingsResult> => {
+      let startup: StartupOutcome;
       try {
         startup = await Promise.race([Promise.resolve().then(() => ready()), disposedPromise]);
       } catch (error) {
         startup = {
           ok: false,
           code: 'storage-failed',
-          message: String(error?.message || error),
+          message: String((error as Error | null)?.message || error),
           state: session.getState(),
         };
       }
@@ -636,7 +742,7 @@ function createWebPageAssistantView({
       if (!startup?.ok && latestSnapshot.lifecycle !== 'ready') {
         initializationError = `初始化失败：${startup?.message || latestSnapshot.applicationError || '设置读取失败。'}`;
       }
-      const intent = pendingOpenIntent || {};
+      const intent: Partial<OpenIntent> = pendingOpenIntent || {};
       pendingOpenIntent = null;
       renderDialog({ scope: intent.scope, tab: intent.tab });
       return initializationError ? { ok: false, code: startup?.code || 'initialization-failed' } : { ok: true };

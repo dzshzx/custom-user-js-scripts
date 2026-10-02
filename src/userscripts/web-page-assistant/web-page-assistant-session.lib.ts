@@ -1,5 +1,74 @@
 import * as Settings from './web-page-assistant-settings.lib.ts';
 import { createRefreshRuntime } from './web-page-assistant-refresh.lib.ts';
+import type { RefreshRuntimeAdapters, RefreshSnapshot } from './web-page-assistant-refresh.lib.ts';
+import type { WebPageAssistantStoragePort } from './web-page-assistant-storage.lib.ts';
+import type { UnlockerRuntime } from './web-page-assistant-unlocker.lib.ts';
+
+export type SessionLifecycle = 'idle' | 'starting' | 'ready' | 'error' | 'disposed';
+export type SessionArea = 'refresh' | 'unlocker';
+export type SessionChangeArea = SessionArea | 'all';
+export type SessionChangeKind = 'countdown' | 'lifecycle' | 'settings';
+export type SessionResultCode = 'disposed' | 'not-ready' | 'invalid-input' | 'storage-failed' | 'application-failed';
+
+export interface SessionChange {
+  kind: SessionChangeKind;
+  area: SessionChangeArea | null;
+}
+
+export interface SessionState {
+  lifecycle: SessionLifecycle;
+  settings: Settings.Settings;
+  refresh: RefreshSnapshot;
+  appliedUnlocker: Settings.UnlockerMatch | null;
+  applicationError: string | null;
+  applicationErrors: Record<SessionArea, string | null>;
+  matchedRefresh: Settings.RefreshMatch | null;
+  matchedUnlocker: Settings.UnlockerMatch | null;
+}
+
+export interface SessionResult {
+  ok: boolean;
+  code: SessionResultCode | null;
+  persisted: boolean;
+  scope: Settings.Scope | null | undefined;
+  state: SessionState;
+  message?: string;
+}
+
+export type SessionCommand =
+  | { type: 'toggle-pause' }
+  | { type: 'disable-active' }
+  | { type: 'save-refresh'; scope: Settings.Scope; intervalMs: number }
+  | { type: 'save-unlocker'; scope: Settings.Scope; setting: Partial<Settings.UnlockerSetting> }
+  | { type: 'delete-unlocker' | 'delete-refresh'; scope: Settings.Scope };
+
+export interface SessionClock {
+  now: RefreshRuntimeAdapters['now'];
+  setInterval: RefreshRuntimeAdapters['setInterval'];
+  clearInterval: RefreshRuntimeAdapters['clearInterval'];
+}
+
+export type SessionStorage = Pick<WebPageAssistantStoragePort, 'readSettings' | 'updateSettings'> &
+  Partial<Pick<WebPageAssistantStoragePort, 'subscribeSettings'>>;
+
+export interface WebPageAssistantSessionOptions {
+  keys: Settings.ScopeKeys;
+  storage: SessionStorage;
+  clock: SessionClock;
+  reload: () => void;
+  unlocker: Pick<UnlockerRuntime, 'install' | 'uninstall'>;
+  ready?: () => Promise<unknown>;
+  onChange?: (state: SessionState, change: SessionChange) => void;
+}
+
+export interface WebPageAssistantSession {
+  start(): Promise<SessionResult>;
+  dispatch(command: SessionCommand | null | undefined): Promise<SessionResult>;
+  getState(): SessionState;
+  dispose(): void;
+}
+
+type ScopedResolver = (settings: Settings.SettingsSource, keys: Settings.ScopeKeys) => unknown;
 
 // Settings and applied capabilities have one owner. Only persisted commands
 // and refreshes from storage enter the FIFO; pause remains available while a
@@ -14,19 +83,19 @@ function createWebPageAssistantSession({
   unlocker,
   ready = () => Promise.resolve(),
   onChange = () => {},
-}) {
+}: WebPageAssistantSessionOptions): WebPageAssistantSession {
   let settings = Settings.emptySettings();
-  let lifecycle = 'idle';
-  let applicationError = null;
-  const applicationErrors = { refresh: null, unlocker: null };
-  let appliedUnlocker = null;
-  let startPromise;
-  let queue = Promise.resolve();
-  let unsubscribeStorage = null;
+  let lifecycle: SessionLifecycle = 'idle';
+  let applicationError: string | null = null;
+  const applicationErrors: SessionState['applicationErrors'] = { refresh: null, unlocker: null };
+  let appliedUnlocker: Settings.UnlockerMatch | null = null;
+  let startPromise: Promise<SessionResult> | undefined;
+  let queue: Promise<unknown> = Promise.resolve();
+  let unsubscribeStorage: (() => void) | null = null;
   let changedWhileStarting = false;
   let refreshQueued = false;
-  let finishDisposed;
-  const disposed = new Promise((resolve) => {
+  let finishDisposed: () => void;
+  const disposed = new Promise<void>((resolve) => {
     finishDisposed = resolve;
   });
   const runtime = createRefreshRuntime({
@@ -39,7 +108,7 @@ function createWebPageAssistantSession({
     onStateChange: () => emit('countdown'),
   });
 
-  function getState() {
+  function getState(): SessionState {
     return JSON.parse(
       JSON.stringify({
         lifecycle,
@@ -53,7 +122,7 @@ function createWebPageAssistantSession({
       }),
     );
   }
-  function emit(kind, area = null) {
+  function emit(kind: SessionChangeKind, area: SessionChangeArea | null = null) {
     if (lifecycle === 'disposed') return;
     try {
       onChange(getState(), { kind, area });
@@ -61,12 +130,16 @@ function createWebPageAssistantSession({
       /* observers cannot fail commands */
     }
   }
-  function result(code = null, persisted = false, scope = null) {
+  function result(
+    code: SessionResultCode | null = null,
+    persisted = false,
+    scope: Settings.Scope | null | undefined = null,
+  ): SessionResult {
     return { ok: !code, code, persisted, scope, state: getState() };
   }
-  function apply(area) {
+  function apply(area: SessionChangeArea): 'application-failed' | null {
     let failed = false;
-    for (const capability of area === 'all' ? ['refresh', 'unlocker'] : [area]) {
+    for (const capability of area === 'all' ? (['refresh', 'unlocker'] as const) : [area]) {
       applicationErrors[capability] = null;
       try {
         if (capability === 'refresh') runtime.restart(Settings.resolveActiveRefreshSetting(settings, keys));
@@ -78,7 +151,7 @@ function createWebPageAssistantSession({
         }
       } catch (error) {
         failed = true;
-        applicationErrors[capability] = String(error?.message || error);
+        applicationErrors[capability] = String((error as Error | null)?.message || error);
         if (capability === 'refresh') runtime.stop();
         else {
           appliedUnlocker = null;
@@ -93,17 +166,18 @@ function createWebPageAssistantSession({
     applicationError = Object.values(applicationErrors).filter(Boolean).join('; ') || null;
     return failed ? 'application-failed' : null;
   }
-  function changedAreas(previous, next) {
-    const same = (resolve) => JSON.stringify(resolve(previous, keys)) === JSON.stringify(resolve(next, keys));
+  function changedAreas(previous: Settings.Settings, next: Settings.Settings): SessionArea[] {
+    const same = (resolve: ScopedResolver) =>
+      JSON.stringify(resolve(previous, keys)) === JSON.stringify(resolve(next, keys));
     return [
-      ...(same(Settings.resolveActiveRefreshSetting) ? [] : ['refresh']),
-      ...(same(Settings.resolveActiveUnlockerSetting) ? [] : ['unlocker']),
+      ...(same(Settings.resolveActiveRefreshSetting) ? [] : (['refresh'] as const)),
+      ...(same(Settings.resolveActiveUnlockerSetting) ? [] : (['unlocker'] as const)),
     ];
   }
-  function combinedArea(areas) {
+  function combinedArea(areas: SessionArea[]): SessionChangeArea | null {
     return areas.length > 1 ? 'all' : (areas[0] ?? null);
   }
-  function adoptStoredSettings(latest) {
+  function adoptStoredSettings(latest: unknown) {
     const next = Settings.normalizeSettings(latest);
     if (JSON.stringify(next) === JSON.stringify(settings)) return;
     const area = combinedArea(changedAreas(settings, next));
@@ -119,7 +193,7 @@ function createWebPageAssistantSession({
         refreshQueued = false;
         if (lifecycle !== 'ready') return;
         const latest = await storage.readSettings();
-        if (lifecycle === 'ready') adoptStoredSettings(latest);
+        if ((lifecycle as SessionLifecycle) === 'ready') adoptStoredSettings(latest);
       })
       .catch(() => {
         /* keep the current copy; the next write rereads storage */
@@ -142,7 +216,7 @@ function createWebPageAssistantSession({
     const initialize = async () => {
       try {
         const [loaded] = await Promise.all([storage.readSettings(), ready()]);
-        if (lifecycle === 'disposed') return result('disposed');
+        if ((lifecycle as SessionLifecycle) === 'disposed') return result('disposed');
         settings = Settings.normalizeSettings(loaded);
         lifecycle = 'ready';
         const code = apply('all');
@@ -152,7 +226,7 @@ function createWebPageAssistantSession({
       } catch (error) {
         if (lifecycle === 'disposed') return result('disposed');
         lifecycle = 'error';
-        applicationError = String(error?.message || error);
+        applicationError = String((error as Error | null)?.message || error);
         emit('lifecycle');
         return result('storage-failed');
       }
@@ -160,15 +234,18 @@ function createWebPageAssistantSession({
     startPromise = Promise.race([initialize(), disposed.then(() => result('disposed'))]);
     return startPromise;
   }
-  async function write(command) {
+  async function write(command: SessionCommand): Promise<SessionResult> {
     if (lifecycle !== 'ready') return result(lifecycle === 'disposed' ? 'disposed' : 'not-ready');
     const { type } = command;
-    const scope = type === 'disable-active' ? runtime.getState().activeMatch?.scope : command.scope;
+    // Cast only names the expected shape; the includes check below validates it.
+    const scope = (
+      type === 'disable-active' ? runtime.getState().activeMatch?.scope : (command as { scope?: unknown }).scope
+    ) as Settings.Scope;
     if (type === 'disable-active' && !scope) return result();
     if (!['page', 'site'].includes(scope)) return result('invalid-input');
     const key = scope === 'page' ? keys.pageKey : keys.siteKey;
-    const area = type.includes('unlocker') ? 'unlocker' : 'refresh';
-    let change;
+    const area: SessionArea = type.includes('unlocker') ? 'unlocker' : 'refresh';
+    let change: (latest: Settings.Settings) => Settings.Settings;
     if (type === 'save-refresh') {
       if (!Settings.isValidIntervalMs(command.intervalMs)) return result('invalid-input');
       const updatedAt = clock.now();
@@ -182,30 +259,30 @@ function createWebPageAssistantSession({
     } else if (type === 'delete-refresh' || type === 'disable-active') {
       change = (latest) => Settings.deleteRefreshSetting(latest, scope, key);
     } else return result('invalid-input');
-    let next;
+    let next: Settings.Settings;
     try {
       next = Settings.normalizeSettings(await storage.updateSettings(change));
     } catch (error) {
-      if (lifecycle === 'disposed') return result('disposed');
-      return { ...result('storage-failed'), message: String(error?.message || error) };
+      if ((lifecycle as SessionLifecycle) === 'disposed') return result('disposed');
+      return { ...result('storage-failed'), message: String((error as Error | null)?.message || error) };
     }
     // Other tabs' changes arrive with this write; apply every area whose
     // match changed, and always the commanded one.
     const applied = combinedArea([...new Set([area, ...changedAreas(settings, next)])]);
     settings = next;
-    if (lifecycle === 'disposed') return result('disposed', true, scope);
-    const code = apply(applied);
+    if ((lifecycle as SessionLifecycle) === 'disposed') return result('disposed', true, scope);
+    const code = apply(applied!);
     emit('settings', applied);
     return result(code, true, scope);
   }
-  function dispatch(command) {
+  function dispatch(command: SessionCommand | null | undefined): Promise<SessionResult> {
     if (lifecycle !== 'ready') return Promise.resolve(result(lifecycle === 'disposed' ? 'disposed' : 'not-ready'));
     if (command?.type === 'toggle-pause') {
       runtime.togglePause();
       return Promise.resolve(result());
     }
     // Capture caller input now, but derive the next settings at execution time.
-    const captured = JSON.parse(JSON.stringify(command || {}));
+    const captured: SessionCommand = JSON.parse(JSON.stringify(command || {}));
     let started = false;
     const pending = queue.then(() => {
       started = true;

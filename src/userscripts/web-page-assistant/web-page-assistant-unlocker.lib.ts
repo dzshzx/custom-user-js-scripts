@@ -1,4 +1,35 @@
-function createUnlockerRuntime(adapters) {
+import type { UnlockerOption, UnlockerSetting } from './web-page-assistant-settings.lib.ts';
+
+export interface UnlockerAdapters {
+  hasUnlockerAction: (setting: UnlockerSetting | null | undefined) => setting is UnlockerSetting;
+  rootContainsTarget: (target: EventTarget | null) => boolean;
+  getDocumentTarget: () => EventTarget;
+  getWindowTarget: () => EventTarget;
+  getStyle: () => unknown;
+  installStyle: (cssText: string) => void;
+  removeStyle: () => void;
+  rootId: string;
+}
+
+export interface UnlockerCapability {
+  option: UnlockerOption;
+  label: string;
+  type: string;
+}
+
+interface CapabilitySpec extends UnlockerCapability {
+  target: () => EventTarget;
+  handler: (event: Event) => void;
+}
+
+export interface UnlockerRuntime {
+  describe(setting: UnlockerSetting | null | undefined, scopeText: string): string;
+  getCapabilitySpecs(): UnlockerCapability[];
+  install(this: Pick<UnlockerRuntime, 'uninstall'>, setting: UnlockerSetting | null | undefined): void;
+  uninstall(): void;
+}
+
+function createUnlockerRuntime(adapters: UnlockerAdapters): UnlockerRuntime {
   const {
     hasUnlockerAction,
     rootContainsTarget,
@@ -9,7 +40,7 @@ function createUnlockerRuntime(adapters) {
     removeStyle,
     rootId,
   } = adapters;
-  const capabilitySpecs = [
+  const capabilitySpecs: CapabilitySpec[] = [
     { option: 'allowSelection', label: '选择文本', target: getDocumentTarget, type: 'selectstart', handler: stopEvent },
     { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'copy', handler: stopEvent },
     { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'cut', handler: stopEvent },
@@ -29,25 +60,25 @@ function createUnlockerRuntime(adapters) {
       handler: stopBeforeUnload,
     },
   ];
-  let cleanupStack = [];
+  let cleanupStack: Array<() => void> = [];
 
-  function stopEvent(event) {
+  function stopEvent(event: Event) {
     if (rootContainsTarget(event.target)) return;
     event.stopPropagation();
   }
 
-  function stopBeforeUnload(event) {
+  function stopBeforeUnload(event: Event) {
     event.stopImmediatePropagation();
-    event.returnValue = undefined;
+    (event as BeforeUnloadEvent).returnValue = undefined;
     return undefined;
   }
 
-  function addListener(target, type, handler) {
+  function addListener(target: EventTarget, type: string, handler: (event: Event) => void) {
     target.addEventListener(type, handler, true);
     cleanupStack.push(() => target.removeEventListener(type, handler, true));
   }
 
-  function installSelectionStyle(setting) {
+  function installSelectionStyle(setting: UnlockerSetting) {
     if (!setting.allowSelection || getStyle()) return;
 
     installStyle(`
@@ -58,11 +89,11 @@ function createUnlockerRuntime(adapters) {
     `);
   }
 
-  function describe(setting, scopeText) {
+  function describe(setting: UnlockerSetting | null | undefined, scopeText: string) {
     if (!setting?.enabled) return '当前未启用网页限制解除。';
 
-    const labels = [];
-    const seenOptions = new Set();
+    const labels: string[] = [];
+    const seenOptions = new Set<UnlockerOption>();
     for (const spec of capabilitySpecs) {
       if (!setting[spec.option] || seenOptions.has(spec.option)) continue;
       labels.push(spec.label);

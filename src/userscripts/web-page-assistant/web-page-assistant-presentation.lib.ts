@@ -1,18 +1,102 @@
 import { mountIcon } from '../shared/shared-icons.lib.tsx';
+import type { IconName } from '../shared/shared-icons.lib.tsx';
+import type {
+  RefreshMatch,
+  RefreshSetting,
+  Scope,
+  Settings,
+  UnlockerMatch,
+  UnlockerSetting,
+  defaultUnlockerSetting as DefaultUnlockerSetting,
+  getRefreshSetting,
+  getUnlockerSetting,
+} from './web-page-assistant-settings.lib.ts';
+
+export type DialogTab = 'refresh' | 'unlocker';
+export type CustomIntervalUnit = 'minutes' | 'seconds';
+
+export interface DialogContractAdapters {
+  settingsContract: { getRefreshSetting: typeof getRefreshSetting; getUnlockerSetting: typeof getUnlockerSetting };
+  defaultUnlockerSetting: typeof DefaultUnlockerSetting;
+  formatInterval: (ms: number) => string;
+  defaultIntervalMs: number;
+}
+
+export interface DialogViewModelInput {
+  message?: string;
+  preferredScope?: Scope | null;
+  preferredTab?: string | null;
+  activeTab?: DialogTab;
+  activeRefreshMatch?: RefreshMatch | null;
+  activeUnlockerMatch?: UnlockerMatch | null;
+  settings: Settings;
+  pageKey: string;
+  siteKey: string;
+  statusText: string;
+  unlockerStatusText: string;
+}
+
+export interface DialogViewModel {
+  message: string;
+  activeTab: DialogTab;
+  selectedScope: Scope;
+  pageSetting: RefreshSetting | null;
+  siteSetting: RefreshSetting | null;
+  pageUnlockerSetting: UnlockerSetting | null;
+  siteUnlockerSetting: UnlockerSetting | null;
+  unlockerFormSetting: UnlockerSetting;
+  customInterval: { value: string; unit: CustomIntervalUnit };
+  statusText: string;
+  unlockerStatusText: string;
+  pageRefreshText: string;
+  siteRefreshText: string;
+  pageUnlockerText: string;
+  siteUnlockerText: string;
+  focusRole: string;
+}
+
+export interface IntervalPreset {
+  label: string;
+  ms: number;
+}
+
+export interface WidgetViewModel {
+  enabled?: boolean;
+  summary: string;
+}
+
+export interface WidgetElements {
+  widget: HTMLElement;
+  widgetButton: HTMLButtonElement | null;
+  countdownNodes: HTMLElement[];
+  statusNode: HTMLElement | null;
+}
+
+export interface WidgetElementOptions {
+  documentObject: Document;
+  model: WidgetViewModel;
+}
+
+export interface DialogElementOptions {
+  documentObject: Document;
+  model: Pick<DialogViewModel, 'activeTab'>;
+}
+
+export type PageAssistantDialogContract = ReturnType<typeof createPageAssistantDialogContract>;
 
 const LIB_NAME = 'WebPageAssistantPresentationLib';
 
 const ICON_OPTIONS = { size: 16, strokeWidth: 2.4 };
 
-function mountIcons(container) {
-  for (const slot of container.querySelectorAll('[data-part-icon]')) {
-    mountIcon(slot, slot.dataset.partIcon, ICON_OPTIONS);
+function mountIcons(container: ParentNode) {
+  for (const slot of container.querySelectorAll<HTMLElement>('[data-part-icon]')) {
+    mountIcon(slot, slot.dataset.partIcon as IconName, ICON_OPTIONS);
   }
 }
 
 // Widget expansion is pointer-dependent: coarse pointers (touch) toggle via
 // click instead of hover. Kept here so entry and layout share one probe.
-function isCoarsePointer(windowObject = globalThis.window) {
+function isCoarsePointer(windowObject: Window | null | undefined = globalThis.window): boolean {
   try {
     const matchMedia = windowObject?.matchMedia;
     if (typeof matchMedia === 'function') {
@@ -24,9 +108,9 @@ function isCoarsePointer(windowObject = globalThis.window) {
   return false;
 }
 
-function createPageAssistantDialogContract(adapters) {
+function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
   const { settingsContract, defaultUnlockerSetting, formatInterval, defaultIntervalMs } = adapters;
-  const tabs = { refresh: 'refresh', unlocker: 'unlocker' };
+  const tabs = { refresh: 'refresh', unlocker: 'unlocker' } as const;
   const roles = {
     status: 'status',
     pageKey: 'page-key',
@@ -44,43 +128,43 @@ function createPageAssistantDialogContract(adapters) {
     unlockerContextMenu: 'unlocker-context-menu',
     unlockerDrag: 'unlocker-drag',
     unlockerBeforeUnload: 'unlocker-beforeunload',
-  };
+  } as const;
   const actions = {
     savePreset: 'save-preset',
     deletePage: 'delete-page',
     deleteSite: 'delete-site',
     deleteUnlockerPage: 'delete-unlocker-page',
     deleteUnlockerSite: 'delete-unlocker-site',
-  };
+  } as const;
 
-  function roleSelector(role) {
+  function roleSelector(role: string) {
     return `[data-part-role="${role}"]`;
   }
 
-  function actionSelector(action) {
+  function actionSelector(action: string) {
     return `[data-part-action="${action}"]`;
   }
 
-  function normalizeTab(value, fallback = tabs.refresh) {
+  function normalizeTab(value: unknown, fallback: DialogTab = tabs.refresh): DialogTab {
     return value === tabs.unlocker || value === tabs.refresh ? value : fallback;
   }
 
-  function focusRoleForTab(tab) {
+  function focusRoleForTab(tab: unknown): string {
     return normalizeTab(tab) === tabs.unlocker ? roles.unlockerEnabled : roles.customValue;
   }
 
-  function readSelectedScope(dialogNode) {
-    const selected = dialogNode?.querySelector('input[name="part-scope"]:checked')?.value;
+  function readSelectedScope(dialogNode: ParentNode | null | undefined): Scope {
+    const selected = dialogNode?.querySelector<HTMLInputElement>('input[name="part-scope"]:checked')?.value;
     return selected === 'site' ? 'site' : 'page';
   }
 
-  function isChecked(dialogNode, role) {
-    return dialogNode?.querySelector(roleSelector(role))?.checked === true;
+  function isChecked(dialogNode: ParentNode | null | undefined, role: string) {
+    return dialogNode?.querySelector<HTMLInputElement>(roleSelector(role))?.checked === true;
   }
 
-  function createViewModel(input) {
+  function createViewModel(input: DialogViewModelInput): DialogViewModel {
     const nextTab = normalizeTab(input.preferredTab, input.activeTab);
-    const selectedScope =
+    const selectedScope: Scope =
       input.preferredScope || input.activeRefreshMatch?.scope || input.activeUnlockerMatch?.scope || 'page';
     const pageSetting = settingsContract.getRefreshSetting(input.settings, 'page', input.pageKey);
     const siteSetting = settingsContract.getRefreshSetting(input.settings, 'site', input.siteKey);
@@ -88,7 +172,7 @@ function createPageAssistantDialogContract(adapters) {
     const siteUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, 'site', input.siteKey);
     const scopedUnlockerSetting = selectedScope === 'site' ? siteUnlockerSetting : pageUnlockerSetting;
     const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
-    const customInterval =
+    const customInterval: DialogViewModel['customInterval'] =
       defaultInterval % (60 * 1000) === 0
         ? { value: String(defaultInterval / (60 * 1000)), unit: 'minutes' }
         : { value: String(Math.round(defaultInterval / 1000)), unit: 'seconds' };
@@ -101,7 +185,7 @@ function createPageAssistantDialogContract(adapters) {
       siteSetting,
       pageUnlockerSetting,
       siteUnlockerSetting,
-      unlockerFormSetting: scopedUnlockerSetting || defaultUnlockerSetting({ enabled: false }),
+      unlockerFormSetting: scopedUnlockerSetting || defaultUnlockerSetting({ enabled: false })!,
       customInterval,
       statusText: input.statusText,
       unlockerStatusText: input.unlockerStatusText,
@@ -113,7 +197,7 @@ function createPageAssistantDialogContract(adapters) {
     };
   }
 
-  function applyModel(dialogNode, model, presets) {
+  function applyModel(dialogNode: HTMLElement, model: DialogViewModel, presets: readonly IntervalPreset[]) {
     const textByRole = [
       [roles.status, model.statusText],
       [roles.pageKey, model.pageRefreshText],
@@ -128,7 +212,7 @@ function createPageAssistantDialogContract(adapters) {
     }
 
     const scopeInput = dialogNode.querySelector(`input[name="part-scope"][value="${model.selectedScope}"]`);
-    if (scopeInput) scopeInput.checked = true;
+    if (scopeInput) (scopeInput as HTMLInputElement).checked = true;
 
     const presetsNode = dialogNode.querySelector(roleSelector(roles.presets));
     for (const preset of presets) {
@@ -138,27 +222,33 @@ function createPageAssistantDialogContract(adapters) {
       presetButton.dataset.partAction = actions.savePreset;
       presetButton.dataset.intervalMs = String(preset.ms);
       presetButton.textContent = preset.label;
-      presetsNode.append(presetButton);
+      presetsNode!.append(presetButton);
     }
 
-    dialogNode.querySelector(roleSelector(roles.customValue)).value = model.customInterval.value;
-    dialogNode.querySelector(roleSelector(roles.customUnit)).value = model.customInterval.unit;
-    dialogNode.querySelector(actionSelector(actions.deletePage)).disabled = !model.pageSetting;
-    dialogNode.querySelector(actionSelector(actions.deleteSite)).disabled = !model.siteSetting;
-    dialogNode.querySelector(roleSelector(roles.unlockerEnabled)).checked = model.unlockerFormSetting.enabled;
-    dialogNode.querySelector(roleSelector(roles.unlockerSelection)).checked = model.unlockerFormSetting.allowSelection;
-    dialogNode.querySelector(roleSelector(roles.unlockerCopy)).checked = model.unlockerFormSetting.allowCopy;
-    dialogNode.querySelector(roleSelector(roles.unlockerContextMenu)).checked =
+    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.customValue))!.value = model.customInterval.value;
+    dialogNode.querySelector<HTMLSelectElement>(roleSelector(roles.customUnit))!.value = model.customInterval.unit;
+    dialogNode.querySelector<HTMLButtonElement>(actionSelector(actions.deletePage))!.disabled = !model.pageSetting;
+    dialogNode.querySelector<HTMLButtonElement>(actionSelector(actions.deleteSite))!.disabled = !model.siteSetting;
+    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerEnabled))!.checked =
+      model.unlockerFormSetting.enabled;
+    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerSelection))!.checked =
+      model.unlockerFormSetting.allowSelection;
+    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerCopy))!.checked =
+      model.unlockerFormSetting.allowCopy;
+    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerContextMenu))!.checked =
       model.unlockerFormSetting.allowContextMenu;
-    dialogNode.querySelector(roleSelector(roles.unlockerDrag)).checked = model.unlockerFormSetting.allowDrag;
-    dialogNode.querySelector(roleSelector(roles.unlockerBeforeUnload)).checked =
+    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerDrag))!.checked =
+      model.unlockerFormSetting.allowDrag;
+    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerBeforeUnload))!.checked =
       model.unlockerFormSetting.suppressBeforeUnload;
-    dialogNode.querySelector(actionSelector(actions.deleteUnlockerPage)).disabled = !model.pageUnlockerSetting;
-    dialogNode.querySelector(actionSelector(actions.deleteUnlockerSite)).disabled = !model.siteUnlockerSetting;
-    dialogNode.querySelector(roleSelector(model.focusRole))?.focus();
+    dialogNode.querySelector<HTMLButtonElement>(actionSelector(actions.deleteUnlockerPage))!.disabled =
+      !model.pageUnlockerSetting;
+    dialogNode.querySelector<HTMLButtonElement>(actionSelector(actions.deleteUnlockerSite))!.disabled =
+      !model.siteUnlockerSetting;
+    dialogNode.querySelector<HTMLElement>(roleSelector(model.focusRole))?.focus();
   }
 
-  function readUnlockerFormSetting(dialogNode) {
+  function readUnlockerFormSetting(dialogNode: ParentNode | null | undefined) {
     return defaultUnlockerSetting({
       enabled: isChecked(dialogNode, roles.unlockerEnabled),
       allowSelection: isChecked(dialogNode, roles.unlockerSelection),
@@ -184,7 +274,7 @@ function createPageAssistantDialogContract(adapters) {
   };
 }
 
-function createWidgetElement({ documentObject, model }) {
+function createWidgetElement({ documentObject, model }: WidgetElementOptions): WidgetElements {
   if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
   if (!model) throw new Error(`${LIB_NAME}: widget model is required.`);
 
@@ -220,17 +310,17 @@ function createWidgetElement({ documentObject, model }) {
   `;
 
   mountIcons(widget);
-  widget.querySelector('[data-part-role="widget-summary"]').textContent = model.summary;
+  widget.querySelector('[data-part-role="widget-summary"]')!.textContent = model.summary;
 
   return {
     widget,
-    widgetButton: widget.querySelector('.part-widget-button'),
-    countdownNodes: [...widget.querySelectorAll('[data-part-role="countdown"]')],
-    statusNode: widget.querySelector('[data-part-role="widget-status"]'),
+    widgetButton: widget.querySelector<HTMLButtonElement>('.part-widget-button'),
+    countdownNodes: [...widget.querySelectorAll<HTMLElement>('[data-part-role="countdown"]')],
+    statusNode: widget.querySelector<HTMLElement>('[data-part-role="widget-status"]'),
   };
 }
 
-function createDialogElement({ documentObject, model }) {
+function createDialogElement({ documentObject, model }: DialogElementOptions): HTMLDialogElement {
   if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
   if (!model) throw new Error(`${LIB_NAME}: dialog model is required.`);
 

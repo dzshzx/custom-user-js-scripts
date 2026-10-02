@@ -36,6 +36,8 @@ import { createWebPageAssistantStoragePort } from './web-page-assistant-storage.
 import { createWebPageAssistantSession } from './web-page-assistant-session.lib.ts';
 import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.ts';
 import { createWebPageAssistantView } from './web-page-assistant-view.lib.ts';
+import type { WebPageAssistantView } from './web-page-assistant-view.lib.ts';
+import type { WidgetPosition } from './web-page-assistant-storage.lib.ts';
 
 (function () {
   'use strict';
@@ -52,15 +54,15 @@ import { createWebPageAssistantView } from './web-page-assistant-view.lib.ts';
     siteKey: location.hostname,
   };
 
-  function normalizeWidgetPosition(value) {
+  function normalizeWidgetPosition(value: unknown): WidgetPosition | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const left = Number(value.left);
-    const top = Number(value.top);
+    const left = Number((value as { left?: unknown }).left);
+    const top = Number((value as { top?: unknown }).top);
     if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
     return { left: Math.round(left), top: Math.round(top) };
   }
 
-  function documentReady() {
+  function documentReady(): Promise<unknown> {
     if (document.readyState !== 'loading') return Promise.resolve();
     return new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
   }
@@ -79,7 +81,7 @@ import { createWebPageAssistantView } from './web-page-assistant-view.lib.ts';
   });
   const unlocker = createUnlockerRuntime({
     hasUnlockerAction: PageAssistantSettings.hasUnlockerAction,
-    rootContainsTarget: (target) => Boolean(document.getElementById(ROOT_ID)?.contains(target)),
+    rootContainsTarget: (target) => Boolean(document.getElementById(ROOT_ID)?.contains(target as Node | null)),
     getDocumentTarget: () => document,
     getWindowTarget: () => window,
     getStyle: () => document.getElementById(UNLOCKER_STYLE_ID),
@@ -95,11 +97,11 @@ import { createWebPageAssistantView } from './web-page-assistant-view.lib.ts';
     rootId: ROOT_ID,
   });
 
-  let widgetPosition = null;
+  let widgetPosition: WidgetPosition | null = null;
   const interfaceReady = Promise.all([storage.readWidgetPosition(), documentReady()]).then(([position]) => {
     widgetPosition = position;
   });
-  let view;
+  let view: WebPageAssistantView | undefined;
   const session = createWebPageAssistantSession({
     keys,
     storage,
@@ -128,7 +130,7 @@ import { createWebPageAssistantView } from './web-page-assistant-view.lib.ts';
     ready: () => session.start(),
     clock: {
       setTimeout: (handler, delay) => window.setTimeout(handler, delay),
-      clearTimeout: (timer) => window.clearTimeout(timer),
+      clearTimeout: (timer) => window.clearTimeout(timer as number | undefined),
     },
   });
 

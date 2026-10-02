@@ -1,6 +1,12 @@
 const LIB_NAME = 'WebPageAssistantPresentationDialogStylesLib';
 
-function installAssistantDialogStyles({ documentObject, rootId, styleId }) {
+export interface AssistantStyleOptions {
+  documentObject: Document;
+  rootId: string;
+  styleId: string;
+}
+
+function installAssistantDialogStyles({ documentObject, rootId, styleId }: AssistantStyleOptions): void {
   if (!documentObject || !rootId || !styleId) {
     throw new Error(`${LIB_NAME}: documentObject, rootId, and styleId are required.`);
   }

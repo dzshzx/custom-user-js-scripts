@@ -1,10 +1,56 @@
 import { resolveGmApi } from '../shared/shared-gm.lib.ts';
+import type { GmOverrides, GmValueChangeListener } from '../shared/shared-gm.lib.ts';
+import type { Settings } from './web-page-assistant-settings.lib.ts';
 
-function maybePromise(value) {
-  return value && typeof value.then === 'function' ? value : Promise.resolve(value);
+export interface WidgetPosition {
+  left: number;
+  top: number;
 }
 
-function createWebPageAssistantStoragePort(adapters) {
+export interface StorageSettingsContract {
+  emptySettings: () => Settings;
+  normalizeSettings: (value: unknown) => Settings;
+}
+
+export interface StorageLogger {
+  warn: (...args: unknown[]) => void;
+}
+
+export interface WebPageAssistantStorageAdapters extends GmOverrides {
+  scriptName: string;
+  settingsContract: StorageSettingsContract;
+  normalizeWidgetPosition: (value: unknown) => WidgetPosition | null;
+  storageKey: string;
+  widgetPositionKey: string;
+  fallbackStorageKey: string;
+  fallbackWidgetPositionKey: string;
+  localStorageAdapter: Pick<Storage, 'getItem' | 'setItem'>;
+  eventTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> | null;
+  logger: StorageLogger;
+  toPromise?: (value: unknown) => Promise<unknown>;
+}
+
+/** GM.addValueChangeListener resolves the listener id asynchronously. */
+type Pending = Promise<number>;
+type SettingsSourceKind = 'primary' | 'fallback' | 'fallback-after-primary-failure';
+
+export interface WebPageAssistantStoragePort {
+  readSettings(): Promise<Settings>;
+  updateSettings(transform: (latest: Settings) => unknown): Promise<Settings>;
+  subscribeSettings(onChange: () => void): () => void;
+  readWidgetPosition(): Promise<WidgetPosition | null>;
+  writeSettings(nextSettings: unknown): Promise<Settings>;
+  writeWidgetPosition(position: unknown): Promise<WidgetPosition | null>;
+  registerSettingsMenu(label: string, callback: () => void): boolean;
+}
+
+function maybePromise(value: unknown): Promise<unknown> {
+  return value && typeof (value as PromiseLike<unknown>).then === 'function'
+    ? (value as Promise<unknown>)
+    : Promise.resolve(value);
+}
+
+function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdapters): WebPageAssistantStoragePort {
   const {
     scriptName,
     settingsContract,
@@ -22,27 +68,27 @@ function createWebPageAssistantStoragePort(adapters) {
   // manager API; production passes none and gets the resolved globals.
   const gm = resolveGmApi(adapters);
 
-  async function readPrimaryValue(key, fallbackValue) {
+  async function readPrimaryValue(key: string, fallbackValue: unknown) {
     if (gm.getValue) {
       return {
         available: true,
-        value: await toPromise(gm.getValue(key, fallbackValue)),
+        value: await toPromise(gm.getValue(key, fallbackValue as Tampermonkey.StorageValue)),
       };
     }
 
     return { available: false, value: fallbackValue };
   }
 
-  async function writePrimaryValue(key, value) {
+  async function writePrimaryValue(key: string, value: unknown) {
     if (gm.setValue) {
-      await toPromise(gm.setValue(key, value));
+      await toPromise(gm.setValue(key, value as Tampermonkey.StorageValue));
       return true;
     }
 
     return false;
   }
 
-  function readFallbackJson(key, normalizer, fallbackValue, warning) {
+  function readFallbackJson<T, F>(key: string, normalizer: (value: unknown) => T, fallbackValue: F, warning: string) {
     try {
       return normalizer(JSON.parse(localStorageAdapter.getItem(key) || 'null')) || fallbackValue;
     } catch (error) {
@@ -51,13 +97,13 @@ function createWebPageAssistantStoragePort(adapters) {
     }
   }
 
-  function writeFallbackJson(key, value) {
+  function writeFallbackJson(key: string, value: unknown) {
     localStorageAdapter.setItem(key, JSON.stringify(value));
   }
 
   // Reports which backend answered so a read-modify-write never derives data
   // from fallback storage and then overwrites the primary copy with it.
-  async function readSettingsWithSource() {
+  async function readSettingsWithSource(): Promise<{ source: SettingsSourceKind; settings: Settings }> {
     try {
       const primary = await readPrimaryValue(storageKey, settingsContract.emptySettings());
       if (primary.available) {
@@ -71,7 +117,7 @@ function createWebPageAssistantStoragePort(adapters) {
     return { source: 'fallback', settings: readFallbackSettings() };
   }
 
-  function readFallbackSettings() {
+  function readFallbackSettings(): Settings {
     return readFallbackJson(
       fallbackStorageKey,
       settingsContract.normalizeSettings,
@@ -80,7 +126,7 @@ function createWebPageAssistantStoragePort(adapters) {
     );
   }
 
-  async function writeSettingsTo(nextSettings, { primary = true } = {}) {
+  async function writeSettingsTo(nextSettings: unknown, { primary = true }: { primary?: boolean } = {}) {
     const normalized = settingsContract.normalizeSettings(nextSettings);
 
     if (primary) {
@@ -95,23 +141,23 @@ function createWebPageAssistantStoragePort(adapters) {
     return normalized;
   }
 
-  function subscribePrimary(onChange) {
-    const listener = (_name, _oldValue, _newValue, remote) => {
+  function subscribePrimary(onChange: () => void) {
+    const listener: GmValueChangeListener = (_name, _oldValue, _newValue, remote) => {
       if (remote) onChange();
     };
     if (!gm.valueChange) return null;
     const { add, remove } = gm.valueChange;
     const result = add(storageKey, listener);
-    if (!result || typeof result.then !== 'function') {
+    if (!result || typeof (result as Pending).then !== 'function') {
       return () => {
-        if (remove) remove(result);
+        if (remove) remove(result as number);
       };
     }
     // GM.addValueChangeListener resolves the listener id asynchronously.
-    result.catch((error) => logger.warn(`${scriptName}: failed to watch userscript storage.`, error));
+    (result as Pending).catch((error) => logger.warn(`${scriptName}: failed to watch userscript storage.`, error));
     return () => {
       if (!remove) return;
-      result.then((value) => remove(value)).catch(() => {});
+      (result as Pending).then((value) => remove(value)).catch(() => {});
     };
   }
 
@@ -130,7 +176,7 @@ function createWebPageAssistantStoragePort(adapters) {
     // unsubscribe function; managers without change events only get the
     // same-origin fallback storage event.
     subscribeSettings(onChange) {
-      const cleanups = [];
+      const cleanups: Array<() => void> = [];
       try {
         const unsubscribe = subscribePrimary(onChange);
         if (unsubscribe) cleanups.push(unsubscribe);
@@ -138,8 +184,8 @@ function createWebPageAssistantStoragePort(adapters) {
         logger.warn(`${scriptName}: failed to watch userscript storage.`, error);
       }
       if (eventTarget && typeof eventTarget.addEventListener === 'function') {
-        const onStorage = (event) => {
-          if (event?.key === fallbackStorageKey || event?.key === null) onChange();
+        const onStorage = (event: Event) => {
+          if ((event as StorageEvent)?.key === fallbackStorageKey || (event as StorageEvent)?.key === null) onChange();
         };
         eventTarget.addEventListener('storage', onStorage);
         cleanups.push(() => eventTarget.removeEventListener('storage', onStorage));

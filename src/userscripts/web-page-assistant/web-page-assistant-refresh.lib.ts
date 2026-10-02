@@ -1,4 +1,42 @@
-function createRefreshRuntime(adapters) {
+import type { RefreshMatch } from './web-page-assistant-settings.lib.ts';
+
+export type RefreshTimerId = number;
+
+export interface RefreshSnapshot {
+  activeMatch: RefreshMatch | null;
+  isPaused: boolean;
+  isRefreshing: boolean;
+  remainingMs: number;
+}
+
+export interface RefreshRuntimeAdapters {
+  minIntervalMs: number;
+  tickMs: number;
+  now: () => number;
+  setInterval: (handler: () => void, delay: number) => RefreshTimerId;
+  clearInterval: (timer: RefreshTimerId) => void;
+  reload: () => void;
+  onStateChange: (snapshot: RefreshSnapshot) => void;
+}
+
+interface RefreshState {
+  activeMatch: RefreshMatch | null;
+  targetTime: number;
+  remainingWhenPaused: number;
+  isPaused: boolean;
+  isRefreshing: boolean;
+  timerId: RefreshTimerId | null;
+}
+
+export interface RefreshRuntime {
+  restart(activeMatch: RefreshMatch | null | undefined): void;
+  stop(): void;
+  togglePause(): RefreshSnapshot;
+  getState(): RefreshSnapshot;
+  tick(): void;
+}
+
+function createRefreshRuntime(adapters: RefreshRuntimeAdapters): RefreshRuntime {
   const {
     minIntervalMs,
     tickMs,
@@ -8,7 +46,7 @@ function createRefreshRuntime(adapters) {
     reload,
     onStateChange,
   } = adapters;
-  const emptyState = {
+  const emptyState: RefreshState = {
     activeMatch: null,
     targetTime: 0,
     remainingWhenPaused: 0,
@@ -16,7 +54,7 @@ function createRefreshRuntime(adapters) {
     isRefreshing: false,
     timerId: null,
   };
-  let state = { ...emptyState };
+  let state: RefreshState = { ...emptyState };
 
   function clearActiveTimer() {
     if (!state.timerId) return;
@@ -24,7 +62,7 @@ function createRefreshRuntime(adapters) {
     state = { ...state, timerId: null };
   }
 
-  function snapshot() {
+  function snapshot(): RefreshSnapshot {
     const remainingMs = state.activeMatch
       ? state.isPaused
         ? state.remainingWhenPaused
@@ -69,7 +107,7 @@ function createRefreshRuntime(adapters) {
     tick();
   }
 
-  function restart(activeMatch) {
+  function restart(activeMatch: RefreshMatch | null | undefined) {
     clearActiveTimer();
     if (!activeMatch) {
       state = { ...emptyState };
