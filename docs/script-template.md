@@ -1,6 +1,6 @@
 # Script Template Notes
 
-复制当前模板脚本创建新脚本时，优先修改这些字段。单文件脚本默认放在 `src/userscripts/<script-id>/<script-id>.user.js`；需要拆分模块的脚本改用「多模块形态」：metadata 放在 `src/userscripts/<script-id>/<script-id>.entry.js`（ESM 入口，不写 `@require`，`@downloadURL`/`@updateURL` 指向 `dist/<script-id>.user.js` raw 路径），同目录 `*.lib.js` 用 import/export 组织，`npm run build` 产出 dist 单文件与旧路径桥接文件。
+复制当前模板脚本创建新脚本时，优先修改这些字段。单文件脚本默认放在 `src/userscripts/<script-id>/<script-id>.user.js`；需要拆分模块的脚本改用「多模块形态」：metadata 放在 `src/userscripts/<script-id>/<script-id>.entry.ts`（TypeScript ESM 入口，不写 `@require`，`@downloadURL`/`@updateURL` 指向 `dist/<script-id>.user.js` raw 路径），同目录 `*.lib.ts`（含 JSX 用 `*.lib.tsx`）用 import/export 组织，相对导入写 `.ts`/`.tsx` 扩展名、类型只用 `import type`，`npm run build` 产出 dist 单文件与旧路径桥接文件。
 
 - `@name`: 脚本名称。
 - `@name:zh-CN` / `@name:en`: 脚本有中文用户界面或跨语言使用场景时，补充本地化名称。

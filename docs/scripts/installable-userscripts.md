@@ -16,7 +16,7 @@
 - 包含设置、刷新、session、unlocker 能力和浮动控件。
 - 浮动 widget 常驻页面：未启用自动刷新时显示为降权圆钮，悬停/点击可展开说明与设置入口，点击圆钮直接打开设置对话框。
 - 当前脚本运行范围较广，安装前应确认目标用户脚本管理器的授权提示。
-- 源码是 `web-page-assistant.entry.js` 加同目录 `*.lib.js` ES 模块，`npm run build` 打包为 dist 单文件。
+- 源码是 `web-page-assistant.entry.ts` 加同目录 `*.lib.ts` TypeScript 模块，`npm run build` 打包为 dist 单文件。
 
 会话契约：
 
@@ -120,7 +120,7 @@
 
 迁移说明：
 
-- 当前源码为 `javdb-recommend.entry.js` 与数据、请求、Period Section、Site Chrome、展示 Lib Module，构建生成 Dist Bundle 和完整 Bridge File。数据模块拥有 Catalog、Navigation Payload、Search Index、Consumer Lease 及双路搜索；Period Section 统一浏览与搜索的安全文本、稳定节点、卡片、封面失败和即时筛选；Site Chrome 独占官网资源的准备、校验、启用与清理；展示模块编排顺序与导航。内存和磁盘均按来源时间判断 TTL，缓存投影不会延长来源有效期。
+- 当前源码为 `javdb-recommend.entry.ts` 与数据、请求、Period Section、Site Chrome、展示 Lib Module，构建生成 Dist Bundle 和完整 Bridge File。数据模块拥有 Catalog、Navigation Payload、Search Index、Consumer Lease 及双路搜索；Period Section 统一浏览与搜索的安全文本、稳定节点、卡片、封面失败和即时筛选；Site Chrome 独占官网资源的准备、校验、启用与清理；展示模块编排顺序与导航。内存和磁盘均按来源时间判断 TTL，缓存投影不会延长来源有效期。
 - 搜索区分完成、取消和部分失败，并显示失败期数及使用旧缓存的期数。清缓存先取消工作，再删除缓存；迟到的响应不能重新写入。请求取消同时清理超时与退避计时器。
 - `@name`、`@namespace`、`@match`、`@grant none`、缓存版本及全部存储 key 保持不变。安装路径迁移保持同一个安装身份；正式升级仍需按发布流程步进版本。
 - 旧版为右下角「🎬」悬浮面板；现改为导航栏入口 + 独立归档页，卡片点击由官网搜索改为直达详情页。存储 key 与安装路径保持不变。

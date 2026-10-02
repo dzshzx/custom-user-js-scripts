@@ -35,7 +35,7 @@
 
 - 脚本运行范围是 `*://*/*`，安装时会看到较宽的授权提示；不需要时可以在脚本管理器里禁用。
 - “限制解除”只影响浏览器页面事件，不绕过登录、权限、付费墙或服务端限制。
-- 安装入口是 `dist/` 下打包好的单文件；`src/` 目录下的 `*.entry.js` 与 `*.lib.js` 是 ES 模块源码，不能直接安装。
+- 安装入口是 `dist/` 下打包好的单文件；`src/` 目录下的 `*.entry.ts` 与 `*.lib.ts(x)` 是 TypeScript 模块源码，不能直接安装。
 
 ## Codex Quota Compass
 
@@ -97,23 +97,24 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 
 ## 开发与验证
 
-需要 Node.js 22 或更高版本。
+需要 Node.js 22.18 或更高版本（`scripts/browser-tools/export-image.mjs` 直接导入 `src/` 下的 `.ts` 模块，依赖 Node 默认开启的类型擦除）。
 
 ```bash
 npm ci
 npm run test:prepare # 项目锁定的 Playwright CLI 安装对应 Chromium 和系统依赖
-npm run verify      # 一次构建、产物一致性、metadata lint、ESLint、全部测试
+npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类型检查、ESLint、全部测试
 ```
 
-`npm run lint` 与 `npm test` 仍可独立运行，会先自动构建。完整入口要求所有测试通过，
+`npm run lint` 与 `npm test` 仍可独立运行，会先自动构建；`npm run lint` 依次跑 metadata 检查、`tsc`（strict，只做类型检查）与 ESLint，单独类型检查用 `npm run typecheck`。
+`src/` 源码是 TypeScript：类型由 esbuild 擦除，影响产出的编译选项固定在 `scripts/lib/jsx-build-options.mjs`，`tsconfig.json` 只管类型检查，收紧类型不会改变安装产物。完整入口要求所有测试通过，
 并核对五项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
 项目在 `package.json` devDependencies 精确锁定 Playwright，测试脚本从那里读取版本；测试只加载本项目依赖和该版本的默认 Chromium，
 缺依赖或浏览器直接报错。日常 browser-tools 的缓存兼容行为不变。
-聚焦调试使用 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs`（加载器让测试直接导入 `.jsx` 源码）；它不代表完整验收。
+聚焦调试使用 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs`（加载器让测试直接导入 `.ts`/`.tsx` 源码）；它不代表完整验收。
 原生 JSON 报告、准备时间和人工验收边界见 [测试说明](docs/testing.md)。
 
 提交前运行 `scripts/format.sh`：prettier（版本锁在 `package.json` devDependencies）重排
-JS、Markdown、YAML 与 JSON，shfmt（脚本内固定版本与 sha256）重排 Shell；
+JS/TS、Markdown、YAML 与 JSON，shfmt（脚本内固定版本与 sha256）重排 Shell；
 `scripts/format.sh --check` 只检查，`npm run verify` 的检查阶段会运行它，格式不一致即失败。`dist/`、`src/` 下与 dist 逐字节相同的桥接文件、
 `package-lock.json` 是生成物或锁文件，不参与重排。
 纯格式重排提交登记在 `.git-blame-ignore-revs`，本地可用

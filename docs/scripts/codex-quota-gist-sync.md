@@ -36,7 +36,7 @@ Gist 同步要求当前 userscript manager 提供 GM storage。本地 `Snapshot 
 
 ## 本地操作与失败恢复
 
-`codex-quota-compass-application.lib.js` 统一管理计算、归档、同步和面板派生状态。`codex-quota-compass-panel-controller.lib.jsx` 是面板展示、交互、文件选择和一次性反馈的唯一 owner；Entry 只组装生产 adapter、菜单和页面生命周期。Archive Store、Cost Ledger 和 Remote Sync 保留独立职责。
+`codex-quota-compass-application.lib.ts` 统一管理计算、归档、同步和面板派生状态。`codex-quota-compass-panel-controller.lib.tsx` 是面板展示、交互、文件选择和一次性反馈的唯一 owner；Entry 只组装生产 adapter、菜单和页面生命周期。Archive Store、Cost Ledger 和 Remote Sync 保留独立职责。
 
 - 同一页面的并发刷新共享完整的「计算 → 保存一次快照 → 刷新统计」操作；运行标记直到整个操作结束才释放。
 - Archive Store 的读取、镜像迁移、保存和导入使用同一个 FIFO。网络等待不会占用本地归档队列；拉取后的远端内容合入当时最新本地归档。

@@ -11,13 +11,13 @@ live in `PRODUCT.md`, UI rules in `DESIGN.md`, per-script behaviour in
 ### Workspace
 
 **Entry**:
-The `<script-id>.entry.js` ES module of a bundled script. It owns the
+The `<script-id>.entry.ts` TypeScript ES module of a bundled script. It owns the
 `// ==UserScript==` metadata block (the single source of `@name`, `@version`,
 and the install URLs) and imports the script's lib modules.
 _Avoid_: main file, loader, index
 
 **Lib Module**:
-A `<script-id>-*.lib.js` ES module with named exports. Dependencies are
+A `<script-id>-*.lib.ts` (or `.lib.tsx` with JSX) TypeScript ES module with named exports. Dependencies are
 expressed only through imports; the build fails on a lib that nothing imports.
 _Avoid_: helper, global, plugin
 
@@ -64,7 +64,7 @@ _Avoid_: overlay, modal, iframe app
 **Widget Kit**:
 The shared ES modules in `src/userscripts/shared/` (design tokens, Lucide
 icons, toast, widget shell) that bundled scripts import as
-`../shared/*.lib.js`; the build skips the directory because it has no entry.
+`../shared/*.lib.ts(x)`; the build skips the directory because it has no entry.
 _Avoid_: common ui, design system package
 
 ### Web Page Assistant

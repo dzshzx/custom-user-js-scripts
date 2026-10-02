@@ -97,7 +97,7 @@ sans-serif`.
 ## Shared Widget Kit
 
 - Floating companion UI is built on the shared kit in `src/userscripts/shared/`
-  instead of per-script shell code: `shared-widget-shell.lib.js` owns the
+  instead of per-script shell code: `shared-widget-shell.lib.ts` owns the
   draggable/dockable floating button, panel positioning, position persistence,
   Esc close, focus hand-off, and outside-click close. Its parts are exported
   for widgets with their own markup: `createDragAnchor` (clamp, drag, edge
@@ -105,15 +105,15 @@ sans-serif`.
   and coarse-pointer disclosure) and `createPanelPlacement` (flip/shift/
   autoUpdate through `@floating-ui/dom`).
 - Userscript manager APIs (`GM_*` / `GM.*`) are resolved only in
-  `shared-gm.lib.js` (`resolveGmApi`); lint rejects `typeof GM` probes
+  `shared-gm.lib.ts` (`resolveGmApi`); lint rejects `typeof GM` probes
   elsewhere.
 - Color, type scale, radius, shadow, and focus-ring tokens come from
-  `shared-tokens.lib.js` (`--wk-*`); each script passes only its accent color.
+  `shared-tokens.lib.ts` (`--wk-*`); each script passes only its accent color.
   Dark mode resolves through `resolveTheme`/`applyTheme` (host detection first,
   `prefers-color-scheme` fallback) and applies via `[data-wk-theme]` on the
   script root, not per-script media queries.
-- Icons come from `shared-icons.lib.jsx`, a thin wrapper over the `lucide-preact` package (license ships with the package).
-- In-page feedback goes through `shared-toast.lib.jsx`.
+- Icons come from `shared-icons.lib.tsx`, a thin wrapper over the `lucide-preact` package (license ships with the package).
+- In-page feedback goes through `shared-toast.lib.tsx`.
 - Extend the kit when a script needs a capability it lacks; keep per-script
   styles limited to domain presentation.
 

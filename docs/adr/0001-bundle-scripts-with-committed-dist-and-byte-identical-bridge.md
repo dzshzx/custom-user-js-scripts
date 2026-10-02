@@ -18,7 +18,8 @@ to heal them.
 ## Decision
 
 1. Source is ESM: `<id>.entry.js` owns the metadata block (no `@require`) and
-   imports `<id>-*.lib.js` modules with named exports.
+   imports `<id>-*.lib.js` modules with named exports. (Since ADR-0006 these
+   are `<id>.entry.ts` and `<id>-*.lib.ts(x)`.)
 2. `npm run build` (esbuild, iife, unminified, utf8) produces the committed
    single-file `dist/<id>.user.js`; `@downloadURL` / `@updateURL` point at it.
 3. The legacy `src/.../<id>.user.js` path is regenerated as a byte-identical
