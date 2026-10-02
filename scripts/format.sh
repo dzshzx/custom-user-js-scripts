@@ -11,7 +11,7 @@ SHFMT_VERSION=3.14.1
 # shfmt 经 PyPI 包 shfmt-py 分发，该版本内置上面的 shfmt。
 SHFMT_PY_VERSION=4.2.0
 # 字节必须保持不变的文件（git pathspec），三种语言共用；与 .prettierignore 保持一致。
-# 另见 files()：有 <id>.entry.js 的脚本目录里的 <id>.user.js 是构建生成的桥接文件，一并排除。
+# 另见 files()：有 <id>.entry.ts 的脚本目录里的 <id>.user.js 是构建生成的桥接文件，一并排除。
 EXCLUDE=(':(exclude)package-lock.json' ':(exclude)**/node_modules/**' ':(exclude)dist/**')
 
 CHECK=0
@@ -41,7 +41,7 @@ files() {
     [ -f "$f" ] || continue
     case "$f" in
       src/userscripts/*/*.user.js)
-        [ -f "${f%.user.js}.entry.js" ] && continue
+        [ -f "${f%.user.js}.entry.ts" ] && continue
         ;;
     esac
     printf '%s\0' "$f"
