@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.8
+// @version      0.3.9
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -5389,7 +5389,7 @@ lucide-preact/dist/esm/icons/triangle-alert.mjs:
 lucide-preact/dist/esm/icons/x.mjs:
 lucide-preact/dist/esm/lucide-preact.mjs:
   (**
-   * @license lucide-preact v1.48.0 - ISC
+   * @license lucide-preact v1.49.0 - ISC
    *
    * This source code is licensed under the ISC license.
    * See the LICENSE file in the root directory of this source tree.
