@@ -97,7 +97,8 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 
 ## 开发与验证
 
-需要 Node.js 22.18 或更高版本（`scripts/browser-tools/export-image.mjs` 直接导入 `src/` 下的 `.ts` 模块，依赖 Node 默认开启的类型擦除）。
+日常开发与 CI 使用 `.node-version` 指定的 Node.js 24 LTS。最低兼容版本仍为 Node.js 22.18
+（`scripts/browser-tools/export-image.mjs` 直接导入 `src/` 下的 `.ts` 模块，依赖 Node 默认开启的类型擦除）。
 
 ```bash
 npm ci
