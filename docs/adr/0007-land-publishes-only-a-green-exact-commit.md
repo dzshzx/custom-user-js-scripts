@@ -14,6 +14,8 @@ has to be decided before `master` moves, on the exact commit that will become
 
 Owner decisions this contract rests on:
 
+- 2026-08-17: a release is judged green on the same commit before it is
+  published (commit `e78c25d`; the Date line of ADR-0002).
 - 2026-09-05: an existing explicit request to release covers the version bump
   and candidate preparation (commit `1fb7d6d`).
 - 2026-09-28: each target `@version` defaults to the next patch; a minor (a
@@ -39,13 +41,13 @@ Owner decisions this contract rests on:
    satisfy it.
 3. **The client is `land`.** A releasing change bumps `@version` on the task
    branch together with the rebuilt dist and bridge files, then the global
-   `land` command pushes `candidate/<sha>`, waits for that sha's `ci-ok`,
-   fast-forwards `master` to the same sha and deletes the candidate. If
-   `master` advanced meanwhile, `land` either recuts the candidate onto it and
-   CI runs again, or, with `--no-recut`, stops so the branch can be rebased and
-   rechecked; either way the version plan is checked against the baseline that
-   the published commit sits on. External pull requests run the same CI and
-   reach `master` through a candidate.
+   `land --no-recut` command pushes `candidate/<sha>`, waits for that sha's
+   `ci-ok`, fast-forwards `master` to the same sha and deletes the candidate.
+   The published commit must carry its own green `ci-ok`, with the version plan
+   checked against the baseline current at that moment; if `master` advanced
+   meanwhile, `land --no-recut` stops so the branch can be rebased and checked
+   again. External pull requests run the same CI and reach `master` through a
+   candidate.
 4. **Versions.** Before changing versions, refresh `origin/master` and run
    `version-plan.mjs plan` over every installable script. The task's release
    authorization covers the exact next patch; minor and major need the user's
