@@ -1,5 +1,5 @@
-# Dependency update policy: fleet-state ADR 0048.
-# Weekly grouped patch/minor PRs are validated and merged by the owner; major updates stay separate.
+# Dependency update policy: fleet-state ADR 0053.
+# Version updates come from local Renovate; this file keeps Dependabot alerts only.
 version: 2
 updates:
   - package-ecosystem: 'npm'
