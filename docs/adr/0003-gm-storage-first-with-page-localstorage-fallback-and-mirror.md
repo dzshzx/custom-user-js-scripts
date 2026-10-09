@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-05-30 (archive foundation 347e124) / 2026-06-08 (storage port f0e54a6); mirror semantics clarified 2026-08-05 (7f17395); recorded 2026-08-23
-- Related: PRODUCT.md "Data Principles", README.md (Codex Quota Compass 注意事项), docs/scripts/codex-quota-gist-sync.md, CONTEXT.md (Snapshot Archive, Gist Sync)
+- Related: PRODUCT.md "Data Principles", README.md (Codex Quota Compass 注意事项), docs/scripts/codex-quota-gist-sync.md, GLOSSARY.md (Snapshot Archive, Gist Sync)
 
 ## Context
 

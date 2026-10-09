@@ -2,7 +2,7 @@
 
 - Status: superseded by [ADR-0007](./0007-land-publishes-only-a-green-exact-commit.md) (was: accepted; amended 2026-09-05, 2026-09-08, 2026-09-14, 2026-09-28, 2026-09-29, 2026-10-01)
 - Date: 2026-08-17 (commit e78c25d); recorded 2026-08-23
-- Related: PRODUCT.md "Version Policy" (the rule text), README.md "开发与验证", .github/workflows/ci.yml, .github/pull_request_template.md, CONTEXT.md (Release Gate)
+- Related: PRODUCT.md "Version Policy" (the rule text), README.md "开发与验证", .github/workflows/ci.yml, .github/pull_request_template.md, GLOSSARY.md (Release Gate)
 
 ## Context
 

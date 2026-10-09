@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-07-24 (decided, commits e6ea2ac / 59b7567 / 1cfcafd); bridge rule fixed 2026-07-25 (303ff01, 2790026); recorded 2026-08-23
-- Related: CONTEXT.md (Entry, Lib Module, Dist Bundle, Bridge File), PRODUCT.md "Installability Principles", docs/script-template.md
+- Related: GLOSSARY.md (Entry, Lib Module, Dist Bundle, Bridge File), PRODUCT.md "Installability Principles", docs/script-template.md
 
 ## Context
 

@@ -55,7 +55,7 @@ Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript �
 
 Gist 同步设置说明见 [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)。
 
-领域词汇见 [CONTEXT.md](CONTEXT.md)。
+领域词汇见 [GLOSSARY.md](GLOSSARY.md)。
 
 ## Feishu Preview Image Export
 
@@ -149,9 +149,9 @@ CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 
 - [DESIGN.md](DESIGN.md)：注入式 userscript UI 的设计上下文和组件规则。
 - [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
 - [docs/adr/index.md](docs/adr/index.md)：架构决策记录（打包与桥接、PR 发布门、存储策略、Gist 同步、入口文件不入库）。
-- [CONTEXT.md](CONTEXT.md)：四个脚本与构建/发布机制的领域术语表。
+- [GLOSSARY.md](GLOSSARY.md)：四个脚本与构建/发布机制的领域术语表。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
 - [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)：Codex Quota Compass GitHub Gist 同步说明。
 - [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：二维码登录态捕获、飞书工具和飞书主图 userscript 说明。
 - [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。
-- [CONTEXT.md](CONTEXT.md)：稳定领域词汇表。
+- [GLOSSARY.md](GLOSSARY.md)：稳定领域词汇表。

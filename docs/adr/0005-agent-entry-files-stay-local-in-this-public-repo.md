@@ -17,7 +17,7 @@ no use to installers.
 1. Those files are gitignored and maintained locally only.
 2. Everything a public reader or a fresh agent needs to work safely must live in
    tracked documents: `README.md` (entry, commands), `PRODUCT.md` (boundaries,
-   storage and version policy), `DESIGN.md` (UI rules), `CONTEXT.md`
+   storage and version policy), `DESIGN.md` (UI rules), `GLOSSARY.md`
    (vocabulary), `docs/scripts/` (per-script behaviour), `docs/adr/`
    (decisions). The local entry files hold pointers plus agent-only facts and
    must not be the sole owner of any project rule.

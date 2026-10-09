@@ -29,7 +29,7 @@ unless a task explicitly introduces one.
 
 This section states each script's product boundary only. Per-script
 behaviour, menu commands, cache/TTL details, and storage-key inventories are
-owned by `docs/scripts/installable-userscripts.md`; vocabulary by `CONTEXT.md`.
+owned by `docs/scripts/installable-userscripts.md`; vocabulary by `GLOSSARY.md`.
 
 ### Web Page Assistant
 
