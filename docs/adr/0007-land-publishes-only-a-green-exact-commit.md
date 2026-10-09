@@ -2,7 +2,7 @@
 
 - Status: accepted (supersedes ADR-0002)
 - Date: 2026-10-07
-- Related: PRODUCT.md "Version Policy" (the rule text), README.md "开发与验证", .github/workflows/ci.yml, scripts/version-plan.mjs, CONTEXT.md (Release Gate), fleet-state ADR 0053 (dependency updates)
+- Related: PRODUCT.md "Version Policy" (the rule text), README.md "开发与验证", .github/workflows/ci.yml, scripts/version-plan.mjs, GLOSSARY.md (Release Gate), fleet-state ADR 0053 (dependency updates)
 
 ## Context
 

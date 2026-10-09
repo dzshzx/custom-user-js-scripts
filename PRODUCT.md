@@ -29,7 +29,7 @@ unless a task explicitly introduces one.
 
 This section states each script's product boundary only. Per-script
 behaviour, menu commands, cache/TTL details, and storage-key inventories are
-owned by `docs/scripts/installable-userscripts.md`; vocabulary by `CONTEXT.md`.
+owned by `docs/scripts/installable-userscripts.md`; vocabulary by `GLOSSARY.md`.
 
 ### Web Page Assistant
 
@@ -171,13 +171,15 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
   baseline, a missing script, invalid metadata, a downgrade, an orphan dist
   installable, or mismatched entry/bridge/dist versions stops the release.
 - A releasing version bump belongs on the task branch before it is pushed as a
-  `candidate/**` branch (the global `land` command). CI runs on the candidate and
-  `land` fast-forwards `master` to that exact green commit; because raw
+  `candidate/**` branch (the global `land --no-recut` command). CI runs on the candidate and
+  `land --no-recut` fast-forwards `master` to that exact green commit; because raw
   `@downloadURL` / `@updateURL` endpoints read `master`, that promotion is the
   external publication boundary. The `master` ruleset refuses any sha without a
   green `ci-ok` check, so there is no push-first-then-see path. CI checks the
-  candidate's version plan against the current `origin/master`, and `land`
-  re-tests a recut candidate whenever `master` advanced before the fast-forward.
+  candidate's version plan against the current `origin/master`. If `master`
+  advances before the fast-forward, `land --no-recut` stops; rebase or update
+  the candidate and validate it again, then pass the gate on the same SHA before
+  landing.
 - A userscript change may keep its version only when the user explicitly chose
   not to release it yet; installed copies then remain on the prior version.
   Once a bumped version reaches `master`, treat it as immutable and publish any

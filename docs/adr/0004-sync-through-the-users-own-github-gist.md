@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-06-13 (commits 50bafbc, 9da79f2, 7fd4561); recorded 2026-08-23
-- Related: docs/scripts/codex-quota-gist-sync.md (setup and data format), CONTEXT.md (Gist Sync, Snapshot Export), PRODUCT.md "Non-Goals"
+- Related: docs/scripts/codex-quota-gist-sync.md (setup and data format), GLOSSARY.md (Gist Sync, Snapshot Export), PRODUCT.md "Non-Goals"
 
 ## Context
 

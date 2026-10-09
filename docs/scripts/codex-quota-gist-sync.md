@@ -82,7 +82,7 @@ codex-quota-compass-snapshot-archive.v1.json
 }
 ```
 
-这样同步体积随**天数**线性增长（每天一行），不再随**同步次数**膨胀——这是相对旧版的关键改动。文件名仍保持 `codex-quota-compass-snapshot-archive.v1.json` 不变（改名会让已有 gist 失联、历史变孤儿），只是内容升级为 v2。
+这样同步体积随**天数**线性增长（每天一行），与**同步次数**无关。文件名仍保持 `codex-quota-compass-snapshot-archive.v1.json` 不变（改名会让已有 gist 失联、历史变孤儿），只是内容升级为 v2。
 
 同步是 merge 语义：
 
