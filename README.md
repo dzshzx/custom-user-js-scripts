@@ -137,7 +137,7 @@ CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 
 发版候选在任务分支上递增版本并重建产物，然后用 `land --no-recut` 推成
 `candidate/**` 分支：CI 在候选上运行，`ci-ok` 通过后
 `land --no-recut` 把 `master` 快进到该同一提交。`master` 的 ruleset 要求每个提交都带绿色
-`ci-ok` 检查并禁止非快进，因此没有「先推再看 CI」的路径，也不再需要 pull request。
+`ci-ok` 检查并禁止非快进，因此没有「先推再看 CI」的路径，也无需 pull request。
 已进入 `master` 的版本视为不可变，后续修复使用下一个 patch。若用户明确选择
 暂不发版，可以不递增版本，但已安装脚本也不会自动获得这次变更。
 
