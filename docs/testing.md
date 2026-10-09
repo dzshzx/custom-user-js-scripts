@@ -1,6 +1,6 @@
 # Automated verification
 
-Use Node 22.18+ (CI uses the latest Node 22) or newer, then `npm ci`, `npm run test:prepare`,
+Use the Node 24 LTS selected by `.node-version` for development and CI (minimum compatible version: 22.18), then `npm ci`, `npm run test:prepare`,
 and `npm run verify`. Preparation uses the installed Playwright CLI (exact pin in `package.json`),
 including its matching Chromium and OS libraries; Linux may require sudo for
 OS dependencies. No npx package download or user-cache search participates in
@@ -9,7 +9,7 @@ isolated cache; it must contain this package's matching browser revision.
 
 Verify builds once, checks committed dist/bridge freshness, metadata, the strict
 `tsc` type check (`tsconfig.json`, no emit), ESLint (`eslint.config.js`, zero errors) and formatting (`scripts/format.sh --check`), then
-runs the complete node:test suite. Independent lint/test commands still build
+runs the complete node:test suite. Independent lint/test commands build
 first. The complete entries accept no filters. For focused debugging use
 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs` after building (the loader lets tests import `.ts`/`.tsx` sources through the same esbuild transform options as the bundle; `npm test` sets it for every file).
 

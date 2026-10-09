@@ -22,7 +22,7 @@
 
 ## Web Page Assistant / 网页助手
 
-网页助手是一个通用网页辅助脚本；为当前页面或整个站点配置刷新规则后，页面右下角会显示一个浮动控件（没有匹配规则时不显示，设置经脚本管理器菜单打开）。它的配置支持“当前页面”和“整个站点”两个范围。
+网页助手是一个通用网页辅助脚本；页面右下角常驻浮动控件，有匹配的刷新规则时显示倒计时，未启用刷新时显示可打开设置的圆钮。设置也可经脚本管理器菜单打开，配置支持“当前页面”和“整个站点”两个范围。
 
 主要能力：
 
@@ -97,7 +97,7 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 
 ## 开发与验证
 
-日常开发与 CI 使用 `.node-version` 指定的 Node.js 24 LTS。最低兼容版本仍为 Node.js 22.18
+日常开发与 CI 使用 `.node-version` 指定的 Node.js 24 LTS。最低兼容版本为 Node.js 22.18
 （`scripts/browser-tools/export-image.mjs` 直接导入 `src/` 下的 `.ts` 模块，依赖 Node 默认开启的类型擦除）。
 
 ```bash
@@ -106,11 +106,11 @@ npm run test:prepare # 项目锁定的 Playwright CLI 安装对应 Chromium 和�
 npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类型检查、ESLint、全部测试
 ```
 
-`npm run lint` 与 `npm test` 仍可独立运行，会先自动构建；`npm run lint` 依次跑 metadata 检查、`tsc`（strict，只做类型检查）与 ESLint，单独类型检查用 `npm run typecheck`。
+`npm run lint` 与 `npm test` 可独立运行，会先自动构建；`npm run lint` 依次跑 metadata 检查、`tsc`（strict，只做类型检查）与 ESLint，单独类型检查用 `npm run typecheck`。
 `src/` 源码是 TypeScript：类型由 esbuild 擦除，影响产出的编译选项固定在 `scripts/lib/jsx-build-options.mjs`，`tsconfig.json` 只管类型检查，收紧类型不会改变安装产物。完整入口要求所有测试通过，
 并核对五项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
 项目在 `package.json` devDependencies 精确锁定 Playwright，测试脚本从那里读取版本；测试只加载本项目依赖和该版本的默认 Chromium，
-缺依赖或浏览器直接报错。日常 browser-tools 的缓存兼容行为不变。
+缺依赖或浏览器直接报错。日常 browser-tools 的兼容加载器优先使用项目依赖，其次读取本机 npm 缓存。
 聚焦调试使用 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs`（加载器让测试直接导入 `.ts`/`.tsx` 源码）；它不代表完整验收。
 原生 JSON 报告、准备时间和人工验收边界见 [测试说明](docs/testing.md)。
 

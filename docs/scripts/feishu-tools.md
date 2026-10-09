@@ -4,7 +4,7 @@
 
 ## QR Login Helper
 
-`scripts/browser-tools/login-qr.mjs` 用 Playwright 打开目标页面，直接从登录页二维码 `<img>` 元素导出 PNG，并在扫码成功后保存浏览器登录态。脚本默认值保留小米飞书行为；实际参数已经支持非飞书网站。
+`scripts/browser-tools/login-qr.mjs` 用 Playwright 打开目标页面，直接从登录页二维码 `<img>` 元素导出 PNG，并在扫码成功后保存浏览器登录态。脚本默认适配小米飞书，可通过参数配置其他网站。
 
 首次使用前，确保 Playwright 在本机 npm 缓存里可用。Playwright 负责二维码元素导出和 storage state 写入：
 
@@ -97,7 +97,7 @@ node scripts/browser-tools/export-image.mjs \
 - 使用已有 Playwright 登录 profile 打开飞书文件页。
 - 先进入 `演示` 视图，再导出当前页面里最大的可见图片。
 - 通过与 userscript 共用的图片读取模块提取原始 `img` 数据，不走截图。
-- CLI 保留原有兼容规则：使用 `src` 属性原值，按未取整面积 `> 20000` 选图，fetch 使用页面默认凭据规则，响应头提供 MIME，并用 `arrayBuffer` 编码为 base64。
+- CLI 使用 `src` 属性原值，按未取整面积 `> 20000` 选图，fetch 使用页面默认凭据规则，响应头提供 MIME，并用 `arrayBuffer` 编码为 base64。
 - 没有候选或 data URL 格式无效时不写输出文件；网络、读取和编码失败直接以非零状态退出。
 
 常用参数：
@@ -122,7 +122,7 @@ node scripts/browser-tools/export-image.mjs \
 - 优先用 `GM_download` 下载
 - 下载文件名默认取当前飞书文档标题
 
-两条导出路径都调用 `readPreviewImage`，通过固定的 `userscript-v1` / `cli-v1` profile 保留上述历史差异。两者共享候选选择、data URL 解析和图片读取实现；命名、GM 下载、本地文件写入与页面准备仍由各自入口负责。
+两条导出路径都调用 `readPreviewImage`，通过固定的 `userscript-v1` / `cli-v1` profile 表达上述行为差异。两者共享候选选择、data URL 解析和图片读取实现；命名、GM 下载、本地文件写入与页面准备由各自入口负责。
 
 迁移说明：
 
