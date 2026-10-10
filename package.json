@@ -58,7 +58,7 @@
     "lucide-preact": "1.52.0",
     "mime": "4.1.0",
     "p-limit": "7.3.3",
-    "preact": "11.0.0",
+    "preact": "11.0.1",
     "quick-lru": "7.3.0",
     "semver": "7.8.5",
     "spark-md5": "3.0.2",
