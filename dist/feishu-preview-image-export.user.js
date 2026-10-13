@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.13
+// @version      0.1.14
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -1698,7 +1698,8 @@ ${root} :focus-visible {
     getAllExtensions(type) {
       if (typeof type !== "string")
         return null;
-      return __classPrivateFieldGet(this, _Mime_typeToExtensions, "f").get(type.toLowerCase()) ?? null;
+      type = type.split(";")[0].trim().toLowerCase();
+      return __classPrivateFieldGet(this, _Mime_typeToExtensions, "f").get(type) ?? null;
     }
     _freeze() {
       this.define = () => {
