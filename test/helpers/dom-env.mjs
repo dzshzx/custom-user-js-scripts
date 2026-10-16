@@ -27,12 +27,17 @@ export const domSkip = domAvailable
 // global never leaks across files.
 // @floating-ui/dom reads the global `window` and DOM constructors once a
 // global window exists; tests that assert panel placement pass
-// `globalWindow: true`.
-export function createDomWindow({ url = 'https://chatgpt.com/', globalDocument = true, globalWindow = false } = {}) {
+// `globalWindow: true`. `settings` passes happy-dom browser settings through.
+export function createDomWindow({
+  url = 'https://chatgpt.com/',
+  globalDocument = true,
+  globalWindow = false,
+  settings,
+} = {}) {
   if (!domAvailable) {
     throw new Error('happy-dom is not installed.');
   }
-  const window = new happyDomModule.Window({ url });
+  const window = new happyDomModule.Window(settings ? { url, settings } : { url });
   if (globalDocument) globalThis.document = window.document;
   if (globalWindow) {
     globalThis.window = window;

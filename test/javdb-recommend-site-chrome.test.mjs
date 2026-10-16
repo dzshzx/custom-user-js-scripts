@@ -4,6 +4,19 @@ import assert from 'node:assert/strict';
 import { createSiteChrome } from '../src/userscripts/javdb-recommend/javdb-recommend-site-chrome.lib.ts';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
+// happy-dom 21 disables CSS file loading by default and then fires `error` on
+// every stylesheet link at once. These tests drive link `load` / `error`
+// themselves, so stylesheet loading is enabled with every request held pending:
+// no network, and no event the test did not dispatch.
+const PENDING_STYLESHEETS = {
+  enableCSSFileLoading: true,
+  fetch: { interceptor: { beforeAsyncRequest: () => new Promise(() => {}) } },
+};
+
+function createChromeWindow() {
+  return createDomWindow({ url: 'https://javdb.com/recommend-archive', settings: PENDING_STYLESHEETS });
+}
+
 function response(html, url = 'https://mirror.example/home') {
   return { ok: true, url, text: async () => html };
 }
@@ -38,7 +51,7 @@ test(
   'loads every screen stylesheet before enabling native chrome and resolves homepage-relative assets',
   { skip: domSkip },
   async () => {
-    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const window = createChromeWindow();
     window.document.body.innerHTML = '<main class="jdb-ra"></main>';
     window.matchMedia = (query) => ({ matches: query !== 'print' });
     installComputedStyleFixture(window, true);
@@ -77,7 +90,7 @@ test(
   { skip: domSkip },
   async () => {
     for (const scenario of ['none', 'error', 'empty']) {
-      const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+      const window = createChromeWindow();
       window.document.body.innerHTML = '<main class="jdb-ra"></main>';
       installComputedStyleFixture(window, scenario !== 'empty');
       const html = scenario === 'none' ? '<html><body><nav class="main-nav"></nav></body></html>' : HOME;
@@ -103,7 +116,7 @@ test(
 );
 
 test('a single total deadline covers a stalled homepage and start remains idempotent', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+  const window = createChromeWindow();
   let timeout;
   let cleared = false;
   const clock = {
@@ -135,7 +148,7 @@ test(
   'dispose wins over a late homepage response and an existing theme is never overwritten',
   { skip: domSkip },
   async () => {
-    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const window = createChromeWindow();
     window.document.documentElement.dataset.theme = 'light';
     let resolveFetch;
     const pending = new Promise((resolve) => {
@@ -163,7 +176,7 @@ test(
   'dispose settles stylesheet loading and late resource events cannot enable native mode',
   { skip: domSkip },
   async () => {
-    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const window = createChromeWindow();
     installComputedStyleFixture(window, true);
     const chrome = createSiteChrome({
       document: window.document,
@@ -189,7 +202,7 @@ test(
   'existing navigation is reused without duplication and hamburger listeners are removed on dispose',
   { skip: domSkip },
   async () => {
-    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    const window = createChromeWindow();
     window.document.body.innerHTML =
       '<nav class="main-nav"><button data-target="existing-menu"></button>' +
       '<div id="existing-menu"></div><div class="navbar-start"></div></nav><main class="jdb-ra"></main>';
