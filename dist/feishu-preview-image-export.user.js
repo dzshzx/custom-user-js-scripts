@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.16
+// @version      0.1.17
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -1871,15 +1871,45 @@ ${root} :focus-visible {
 
   // src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.ts
   var LIB_NAME = "FeishuPreviewImageExportLogicLib";
+  var DEFAULT_DOWNLOAD_TIMEOUT_MS = 12e4;
+  var FORMAT_CHARS = /\p{Cf}/gu;
   function sanitizeFilePart(value, fallback) {
-    const text = String(value || "").trim();
-    return text ? filenamify(text, { replacement: "-" }) : fallback;
+    const text = String(value || "").replace(FORMAT_CHARS, "").trim();
+    const safe = text ? filenamify(text, { replacement: "-" }).replace(FORMAT_CHARS, "").trim() : "";
+    return safe || fallback;
   }
   function extensionFromMime(type) {
     return index_lite_default.getExtension(String(type || "")) || "bin";
   }
+  function errorText(error) {
+    try {
+      if (error instanceof Error) return error.message;
+      if (typeof error === "string") return error;
+      if (error && typeof error === "object") {
+        const record = error;
+        for (const key of ["error", "message"]) {
+          const value = record[key];
+          if (typeof value === "string" && value) return value;
+        }
+        return JSON.stringify(error) ?? "";
+      }
+      return String(error);
+    } catch {
+      return "unknown error";
+    }
+  }
+  function isGmErrorObject(error) {
+    try {
+      return !(error instanceof Error) && !!error && typeof error === "object" && "error" in error;
+    } catch {
+      return false;
+    }
+  }
   function toUserMessage(error) {
-    const text = error instanceof Error ? error.message : String(error);
+    const text = errorText(error);
+    if (isGmErrorObject(error)) {
+      return `浏览器下载失败（${text}），请重试。`;
+    }
     const httpMatch = /^Failed to fetch image: (\d+)/.exec(text);
     if (httpMatch) {
       return `图片拉取失败（HTTP ${httpMatch[1]}），请确认已登录飞书或稍后重试。`;
@@ -1901,7 +1931,21 @@ ${root} :focus-visible {
     }
     return `导出失败：${text}`;
   }
-  function createImageExportRuntime({ documentObject, fetchImpl, gmDownload } = {}) {
+  function dataUrlToBlobUrl(view, url) {
+    const match = /^data:([^;,]*)(;base64)?,(.*)$/su.exec(url);
+    if (!view || !match || typeof view.URL?.createObjectURL !== "function") return null;
+    const [, type, base64, body] = match;
+    const binary = base64 ? view.atob(body) : decodeURIComponent(body);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index) & 255;
+    return view.URL.createObjectURL(new view.Blob([bytes], { type: type || "application/octet-stream" }));
+  }
+  function createImageExportRuntime({
+    documentObject,
+    fetchImpl,
+    gmDownload,
+    downloadTimeoutMs = DEFAULT_DOWNLOAD_TIMEOUT_MS
+  } = {}) {
     if (!documentObject) throw new Error(`${LIB_NAME}: documentObject is required.`);
     function getDocumentTitle() {
       const raw = documentObject.title.replace(/\s*-\s*飞书云文档\s*$/u, "").trim();
@@ -1911,24 +1955,43 @@ ${root} :focus-visible {
       return readPreviewImage({ profile: "userscript-v1", mode: "inspect" }, { documentObject }).items;
     }
     function fallbackDownload(url, filename) {
+      const view = documentObject.defaultView;
+      const blobUrl = url.startsWith("data:") ? dataUrlToBlobUrl(view, url) : null;
       const anchor = documentObject.createElement("a");
-      anchor.href = url;
+      anchor.href = blobUrl || url;
       anchor.download = filename;
       anchor.rel = "noopener";
       documentObject.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
+      if (blobUrl) view?.setTimeout(() => view.URL.revokeObjectURL(blobUrl), 1e4);
     }
     function gmDownloadPromise(url, filename) {
       return new Promise((resolve, reject) => {
-        gmDownload({
-          url,
-          name: filename,
-          saveAs: true,
-          onload: resolve,
-          onerror: (error) => reject(error || new Error("GM_download failed")),
-          ontimeout: () => reject(new Error("GM_download timed out"))
+        let settled = false;
+        const settle = (fn) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          fn();
+        };
+        const failed = (error) => settle(() => {
+          console.warn(`${LIB_NAME}: GM_download failed (${errorText(error)}); falling back to anchor download.`);
+          resolve("failed");
         });
+        const timer = setTimeout(() => settle(() => reject(new Error("GM_download timed out"))), downloadTimeoutMs);
+        try {
+          gmDownload({
+            url,
+            name: filename,
+            saveAs: true,
+            onload: () => settle(() => resolve("ok")),
+            onerror: failed,
+            ontimeout: () => failed("timeout")
+          });
+        } catch (error) {
+          failed(error);
+        }
       });
     }
     async function exportMainImage() {
@@ -1943,12 +2006,11 @@ ${root} :focus-visible {
       if (result.kind === "empty") return null;
       const filename = `${getDocumentTitle()}.${extensionFromMime(result.mime)}`;
       const url = result.payload.data;
-      if (typeof gmDownload === "function") {
-        await gmDownloadPromise(url, filename);
-      } else {
-        fallbackDownload(url, filename);
+      if (typeof gmDownload === "function" && await gmDownloadPromise(url, filename) === "ok") {
+        return { filename };
       }
-      return { filename };
+      fallbackDownload(url, filename);
+      return typeof gmDownload === "function" ? { filename, via: "anchor" } : { filename };
     }
     return {
       exportMainImage,
@@ -2006,7 +2068,9 @@ ${root} :focus-visible {
       const progress = activeToaster.showProgress({ message: "正在导出主图…" });
       runtime.exportMainImage().then((result) => {
         if (result) {
-          progress.done(`已导出 ${result.filename}`);
+          progress.done(
+            result.via === "anchor" ? `已导出 ${result.filename}（扩展下载失败，已改用浏览器直接下载）` : `已导出 ${result.filename}`
+          );
         } else {
           progress.done("当前页面没有找到可导出的主图。");
         }

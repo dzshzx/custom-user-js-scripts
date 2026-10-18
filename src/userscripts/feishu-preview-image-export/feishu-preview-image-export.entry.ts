@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.16
+// @version      0.1.17
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -84,7 +84,11 @@ import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-
       .exportMainImage()
       .then((result) => {
         if (result) {
-          progress.done(`已导出 ${result.filename}`);
+          progress.done(
+            result.via === 'anchor'
+              ? `已导出 ${result.filename}（扩展下载失败，已改用浏览器直接下载）`
+              : `已导出 ${result.filename}`,
+          );
         } else {
           progress.done('当前页面没有找到可导出的主图。');
         }
