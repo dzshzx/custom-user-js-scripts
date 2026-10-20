@@ -40,7 +40,6 @@ test('toUserMessage maps internal English errors to Chinese user copy', () => {
   assert.equal(toUserMessage(new Error('Unsupported data URL format')), '图片地址格式不支持，无法导出。');
   assert.equal(toUserMessage(new Error('Image source is empty')), '未读取到图片地址，请刷新页面后重试。');
   assert.equal(toUserMessage(new Error('GM_download timed out')), '下载超时，请重试。');
-  assert.equal(toUserMessage(new Error('GM_download failed')), '浏览器下载失败，请重试。');
   assert.equal(toUserMessage(new Error('weird')), '导出失败：weird');
 });
 
@@ -82,14 +81,8 @@ test('runtime returns null when no image passes the area threshold', { skip: dom
 
 test('runtime keeps the anchor fallback when GM_download is unavailable', { skip: domSkip }, async () => {
   const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1' });
-  const clicks = [];
-  window.HTMLAnchorElement.prototype.click = function click() {
-    clicks.push({ href: this.href, download: this.download });
-  };
-  const img = window.document.createElement('img');
-  img.src = 'data:image/png;base64,aGk=';
-  img.getBoundingClientRect = () => ({ width: 800, height: 600 });
-  window.document.body.append(img);
+  const clicks = recordAnchorClicks(window);
+  appendBigImage(window);
   const runtime = createImageExportRuntime({ documentObject: window.document });
 
   assert.deepEqual(await runtime.exportMainImage(), { filename: 'feishu-image.png' });
@@ -121,14 +114,15 @@ test('sanitizeFilePart strips Unicode format (Cf) characters and falls back when
   assert.equal(sanitizeFilePart(INVISIBLE, 'feishu-image'), 'feishu-image');
   assert.equal(sanitizeFilePart(` ${INVISIBLE} `, 'feishu-image'), 'feishu-image');
   assert.doesNotMatch(sanitizeFilePart(`a${INVISIBLE}/b`, 'fb'), /\p{Cf}/u);
+  // filenamify 截断后为空串（首个字形簇超过 100 个 UTF-16 码元）时同样回退。
+  assert.equal(sanitizeFilePart(`a${'\u0301'.repeat(150)}`, 'feishu-image'), 'feishu-image');
 });
 
 test('toUserMessage never throws for non-Error values', () => {
   const nullProto = Object.create(null);
   assert.equal(typeof toUserMessage(nullProto), 'string');
-  const tmError = Object.assign(Object.create(null), { id: 7, error: 'unknown', details: { current: 'x' } });
-  assert.equal(toUserMessage(tmError), '浏览器下载失败（unknown），请重试。');
-  assert.equal(toUserMessage({ id: 7, error: 'not_succeeded' }), '浏览器下载失败（not_succeeded），请重试。');
+  const tmError = Object.assign(Object.create(null), { id: 7, error: 'not_succeeded' });
+  assert.equal(typeof toUserMessage(tmError), 'string');
   assert.equal(typeof toUserMessage(null), 'string');
   assert.equal(typeof toUserMessage(undefined), 'string');
   assert.equal(toUserMessage('plain'), '导出失败：plain');
@@ -322,7 +316,7 @@ test(
     const { window, menuCalls } = boot({
       gmDownload: (options) => options.onerror(Object.assign(Object.create(null), { id: 3, error: 'unknown' })),
     });
-    window.HTMLAnchorElement.prototype.click = function click() {};
+    recordAnchorClicks(window);
     window.document.title = `报${INVISIBLE}价单 - 飞书云文档`;
     appendBigImage(window);
 

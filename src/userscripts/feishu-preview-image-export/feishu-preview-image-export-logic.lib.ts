@@ -31,12 +31,14 @@ const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120_000;
 // Unicode 格式类字符（零宽、方向控制、不可见运算符等）：飞书标题里的水印会带上它们，GM_download 遇到即失败。
 const FORMAT_CHARS = /\p{Cf}/gu;
 
+// 格式类字符须在 filenamify 之前删掉：filenamify 会把它们换成替换符 '-'（只保留 U+200D 原样），
+// 删在前面才得到干净标题，且输出里不再有 \p{Cf}。filenamify 自己去掉尾部空格与句点。
+// 首个字形簇超过 100 个 UTF-16 码元时 filenamify 截断后会返回空串，所以仍要 `|| fallback`。
 function sanitizeFilePart(value: unknown, fallback: string): string {
   const text = String(value || '')
     .replace(FORMAT_CHARS, '')
     .trim();
-  const safe = text ? filenamify(text, { replacement: '-' }).replace(FORMAT_CHARS, '').trim() : '';
-  return safe || fallback;
+  return (text && filenamify(text, { replacement: '-' })) || fallback;
 }
 
 // image/jpeg -> jpg; parameters such as "; charset=binary" are ignored; unknown types -> bin.
@@ -44,7 +46,6 @@ function extensionFromMime(type: unknown): string {
   return mime.getExtension(String(type || '')) || 'bin';
 }
 
-// 内部错误保持英文进 console；给用户的是这里映射的中文文案。
 // 取错误文案，绝不抛错：兼容 Error、字符串、null 原型对象和 Tampermonkey 的 {id, error, details}。
 function errorText(error: unknown): string {
   try {
@@ -64,19 +65,9 @@ function errorText(error: unknown): string {
   }
 }
 
-function isGmErrorObject(error: unknown): boolean {
-  try {
-    return !(error instanceof Error) && !!error && typeof error === 'object' && 'error' in error;
-  } catch {
-    return false;
-  }
-}
-
+// 内部错误保持英文进 console；给用户的是这里映射的中文文案。经 errorText 取文字，遇到怪对象也不抛错。
 function toUserMessage(error: unknown): string {
   const text = errorText(error);
-  if (isGmErrorObject(error)) {
-    return `浏览器下载失败（${text}），请重试。`;
-  }
   const httpMatch = /^Failed to fetch image: (\d+)/.exec(text);
   if (httpMatch) {
     return `图片拉取失败（HTTP ${httpMatch[1]}），请确认已登录飞书或稍后重试。`;
@@ -90,20 +81,18 @@ function toUserMessage(error: unknown): string {
   if (text.includes('GM_download timed out')) {
     return '下载超时，请重试。';
   }
-  if (text.includes('GM_download failed')) {
-    return '浏览器下载失败，请重试。';
-  }
   if (text.includes('Failed to read blob')) {
     return '图片数据读取失败，请重试。';
   }
   return `导出失败：${text}`;
 }
 
+// 只处理 base64 data URL（页面 data URL 与 FileReader.readAsDataURL 的产出都是）；其余返回 null，调用方直接用原地址下载。
 function dataUrlToBlobUrl(view: (Window & typeof globalThis) | null, url: string): string | null {
-  const match = /^data:([^;,]*)(;base64)?,(.*)$/su.exec(url);
+  const match = /^data:([^;,]*);base64,(.*)$/su.exec(url);
   if (!view || !match || typeof view.URL?.createObjectURL !== 'function') return null;
-  const [, type, base64, body] = match;
-  const binary = base64 ? view.atob(body) : decodeURIComponent(body);
+  const [, type, body] = match;
+  const binary = view.atob(body);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index) & 0xff;
   return view.URL.createObjectURL(new view.Blob([bytes], { type: type || 'application/octet-stream' }));
@@ -130,7 +119,7 @@ function createImageExportRuntime(
   // GM 下载与 anchor 后备：data URL 先转成 blob URL，再用 <a download> 触发浏览器下载。
   function fallbackDownload(url: string, filename: string) {
     const view = documentObject.defaultView as (Window & typeof globalThis) | null;
-    const blobUrl = url.startsWith('data:') ? dataUrlToBlobUrl(view, url) : null;
+    const blobUrl = dataUrlToBlobUrl(view, url);
     const anchor = documentObject.createElement('a');
     anchor.href = blobUrl || url;
     anchor.download = filename;
@@ -142,7 +131,7 @@ function createImageExportRuntime(
   }
 
   function gmDownloadPromise(url: string, filename: string) {
-    // 'failed'：GM_download 报错，可走后备；'timeout'：本脚本超时，直接报失败。
+    // 'ok'：下载成功；'failed'：GM_download 报错或同步抛错，可走后备；本脚本超时则 reject，直接报失败。
     return new Promise<'ok' | 'failed'>((resolve, reject) => {
       let settled = false;
       const settle = (fn: () => void) => {
@@ -172,7 +161,8 @@ function createImageExportRuntime(
     });
   }
 
-  // Returns { filename } on success, or null when no main image is on the page.
+  // Returns { filename } on success ({ filename, via: 'anchor' } when GM_download failed and the anchor
+  // fallback ran), or null when no main image is on the page.
   async function exportMainImage(): Promise<ExportResult | null> {
     const result = await readPreviewImage(
       { profile: 'userscript-v1', mode: 'read' },

@@ -37,7 +37,7 @@ export function createDomWindow({
   if (!domAvailable) {
     throw new Error('happy-dom is not installed.');
   }
-  const window = new happyDomModule.Window(settings ? { url, settings } : { url });
+  const window = new happyDomModule.Window({ url, settings });
   if (globalDocument) globalThis.document = window.document;
   if (globalWindow) {
     globalThis.window = window;

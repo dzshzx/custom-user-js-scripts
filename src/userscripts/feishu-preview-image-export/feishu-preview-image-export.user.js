@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.17
+// @version      0.1.18
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -1875,8 +1875,7 @@ ${root} :focus-visible {
   var FORMAT_CHARS = /\p{Cf}/gu;
   function sanitizeFilePart(value, fallback) {
     const text = String(value || "").replace(FORMAT_CHARS, "").trim();
-    const safe = text ? filenamify(text, { replacement: "-" }).replace(FORMAT_CHARS, "").trim() : "";
-    return safe || fallback;
+    return text && filenamify(text, { replacement: "-" }) || fallback;
   }
   function extensionFromMime(type) {
     return index_lite_default.getExtension(String(type || "")) || "bin";
@@ -1898,18 +1897,8 @@ ${root} :focus-visible {
       return "unknown error";
     }
   }
-  function isGmErrorObject(error) {
-    try {
-      return !(error instanceof Error) && !!error && typeof error === "object" && "error" in error;
-    } catch {
-      return false;
-    }
-  }
   function toUserMessage(error) {
     const text = errorText(error);
-    if (isGmErrorObject(error)) {
-      return `浏览器下载失败（${text}），请重试。`;
-    }
     const httpMatch = /^Failed to fetch image: (\d+)/.exec(text);
     if (httpMatch) {
       return `图片拉取失败（HTTP ${httpMatch[1]}），请确认已登录飞书或稍后重试。`;
@@ -1923,19 +1912,16 @@ ${root} :focus-visible {
     if (text.includes("GM_download timed out")) {
       return "下载超时，请重试。";
     }
-    if (text.includes("GM_download failed")) {
-      return "浏览器下载失败，请重试。";
-    }
     if (text.includes("Failed to read blob")) {
       return "图片数据读取失败，请重试。";
     }
     return `导出失败：${text}`;
   }
   function dataUrlToBlobUrl(view, url) {
-    const match = /^data:([^;,]*)(;base64)?,(.*)$/su.exec(url);
+    const match = /^data:([^;,]*);base64,(.*)$/su.exec(url);
     if (!view || !match || typeof view.URL?.createObjectURL !== "function") return null;
-    const [, type, base64, body] = match;
-    const binary = base64 ? view.atob(body) : decodeURIComponent(body);
+    const [, type, body] = match;
+    const binary = view.atob(body);
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index) & 255;
     return view.URL.createObjectURL(new view.Blob([bytes], { type: type || "application/octet-stream" }));
@@ -1956,7 +1942,7 @@ ${root} :focus-visible {
     }
     function fallbackDownload(url, filename) {
       const view = documentObject.defaultView;
-      const blobUrl = url.startsWith("data:") ? dataUrlToBlobUrl(view, url) : null;
+      const blobUrl = dataUrlToBlobUrl(view, url);
       const anchor = documentObject.createElement("a");
       anchor.href = blobUrl || url;
       anchor.download = filename;
