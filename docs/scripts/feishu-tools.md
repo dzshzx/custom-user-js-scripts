@@ -110,21 +110,8 @@ node scripts/browser-tools/export-image.mjs \
 
 ## Preview Image Export Userscript
 
-安装入口：
+安装入口、运行范围、下载方式与迁移说明见 [installable-userscripts.md 的 Feishu Preview Image Export](installable-userscripts.md#feishu-preview-image-export)。本页只记它与上面 CLI 的差异：
 
-- [../../dist/feishu-preview-image-export.user.js](../../dist/feishu-preview-image-export.user.js)
+- userscript 使用 `currentSrc`（后备 `img.src`），宽高分别取整后按面积 `>= 20000` 选图；远端图片 fetch 明确携带当前登录凭据，Blob MIME 和 FileReader data URL 保持原值。
 
-行为：
-
-- 运行在 `https://mi.feishu.cn/file/*`
-- 从当前页面里找最大的可见图片
-- 使用 `currentSrc`（后备 `img.src`），宽高分别取整后按面积 `>= 20000` 选图；远端图片 fetch 明确携带当前登录凭据，Blob MIME 和 FileReader data URL 保持原值
-- 优先用 `GM_download` 下载；下载失败后备、超时与文件名清理见 [installable-userscripts.md 的 Feishu Preview Image Export](installable-userscripts.md#feishu-preview-image-export)
-
-两条导出路径都调用 `readPreviewImage`，通过固定的 `userscript-v1` / `cli-v1` profile 表达上述行为差异。两者共享候选选择、data URL 解析和图片读取实现；命名、GM 下载与 anchor 后备、本地文件写入与页面准备由各自入口负责。
-
-迁移说明：
-
-- 旧路径：`src/feishu-preview-image-export.user.js`
-- 其后路径：`src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`
-- 当前安装入口为 Dist Bundle，`@downloadURL` / `@updateURL` 均指向该路径；上述 src 路径保留与 Dist Bundle 逐字节相同的完整 Bridge File。
+两条导出路径都调用 `readPreviewImage`，通过固定的 `userscript-v1` / `cli-v1` profile 表达上述行为差异。两者共享候选选择和图片读取实现（含 data URL 格式校验）；命名、GM 下载与 anchor 后备（userscript 的后备另用 `dataUrlToBlobUrl` 把 data URL 转成 blob URL）、本地文件写入与页面准备由各自入口负责。
