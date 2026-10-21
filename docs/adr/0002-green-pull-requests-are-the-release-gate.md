@@ -131,7 +131,7 @@ the previous post-publication deduplication job is removed.
 
 Dependabot continues to open grouped weekly updates with the existing three-day
 cooldown. Automatic merging is disabled and its write-token workflow is retired.
-The owner validates updates and lands them through the same candidate gate;
+The user validates updates and lands them through the same candidate gate;
 there is no automatic rebase exception to the admitted commit identity.
 
 The `ci-ok` summary requires the verification job to succeed. Failure,

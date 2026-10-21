@@ -12,7 +12,7 @@ and script managers treat a fetched version as immutable. Publication therefore
 has to be decided before `master` moves, on the exact commit that will become
 `master`, against the baseline that is current at that moment.
 
-Owner decisions this contract rests on:
+User decisions this contract rests on:
 
 - 2026-08-17: a release is judged green on the same commit before it is
   published (commit `e78c25d`; the Date line of ADR-0002).
@@ -21,8 +21,8 @@ Owner decisions this contract rests on:
 - 2026-09-28: each target `@version` defaults to the next patch; a minor (a
   capability the user can notice) or a major (including `0.x` → `1.0.0`)
   needs the user's confirmation first (commit `b6fc697`, following the
-  owner's workspace-wide version rule).
-- 2026-10-01: dependency updates move to the owner's local Renovate service and
+  user's workspace-wide version rule).
+- 2026-10-01: dependency updates move to the user's local Renovate service and
   land through the same gate; GitHub auto-merge stays off (commit `2d4d7c9`;
   fleet-state ADR 0053).
 
