@@ -20,7 +20,7 @@ retract, because script managers treat a version as immutable once fetched.
 2. That exact green commit is merged to `master`; the merge is the external
    publication. No merge-first-then-wait-for-push-CI.
 3. A version that reached `master` is immutable; any correction ships as the
-   next patch version. Whether to release at all is still asked of the user
+   next patch version. Whether to release at all is still asked of the maintainer
    before the bump.
 
 ## Consequences
@@ -84,11 +84,11 @@ token.
 
 ## Amendment: agent-chosen versions (2026-09-28)
 
-The 2026-09-14 version-plan approval gate is withdrawn. Stopping for the user
+The 2026-09-14 version-plan approval gate is withdrawn. Stopping for the maintainer
 to confirm minor, major, or skipped-patch plans interrupted releases without
 constraining them. The agent now chooses each target `@version` under the bump
 levels in `PRODUCT.md` "Version Policy" (patch by default, minor for a
-user-visible capability, major only when the user names it).
+user-visible capability, major only when the maintainer names it).
 
 `scripts/version-plan.mjs` no longer computes a plan digest, and neither
 `scripts/candidate.sh` nor the trusted promote step accepts or requires a
@@ -131,7 +131,7 @@ the previous post-publication deduplication job is removed.
 
 Dependabot continues to open grouped weekly updates with the existing three-day
 cooldown. Automatic merging is disabled and its write-token workflow is retired.
-The user validates updates and lands them through the same candidate gate;
+The maintainer validates updates and lands them through the same candidate gate;
 there is no automatic rebase exception to the admitted commit identity.
 
 The `ci-ok` summary requires the verification job to succeed. Failure,

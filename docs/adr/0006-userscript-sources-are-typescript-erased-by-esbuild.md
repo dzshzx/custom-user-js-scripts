@@ -8,7 +8,7 @@
 
 About 12.6k lines of hand-written userscript source had no type checking: only
 ESLint's recommended rules and valibot validation at the storage and sync
-boundaries. The user chose a full move to TypeScript for long-term
+boundaries. The maintainer chose a full move to TypeScript for long-term
 maintainability. Installed copies update by `@version`, so the migration must
 not change what users run.
 
@@ -41,7 +41,7 @@ not change what users run.
 ## Rejected alternatives
 
 - JSDoc types with `checkJs`: keeps `.js` but makes types verbose and second
-  class; the user chose real TypeScript.
+  class; the maintainer chose real TypeScript.
 - Migrating tests and tooling in the same change: about 15k more lines with no
   shipped-behaviour benefit, and Node 22.15–22.17 could not run them without a
   flag; can follow separately.

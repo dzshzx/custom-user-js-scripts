@@ -152,13 +152,13 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
 
 ## Version Policy
 
-- Use the user's existing release decision for the task. If the release
+- Use the maintainer's existing release decision for the task. If the release
   decision is missing, prepare and validate the changes on the task branch,
   then ask before pushing the candidate. Script managers key update discovery
   and cache refresh on `@version`.
 - Default each target `@version` to the next patch. A minor (the release adds
   a capability the user can notice) and a major (including `0.x` -> `1.0.0`)
-  need the user's confirmation first. Internal refactors, directory
+  need the maintainer's confirmation first. Internal refactors, directory
   moves, and internal storage-format migrations that keep compatible reads are
   not breaking changes.
 - Before changing versions, refresh the baseline with `git fetch origin master`,

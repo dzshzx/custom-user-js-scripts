@@ -127,7 +127,7 @@ JS/TS、Markdown、YAML 与 JSON，shfmt（脚本内固定版本与 sha256）重
 `node scripts/version-plan.mjs plan --target '<安装身份>=<目标版本>'`（多个目标重复传参），
 在不写文件的情况下查看全部可安装脚本从 `origin/master` 基线到目标版本的完整计划。
 目标版本按 `PRODUCT.md`「Version Policy」：默认 patch；minor（有用户能感知的新能力）
-与 major（含 0.x→1.0）须先经用户确认。改 metadata、
+与 major（含 0.x→1.0）须先经维护者确认。改 metadata、
 重建后用全局 `land --no-recut` 命令推候选。
 CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 在合入前前进时，
 `land --no-recut` 停止。先变基或更新候选并重新验证，再通过同一 SHA 的提交门禁后合入。
@@ -138,7 +138,7 @@ CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 
 `candidate/**` 分支：CI 在候选上运行，`ci-ok` 通过后
 `land --no-recut` 把 `master` 快进到该同一提交。`master` 的 ruleset 要求每个提交都带绿色
 `ci-ok` 检查并禁止非快进，因此没有「先推再看 CI」的路径，也无需 pull request。
-已进入 `master` 的版本视为不可变，后续修复使用下一个 patch。若用户明确选择
+已进入 `master` 的版本视为不可变，后续修复使用下一个 patch。若维护者明确选择
 暂不发版，可以不递增版本，但已安装脚本也不会自动获得这次变更。
 
 新建脚本可从 [src/userscripts/example/example.user.js](src/userscripts/example/example.user.js) 开始，并参考 [docs/script-template.md](docs/script-template.md)。有注入 UI 的脚本先看 [DESIGN.md](DESIGN.md)。

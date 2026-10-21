@@ -50,6 +50,12 @@ required before `land` publishes by advancing `master`. Bump levels and
 immutability are defined by `PRODUCT.md` "Version Policy".
 _Avoid_: push-to-publish, pull-request merge, tag release, hotfix in place
 
+**Maintainer**:
+The owner and decision-maker of this repository: makes technical trade-offs and
+ADRs, approves deletions and releases, and receives alerts — the person the
+agent works for. People who install and run the scripts are users.
+_Avoid_: user, owner (when meaning the maintainer)
+
 **Companion UI**:
 Floating controls, panels, and menu commands that live inside a host page: the
 user opens one while working in the page, checks state or performs one action,

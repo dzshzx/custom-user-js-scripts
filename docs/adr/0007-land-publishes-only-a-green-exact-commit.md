@@ -12,7 +12,7 @@ and script managers treat a fetched version as immutable. Publication therefore
 has to be decided before `master` moves, on the exact commit that will become
 `master`, against the baseline that is current at that moment.
 
-User decisions this contract rests on:
+Maintainer decisions this contract rests on:
 
 - 2026-08-17: a release is judged green on the same commit before it is
   published (commit `e78c25d`; the Date line of ADR-0002).
@@ -20,9 +20,9 @@ User decisions this contract rests on:
   and candidate preparation (commit `1fb7d6d`).
 - 2026-09-28: each target `@version` defaults to the next patch; a minor (a
   capability the user can notice) or a major (including `0.x` → `1.0.0`)
-  needs the user's confirmation first (commit `b6fc697`, following the
-  user's workspace-wide version rule).
-- 2026-10-01: dependency updates move to the user's local Renovate service and
+  needs the maintainer's confirmation first (commit `b6fc697`, following the
+  maintainer's workspace-wide version rule).
+- 2026-10-01: dependency updates move to the maintainer's local Renovate service and
   land through the same gate; GitHub auto-merge stays off (commit `2d4d7c9`;
   fleet-state ADR 0053).
 
@@ -50,14 +50,14 @@ User decisions this contract rests on:
    candidate.
 4. **Versions.** Before changing versions, refresh `origin/master` and run
    `version-plan.mjs plan` over every installable script. The task's release
-   authorization covers the exact next patch; minor and major need the user's
+   authorization covers the exact next patch; minor and major need the maintainer's
    confirmation first; when the release decision itself is missing, prepare and
    validate on the task branch and ask before pushing the candidate. The script
    stops on an unknown baseline, an incomplete or duplicate target set, a
    missing script, invalid metadata, an orphan dist installable, mismatched
    entry/bridge/dist versions, or a downgrade; every other forward transition
    passes. A version that reached `master` is immutable; corrections ship as the
-   next patch. A change may keep its version only when the user chose not to
+   next patch. A change may keep its version only when the maintainer chose not to
    release it yet.
 5. **Dependency updates.** Local Renovate opens the update pull request; the
    userscripts adapter rebuilds, bumps the next patch of every userscript whose
