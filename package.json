@@ -55,7 +55,7 @@
     "fast-json-stable-stringify": "2.1.0",
     "filenamify": "7.0.3",
     "idb-keyval": "6.3.0",
-    "lucide-preact": "1.60.0",
+    "lucide-preact": "1.61.0",
     "mime": "4.1.1",
     "p-limit": "7.3.3",
     "preact": "11.0.1",
