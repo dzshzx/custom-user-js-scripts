@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.19
+// @version      0.1.20
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -2092,7 +2092,7 @@ lucide-preact/dist/esm/icons/triangle-alert.mjs:
 lucide-preact/dist/esm/icons/x.mjs:
 lucide-preact/dist/esm/lucide-preact.mjs:
   (**
-   * @license lucide-preact v1.60.0 - ISC
+   * @license lucide-preact v1.61.0 - ISC
    *
    * This source code is licensed under the ISC license.
    * See the LICENSE file in the root directory of this source tree.
