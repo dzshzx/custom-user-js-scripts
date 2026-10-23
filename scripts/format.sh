@@ -6,7 +6,7 @@
 # 各工具配置：ruff.toml、.prettierrc.json/.prettierignore、.editorconfig（shfmt）。
 set -euo pipefail
 
-RUFF_VERSION=0.17.1
+RUFF_VERSION=0.17.2
 SHFMT_VERSION=3.14.1
 # shfmt 经 PyPI 包 shfmt-py 分发，该版本内置上面的 shfmt。
 SHFMT_PY_VERSION=4.2.0
