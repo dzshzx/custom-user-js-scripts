@@ -1,0 +1,31 @@
+{
+  "oversize": {
+    "src/userscripts/javdb-recommend/javdb-recommend-view.lib.ts": {
+      "bytes": 35167,
+      "reason": "存量，待整改"
+    },
+    "test/javdb-recommend.test.mjs": {
+      "bytes": 50762,
+      "reason": "存量，待整改"
+    }
+  },
+  "exclude": [
+    {
+      "pattern": "src/userscripts/codex-quota-compass/codex-quota-compass.user.js",
+      "reason": "构建产物：scripts/build-userscripts.mjs 用 esbuild 打包生成的桥接文件，与 dist/ 安装文件逐字节相同，源码在同目录 *.lib.ts / *.entry.ts"
+    },
+    {
+      "pattern": "src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js",
+      "reason": "构建产物：scripts/build-userscripts.mjs 用 esbuild 打包生成的桥接文件，与 dist/ 安装文件逐字节相同，源码在同目录 *.lib.ts / *.entry.ts"
+    },
+    {
+      "pattern": "src/userscripts/javdb-recommend/javdb-recommend.user.js",
+      "reason": "构建产物：scripts/build-userscripts.mjs 用 esbuild 打包生成的桥接文件，与 dist/ 安装文件逐字节相同，源码在同目录 *.lib.ts / *.entry.ts"
+    },
+    {
+      "pattern": "src/userscripts/web-page-assistant/web-page-assistant.user.js",
+      "reason": "构建产物：scripts/build-userscripts.mjs 用 esbuild 打包生成的桥接文件，与 dist/ 安装文件逐字节相同，源码在同目录 *.lib.ts / *.entry.ts"
+    }
+  ],
+  "complexity": {}
+}
