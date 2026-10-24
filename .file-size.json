@@ -1,10 +1,5 @@
 {
-  "oversize": {
-    "src/userscripts/javdb-recommend/javdb-recommend-view.lib.ts": {
-      "bytes": 35167,
-      "reason": "存量，待整改"
-    }
-  },
+  "oversize": {},
   "exclude": [
     {
       "pattern": "src/userscripts/codex-quota-compass/codex-quota-compass.user.js",

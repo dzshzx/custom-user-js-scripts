@@ -19,9 +19,9 @@ import { parseMetadataBlock } from '../scripts/lib/userscript-metadata.mjs';
 
 const RAW_URL = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js';
 
-test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.11', async () => {
+test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.12', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
-  assert.deepEqual(metadata.get('@version'), ['0.0.11']);
+  assert.deepEqual(metadata.get('@version'), ['0.0.12']);
   assert.deepEqual(metadata.get('@downloadURL'), [RAW_URL]);
   assert.deepEqual(metadata.get('@updateURL'), [RAW_URL]);
 });
@@ -389,11 +389,11 @@ test('toolbar icons are inline Lucide SVGs and the source carries no emoji icons
   for (const emoji of ['🔍', '◀', '▶', '★', '←']) {
     assert.equal(source.includes(emoji), false, `source still contains ${emoji}`);
   }
-  const viewSource = await readFile(
-    new URL('../src/userscripts/javdb-recommend/javdb-recommend-view.lib.ts', import.meta.url),
+  const shellSource = await readFile(
+    new URL('../src/userscripts/javdb-recommend/javdb-recommend-page-shell.lib.ts', import.meta.url),
     'utf8',
   );
-  assert.match(viewSource, /vendored from Lucide/);
+  assert.match(shellSource, /vendored from Lucide/);
 
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
   await runScript(
