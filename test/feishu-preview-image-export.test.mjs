@@ -258,7 +258,7 @@ test('dist shows an info toast when no exportable image exists', { skip: domSkip
   // The toast leaves a real happy-dom auto-dismiss setTimeout (4s) pending;
   // node:test's mock.timers can't reach it (happy-dom binds its own timer
   // globals at module load, before any mock is installed), so abort it the
-  // way javdb-recommend.test.mjs already does for its DOM windows.
+  // way the javdb-recommend-*.test.mjs files already do for their DOM windows.
   await window.happyDOM.close();
 });
 

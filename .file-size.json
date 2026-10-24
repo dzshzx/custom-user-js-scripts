@@ -3,10 +3,6 @@
     "src/userscripts/javdb-recommend/javdb-recommend-view.lib.ts": {
       "bytes": 35167,
       "reason": "存量，待整改"
-    },
-    "test/javdb-recommend.test.mjs": {
-      "bytes": 50762,
-      "reason": "存量，待整改"
     }
   },
   "exclude": [
