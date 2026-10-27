@@ -264,7 +264,12 @@ test(
     }
     assert.deepEqual(detailCalls, [5, 2]);
     releaseTarget();
-    for (let i = 0; i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="1"] .item'); i += 1) {
+    // Loading skeletons also carry .item; wait for period 1's real card, which exists only after its request.
+    for (
+      let i = 0;
+      i < 100 && !window.document.querySelector('.jdb-ra-sec[data-period="1"] .item[data-jdb-ra-card="1"]');
+      i += 1
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     releaseFirst();
