@@ -580,6 +580,9 @@ export interface WidgetShell {
   close(): void;
   toggle(): void;
   reposition(): Promise<ComputePositionReturn | null>;
+  // Coalesces reposition calls made while the panel content is still
+  // changing into one re-place on the next frame.
+  scheduleReposition(): void;
   isOpen(): boolean;
   destroy(): void;
 }
@@ -832,6 +835,16 @@ function createWidgetShell(
     return isOpenState ? positionPanel() : Promise.resolve(null);
   }
 
+  let repositionScheduled = false;
+  function scheduleReposition() {
+    if (!isOpenState || repositionScheduled) return;
+    repositionScheduled = true;
+    requestFrame(() => {
+      repositionScheduled = false;
+      void reposition();
+    });
+  }
+
   return {
     cssText: WIDGET_SHELL_CSS,
     buttonEl,
@@ -840,9 +853,17 @@ function createWidgetShell(
     close,
     toggle,
     reposition,
+    scheduleReposition,
     isOpen: () => isOpenState,
     destroy,
   };
 }
 
-export { createWidgetShell, createDragAnchor, createHoverExpansion, createPanelPlacement };
+export {
+  createWidgetShell,
+  createDragAnchor,
+  createHoverExpansion,
+  createPanelPlacement,
+  PANEL_SAFE_MARGIN,
+  PANEL_GAP,
+};

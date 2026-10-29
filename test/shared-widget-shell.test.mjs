@@ -309,3 +309,30 @@ test(
     shell.destroy();
   },
 );
+
+test('scheduleReposition coalesces calls into one frame and ignores a closed panel', { skip: domSkip }, () => {
+  const window = createDomWindow({ globalWindow: true });
+  const frames = [];
+  window.requestAnimationFrame = (callback) => {
+    frames.push(callback);
+    return frames.length;
+  };
+  const root = window.document.createElement('div');
+  window.document.body.append(root);
+  const shell = createWidgetShell({ root, buttonContent: 'T', renderPanelBody: () => {} });
+
+  shell.scheduleReposition();
+  assert.equal(frames.length, 0);
+
+  shell.open();
+  const framesAfterOpen = frames.length;
+  shell.scheduleReposition();
+  shell.scheduleReposition();
+  shell.scheduleReposition();
+  assert.equal(frames.length, framesAfterOpen + 1);
+
+  frames.forEach((callback) => callback());
+  shell.scheduleReposition();
+  assert.equal(frames.length, framesAfterOpen + 2);
+  shell.destroy();
+});
