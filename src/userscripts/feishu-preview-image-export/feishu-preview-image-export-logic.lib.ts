@@ -23,7 +23,6 @@ export interface ImageExportRuntime {
 
 export interface ExportResult {
   filename: string;
-  via?: 'anchor';
 }
 
 const LIB_NAME = 'FeishuPreviewImageExportLogicLib';
@@ -63,6 +62,15 @@ function toUserMessage(error: unknown): string {
   if (text.includes('GM_download timed out')) {
     return '下载超时，请重试。';
   }
+  // Tampermonkey 对用户在另存为里点「取消」报 not_succeeded，与别的运行期失败分不开；用户决定（2026-10-29，#32）
+  // 这种情况一律不走后备下载、只提示。
+  if (text.includes('GM_download failed: not_succeeded')) {
+    return '已取消导出。';
+  }
+  const gmFailed = /GM_download failed: (.+)$/.exec(text);
+  if (gmFailed) {
+    return `扩展下载失败（${gmFailed[1]}），请重试。`;
+  }
   if (text.includes('Failed to read blob')) {
     return '图片数据读取失败，请重试。';
   }
@@ -98,23 +106,36 @@ function createImageExportRuntime(
     return readPreviewImage({ profile: 'userscript-v1', mode: 'inspect' }, { documentObject }).items;
   }
 
-  // GM 下载与 anchor 后备：data URL 先转成 blob URL，再用 <a download> 触发浏览器下载。
+  // 没有 GM_download 的脚本管理器走 anchor 下载：data URL 先转成 blob URL，再用 <a download> 触发浏览器下载。
+  // anchor 放在脚本自建的同源空白 iframe 里点：飞书预览页在 document 上挂了捕获与冒泡两个
+  // 阶段的 click 处理器，对顶层文档里的 anchor 一律 preventDefault，浏览器就不下载
+  //（2026-10-29 真实页面实测，#32）；iframe 自己的文档没有这些处理器。
   function fallbackDownload(url: string, filename: string) {
-    const view = documentObject.defaultView as (Window & typeof globalThis) | null;
+    const frame = documentObject.createElement('iframe');
+    frame.style.display = 'none';
+    frame.setAttribute('aria-hidden', 'true');
+    documentObject.body.appendChild(frame);
+    const frameDocument = frame.contentDocument ?? documentObject;
+    const view = (frameDocument.defaultView ?? documentObject.defaultView) as (Window & typeof globalThis) | null;
     const blobUrl = dataUrlToBlobUrl(view, url);
-    const anchor = documentObject.createElement('a');
+    const anchor = frameDocument.createElement('a');
     anchor.href = blobUrl || url;
     anchor.download = filename;
     anchor.rel = 'noopener';
-    documentObject.body.appendChild(anchor);
+    (frameDocument.body ?? frameDocument.documentElement).appendChild(anchor);
     anchor.click();
-    anchor.remove();
-    if (blobUrl) view?.setTimeout(() => view.URL.revokeObjectURL(blobUrl), 10_000);
+    // 下载由浏览器异步接手；iframe 与 blob URL 留一会儿再收，免得下载还没开始就被撤掉。
+    const cleanup = () => {
+      if (blobUrl) view?.URL.revokeObjectURL(blobUrl);
+      frame.remove();
+    };
+    (documentObject.defaultView ?? globalThis).setTimeout(cleanup, 10_000);
   }
 
   function gmDownloadPromise(url: string, filename: string) {
-    // 'ok'：下载成功；'failed'：GM_download 报错或同步抛错，可走后备；本脚本超时则 reject，直接报失败。
-    return new Promise<'ok' | 'failed'>((resolve, reject) => {
+    // 成功 resolve；GM_download 报错、同步抛错或本脚本超时都 reject，不走后备下载：
+    // 用户在另存为里点「取消」也会以 not_succeeded 报错，后备会违背用户的取消（用户决定，2026-10-29，#32）。
+    return new Promise<void>((resolve, reject) => {
       let settled = false;
       const settle = (fn: () => void) => {
         if (settled) return;
@@ -122,18 +143,14 @@ function createImageExportRuntime(
         clearTimeout(timer);
         fn();
       };
-      const failed = (error: unknown) =>
-        settle(() => {
-          console.warn(`${LIB_NAME}: GM_download failed (${errorMessage(error)}); falling back to anchor download.`);
-          resolve('failed');
-        });
+      const failed = (error: unknown) => settle(() => reject(new Error(`GM_download failed: ${errorMessage(error)}`)));
       const timer = setTimeout(() => settle(() => reject(new Error('GM_download timed out'))), downloadTimeoutMs);
       try {
         gmDownload!({
           url,
           name: filename,
           saveAs: true,
-          onload: () => settle(() => resolve('ok')),
+          onload: () => settle(resolve),
           onerror: failed,
           ontimeout: () => failed('timeout'),
         });
@@ -143,8 +160,8 @@ function createImageExportRuntime(
     });
   }
 
-  // Returns { filename } on success ({ filename, via: 'anchor' } when GM_download failed and the anchor
-  // fallback ran), or null when no main image is on the page.
+  // Returns { filename } on success, or null when no main image is on the page; rejects when the
+  // download failed or the user cancelled the save dialog.
   async function exportMainImage(): Promise<ExportResult | null> {
     const result = await readPreviewImage(
       { profile: 'userscript-v1', mode: 'read' },
@@ -159,11 +176,12 @@ function createImageExportRuntime(
     const filename = `${getDocumentTitle()}.${extensionFromMime(result.mime)}`;
     const url = result.payload.data;
 
-    if (typeof gmDownload === 'function' && (await gmDownloadPromise(url, filename)) === 'ok') {
-      return { filename };
+    if (typeof gmDownload === 'function') {
+      await gmDownloadPromise(url, filename);
+    } else {
+      fallbackDownload(url, filename);
     }
-    fallbackDownload(url, filename);
-    return typeof gmDownload === 'function' ? { filename, via: 'anchor' } : { filename };
+    return { filename };
   }
 
   return {

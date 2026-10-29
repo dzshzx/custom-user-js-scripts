@@ -39,6 +39,11 @@ test('toUserMessage maps internal English errors to Chinese user copy', () => {
   assert.equal(toUserMessage(new Error('Unsupported data URL format')), '图片地址格式不支持，无法导出。');
   assert.equal(toUserMessage(new Error('Image source is empty')), '未读取到图片地址，请刷新页面后重试。');
   assert.equal(toUserMessage(new Error('GM_download timed out')), '下载超时，请重试。');
+  assert.equal(toUserMessage(new Error('GM_download failed: not_succeeded')), '已取消导出。');
+  assert.equal(
+    toUserMessage(new Error('GM_download failed: not_permitted')),
+    '扩展下载失败（not_permitted），请重试。',
+  );
   assert.equal(toUserMessage(new Error('weird')), '导出失败：weird');
 });
 
@@ -79,7 +84,7 @@ test('runtime returns null when no image passes the area threshold', { skip: dom
 });
 
 test('runtime keeps the anchor fallback when GM_download is unavailable', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1' });
+  const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1', ...FALLBACK_DOM });
   const clicks = recordAnchorClicks(window);
   appendBigImage(window);
   const runtime = createImageExportRuntime({ documentObject: window.document });
@@ -143,10 +148,13 @@ function appendBigImage(window) {
   window.document.body.append(img);
 }
 
+// 后备下载的 anchor 放在脚本自建的 iframe 里（见 fallbackDownload）；记录时顺带记下它所在的文档。
+// 调用方建 window 时要传 FALLBACK_DOM，否则 happy-dom 不给 iframe 建文档。
+const FALLBACK_DOM = { settings: { enableIframePageLoading: true } };
 function recordAnchorClicks(window) {
   const clicks = [];
   window.HTMLAnchorElement.prototype.click = function click() {
-    clicks.push({ href: this.href, download: this.download });
+    clicks.push({ href: this.href, download: this.download, inFrame: this.ownerDocument !== window.document });
   };
   return clicks;
 }
@@ -167,28 +175,74 @@ test('runtime sends GM_download a filename without invisible characters', { skip
   assert.equal(downloads[0].name, '报价单.png');
 });
 
+test('runtime reports a cancelled save dialog and never downloads behind the user', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1', ...FALLBACK_DOM });
+  window.document.title = `设计稿${INVISIBLE} - 飞书云文档`;
+  appendBigImage(window);
+  const clicks = recordAnchorClicks(window);
+  const runtime = createImageExportRuntime({
+    documentObject: window.document,
+    // Tampermonkey 对另存为里点「取消」报 not_succeeded（null 原型对象）。
+    gmDownload: (options) => options.onerror(Object.assign(Object.create(null), { id: 1, error: 'not_succeeded' })),
+  });
+  await assert.rejects(runtime.exportMainImage(), (error) => {
+    assert.equal(toUserMessage(error), '已取消导出。');
+    return true;
+  });
+  assert.equal(clicks.length, 0);
+  assert.equal(window.document.querySelector('iframe'), null);
+  await window.happyDOM.close();
+});
+
+test('runtime reports other Tampermonkey download errors without a fallback', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1', ...FALLBACK_DOM });
+  appendBigImage(window);
+  const clicks = recordAnchorClicks(window);
+  const runtime = createImageExportRuntime({
+    documentObject: window.document,
+    gmDownload: (options) => options.onerror(Object.assign(Object.create(null), { id: 1, error: 'unknown' })),
+  });
+  await assert.rejects(runtime.exportMainImage(), (error) => {
+    assert.equal(toUserMessage(error), '扩展下载失败（unknown），请重试。');
+    return true;
+  });
+  assert.equal(clicks.length, 0);
+  await window.happyDOM.close();
+});
+
 test(
-  'runtime falls back to an anchor download when GM_download reports a Tampermonkey error',
+  'anchor download without GM_download clicks inside its own iframe so page click handlers never see it',
   { skip: domSkip },
   async () => {
-    const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1' });
-    window.document.title = `设计稿${INVISIBLE} - 飞书云文档`;
+    const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1', ...FALLBACK_DOM });
     appendBigImage(window);
+    // 飞书预览页的写法：document 上捕获与冒泡两个阶段的 click 处理器都 preventDefault。
+    let seen = 0;
+    for (const capture of [true, false]) {
+      window.document.addEventListener(
+        'click',
+        (event) => {
+          seen += 1;
+          event.preventDefault();
+        },
+        capture,
+      );
+    }
     const clicks = recordAnchorClicks(window);
-    const runtime = createImageExportRuntime({
-      documentObject: window.document,
-      gmDownload: (options) => options.onerror(Object.assign(Object.create(null), { id: 1, error: 'unknown' })),
-    });
-    assert.deepEqual(await runtime.exportMainImage(), { filename: '设计稿.png', via: 'anchor' });
+    const runtime = createImageExportRuntime({ documentObject: window.document });
+    assert.deepEqual(await runtime.exportMainImage(), { filename: 'feishu-image.png' });
     assert.equal(clicks.length, 1);
-    assert.equal(clicks[0].download, '设计稿.png');
-    assert.match(clicks[0].href, /^blob:/);
+    assert.equal(clicks[0].inFrame, true);
+    assert.equal(seen, 0);
+    const frame = window.document.querySelector('iframe');
+    assert.ok(frame, 'anchor iframe stays until the download has started');
+    assert.equal(frame.contentDocument.querySelector('a[download]')?.download, 'feishu-image.png');
     await window.happyDOM.close();
   },
 );
 
-test('runtime falls back to an anchor download when GM_download throws synchronously', { skip: domSkip }, async () => {
-  const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1' });
+test('runtime reports a synchronous GM_download throw as a download failure', { skip: domSkip }, async () => {
+  const window = createDomWindow({ url: 'https://mi.feishu.cn/file/docx-1', ...FALLBACK_DOM });
   appendBigImage(window);
   const clicks = recordAnchorClicks(window);
   const runtime = createImageExportRuntime({
@@ -197,8 +251,11 @@ test('runtime falls back to an anchor download when GM_download throws synchrono
       throw new Error('not allowed');
     },
   });
-  assert.equal((await runtime.exportMainImage()).via, 'anchor');
-  assert.equal(clicks.length, 1);
+  await assert.rejects(runtime.exportMainImage(), (error) => {
+    assert.equal(toUserMessage(error), '扩展下载失败（not allowed），请重试。');
+    return true;
+  });
+  assert.equal(clicks.length, 0);
   await window.happyDOM.close();
 });
 
@@ -323,11 +380,28 @@ test(
     await flush(10);
 
     const toast = window.document.querySelector('#feishu-pie-root .wk-toast');
-    assert.notEqual(toast.dataset.tone, 'progress');
-    assert.match(toast.textContent, /报价单\.png/);
+    assert.equal(toast.dataset.tone, 'error');
+    assert.match(toast.textContent, /扩展下载失败（unknown），请重试。/);
     await window.happyDOM.close();
   },
 );
+
+test('dist tells the user the export was cancelled when the save dialog is dismissed', { skip: domSkip }, async () => {
+  const { window, menuCalls } = boot({
+    gmDownload: (options) => options.onerror(Object.assign(Object.create(null), { id: 4, error: 'not_succeeded' })),
+  });
+  const clicks = recordAnchorClicks(window);
+  appendBigImage(window);
+
+  menuCalls[0].callback();
+  await flush(10);
+
+  const toast = window.document.querySelector('#feishu-pie-root .wk-toast');
+  assert.notEqual(toast.dataset.tone, 'progress');
+  assert.match(toast.textContent, /已取消导出。/);
+  assert.equal(clicks.length, 0);
+  await window.happyDOM.close();
+});
 
 test('dist source contains no alert() call', async () => {
   assert.doesNotMatch(distSource, /\balert\s*\(/);

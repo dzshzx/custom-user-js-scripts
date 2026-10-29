@@ -114,4 +114,4 @@ node scripts/browser-tools/export-image.mjs \
 
 - userscript 使用 `currentSrc`（后备 `img.src`），宽高分别取整后按面积 `>= 20000` 选图；远端图片 fetch 明确携带当前登录凭据，Blob MIME 和 FileReader data URL 保持原值。
 
-两条导出路径都调用 `readPreviewImage`，通过固定的 `userscript-v1` / `cli-v1` profile 表达上述行为差异。两者共享候选选择和图片读取实现（含 data URL 格式校验）；命名、GM 下载与 anchor 后备（userscript 的后备另用 `dataUrlToBlobUrl` 把 data URL 转成 blob URL）、本地文件写入与页面准备由各自入口负责。
+两条导出路径都调用 `readPreviewImage`，通过固定的 `userscript-v1` / `cli-v1` profile 表达上述行为差异。两者共享候选选择和图片读取实现（含 data URL 格式校验）；命名、GM 下载与没有 `GM_download` 时的 anchor 下载（userscript 另用 `dataUrlToBlobUrl` 把 data URL 转成 blob URL，anchor 在自建隐藏 iframe 里点击）、本地文件写入与页面准备由各自入口负责。

@@ -74,8 +74,9 @@
 - 运行在 `https://mi.feishu.cn/file/*`。
 - 从当前页面里找最大的可见图片。
 - 优先用 `GM_download` 下载。
-- GM 下载与 anchor 后备：`GM_download` 报错（含 Tampermonkey 的 `{id, error, details}` 错误对象）或同步抛错时，改用 blob URL 加 `<a download>` 由浏览器直接下载，toast 注明已改用直接下载；没有 `GM_download` 时直接走 anchor 下载。
-- `GM_download` 120 秒内既不成功也不报错时按超时报失败，toast 转为失败提示，不再走后备，以免重复下载。
+- `GM_download` 报错（含 Tampermonkey 的 `{id, error, details}` 错误对象）或同步抛错时只提示、不再改走浏览器直接下载：Tampermonkey 对用户在另存为里点「取消」同样报 `not_succeeded`，与其他失败分不开，后备下载会违背用户的取消（用户决定，2026-10-29）。`not_succeeded` 的 toast 为「已取消导出。」，其他错误码为「扩展下载失败（<错误码>），请重试。」。
+- 没有 `GM_download` 的脚本管理器走 anchor 下载：blob URL 加 `<a download>`，anchor 放在脚本自建的隐藏同源 iframe 里点击，因为飞书预览页在 document 上的 click 处理器会拦掉顶层文档里的点击。
+- `GM_download` 120 秒内既不成功也不报错时按超时报失败，toast 转为失败提示。
 - 下载文件名默认取当前飞书文档标题，去掉零宽字符等 Unicode 格式类字符（`\p{Cf}`，飞书标题水印会带上），清理后为空时用 `feishu-image`。
 - 用户反馈经页面内 toast 展示导出进度、成功文件名和中文失败原因。
 - 图片选择与读取由 `readPreviewImage` 持有；userscript 使用固定 `userscript-v1` profile，本地 Playwright 导出工具使用 `cli-v1` profile。两者共享实现，各 profile 定义 currentSrc/src、面积边界、fetch 凭据、MIME 与编码方式。
