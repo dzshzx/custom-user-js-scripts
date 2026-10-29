@@ -21,7 +21,7 @@
 会话契约：
 
 - Session 直接使用 Settings 与 Refresh Runtime，独占已提交设置、规则匹配和实际应用状态；View 只接收 Session 快照并负责对话框、浮动 widget、草稿、焦点、宿主 inert 和布局绑定，Entry 只组装浏览器 adapter、注册菜单并管理页面退出。
-- `start()` 幂等，菜单在读取前注册，倒计时与常驻 widget 等待 DOM 和保存的位置就绪。页面与站点 scope 固定为启动时的地址；初始化结算前的多个开窗请求合并，读取失败时对话框显示错误并禁用写操作。
+- `start()` 幂等，菜单在读取前注册，倒计时与常驻 widget 等待 DOM 和保存的位置就绪。widget 位置按 hostname 存在 GM key `pageAutoRefreshTimerWidgetPosition:<hostname>`，没有时只读旧的共享 key `pageAutoRefreshTimerWidgetPosition`；localStorage 兜底本身按 origin 隔离，key 不变。页面与站点 scope 固定为启动时的地址；初始化结算前的多个开窗请求合并，读取失败时对话框显示错误并禁用写操作。
 - 设置命令按 FIFO 持久化，成功后才重匹配并应用；暂停立即作用于当前倒计时。保存 Unlocker 不重启刷新，删除页面规则后重新匹配站点规则。
 - 多标签页共用一份设置：每次保存都在存储中的最新设置上只改本次操作的那一条规则，不写回启动时的内存副本，其他标签页保存的规则不会被覆盖；同一条规则被两个标签页先后修改时以后写为准。其他标签页保存后，本页经脚本管理器的值变化事件（`GM_addValueChangeListener`；回退到页面 `localStorage` 时为同源 `storage` 事件）重读设置，只重新应用匹配结果有变化的能力。主存储读取失败时本次保存只写回退存储，不用回退数据覆盖主存储。脚本管理器不提供跨标签事件时界面要到下次保存或刷新页面才更新，但保存本身仍基于最新设置。
 - 操作结果区分无效输入、未就绪、已销毁、存储失败和应用失败，并携带 `persisted`。设置已保存但能力安装失败时保留设置、清理安装并显示实际应用错误。

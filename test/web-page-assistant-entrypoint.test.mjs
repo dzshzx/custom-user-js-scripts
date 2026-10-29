@@ -93,3 +93,19 @@ test('entrypoint registers the settings menu before async storage initialization
     ['网页助手设置'],
   );
 });
+
+test('entrypoint reads the widget position for this site before the shared one', async () => {
+  const reads = [];
+  await createEntrypointHarness({
+    GM_getValue(key, fallbackValue) {
+      reads.push(key);
+      return key === 'pageAutoRefreshTimerSettings' ? new Promise(() => {}) : fallbackValue;
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(
+    reads.filter((key) => key.startsWith('pageAutoRefreshTimerWidgetPosition')),
+    ['pageAutoRefreshTimerWidgetPosition:example.com', 'pageAutoRefreshTimerWidgetPosition'],
+  );
+});

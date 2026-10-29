@@ -170,6 +170,9 @@ sans-serif`.
   clicking the widget button instead.
 - Drag, clamping, hover disclosure and compact-panel placement come from the
   shared widget kit parts; the widget does not dock to screen edges.
+- The dragged position is saved per hostname, so moving the widget off one
+  site's corner controls leaves other sites alone; a site without its own
+  position uses the position shared by every site before (read only).
 - The settings dialog owns scope selection, refresh settings, unlocker
   capability toggles, status boxes, and destructive delete actions.
 - The dialog is a native modal `<dialog>` (`showModal()`): the platform

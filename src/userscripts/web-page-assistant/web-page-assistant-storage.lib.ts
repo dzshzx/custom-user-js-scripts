@@ -21,7 +21,10 @@ export interface WebPageAssistantStorageAdapters extends GmOverrides {
   settingsContract: StorageSettingsContract;
   normalizeWidgetPosition: (value: unknown) => WidgetPosition | null;
   storageKey: string;
+  /** Per-site key the widget position is read from and written to. */
   widgetPositionKey: string;
+  /** Read-only position shared by every site before positions were per site. */
+  sharedWidgetPositionKey?: string | null;
   fallbackStorageKey: string;
   fallbackWidgetPositionKey: string;
   localStorageAdapter: Pick<Storage, 'getItem' | 'setItem'>;
@@ -57,6 +60,7 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
     normalizeWidgetPosition: normalizePosition,
     storageKey,
     widgetPositionKey,
+    sharedWidgetPositionKey = null,
     fallbackStorageKey,
     fallbackWidgetPositionKey,
     localStorageAdapter,
@@ -203,7 +207,12 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
     async readWidgetPosition() {
       try {
         const primary = await readPrimaryValue(widgetPositionKey, null);
-        if (primary.available) return normalizePosition(primary.value);
+        if (primary.available) {
+          const sitePosition = normalizePosition(primary.value);
+          if (sitePosition || !sharedWidgetPositionKey) return sitePosition;
+          // A site the widget was never dragged on keeps the shared position.
+          return normalizePosition((await readPrimaryValue(sharedWidgetPositionKey, null)).value);
+        }
       } catch (error) {
         logger.warn(`${scriptName}: failed to read widget position.`, error);
       }

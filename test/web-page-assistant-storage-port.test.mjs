@@ -141,6 +141,35 @@ test('storage port normalizes widget position from GM and fallback storage', asy
   assert.deepEqual(await fallbackPort.readWidgetPosition(), { left: 4, top: 9 });
 });
 
+test('widget position is kept per site and falls back to the shared position', async () => {
+  const values = { position: { left: 30, top: 40 } };
+  const writes = [];
+  const port = (siteKey) =>
+    createWebPageAssistantStoragePort(
+      baseAdapters({
+        widgetPositionKey: `position:${siteKey}`,
+        sharedWidgetPositionKey: 'position',
+        gmGetValue(key, fallbackValue) {
+          return key in values ? values[key] : fallbackValue;
+        },
+        gmSetValue(key, value) {
+          writes.push(key);
+          values[key] = value;
+        },
+      }),
+    );
+
+  // A site never dragged on keeps the position shared by every site before.
+  assert.deepEqual(await port('a.test').readWidgetPosition(), { left: 30, top: 40 });
+  assert.deepEqual(await port('a.test').writeWidgetPosition({ left: 5, top: 6 }), { left: 5, top: 6 });
+  assert.deepEqual(writes, ['position:a.test']);
+  assert.deepEqual(await port('a.test').readWidgetPosition(), { left: 5, top: 6 });
+  assert.deepEqual(await port('b.test').readWidgetPosition(), { left: 30, top: 40 });
+
+  delete values.position;
+  assert.equal(await port('b.test').readWidgetPosition(), null);
+});
+
 test('storage port registers settings menu through available GM adapter', () => {
   const legacyCalls = [];
   const promiseCalls = [];
