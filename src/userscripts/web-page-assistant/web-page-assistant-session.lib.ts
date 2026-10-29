@@ -1,3 +1,4 @@
+import { errorMessage } from '../shared/shared-values.lib.ts';
 import * as Settings from './web-page-assistant-settings.lib.ts';
 import { createRefreshRuntime } from './web-page-assistant-refresh.lib.ts';
 import type { RefreshRuntimeAdapters, RefreshSnapshot } from './web-page-assistant-refresh.lib.ts';
@@ -73,6 +74,10 @@ type ScopedResolver = (settings: Settings.SettingsSource, keys: Settings.ScopeKe
 // storage write is pending. Every write is applied to the latest stored
 // settings, so other tabs' saves survive; their change events refresh the
 // in-memory copy between writes.
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function createWebPageAssistantSession({
   keys,
   storage,
@@ -83,8 +88,10 @@ function createWebPageAssistantSession({
   onChange = () => {},
 }: WebPageAssistantSessionOptions): WebPageAssistantSession {
   let settings = Settings.emptySettings();
+  // Snapshot copy of settings, cloned once per change instead of per countdown tick.
+  let settingsSnapshot: Settings.Settings = clone(settings);
   let lifecycle: SessionLifecycle = 'idle';
-  let applicationError: string | null = null;
+  let startError: string | null = null;
   const applicationErrors: SessionState['applicationErrors'] = { refresh: null, unlocker: null };
   let appliedUnlocker: Settings.UnlockerMatch | null = null;
   let startPromise: Promise<SessionResult> | undefined;
@@ -106,17 +113,16 @@ function createWebPageAssistantSession({
     onStateChange: () => emit('countdown'),
   });
 
+  function commitSettings(next: Settings.Settings) {
+    settings = next;
+    settingsSnapshot = clone(next);
+  }
   function getState(): SessionState {
-    return JSON.parse(
-      JSON.stringify({
-        lifecycle,
-        settings,
-        refresh: runtime.getState(),
-        appliedUnlocker,
-        applicationError,
-        applicationErrors,
-      }),
-    );
+    return {
+      ...clone({ lifecycle, refresh: runtime.getState(), appliedUnlocker, applicationErrors }),
+      settings: settingsSnapshot,
+      applicationError: [startError, ...Object.values(applicationErrors)].filter(Boolean).join('; ') || null,
+    };
   }
   function emit(kind: SessionChangeKind, area: SessionChangeArea | null = null) {
     if (lifecycle === 'disposed') return;
@@ -147,7 +153,7 @@ function createWebPageAssistantSession({
         }
       } catch (error) {
         failed = true;
-        applicationErrors[capability] = String((error as Error | null)?.message || error);
+        applicationErrors[capability] = errorMessage(error);
         if (capability === 'refresh') runtime.stop();
         else {
           appliedUnlocker = null;
@@ -159,7 +165,6 @@ function createWebPageAssistantSession({
         }
       }
     }
-    applicationError = Object.values(applicationErrors).filter(Boolean).join('; ') || null;
     return failed ? 'application-failed' : null;
   }
   function changedAreas(previous: Settings.Settings, next: Settings.Settings): SessionArea[] {
@@ -177,7 +182,7 @@ function createWebPageAssistantSession({
     const next = Settings.normalizeSettings(latest);
     if (JSON.stringify(next) === JSON.stringify(settings)) return;
     const area = combinedArea(changedAreas(settings, next));
-    settings = next;
+    commitSettings(next);
     if (area) apply(area);
     emit('settings', area);
   }
@@ -213,7 +218,7 @@ function createWebPageAssistantSession({
       try {
         const [loaded] = await Promise.all([storage.readSettings(), ready()]);
         if ((lifecycle as SessionLifecycle) === 'disposed') return result('disposed');
-        settings = Settings.normalizeSettings(loaded);
+        commitSettings(Settings.normalizeSettings(loaded));
         lifecycle = 'ready';
         const code = apply('all');
         emit('lifecycle');
@@ -222,7 +227,7 @@ function createWebPageAssistantSession({
       } catch (error) {
         if (lifecycle === 'disposed') return result('disposed');
         lifecycle = 'error';
-        applicationError = String((error as Error | null)?.message || error);
+        startError = errorMessage(error);
         emit('lifecycle');
         return result('storage-failed');
       }
@@ -260,12 +265,12 @@ function createWebPageAssistantSession({
       next = Settings.normalizeSettings(await storage.updateSettings(change));
     } catch (error) {
       if ((lifecycle as SessionLifecycle) === 'disposed') return result('disposed');
-      return { ...result('storage-failed'), message: String((error as Error | null)?.message || error) };
+      return { ...result('storage-failed'), message: errorMessage(error) };
     }
     // Other tabs' changes arrive with this write; apply every area whose
     // match changed, and always the commanded one.
     const applied = combinedArea([...new Set([area, ...changedAreas(settings, next)])]);
-    settings = next;
+    commitSettings(next);
     if ((lifecycle as SessionLifecycle) === 'disposed') return result('disposed', true, scope);
     const code = apply(applied!);
     emit('settings', applied);

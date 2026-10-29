@@ -289,3 +289,44 @@ test('dispose during readiness prevents startup installation and stops notificat
   assert.equal((await h.session.dispatch(save())).code, 'disposed');
   assert.equal((await h.session.start()).code, 'disposed');
 });
+
+test('countdown snapshots reuse the settings copy until settings change', async () => {
+  const h = harness();
+  await h.session.start();
+  await h.session.dispatch(save());
+  const before = h.events.length;
+  h.tick();
+  h.tick();
+  const [first, second] = h.events.slice(before).map((event) => event.state);
+  assert.equal(h.events.at(-1).kind, 'countdown');
+  assert.equal(first.settings, second.settings);
+  assert.equal(h.session.getState().settings, second.settings);
+  assert.notEqual(first.refresh, second.refresh);
+  await h.session.dispatch(save('site'));
+  const changed = h.session.getState().settings;
+  assert.notEqual(changed, second.settings);
+  assert.ok(changed.refresh.sites.site);
+  assert.equal(second.settings.refresh.sites.site, undefined);
+});
+
+test('application error text combines failed capabilities and startup failures', async () => {
+  const failing = harness({
+    unlocker: {
+      install(setting) {
+        if (setting) throw Error('installation');
+      },
+    },
+  });
+  await failing.session.start();
+  assert.equal(failing.session.getState().applicationError, null);
+  await failing.session.dispatch({ type: 'save-unlocker', scope: 'page', setting: { enabled: true } });
+  assert.equal(failing.session.getState().applicationError, 'installation');
+  assert.deepEqual(failing.session.getState().applicationErrors, { refresh: null, unlocker: 'installation' });
+
+  const broken = harness({ storage: { readSettings: () => Promise.reject(Error('read failed')) } });
+  const result = await broken.session.start();
+  assert.equal(result.code, 'storage-failed');
+  assert.equal(result.state.lifecycle, 'error');
+  assert.equal(result.state.applicationError, 'read failed');
+  assert.deepEqual(result.state.applicationErrors, { refresh: null, unlocker: null });
+});
