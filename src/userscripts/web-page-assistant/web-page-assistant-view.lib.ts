@@ -122,6 +122,8 @@ const WIDGET_DEFAULT_OFFSET = 18;
 const PANEL_WIDTH = 248;
 const PANEL_MIN_WIDTH = 52;
 const PANEL_SAFE_MARGIN = 12;
+// Placement offset between widget and panel; the panel's hover bridge spans it.
+const PANEL_GAP = 8;
 const PRESETS = [
   { label: '30 秒', ms: 30 * 1000 },
   { label: '1 分钟', ms: 60 * 1000 },
@@ -244,6 +246,7 @@ function createWebPageAssistantView({
   function sizeWidgetPanel(panel: HTMLElement) {
     const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN * 2));
     panel.style.setProperty('--part-panel-width', `${Math.round(width)}px`);
+    panel.style.setProperty('--part-panel-gap', `${PANEL_GAP}px`);
   }
 
   // The widget rides on the shared kit: drag and clamping from the drag
@@ -285,6 +288,7 @@ function createWebPageAssistantView({
           reference: widget!,
           floating: panel,
           placement: 'top-end',
+          gap: PANEL_GAP,
           strategy: 'absolute',
           apply({ x, y, placement: side }) {
             panel.style.setProperty('--part-panel-left', `${Math.round(x)}px`);

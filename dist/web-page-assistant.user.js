@@ -1387,7 +1387,7 @@
     #${rootId} .part-widget-panel::before {
       content: "";
       position: absolute;
-      inset: -8px 0;
+      inset: calc(-1 * var(--part-panel-gap, 8px)) 0;
       z-index: -1;
     }
 
@@ -4179,10 +4179,8 @@
     return value === "left" || value === "right";
   }
   function isFocusVisible(target) {
-    const element = target;
-    if (typeof element?.matches !== "function") return true;
     try {
-      return element.matches(":focus-visible");
+      return target.matches(":focus-visible");
     } catch {
       return true;
     }
@@ -4717,6 +4715,7 @@ ${root} :focus-visible {
   var PANEL_WIDTH = 248;
   var PANEL_MIN_WIDTH = 52;
   var PANEL_SAFE_MARGIN2 = 12;
+  var PANEL_GAP2 = 8;
   var PRESETS = [
     { label: "30 秒", ms: 30 * 1e3 },
     { label: "1 分钟", ms: 60 * 1e3 },
@@ -4828,6 +4827,7 @@ ${root} :focus-visible {
     function sizeWidgetPanel(panel) {
       const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN2 * 2));
       panel.style.setProperty("--part-panel-width", `${Math.round(width)}px`);
+      panel.style.setProperty("--part-panel-gap", `${PANEL_GAP2}px`);
     }
     function attachWidgetShell() {
       detachWidgetShell();
@@ -4865,6 +4865,7 @@ ${root} :focus-visible {
         reference: widget,
         floating: panel,
         placement: "top-end",
+        gap: PANEL_GAP2,
         strategy: "absolute",
         apply({ x: x2, y: y3, placement: side }) {
           panel.style.setProperty("--part-panel-left", `${Math.round(x2)}px`);

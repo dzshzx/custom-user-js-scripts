@@ -50,12 +50,11 @@ function appendClasses(el: Element, classes: unknown) {
   if (list.length) el.classList.add(...list);
 }
 
-// Engines without :focus-visible keep the old focus-expands behaviour.
+// Engines without :focus-visible (or a target without matches) keep the old
+// focus-expands behaviour.
 function isFocusVisible(target: EventTarget | null) {
-  const element = target as Partial<Element> | null;
-  if (typeof element?.matches !== 'function') return true;
   try {
-    return element.matches(':focus-visible');
+    return (target as Element).matches(':focus-visible');
   } catch {
     return true;
   }

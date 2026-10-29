@@ -255,7 +255,7 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
     #${rootId} .part-widget-panel::before {
       content: "";
       position: absolute;
-      inset: -8px 0;
+      inset: calc(-1 * var(--part-panel-gap, 8px)) 0;
       z-index: -1;
     }
 
