@@ -264,6 +264,22 @@ test('createQuotaCalculator records an explicit model summary error without fail
   assert.equal(result.近30天.模型汇总错误, 'HTTP 500 Internal Server Error');
 });
 
+test('createQuotaCalculator keeps a malformed token breakdown inside the model summary error', async () => {
+  const calculator = createQuotaCalculator({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
+    getBrowserTimeZone: () => 'Asia/Shanghai',
+    fetchUsage: async () => newShapeUsageFixture(),
+    fetchDailyUsage: async (startDate) => emptyDailyFixture(startDate),
+    fetchDailyTokenBreakdown: async () => ({ data: [null] }),
+  });
+
+  const result = await calculator.run();
+
+  assert.deepEqual(result.近30天.模型汇总, []);
+  assert.match(result.近30天.模型汇总错误, /null/);
+});
+
 test('createQuotaCalculator surfaces rate limit reset credits with detail rows', async () => {
   const calculator = createQuotaCalculator({
     config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },

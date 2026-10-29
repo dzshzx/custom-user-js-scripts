@@ -586,12 +586,21 @@ function createQuotaCalculator({
     if (typeof fetchDailyTokenBreakdown !== 'function') {
       return () => ({ modelSummaries: null, modelSummaryError: '' });
     }
+    const failed = (error: unknown) => ({ modelSummaries: [], modelSummaryError: errorMessage(error) });
+    let json: DailyTokenBreakdownPayload;
     try {
-      const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
-      return (rangeCredits) => ({ modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: '' });
+      json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
     } catch (error) {
-      return () => ({ modelSummaries: [], modelSummaryError: errorMessage(error) });
+      return () => failed(error);
     }
+    // 换算与请求共用同一道错误边界：形状异常的数据同样只让这一项报错。
+    return (rangeCredits) => {
+      try {
+        return { modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: '' };
+      } catch (error) {
+        return failed(error);
+      }
+    };
   }
 
   function parseResetCreditRows(json: ResetCreditsPayload | null | undefined): QuotaResetCreditRow[] {
