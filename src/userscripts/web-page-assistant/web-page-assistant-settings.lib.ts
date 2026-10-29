@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { coerce, isRecord } from '../shared/shared-values.lib.ts';
 
 const MIN_INTERVAL_MS = 1000;
 const MAX_INTERVAL_MS = 60 * 60 * 1000;
@@ -27,20 +28,10 @@ function emptySettings(): Settings {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
 function isValidIntervalMs(value: number): boolean {
   return Number.isFinite(value) && value >= MIN_INTERVAL_MS && value <= MAX_INTERVAL_MS;
 }
 
-// Missing keys still run through the transform, so defaults apply uniformly.
-const coerce = <T>(transform: (value: unknown) => T) =>
-  v.pipe(
-    v.optional(v.unknown(), () => undefined),
-    v.transform(transform),
-  );
 const record = <E extends v.ObjectEntries>(entries: E) => v.pipe(v.custom<RecordInput>(isRecord), v.object(entries));
 
 function timestampOrNow(value: unknown): number {
@@ -97,6 +88,10 @@ export interface ScopeKeys {
   pageKey: string;
   siteKey: string;
 }
+interface ScopedBuckets<T> {
+  pages: Record<string, T>;
+  sites: Record<string, T>;
+}
 export interface ScopedMatch<T> {
   scope: Scope;
   key: string;
@@ -144,38 +139,51 @@ function hasUnlockerAction(setting: UnlockerSetting | null | undefined): setting
   );
 }
 
-function resolveActiveRefreshSetting(sourceSettings: SettingsSource, keys: ScopeKeys): RefreshMatch | null {
-  const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, RefreshScopedSchema);
-  const pageSetting = normalizeRefreshSetting(refreshSettings.pages[keys.pageKey]);
-  if (pageSetting) return { scope: 'page', key: keys.pageKey, setting: pageSetting };
+function bucketOf<T>(scoped: ScopedBuckets<T>, scope: Scope): Record<string, T> {
+  return scope === 'site' ? scoped.sites : scoped.pages;
+}
 
-  const siteSetting = normalizeRefreshSetting(refreshSettings.sites[keys.siteKey]);
-  if (siteSetting) return { scope: 'site', key: keys.siteKey, setting: siteSetting };
+// Normalized buckets hold only parsed entries; own keys keep `constructor` and
+// friends from resolving to prototype members.
+function settingAt<T>(scoped: ScopedBuckets<T>, scope: Scope, key: string): T | null {
+  const bucket = bucketOf(scoped, scope);
+  return Object.hasOwn(bucket, key) ? bucket[key]! : null;
+}
 
+// The page setting wins over the site setting when `accept` takes it.
+function resolveActiveSetting<T>(
+  scoped: ScopedBuckets<T>,
+  keys: ScopeKeys,
+  accept: (setting: T) => boolean,
+): ScopedMatch<T> | null {
+  for (const [scope, key] of [
+    ['page', keys.pageKey],
+    ['site', keys.siteKey],
+  ] as const) {
+    const setting = settingAt(scoped, scope, key);
+    if (setting && accept(setting)) return { scope, key, setting };
+  }
   return null;
+}
+
+function resolveActiveRefreshSetting(sourceSettings: SettingsSource, keys: ScopeKeys): RefreshMatch | null {
+  return resolveActiveSetting(normalizeScopedSettings(sourceSettings?.refresh, RefreshScopedSchema), keys, () => true);
 }
 
 function resolveActiveUnlockerSetting(sourceSettings: SettingsSource, keys: ScopeKeys): UnlockerMatch | null {
-  const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, UnlockerScopedSchema);
-  const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[keys.pageKey]);
-  if (hasUnlockerAction(pageSetting)) return { scope: 'page', key: keys.pageKey, setting: pageSetting };
-
-  const siteSetting = normalizeUnlockerSetting(unlockerSettings.sites[keys.siteKey]);
-  if (hasUnlockerAction(siteSetting)) return { scope: 'site', key: keys.siteKey, setting: siteSetting };
-
-  return null;
+  return resolveActiveSetting(
+    normalizeScopedSettings(sourceSettings?.unlocker, UnlockerScopedSchema),
+    keys,
+    hasUnlockerAction,
+  );
 }
 
 function getRefreshSetting(sourceSettings: unknown, scope: Scope, key: string): RefreshSetting | null {
-  const settings = normalizeSettings(sourceSettings);
-  const bucket = scope === 'site' ? settings.refresh.sites : settings.refresh.pages;
-  return normalizeRefreshSetting(bucket[key]);
+  return settingAt(normalizeSettings(sourceSettings).refresh, scope, key);
 }
 
 function getUnlockerSetting(sourceSettings: unknown, scope: Scope, key: string): UnlockerSetting | null {
-  const settings = normalizeSettings(sourceSettings);
-  const bucket = scope === 'site' ? settings.unlocker.sites : settings.unlocker.pages;
-  return normalizeUnlockerSetting(bucket[key]);
+  return settingAt(normalizeSettings(sourceSettings).unlocker, scope, key);
 }
 
 function setRefreshSetting(
@@ -186,15 +194,14 @@ function setRefreshSetting(
   updatedAt: number = Date.now(),
 ): Settings {
   const next = normalizeSettings(sourceSettings);
-  const bucket = scope === 'site' ? next.refresh.sites : next.refresh.pages;
-  bucket[key] = { intervalMs, updatedAt };
+  bucketOf(next.refresh, scope)[key] = { intervalMs, updatedAt };
+  // Normalizing again validates the raw interval and timestamp just written.
   return normalizeSettings(next);
 }
 
 function deleteRefreshSetting(sourceSettings: unknown, scope: Scope, key: string): Settings {
   const next = normalizeSettings(sourceSettings);
-  const bucket = scope === 'site' ? next.refresh.sites : next.refresh.pages;
-  delete bucket[key];
+  delete bucketOf(next.refresh, scope)[key];
   return next;
 }
 
@@ -218,11 +225,7 @@ function setUnlockerSetting(
   if (!normalized) return normalizeSettings(sourceSettings);
 
   const next = normalizeSettings(sourceSettings);
-  const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
-  bucket[key] = {
-    ...normalized,
-    updatedAt,
-  };
+  bucketOf(next.unlocker, scope)[key] = { ...normalized, updatedAt };
   return normalizeSettings(next);
 }
 
@@ -245,8 +248,7 @@ function describeUnlockerSetting(setting: UnlockerSetting | null | undefined, sc
 
 function deleteUnlockerSetting(sourceSettings: unknown, scope: Scope, key: string): Settings {
   const next = normalizeSettings(sourceSettings);
-  const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
-  delete bucket[key];
+  delete bucketOf(next.unlocker, scope)[key];
   return next;
 }
 

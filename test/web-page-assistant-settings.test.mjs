@@ -152,3 +152,23 @@ test('unlocker description lists each enabled capability once in option order', 
     '整个站点已启用：复制/剪切、离开提示。',
   );
 });
+
+test('settings lookups read raw sources, fall back to the site, and ignore prototype keys', () => {
+  const raw = {
+    refresh: { sites: { [siteKey]: { intervalMs: '60000', updatedAt: 2 } } },
+    unlocker: { pages: { [pageKey]: { enabled: 1, allowCopy: false } } },
+  };
+  const keys = { pageKey, siteKey };
+
+  assert.deepEqual(libraryContract.getRefreshSetting(raw, 'site', siteKey), { intervalMs: 60_000, updatedAt: 2 });
+  assert.equal(libraryContract.getRefreshSetting(raw, 'page', pageKey), null);
+  assert.equal(libraryContract.getUnlockerSetting(raw, 'page', pageKey).allowCopy, false);
+  assert.equal(libraryContract.resolveActiveRefreshSetting(raw, keys).scope, 'site');
+  assert.equal(libraryContract.resolveActiveUnlockerSetting(raw, keys).scope, 'page');
+  for (const key of ['constructor', 'toString', 'hasOwnProperty']) {
+    assert.equal(libraryContract.getRefreshSetting(raw, 'site', key), null);
+    assert.equal(libraryContract.getUnlockerSetting(raw, 'page', key), null);
+    assert.equal(libraryContract.resolveActiveRefreshSetting(raw, { pageKey: key, siteKey: key }), null);
+    assert.equal(libraryContract.resolveActiveUnlockerSetting(raw, { pageKey: key, siteKey: key }), null);
+  }
+});
