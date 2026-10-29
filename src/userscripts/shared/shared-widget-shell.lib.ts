@@ -50,6 +50,17 @@ function appendClasses(el: Element, classes: unknown) {
   if (list.length) el.classList.add(...list);
 }
 
+// Engines without :focus-visible keep the old focus-expands behaviour.
+function isFocusVisible(target: EventTarget | null) {
+  const element = target as Partial<Element> | null;
+  if (typeof element?.matches !== 'function') return true;
+  try {
+    return element.matches(':focus-visible');
+  } catch {
+    return true;
+  }
+}
+
 function eventContainsNode(event: Event, node: Node | null | undefined) {
   if (!node) return false;
   const path = event.composedPath?.();
@@ -372,8 +383,8 @@ function createDragAnchor(
 /**
  * Hover/focus disclosure for a compact widget: hover expands after a short
  * intent delay (leaving first cancels it); coarse pointers without hover
- * toggle with a click on the trigger instead. Focus inside expands, focus
- * leaving collapses. `is-expanded` goes on the container.
+ * toggle with a click on the trigger instead. Keyboard-visible focus inside
+ * expands, focus leaving collapses. `is-expanded` goes on the container.
  */
 export interface HoverExpansionOptions {
   container: HTMLElement;
@@ -443,7 +454,11 @@ function createHoverExpansion(
       setExpanded(false);
     });
   }
-  listen(container, 'focusin', () => setExpanded(true));
+  // Only keyboard-visible focus expands: a mouse click on the trigger, or a
+  // dialog handing focus back to it, must not pop the panel open.
+  listen(container, 'focusin', (event) => {
+    if (isFocusVisible(event.target)) setExpanded(true);
+  });
   listen(container, 'focusout', (event) => {
     if (!event.relatedTarget || !container.contains(event.relatedTarget as Node)) setExpanded(false);
   });

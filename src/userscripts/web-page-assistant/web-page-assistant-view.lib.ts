@@ -114,7 +114,10 @@ const STYLE_ID = `${ROOT_ID}-style`;
 const TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
 const DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
 // Widget footprint from the base styles (.part-widget) and the compact panel.
-const WIDGET_SIZE = { width: 154, height: 60 };
+const WIDGET_SIZE = { width: 154, height: 48 };
+// The widget sits in a corner where host pages keep their own buttons; a
+// cursor only passing over it on the way there must not open the panel.
+const WIDGET_HOVER_INTENT_MS = 350;
 const WIDGET_DEFAULT_OFFSET = 18;
 const PANEL_WIDTH = 248;
 const PANEL_MIN_WIDTH = 52;
@@ -274,6 +277,7 @@ function createWebPageAssistantView({
       trigger: widgetButton!,
       isCoarsePointer: () => isCoarsePointer(windowObject),
       isSuppressed: () => anchor.isDragSuppressed(),
+      hoverIntentMs: WIDGET_HOVER_INTENT_MS,
       timers,
     });
     const placement = panel

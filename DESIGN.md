@@ -162,8 +162,12 @@ sans-serif`.
 - The per-second countdown is `aria-hidden`; a visually-hidden status node
   announces only lifecycle changes (enabled/paused/resumed/disabled) as full
   sentences.
-- Hover expansion carries a short intent delay; coarse pointers toggle
-  expansion by clicking the widget button instead.
+- The widget sits in a host page corner, so collapsed it must not get in the
+  way: only the visible button takes pointer events (the rest of its box lets
+  clicks through to the host page), hover expands only after a 350ms intent
+  delay, and focus expands it only when keyboard-visible (a mouse click or a
+  dialog returning focus does not). Coarse pointers toggle expansion by
+  clicking the widget button instead.
 - Drag, clamping, hover disclosure and compact-panel placement come from the
   shared widget kit parts; the widget does not dock to screen edges.
 - The settings dialog owns scope selection, refresh settings, unlocker

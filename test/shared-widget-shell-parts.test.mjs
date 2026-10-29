@@ -113,6 +113,22 @@ test('hover expansion waits for the intent delay and mouseleave cancels it', { s
   assert.equal(widget.classList.contains('is-expanded'), false);
 });
 
+test('only keyboard-visible focus expands the widget', { skip: domSkip }, () => {
+  const { window, widget, button } = setup();
+  let focusVisible = false;
+  button.matches = (selector) => selector === ':focus-visible' && focusVisible;
+
+  // A mouse click, or a dialog returning focus after one, is not focus-visible.
+  button.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true }));
+  assert.equal(widget.classList.contains('is-expanded'), false);
+
+  focusVisible = true;
+  button.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true }));
+  assert.equal(widget.classList.contains('is-expanded'), true);
+  button.dispatchEvent(new window.FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+  assert.equal(widget.classList.contains('is-expanded'), false);
+});
+
 test('coarse pointers toggle expansion via click and swallow the post-drag click', { skip: domSkip }, () => {
   const { window, widget, button, timers } = setup({ coarse: true });
   widget.dispatchEvent(new window.Event('mouseenter'));

@@ -61,8 +61,7 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
 	      opacity: 0.55;
 	    }
 
-	    #${rootId} .part-widget.is-idle:hover .part-widget-button,
-	    #${rootId} .part-widget.is-idle:focus-within .part-widget-button,
+	    #${rootId} .part-widget.is-idle .part-widget-button:hover,
 	    #${rootId} .part-widget.is-idle.is-expanded .part-widget-button {
 	      opacity: 1;
 	    }
@@ -113,7 +112,14 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
       right: 18px;
       bottom: 18px;
       width: 154px;
-      height: 60px;
+      height: 48px;
+      pointer-events: none;
+    }
+
+    /* Collapsed, only the visible button takes the pointer so host controls
+       around it stay clickable; expanded, the box bridges button and panel. */
+    #${rootId} .part-widget.is-expanded {
+      pointer-events: auto;
     }
 
     #${rootId} .part-widget.is-dragging {
@@ -143,8 +149,8 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
       align-items: center;
       justify-content: center;
       gap: 0;
-      width: 52px;
-      height: 52px;
+      width: 40px;
+      height: 40px;
       padding: 0;
 	        border: 1px solid var(--part-line);
 	        border-radius: 999px;
@@ -154,6 +160,7 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
 	        cursor: grab;
 	        opacity: 0.72;
 	        overflow: hidden;
+	        pointer-events: auto;
 	        transition:
 	          width 160ms ease,
 	          padding 160ms ease,
@@ -166,13 +173,11 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
       cursor: grabbing;
     }
 
-    #${rootId} .part-widget:hover .part-widget-button,
-    #${rootId} .part-widget:focus-within .part-widget-button,
     #${rootId} .part-widget.is-expanded .part-widget-button {
       justify-content: flex-start;
 	        gap: 8px;
 	        width: 154px;
-	        padding: 0 12px;
+	        padding: 0 8px;
 	        background: var(--part-surface);
 	        box-shadow: 0 14px 38px oklch(28% 0.03 242 / 0.2);
 	        opacity: 1;
@@ -183,9 +188,9 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 26px;
-      min-width: 26px;
-      height: 26px;
+      width: 24px;
+      min-width: 24px;
+      height: 24px;
       border-radius: 999px;
 	        background: var(--part-action);
 	        color: oklch(98.6% 0.003 250);
@@ -203,7 +208,7 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
       overflow: hidden;
       opacity: 0;
 	        color: var(--part-text);
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 750;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
@@ -214,8 +219,6 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
         transform 160ms ease;
     }
 
-    #${rootId} .part-widget:hover .part-widget-button-text,
-    #${rootId} .part-widget:focus-within .part-widget-button-text,
     #${rootId} .part-widget.is-expanded .part-widget-button-text {
       max-width: 84px;
       opacity: 1;
@@ -241,12 +244,19 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
         transform 160ms ease;
     }
 
-    #${rootId} .part-widget:hover .part-widget-panel,
-    #${rootId} .part-widget:focus-within .part-widget-panel,
     #${rootId} .part-widget.is-expanded .part-widget-panel {
       opacity: 1;
       pointer-events: auto;
       transform: translateY(0) scale(1);
+    }
+
+    /* Covers the placement gap so moving from the button to the panel does
+       not leave the widget and collapse it on the way. */
+    #${rootId} .part-widget-panel::before {
+      content: "";
+      position: absolute;
+      inset: -8px 0;
+      z-index: -1;
     }
 
 	      #${rootId} .part-title {

@@ -80,3 +80,57 @@ test('real Chromium runs the bundle without inert or stale-save lifecycle leaks'
     await browser.close();
   }
 });
+
+test('real Chromium keeps the collapsed corner widget out of host controls', async () => {
+  const playwright = await loadTestPlaywright();
+  const browser = await playwright.chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+    await page.route('https://assistant.test/**', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: `<button id="host-corner" style="position:fixed;right:0;bottom:0;width:200px;height:100px"
+          onclick="window.__hostClicks=(window.__hostClicks||0)+1">host</button>`,
+      }),
+    );
+    await page.goto('https://assistant.test/corner');
+    await page.evaluate((source) => window.eval(source), bundle);
+    const button = page.locator('.part-widget-button');
+    await button.waitFor();
+    const widgetBox = await page.locator('.part-widget').boundingBox();
+    const buttonBox = await button.boundingBox();
+    const isExpanded = () => page.locator('.part-widget').evaluate((node) => node.classList.contains('is-expanded'));
+
+    // Inside the widget box but left of the visible button: the host gets the
+    // pointer, and resting there never opens the panel.
+    const gapPoint = { x: widgetBox.x + 20, y: buttonBox.y + buttonBox.height / 2 };
+    assert.ok(gapPoint.x < buttonBox.x);
+    assert.equal(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.id, gapPoint), 'host-corner');
+    await page.mouse.move(gapPoint.x, gapPoint.y);
+    await page.mouse.click(gapPoint.x, gapPoint.y);
+    assert.equal(await page.evaluate(() => window.__hostClicks), 1);
+    await page.waitForTimeout(500);
+    assert.equal(await isExpanded(), false);
+
+    // Resting on the button expands it, and the cursor can travel up to the
+    // panel without the widget collapsing on the way.
+    await page.mouse.move(buttonBox.x + buttonBox.width / 2, buttonBox.y + buttonBox.height / 2);
+    await page.waitForFunction(() => document.querySelector('.part-widget').classList.contains('is-expanded'));
+    const panelBox = await page.locator('.part-widget-panel').boundingBox();
+    await page.mouse.move(panelBox.x + panelBox.width - 20, panelBox.y + panelBox.height / 2, { steps: 12 });
+    assert.equal(await isExpanded(), true);
+
+    // A mouse click opens settings; closing them by mouse hands focus back to
+    // the button without popping the panel open while the cursor is away.
+    await page.mouse.move(10, 10);
+    assert.equal(await isExpanded(), false);
+    await button.click();
+    await page.locator('button[data-part-action="close-dialog"]').click();
+    await page.waitForFunction(() => !document.querySelector('.part-backdrop'));
+    await page.mouse.move(10, 10);
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('part-widget-button')), true);
+    assert.equal(await isExpanded(), false);
+  } finally {
+    await browser.close();
+  }
+});

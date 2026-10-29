@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.20
+// @version      0.3.21
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -1188,8 +1188,7 @@
 	      opacity: 0.55;
 	    }
 
-	    #${rootId} .part-widget.is-idle:hover .part-widget-button,
-	    #${rootId} .part-widget.is-idle:focus-within .part-widget-button,
+	    #${rootId} .part-widget.is-idle .part-widget-button:hover,
 	    #${rootId} .part-widget.is-idle.is-expanded .part-widget-button {
 	      opacity: 1;
 	    }
@@ -1240,7 +1239,14 @@
       right: 18px;
       bottom: 18px;
       width: 154px;
-      height: 60px;
+      height: 48px;
+      pointer-events: none;
+    }
+
+    /* Collapsed, only the visible button takes the pointer so host controls
+       around it stay clickable; expanded, the box bridges button and panel. */
+    #${rootId} .part-widget.is-expanded {
+      pointer-events: auto;
     }
 
     #${rootId} .part-widget.is-dragging {
@@ -1270,8 +1276,8 @@
       align-items: center;
       justify-content: center;
       gap: 0;
-      width: 52px;
-      height: 52px;
+      width: 40px;
+      height: 40px;
       padding: 0;
 	        border: 1px solid var(--part-line);
 	        border-radius: 999px;
@@ -1281,6 +1287,7 @@
 	        cursor: grab;
 	        opacity: 0.72;
 	        overflow: hidden;
+	        pointer-events: auto;
 	        transition:
 	          width 160ms ease,
 	          padding 160ms ease,
@@ -1293,13 +1300,11 @@
       cursor: grabbing;
     }
 
-    #${rootId} .part-widget:hover .part-widget-button,
-    #${rootId} .part-widget:focus-within .part-widget-button,
     #${rootId} .part-widget.is-expanded .part-widget-button {
       justify-content: flex-start;
 	        gap: 8px;
 	        width: 154px;
-	        padding: 0 12px;
+	        padding: 0 8px;
 	        background: var(--part-surface);
 	        box-shadow: 0 14px 38px oklch(28% 0.03 242 / 0.2);
 	        opacity: 1;
@@ -1310,9 +1315,9 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 26px;
-      min-width: 26px;
-      height: 26px;
+      width: 24px;
+      min-width: 24px;
+      height: 24px;
       border-radius: 999px;
 	        background: var(--part-action);
 	        color: oklch(98.6% 0.003 250);
@@ -1330,7 +1335,7 @@
       overflow: hidden;
       opacity: 0;
 	        color: var(--part-text);
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 750;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
@@ -1341,8 +1346,6 @@
         transform 160ms ease;
     }
 
-    #${rootId} .part-widget:hover .part-widget-button-text,
-    #${rootId} .part-widget:focus-within .part-widget-button-text,
     #${rootId} .part-widget.is-expanded .part-widget-button-text {
       max-width: 84px;
       opacity: 1;
@@ -1368,12 +1371,19 @@
         transform 160ms ease;
     }
 
-    #${rootId} .part-widget:hover .part-widget-panel,
-    #${rootId} .part-widget:focus-within .part-widget-panel,
     #${rootId} .part-widget.is-expanded .part-widget-panel {
       opacity: 1;
       pointer-events: auto;
       transform: translateY(0) scale(1);
+    }
+
+    /* Covers the placement gap so moving from the button to the panel does
+       not leave the widget and collapse it on the way. */
+    #${rootId} .part-widget-panel::before {
+      content: "";
+      position: absolute;
+      inset: -8px 0;
+      z-index: -1;
     }
 
 	      #${rootId} .part-title {
@@ -4163,6 +4173,15 @@
   function isDockSide(value) {
     return value === "left" || value === "right";
   }
+  function isFocusVisible(target) {
+    const element = target;
+    if (typeof element?.matches !== "function") return true;
+    try {
+      return element.matches(":focus-visible");
+    } catch {
+      return true;
+    }
+  }
   var WIDGET_SHELL_CSS = `
 .wk-widget-button {
   position: fixed;
@@ -4454,7 +4473,9 @@
         setExpanded(false);
       });
     }
-    listen(container, "focusin", () => setExpanded(true));
+    listen(container, "focusin", (event) => {
+      if (isFocusVisible(event.target)) setExpanded(true);
+    });
     listen(container, "focusout", (event) => {
       if (!event.relatedTarget || !container.contains(event.relatedTarget)) setExpanded(false);
     });
@@ -4685,7 +4706,8 @@ ${root} :focus-visible {
   var STYLE_ID = `${ROOT_ID}-style`;
   var TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
   var DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
-  var WIDGET_SIZE = { width: 154, height: 60 };
+  var WIDGET_SIZE = { width: 154, height: 48 };
+  var WIDGET_HOVER_INTENT_MS = 350;
   var WIDGET_DEFAULT_OFFSET = 18;
   var PANEL_WIDTH = 248;
   var PANEL_MIN_WIDTH = 52;
@@ -4831,6 +4853,7 @@ ${root} :focus-visible {
         trigger: widgetButton,
         isCoarsePointer: () => isCoarsePointer(windowObject),
         isSuppressed: () => anchor.isDragSuppressed(),
+        hoverIntentMs: WIDGET_HOVER_INTENT_MS,
         timers
       });
       const placement = panel ? createPanelPlacement({
