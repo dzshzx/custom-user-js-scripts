@@ -34,7 +34,6 @@ export interface GmApi {
 
 export interface GmOverrides {
   gm?: GmModernApi | null;
-  gmApi?: GmModernApi | null;
   gmGetValue?: GmGetValue | null;
   gmSetValue?: GmSetValue | null;
   gmAddValueChangeListener?: GmAddValueChangeListener | null;
@@ -82,7 +81,7 @@ function modernGlobal(): GmModernApi | null {
  *
  * Overrides: `gmGetValue`, `gmSetValue`, `gmAddValueChangeListener`,
  * `gmRemoveValueChangeListener`, `gmRegisterMenuCommand`, `gmXmlhttpRequest`,
- * `gmDownload`, and `gm` / `gmApi` for the modern object.
+ * `gmDownload`, and `gm` for the modern object.
  *
  * `valueChange` pairs add/remove from the same API family, because listener
  * ids are not interchangeable between them; the modern `add` may return a
@@ -90,7 +89,7 @@ function modernGlobal(): GmModernApi | null {
  */
 function resolveGmApi(overrides: GmOverrides = {}): GmApi {
   const legacy = legacyGlobals();
-  const gm = overrides.gm || overrides.gmApi || modernGlobal();
+  const gm = overrides.gm || modernGlobal();
 
   const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
   let valueChange: GmValueChange | null = null;

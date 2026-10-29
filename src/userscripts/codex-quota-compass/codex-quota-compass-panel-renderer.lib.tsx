@@ -1,5 +1,6 @@
 import { installQuotaPanelRendererStyles } from './codex-quota-compass-panel-renderer-styles.lib.ts';
 import { StatsView } from './codex-quota-compass-panel-stats.lib.tsx';
+import { errorMessage } from '../shared/shared-values.lib.ts';
 import type { ComponentChildren } from 'preact';
 import type { QuotaMessageKey, QuotaTranslate } from './codex-quota-compass-i18n.lib.ts';
 import type { StatsDrill } from './codex-quota-compass-panel-stats.lib.tsx';
@@ -717,7 +718,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp }: QuotaPanelRendererOpti
     return (
       <div class="cqc-error">
         <strong>{t('errorTitle')}</strong>
-        <p>{(error as { message?: string } | null)?.message || (error as string) || t('errorUnknown')}</p>
+        <p>{(error && errorMessage(error)) || t('errorUnknown')}</p>
         <button type="button" class="cqc-refresh" data-action="refresh">
           {t('actionRetry')}
         </button>
