@@ -63,7 +63,7 @@ test('storage port reads and writes settings through legacy GM storage first', a
     baseAdapters({
       gmGetValue(key, fallbackValue) {
         assert.equal(key, 'settings');
-        assert.deepEqual(fallbackValue, createSettingsContract().emptySettings());
+        assert.equal(fallbackValue, null);
         return { from: 'gm' };
       },
       gmSetValue(key, value) {

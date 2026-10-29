@@ -590,6 +590,123 @@
     };
   }
 
+  // src/userscripts/shared/shared-gm-json-store.lib.ts
+  function createGmFirstJsonStore(options) {
+    const { scriptName, subject, key, normalize, mirror = false, eventTarget = null } = options;
+    const fallbackKey = options.fallbackKey || null;
+    const logger = options.logger === void 0 ? globalThis.console : options.logger;
+    const warn = (message, error) => logger?.warn?.(`${scriptName}: ${message}`, error);
+    const gmApi = () => resolveGmApi(options);
+    function fallbackStorage() {
+      const storage = options.localStorage === void 0 ? globalThis.localStorage : options.localStorage;
+      if (!storage) throw new Error("localStorage is unavailable.");
+      return storage;
+    }
+    function writeFallback(value) {
+      if (!fallbackKey) throw new Error(`No fallback storage for ${subject}.`);
+      fallbackStorage().setItem(fallbackKey, JSON.stringify(value));
+    }
+    function readFallback() {
+      if (!fallbackKey) return { available: false, value: null };
+      try {
+        return { available: true, value: normalize(JSON.parse(fallbackStorage().getItem(fallbackKey) || "null")) };
+      } catch (error) {
+        warn(`failed to read ${subject} from fallback storage.`, error);
+        return { available: false, value: null };
+      }
+    }
+    async function read() {
+      let gmFailed = false;
+      const { getValue } = gmApi();
+      if (getValue) {
+        try {
+          return { backend: "gm", value: normalize(await getValue(key, null)), gmFailed: false };
+        } catch (error) {
+          gmFailed = true;
+          warn(`failed to read ${subject} from userscript storage.`, error);
+        }
+      }
+      const fallback = readFallback();
+      return fallback.available ? { backend: "localStorage", value: fallback.value, gmFailed } : { backend: "none", value: null, gmFailed };
+    }
+    async function write(value, { fallbackOnly = false } = {}) {
+      const { setValue } = gmApi();
+      if (!fallbackOnly && setValue) {
+        let written = false;
+        try {
+          await setValue(key, value);
+          written = true;
+        } catch (error) {
+          warn(`failed to write ${subject} to userscript storage.`, error);
+        }
+        if (written) {
+          let mirrorDegraded = false;
+          if (mirror && fallbackKey) {
+            try {
+              writeFallback(value);
+            } catch (error) {
+              mirrorDegraded = true;
+              warn(`failed to mirror ${subject} to fallback storage.`, error);
+            }
+          }
+          return { backend: "gm", mirrorDegraded };
+        }
+      }
+      writeFallback(value);
+      return { backend: "localStorage", mirrorDegraded: false };
+    }
+    function subscribeGm(listener) {
+      const { valueChange } = gmApi();
+      if (!valueChange) return null;
+      const { add, remove } = valueChange;
+      const watchFailed = (error) => warn(`failed to watch ${subject} in userscript storage.`, error);
+      let listenerId;
+      try {
+        listenerId = add(key, (name, oldValue, newValue, remote) => {
+          listener({ backend: "gm", key: name, oldValue, newValue, remote: Boolean(remote) });
+        });
+      } catch (error) {
+        watchFailed(error);
+        return null;
+      }
+      if (listenerId === void 0 || listenerId === null) return null;
+      if (typeof listenerId.then !== "function") {
+        const id = listenerId;
+        return () => remove?.(id);
+      }
+      const pending = listenerId;
+      pending.catch(watchFailed);
+      return () => {
+        if (!remove) return;
+        pending.then((id) => remove(id)).catch(() => {
+        });
+      };
+    }
+    function subscribe(listener) {
+      const cleanups = [];
+      const unsubscribeGm = subscribeGm(listener);
+      if (unsubscribeGm) cleanups.push(unsubscribeGm);
+      if (fallbackKey && eventTarget && typeof eventTarget.addEventListener === "function") {
+        const onStorage = (event) => {
+          const { key: changedKey, oldValue, newValue } = event || {};
+          if (changedKey !== fallbackKey && changedKey !== null) return;
+          listener({ backend: "localStorage", key: fallbackKey, oldValue, newValue, remote: true });
+        };
+        eventTarget.addEventListener("storage", onStorage);
+        cleanups.push(() => eventTarget.removeEventListener("storage", onStorage));
+      }
+      return () => {
+        for (const cleanup of cleanups) {
+          try {
+            cleanup();
+          } catch {
+          }
+        }
+      };
+    }
+    return { read, readFallback, write, subscribe };
+  }
+
   // src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts
   function normalizeWidgetPosition(value) {
     if (!isRecord(value)) return null;
@@ -612,152 +729,71 @@
       logger
     } = adapters;
     const gm = resolveGmApi(adapters);
-    async function readPrimaryValue(key, fallbackValue) {
-      if (gm.getValue) {
-        return {
-          available: true,
-          value: await gm.getValue(key, fallbackValue)
-        };
-      }
-      return { available: false, value: fallbackValue };
-    }
-    async function writePrimaryValue(key, value) {
-      if (gm.setValue) {
-        await gm.setValue(key, value);
-        return true;
-      }
-      return false;
-    }
-    function readFallbackJson(key, normalizer, fallbackValue, warning) {
-      try {
-        return normalizer(JSON.parse(localStorageAdapter.getItem(key) || "null")) || fallbackValue;
-      } catch (error) {
-        logger.warn(warning, error);
-        return fallbackValue;
-      }
-    }
-    function writeFallbackJson(key, value) {
-      localStorageAdapter.setItem(key, JSON.stringify(value));
-    }
-    async function readSettingsWithSource() {
-      try {
-        const primary = await readPrimaryValue(storageKey, settingsContract.emptySettings());
-        if (primary.available) {
-          return { source: "primary", settings: settingsContract.normalizeSettings(primary.value) };
-        }
-      } catch (error) {
-        logger.warn(`${scriptName}: failed to read userscript storage.`, error);
-        return { source: "fallback-after-primary-failure", settings: readFallbackSettings() };
-      }
-      return { source: "fallback", settings: readFallbackSettings() };
-    }
-    function readFallbackSettings() {
-      return readFallbackJson(
-        fallbackStorageKey,
-        settingsContract.normalizeSettings,
-        settingsContract.emptySettings(),
-        `${scriptName}: failed to read fallback storage.`
-      );
-    }
-    async function writeSettingsTo(nextSettings, { primary = true } = {}) {
-      const normalized = settingsContract.normalizeSettings(nextSettings);
-      if (primary) {
-        try {
-          if (await writePrimaryValue(storageKey, normalized)) return normalized;
-        } catch (error) {
-          logger.warn(`${scriptName}: failed to write userscript storage.`, error);
-        }
-      }
-      writeFallbackJson(fallbackStorageKey, normalized);
-      return normalized;
-    }
-    function subscribePrimary(onChange) {
-      const listener = (_name, _oldValue, _newValue, remote) => {
-        if (remote) onChange();
-      };
-      if (!gm.valueChange) return null;
-      const { add, remove } = gm.valueChange;
-      const result = add(storageKey, listener);
-      if (!result || typeof result.then !== "function") {
-        return () => {
-          if (remove) remove(result);
-        };
-      }
-      result.catch((error) => logger.warn(`${scriptName}: failed to watch userscript storage.`, error));
-      return () => {
-        if (!remove) return;
-        result.then((value) => remove(value)).catch(() => {
-        });
-      };
+    const storeOptions = { ...adapters, scriptName, localStorage: localStorageAdapter, logger };
+    const settingsStore = createGmFirstJsonStore({
+      ...storeOptions,
+      subject: "settings",
+      key: storageKey,
+      fallbackKey: fallbackStorageKey,
+      normalize: settingsContract.normalizeSettings,
+      eventTarget
+    });
+    const sitePositionStore = createGmFirstJsonStore({
+      ...storeOptions,
+      subject: "widget position",
+      key: widgetPositionKey,
+      fallbackKey: fallbackWidgetPositionKey,
+      normalize: normalizeWidgetPosition,
+      eventTarget: null
+    });
+    const sharedPositionStore = sharedWidgetPositionKey ? createGmFirstJsonStore({
+      ...storeOptions,
+      subject: "shared widget position",
+      key: sharedWidgetPositionKey,
+      fallbackKey: null,
+      normalize: normalizeWidgetPosition,
+      eventTarget: null
+    }) : null;
+    async function readSettings() {
+      const result = await settingsStore.read();
+      return { result, settings: result.value ?? settingsContract.emptySettings() };
     }
     return {
       async readSettings() {
-        return (await readSettingsWithSource()).settings;
+        return (await readSettings()).settings;
       },
       // Applies one change to the latest stored settings instead of a copy held
-      // since page load, so saves from other tabs are kept.
+      // since page load, so saves from other tabs are kept. Settings read from
+      // fallback storage after a GM failure are never written over the GM copy.
       async updateSettings(transform2) {
-        const latest = await readSettingsWithSource();
-        const next = transform2(latest.settings);
-        return writeSettingsTo(next, { primary: latest.source !== "fallback-after-primary-failure" });
+        const latest = await readSettings();
+        const next = settingsContract.normalizeSettings(transform2(latest.settings));
+        await settingsStore.write(next, { fallbackOnly: latest.result.gmFailed });
+        return next;
       },
       // Calls onChange when another tab changes the settings. Returns an
       // unsubscribe function; managers without change events only get the
       // same-origin fallback storage event.
       subscribeSettings(onChange) {
-        const cleanups = [];
-        try {
-          const unsubscribe = subscribePrimary(onChange);
-          if (unsubscribe) cleanups.push(unsubscribe);
-        } catch (error) {
-          logger.warn(`${scriptName}: failed to watch userscript storage.`, error);
-        }
-        if (eventTarget && typeof eventTarget.addEventListener === "function") {
-          const onStorage = (event) => {
-            if (event?.key === fallbackStorageKey || event?.key === null) onChange();
-          };
-          eventTarget.addEventListener("storage", onStorage);
-          cleanups.push(() => eventTarget.removeEventListener("storage", onStorage));
-        }
-        return () => {
-          for (const cleanup of cleanups) {
-            try {
-              cleanup();
-            } catch {
-            }
-          }
-        };
+        return settingsStore.subscribe((change) => {
+          if (change.remote) onChange();
+        });
       },
       async readWidgetPosition() {
-        try {
-          const primary = await readPrimaryValue(widgetPositionKey, null);
-          if (primary.available) {
-            const sitePosition = normalizeWidgetPosition(primary.value);
-            if (sitePosition || !sharedWidgetPositionKey) return sitePosition;
-            return normalizeWidgetPosition((await readPrimaryValue(sharedWidgetPositionKey, null)).value);
-          }
-        } catch (error) {
-          logger.warn(`${scriptName}: failed to read widget position.`, error);
-        }
-        return readFallbackJson(
-          fallbackWidgetPositionKey,
-          normalizeWidgetPosition,
-          null,
-          `${scriptName}: failed to read fallback widget position.`
-        );
+        const site = await sitePositionStore.read();
+        if (site.backend !== "gm" || site.value || !sharedPositionStore) return site.value;
+        const shared = await sharedPositionStore.read();
+        return shared.gmFailed ? sitePositionStore.readFallback().value : shared.value;
       },
       async writeSettings(nextSettings) {
-        return writeSettingsTo(nextSettings);
+        const normalized = settingsContract.normalizeSettings(nextSettings);
+        await settingsStore.write(normalized);
+        return normalized;
       },
       async writeWidgetPosition(position) {
         const normalized = normalizeWidgetPosition(position);
         if (!normalized) return null;
-        try {
-          if (await writePrimaryValue(widgetPositionKey, normalized)) return normalized;
-        } catch (error) {
-          logger.warn(`${scriptName}: failed to write widget position.`, error);
-        }
-        writeFallbackJson(fallbackWidgetPositionKey, normalized);
+        await sitePositionStore.write(normalized);
         return normalized;
       },
       registerSettingsMenu(label, callback) {

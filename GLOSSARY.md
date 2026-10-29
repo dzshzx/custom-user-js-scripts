@@ -69,7 +69,8 @@ _Avoid_: overlay, modal, iframe app
 
 **Widget Kit**:
 The shared ES modules in `src/userscripts/shared/` (design tokens, Lucide
-icons, toast, widget shell) that bundled scripts import as
+icons, toast, widget shell, the GM manager adapter and the GM-first JSON store
+with its localStorage fallback) that bundled scripts import as
 `../shared/*.lib.ts(x)`; the build skips the directory because it has no entry.
 _Avoid_: common ui, design system package
 

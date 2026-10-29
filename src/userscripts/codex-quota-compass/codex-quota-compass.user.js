@@ -1951,6 +1951,123 @@ ${text.slice(0, 800)}`);
     };
   }
 
+  // src/userscripts/shared/shared-gm-json-store.lib.ts
+  function createGmFirstJsonStore(options) {
+    const { scriptName, subject, key, normalize, mirror = false, eventTarget = null } = options;
+    const fallbackKey = options.fallbackKey || null;
+    const logger = options.logger === void 0 ? globalThis.console : options.logger;
+    const warn = (message, error) => logger?.warn?.(`${scriptName}: ${message}`, error);
+    const gmApi = () => resolveGmApi(options);
+    function fallbackStorage() {
+      const storage = options.localStorage === void 0 ? globalThis.localStorage : options.localStorage;
+      if (!storage) throw new Error("localStorage is unavailable.");
+      return storage;
+    }
+    function writeFallback(value) {
+      if (!fallbackKey) throw new Error(`No fallback storage for ${subject}.`);
+      fallbackStorage().setItem(fallbackKey, JSON.stringify(value));
+    }
+    function readFallback() {
+      if (!fallbackKey) return { available: false, value: null };
+      try {
+        return { available: true, value: normalize(JSON.parse(fallbackStorage().getItem(fallbackKey) || "null")) };
+      } catch (error) {
+        warn(`failed to read ${subject} from fallback storage.`, error);
+        return { available: false, value: null };
+      }
+    }
+    async function read() {
+      let gmFailed = false;
+      const { getValue } = gmApi();
+      if (getValue) {
+        try {
+          return { backend: "gm", value: normalize(await getValue(key, null)), gmFailed: false };
+        } catch (error) {
+          gmFailed = true;
+          warn(`failed to read ${subject} from userscript storage.`, error);
+        }
+      }
+      const fallback2 = readFallback();
+      return fallback2.available ? { backend: "localStorage", value: fallback2.value, gmFailed } : { backend: "none", value: null, gmFailed };
+    }
+    async function write(value, { fallbackOnly = false } = {}) {
+      const { setValue } = gmApi();
+      if (!fallbackOnly && setValue) {
+        let written = false;
+        try {
+          await setValue(key, value);
+          written = true;
+        } catch (error) {
+          warn(`failed to write ${subject} to userscript storage.`, error);
+        }
+        if (written) {
+          let mirrorDegraded = false;
+          if (mirror && fallbackKey) {
+            try {
+              writeFallback(value);
+            } catch (error) {
+              mirrorDegraded = true;
+              warn(`failed to mirror ${subject} to fallback storage.`, error);
+            }
+          }
+          return { backend: "gm", mirrorDegraded };
+        }
+      }
+      writeFallback(value);
+      return { backend: "localStorage", mirrorDegraded: false };
+    }
+    function subscribeGm(listener) {
+      const { valueChange } = gmApi();
+      if (!valueChange) return null;
+      const { add, remove } = valueChange;
+      const watchFailed = (error) => warn(`failed to watch ${subject} in userscript storage.`, error);
+      let listenerId;
+      try {
+        listenerId = add(key, (name, oldValue, newValue, remote) => {
+          listener({ backend: "gm", key: name, oldValue, newValue, remote: Boolean(remote) });
+        });
+      } catch (error) {
+        watchFailed(error);
+        return null;
+      }
+      if (listenerId === void 0 || listenerId === null) return null;
+      if (typeof listenerId.then !== "function") {
+        const id = listenerId;
+        return () => remove?.(id);
+      }
+      const pending = listenerId;
+      pending.catch(watchFailed);
+      return () => {
+        if (!remove) return;
+        pending.then((id) => remove(id)).catch(() => {
+        });
+      };
+    }
+    function subscribe(listener) {
+      const cleanups = [];
+      const unsubscribeGm = subscribeGm(listener);
+      if (unsubscribeGm) cleanups.push(unsubscribeGm);
+      if (fallbackKey && eventTarget && typeof eventTarget.addEventListener === "function") {
+        const onStorage = (event) => {
+          const { key: changedKey, oldValue, newValue } = event || {};
+          if (changedKey !== fallbackKey && changedKey !== null) return;
+          listener({ backend: "localStorage", key: fallbackKey, oldValue, newValue, remote: true });
+        };
+        eventTarget.addEventListener("storage", onStorage);
+        cleanups.push(() => eventTarget.removeEventListener("storage", onStorage));
+      }
+      return () => {
+        for (const cleanup of cleanups) {
+          try {
+            cleanup();
+          } catch {
+          }
+        }
+      };
+    }
+    return { read, readFallback, write, subscribe };
+  }
+
   // src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts
   var DEFAULT_ARCHIVE_KEY = "codexQuotaCompassSnapshotArchive";
   var DEFAULT_ARCHIVE_FALLBACK_KEY = "codexQuotaCompassSnapshotArchiveFallback";
@@ -1964,9 +2081,19 @@ ${text.slice(0, 800)}`);
     const fallbackKey = options.fallbackKey || DEFAULT_ARCHIVE_FALLBACK_KEY;
     const scriptName = options.scriptName || "Codex Quota Compass";
     const logger = options.logger || globalThis.console;
-    const localStorageObject = options.localStorage || globalThis.localStorage;
     const mergeArchives = options.mergeArchives ?? null;
     const normalizeArchive = options.normalizeArchive ?? ((archive) => archive);
+    const store = createGmFirstJsonStore({
+      ...options,
+      scriptName,
+      subject: "archive",
+      key: archiveKey,
+      fallbackKey,
+      localStorage: options.localStorage || void 0,
+      normalize: (archive) => archive,
+      mirror: true,
+      logger
+    });
     let backendInfo = STORAGE_BACKENDS.pending;
     let mirrorDegraded = false;
     function gmBackendInfo() {
@@ -1976,34 +2103,6 @@ ${text.slice(0, 800)}`);
         degraded: true,
         mirrorError: "Snapshot Archive mirror write failed."
       } : STORAGE_BACKENDS.gm;
-    }
-    async function readFromGmStorage() {
-      const { getValue } = resolveGmApi(options);
-      if (getValue) {
-        return await getValue(archiveKey, null);
-      }
-      throw new Error("GM storage is unavailable.");
-    }
-    async function writeToGmStorage(nextArchive) {
-      const { setValue } = resolveGmApi(options);
-      if (setValue) {
-        await setValue(archiveKey, nextArchive);
-        return nextArchive;
-      }
-      throw new Error("GM storage is unavailable.");
-    }
-    function readFromLocalStorage() {
-      if (!localStorageObject?.getItem) {
-        throw new Error("localStorage is unavailable.");
-      }
-      return JSON.parse(localStorageObject.getItem(fallbackKey) || "null");
-    }
-    function writeToLocalStorage(nextArchive) {
-      if (!localStorageObject?.setItem) {
-        throw new Error("localStorage is unavailable.");
-      }
-      localStorageObject.setItem(fallbackKey, JSON.stringify(nextArchive));
-      return nextArchive;
     }
     function mergeStorageArchives(primaryArchive, fallbackArchive) {
       const normalizedPrimary = normalizeArchive(primaryArchive);
@@ -2017,33 +2116,15 @@ ${text.slice(0, 800)}`);
         changed: merged?.changed ?? Number(merged?.report?.added) > 0
       };
     }
-    function getGmValueChangeAdapter() {
-      return resolveGmApi(options).valueChange;
-    }
     return {
       async read() {
-        let gmArchive = null;
-        let gmAvailable = false;
-        try {
-          gmArchive = await readFromGmStorage();
-          gmAvailable = true;
-          backendInfo = gmBackendInfo();
-        } catch (error) {
-          logger?.warn?.(`${scriptName}: failed to read userscript archive storage.`, error);
-        }
-        let fallbackArchive = null;
-        let fallbackAvailable = false;
-        try {
-          fallbackArchive = readFromLocalStorage();
-          fallbackAvailable = true;
-        } catch (error) {
-          logger?.warn?.(`${scriptName}: failed to read fallback archive storage.`, error);
-        }
-        if (gmAvailable) {
-          const merged = mergeStorageArchives(gmArchive, fallbackArchive);
+        const primary = await store.read();
+        if (primary.backend === "gm") {
+          const merged = mergeStorageArchives(primary.value, store.readFallback().value);
           if (merged.changed) {
             try {
-              await writeToGmStorage(merged.archive);
+              const migrated = await store.write(merged.archive);
+              if (migrated.backend === "gm") mirrorDegraded = migrated.mirrorDegraded;
             } catch (error) {
               logger?.warn?.(`${scriptName}: failed to migrate fallback archive into userscript storage.`, error);
             }
@@ -2051,27 +2132,18 @@ ${text.slice(0, 800)}`);
           backendInfo = gmBackendInfo();
           return merged.archive;
         }
-        if (!fallbackAvailable) throw new Error("Both Snapshot Archive storage reads failed.");
+        if (primary.backend === "none") throw new Error("Both Snapshot Archive storage reads failed.");
         backendInfo = STORAGE_BACKENDS.localStorage;
-        return fallbackArchive;
+        return primary.value;
       },
       async write(nextArchive) {
-        try {
-          await writeToGmStorage(nextArchive);
-          try {
-            writeToLocalStorage(nextArchive);
-            mirrorDegraded = false;
-          } catch (error) {
-            mirrorDegraded = true;
-            logger?.warn?.(`${scriptName}: failed to mirror userscript archive storage to fallback storage.`, error);
-          }
+        const result = await store.write(nextArchive);
+        if (result.backend === "gm") {
+          mirrorDegraded = result.mirrorDegraded;
           backendInfo = gmBackendInfo();
-          return nextArchive;
-        } catch (error) {
-          logger?.warn?.(`${scriptName}: failed to write userscript archive storage.`, error);
+        } else {
+          backendInfo = STORAGE_BACKENDS.localStorage;
         }
-        writeToLocalStorage(nextArchive);
-        backendInfo = STORAGE_BACKENDS.localStorage;
         return nextArchive;
       },
       getBackendInfo() {
@@ -2080,23 +2152,15 @@ ${text.slice(0, 800)}`);
       subscribeToChanges(listener) {
         if (typeof listener !== "function") return () => {
         };
-        const adapter = getGmValueChangeAdapter();
-        if (!adapter) return () => {
-        };
-        const listenerId = adapter.add(archiveKey, (key, oldValue, newValue, remote) => {
+        return store.subscribe((change) => {
           listener({
-            key,
-            oldValue,
-            newValue,
-            remote: Boolean(remote),
-            backendInfo: STORAGE_BACKENDS.gm
+            key: change.key,
+            oldValue: change.oldValue,
+            newValue: change.newValue,
+            remote: change.remote,
+            backendInfo: STORAGE_BACKENDS[change.backend]
           });
         });
-        return () => {
-          if (adapter.remove && listenerId !== void 0 && listenerId !== null) {
-            adapter.remove(listenerId);
-          }
-        };
       }
     };
   }
