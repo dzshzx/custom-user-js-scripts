@@ -19,9 +19,9 @@ import { parseMetadataBlock } from '../scripts/lib/userscript-metadata.mjs';
 
 const RAW_URL = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js';
 
-test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.12', async () => {
+test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.13', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
-  assert.deepEqual(metadata.get('@version'), ['0.0.12']);
+  assert.deepEqual(metadata.get('@version'), ['0.0.13']);
   assert.deepEqual(metadata.get('@downloadURL'), [RAW_URL]);
   assert.deepEqual(metadata.get('@updateURL'), [RAW_URL]);
 });
