@@ -1,3 +1,5 @@
+import { ensureStyle } from '../shared/shared-dom.lib.ts';
+
 const LIB_NAME = 'WebPageAssistantPresentationDialogStylesLib';
 
 export interface AssistantStyleOptions {
@@ -6,16 +8,13 @@ export interface AssistantStyleOptions {
   styleId: string;
 }
 
-function installAssistantDialogStyles({ documentObject, rootId, styleId }: AssistantStyleOptions): void {
+// Returns the remover from ensureStyle: a no-op when the style already exists.
+function installAssistantDialogStyles({ documentObject, rootId, styleId }: AssistantStyleOptions): () => void {
   if (!documentObject || !rootId || !styleId) {
     throw new Error(`${LIB_NAME}: documentObject, rootId, and styleId are required.`);
   }
 
-  if (documentObject.getElementById(styleId)) return;
-
-  const style = documentObject.createElement('style');
-  style.id = styleId;
-  style.textContent = `      #${rootId} .part-backdrop {
+  const cssText = `      #${rootId} .part-backdrop {
       position: fixed;
 	        inset: 0;
 	        width: auto;
@@ -289,7 +288,7 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }: Assis
       }
     }
   `;
-  documentObject.documentElement.append(style);
+  return ensureStyle(documentObject, styleId, cssText, documentObject.documentElement);
 }
 
 export { installAssistantDialogStyles };

@@ -1,23 +1,20 @@
 import { mountIcon } from '../shared/shared-icons.lib.tsx';
 import type { IconName } from '../shared/shared-icons.lib.tsx';
+import { defaultUnlockerSetting, getRefreshSetting, getUnlockerSetting } from './web-page-assistant-settings.lib.ts';
 import type {
   RefreshMatch,
   RefreshSetting,
   Scope,
   Settings,
   UnlockerMatch,
+  UnlockerOption,
   UnlockerSetting,
-  defaultUnlockerSetting as DefaultUnlockerSetting,
-  getRefreshSetting,
-  getUnlockerSetting,
 } from './web-page-assistant-settings.lib.ts';
 
 export type DialogTab = 'refresh' | 'unlocker';
 export type CustomIntervalUnit = 'minutes' | 'seconds';
 
 export interface DialogContractAdapters {
-  settingsContract: { getRefreshSetting: typeof getRefreshSetting; getUnlockerSetting: typeof getUnlockerSetting };
-  defaultUnlockerSetting: typeof DefaultUnlockerSetting;
   formatInterval: (ms: number) => string;
   defaultIntervalMs: number;
 }
@@ -104,7 +101,7 @@ function isCoarsePointer(windowObject: Window | null | undefined = globalThis.wi
 }
 
 function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
-  const { settingsContract, defaultUnlockerSetting, formatInterval, defaultIntervalMs } = adapters;
+  const { formatInterval, defaultIntervalMs } = adapters;
   const tabs = { refresh: 'refresh', unlocker: 'unlocker' } as const;
   const roles = {
     status: 'status',
@@ -124,6 +121,15 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
     unlockerDrag: 'unlocker-drag',
     unlockerBeforeUnload: 'unlocker-beforeunload',
   } as const;
+  // Unlocker form checkboxes and the setting field each one edits.
+  const unlockerFields: ReadonlyArray<readonly [string, 'enabled' | UnlockerOption]> = [
+    [roles.unlockerEnabled, 'enabled'],
+    [roles.unlockerSelection, 'allowSelection'],
+    [roles.unlockerCopy, 'allowCopy'],
+    [roles.unlockerContextMenu, 'allowContextMenu'],
+    [roles.unlockerDrag, 'allowDrag'],
+    [roles.unlockerBeforeUnload, 'suppressBeforeUnload'],
+  ];
   const actions = {
     savePreset: 'save-preset',
     deletePage: 'delete-page',
@@ -161,10 +167,10 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
     const nextTab = normalizeTab(input.preferredTab, input.activeTab);
     const selectedScope: Scope =
       input.preferredScope || input.activeRefreshMatch?.scope || input.activeUnlockerMatch?.scope || 'page';
-    const pageSetting = settingsContract.getRefreshSetting(input.settings, 'page', input.pageKey);
-    const siteSetting = settingsContract.getRefreshSetting(input.settings, 'site', input.siteKey);
-    const pageUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, 'page', input.pageKey);
-    const siteUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, 'site', input.siteKey);
+    const pageSetting = getRefreshSetting(input.settings, 'page', input.pageKey);
+    const siteSetting = getRefreshSetting(input.settings, 'site', input.siteKey);
+    const pageUnlockerSetting = getUnlockerSetting(input.settings, 'page', input.pageKey);
+    const siteUnlockerSetting = getUnlockerSetting(input.settings, 'site', input.siteKey);
     const scopedUnlockerSetting = selectedScope === 'site' ? siteUnlockerSetting : pageUnlockerSetting;
     const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
     const customInterval: DialogViewModel['customInterval'] =
@@ -230,18 +236,9 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
     dialogNode.querySelector<HTMLSelectElement>(roleSelector(roles.customUnit))!.value = model.customInterval.unit;
     dialogNode.querySelector<HTMLButtonElement>(actionSelector(actions.deletePage))!.disabled = !model.pageSetting;
     dialogNode.querySelector<HTMLButtonElement>(actionSelector(actions.deleteSite))!.disabled = !model.siteSetting;
-    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerEnabled))!.checked =
-      model.unlockerFormSetting.enabled;
-    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerSelection))!.checked =
-      model.unlockerFormSetting.allowSelection;
-    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerCopy))!.checked =
-      model.unlockerFormSetting.allowCopy;
-    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerContextMenu))!.checked =
-      model.unlockerFormSetting.allowContextMenu;
-    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerDrag))!.checked =
-      model.unlockerFormSetting.allowDrag;
-    dialogNode.querySelector<HTMLInputElement>(roleSelector(roles.unlockerBeforeUnload))!.checked =
-      model.unlockerFormSetting.suppressBeforeUnload;
+    for (const [role, field] of unlockerFields) {
+      dialogNode.querySelector<HTMLInputElement>(roleSelector(role))!.checked = model.unlockerFormSetting[field];
+    }
     dialogNode.querySelector<HTMLButtonElement>(actionSelector(actions.deleteUnlockerPage))!.disabled =
       !model.pageUnlockerSetting;
     dialogNode.querySelector<HTMLButtonElement>(actionSelector(actions.deleteUnlockerSite))!.disabled =
@@ -250,14 +247,9 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
   }
 
   function readUnlockerFormSetting(dialogNode: ParentNode | null | undefined) {
-    return defaultUnlockerSetting({
-      enabled: isChecked(dialogNode, roles.unlockerEnabled),
-      allowSelection: isChecked(dialogNode, roles.unlockerSelection),
-      allowCopy: isChecked(dialogNode, roles.unlockerCopy),
-      allowContextMenu: isChecked(dialogNode, roles.unlockerContextMenu),
-      allowDrag: isChecked(dialogNode, roles.unlockerDrag),
-      suppressBeforeUnload: isChecked(dialogNode, roles.unlockerBeforeUnload),
-    });
+    return defaultUnlockerSetting(
+      Object.fromEntries(unlockerFields.map(([role, field]) => [field, isChecked(dialogNode, role)])),
+    );
   }
 
   return {

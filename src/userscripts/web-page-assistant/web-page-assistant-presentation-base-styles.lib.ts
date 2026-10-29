@@ -1,3 +1,5 @@
+import { ensureStyle } from '../shared/shared-dom.lib.ts';
+
 const LIB_NAME = 'WebPageAssistantPresentationBaseStylesLib';
 
 export interface AssistantStyleOptions {
@@ -6,19 +8,16 @@ export interface AssistantStyleOptions {
   styleId: string;
 }
 
-function installAssistantBaseStyles({ documentObject, rootId, styleId }: AssistantStyleOptions): void {
+// Returns the remover from ensureStyle: a no-op when the style already exists.
+function installAssistantBaseStyles({ documentObject, rootId, styleId }: AssistantStyleOptions): () => void {
   if (!documentObject || !rootId || !styleId) {
     throw new Error(`${LIB_NAME}: documentObject, rootId, and styleId are required.`);
   }
 
-  if (documentObject.getElementById(styleId)) return;
-
   // WPA tokens bridge the shared widget kit tokens (--wk-*) injected on the
   // same root by buildTokenCss; theme flips via [data-wk-theme="dark"] set by
   // applyTheme. Only derivatives without a --wk-* counterpart stay local.
-  const style = documentObject.createElement('style');
-  style.id = styleId;
-  style.textContent = `
+  const cssText = `
 	      #${rootId} {
 	        position: fixed;
 	        z-index: 2147483647;
@@ -350,7 +349,7 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
     }
 
 `;
-  documentObject.documentElement.append(style);
+  return ensureStyle(documentObject, styleId, cssText, documentObject.documentElement);
 }
 
 export { installAssistantBaseStyles };

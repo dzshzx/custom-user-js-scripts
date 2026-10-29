@@ -272,3 +272,19 @@ test('a write completing after disposal cannot restore the interface', { skip: d
   await flush();
   assert.equal(harness.window.document.getElementById('page-auto-refresh-timer-root'), null);
 });
+
+test('the view removes only the styles it installed when disposed', { skip: domSkip }, async () => {
+  const harness = createHarness();
+  const { document } = harness.window;
+  const hostDialogStyle = document.createElement('style');
+  hostDialogStyle.id = 'page-auto-refresh-timer-root-dialog-style';
+  document.head.append(hostDialogStyle);
+  await harness.view.openSettings();
+  const ownedIds = ['page-auto-refresh-timer-root-token-style', 'page-auto-refresh-timer-root-style'];
+  for (const id of ownedIds) assert.equal(document.getElementById(id)?.parentNode, document.documentElement);
+  assert.equal(document.querySelectorAll('#page-auto-refresh-timer-root-dialog-style').length, 1);
+  harness.view.dispose();
+  harness.session.dispose();
+  for (const id of ownedIds) assert.equal(document.getElementById(id), null);
+  assert.equal(document.getElementById('page-auto-refresh-timer-root-dialog-style'), hostDialogStyle);
+});

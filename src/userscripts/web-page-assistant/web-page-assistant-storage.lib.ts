@@ -1,4 +1,5 @@
 import { resolveGmApi } from '../shared/shared-gm.lib.ts';
+import { isRecord } from '../shared/shared-values.lib.ts';
 import type { GmOverrides, GmValueChangeListener } from '../shared/shared-gm.lib.ts';
 import type { Settings } from './web-page-assistant-settings.lib.ts';
 
@@ -8,9 +9,9 @@ export interface WidgetPosition {
 }
 
 function normalizeWidgetPosition(value: unknown): WidgetPosition | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const left = Number((value as { left?: unknown }).left);
-  const top = Number((value as { top?: unknown }).top);
+  if (!isRecord(value)) return null;
+  const left = Number(value.left);
+  const top = Number(value.top);
   if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
   return { left: Math.round(left), top: Math.round(top) };
 }

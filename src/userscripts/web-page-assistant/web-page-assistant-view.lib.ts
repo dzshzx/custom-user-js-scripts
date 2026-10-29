@@ -7,8 +7,16 @@ import {
   createDialogElement,
   isCoarsePointer,
 } from './web-page-assistant-presentation.lib.ts';
-import { createDragAnchor, createHoverExpansion, createPanelPlacement } from '../shared/shared-widget-shell.lib.ts';
+import {
+  PANEL_GAP,
+  PANEL_SAFE_MARGIN,
+  createDragAnchor,
+  createHoverExpansion,
+  createPanelPlacement,
+} from '../shared/shared-widget-shell.lib.ts';
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
+import { ensureStyle } from '../shared/shared-dom.lib.ts';
+import { errorMessage } from '../shared/shared-values.lib.ts';
 import type { DragAnchor, HoverExpansion, PanelPlacement, WidgetTimers } from '../shared/shared-widget-shell.lib.ts';
 import type { DialogTab } from './web-page-assistant-presentation.lib.ts';
 import type { Scope, ScopeKeys, UnlockerSetting } from './web-page-assistant-settings.lib.ts';
@@ -121,9 +129,6 @@ const WIDGET_HOVER_INTENT_MS = 350;
 const WIDGET_DEFAULT_OFFSET = 18;
 const PANEL_WIDTH = 248;
 const PANEL_MIN_WIDTH = 52;
-const PANEL_SAFE_MARGIN = 12;
-// Placement offset between widget and panel; the panel's hover bridge spans it.
-const PANEL_GAP = 8;
 const PRESET_INTERVALS_MS = [30, 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 30 * 60, 60 * 60].map(
   (seconds) => seconds * 1000,
 );
@@ -178,8 +183,6 @@ function createWebPageAssistantView({
     clearTimeout: clock?.clearTimeout || windowObject.clearTimeout.bind(windowObject),
   };
   const dialogContract = createPageAssistantDialogContract({
-    settingsContract: PageAssistantSettings,
-    defaultUnlockerSetting: PageAssistantSettings.defaultUnlockerSetting,
     formatInterval,
     defaultIntervalMs: 5 * 60 * 1000,
   });
@@ -209,7 +212,7 @@ function createWebPageAssistantView({
   let openPromise: Promise<OpenSettingsResult> | null = null;
   let pendingOpenIntent: OpenIntent | null = null;
   const pendingSubmissions = new Set<Submission>();
-  const ownedStyleIds = new Set<string>();
+  const styleRemovers: Array<() => void> = [];
   let finishDisposed: (value: OpenSettingsResult) => void;
   const disposedPromise = new Promise<OpenSettingsResult>((resolve) => {
     finishDisposed = resolve;
@@ -297,39 +300,39 @@ function createWebPageAssistantView({
     widgetShell.placement?.update().catch(() => {});
   }
 
-  function currentStatusText(snapshot: SessionState = latestSnapshot): string {
-    const activeMatch = snapshot.refresh.activeMatch;
+  // The dialog says "已启用"; the widget, read on its own, says "自动刷新已启用".
+  function enabledStatusText(enabledText: string): string {
+    const activeMatch = latestSnapshot.refresh.activeMatch;
     if (!activeMatch) return '当前未启用自动刷新。';
-    return `${scopeLabel(activeMatch.scope)}已启用，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
+    return `${scopeLabel(activeMatch.scope)}${enabledText}，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
   }
 
-  function widgetStatusText(snapshot: SessionState = latestSnapshot): string {
-    const runtimeState = snapshot.refresh;
-    if (!runtimeState.activeMatch) return '当前未启用自动刷新。';
-    if (runtimeState.isPaused) {
+  function currentStatusText(): string {
+    return enabledStatusText('已启用');
+  }
+
+  function widgetStatusText(): string {
+    const runtimeState = latestSnapshot.refresh;
+    if (runtimeState.activeMatch && runtimeState.isPaused) {
       const remaining = formatInterval(Math.max(1000, Math.ceil(runtimeState.remainingMs / 1000) * 1000));
       return `自动刷新已暂停，剩余 ${remaining}。`;
     }
-    return `${scopeLabel(runtimeState.activeMatch.scope)}自动刷新已启用，每 ${formatInterval(runtimeState.activeMatch.setting.intervalMs)} 刷新一次。`;
+    return enabledStatusText('自动刷新已启用');
   }
 
   // Installs a style the page does not have yet and owns it for dispose.
-  function ensureStyle(styleId: string, install: () => void) {
+  function ownStyle(styleId: string, install: () => () => void) {
     if (documentObject.getElementById(styleId)) return;
-    install();
-    ownedStyleIds.add(styleId);
+    styleRemovers.push(install());
   }
 
   function ensureRoot(): HTMLElement | null {
     if (disposed) return null;
     if (root && root.isConnected !== false) return root;
-    ensureStyle(TOKEN_STYLE_ID, () => {
-      const tokenStyle = documentObject.createElement('style');
-      tokenStyle.id = TOKEN_STYLE_ID;
-      tokenStyle.textContent = tokenCss;
-      documentObject.documentElement.append(tokenStyle);
-    });
-    ensureStyle(STYLE_ID, () => installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID }));
+    ownStyle(TOKEN_STYLE_ID, () =>
+      ensureStyle(documentObject, TOKEN_STYLE_ID, tokenCss, documentObject.documentElement),
+    );
+    ownStyle(STYLE_ID, () => installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID }));
     root = documentObject.getElementById(ROOT_ID);
     if (!root) {
       root = documentObject.createElement('div');
@@ -344,20 +347,16 @@ function createWebPageAssistantView({
     return root;
   }
 
-  function createWidgetViewModel() {
-    return {
-      enabled: Boolean(latestSnapshot.refresh.activeMatch),
-      summary: currentStatusText(),
-    };
-  }
-
   function renderWidget() {
     if (disposed || latestSnapshot.lifecycle !== 'ready') return;
     ensureRoot();
     if (!hasMountedWidget) widgetPosition = positions.get?.() || widgetPosition;
     const returnToWidget = dialogReturnFocus === widgetButton;
     widget?.remove();
-    const rendered = createWidgetElement({ documentObject, model: createWidgetViewModel() });
+    const rendered = createWidgetElement({
+      documentObject,
+      model: { enabled: Boolean(latestSnapshot.refresh.activeMatch), summary: currentStatusText() },
+    });
     widget = rendered.widget;
     widgetButton = rendered.widgetButton;
     countdownNodes = rendered.countdownNodes;
@@ -372,10 +371,6 @@ function createWebPageAssistantView({
     updatePauseButton();
     updateCountdownText();
     updateWidgetStatusText();
-  }
-
-  function getSelectedScope() {
-    return dialogContract.readSelectedScope(dialog);
   }
 
   function createDialogViewModel(
@@ -394,7 +389,10 @@ function createWebPageAssistantView({
       pageKey: keys.pageKey,
       siteKey: keys.siteKey,
       statusText: currentStatusText(),
-      unlockerStatusText: unlockerStatusText(latestSnapshot, preferredScope || getSelectedScope()),
+      unlockerStatusText: unlockerStatusText(
+        latestSnapshot,
+        preferredScope || dialogContract.readSelectedScope(dialog),
+      ),
     });
   }
 
@@ -447,7 +445,7 @@ function createWebPageAssistantView({
     if (disposed) return;
     ensureRoot();
     // Most pages never open the settings, so their styles wait for the first dialog.
-    ensureStyle(DIALOG_STYLE_ID, () =>
+    ownStyle(DIALOG_STYLE_ID, () =>
       installAssistantDialogStyles({ documentObject, rootId: ROOT_ID, styleId: DIALOG_STYLE_ID }),
     );
     const preserved = captureDialogState();
@@ -493,7 +491,10 @@ function createWebPageAssistantView({
 
   function updateDialogStatus() {
     if (!dialog) return;
-    dialogContract.applyStatusTexts(dialog, createDialogViewModel('', getSelectedScope(), activeDialogTab));
+    dialogContract.applyStatusTexts(
+      dialog,
+      createDialogViewModel('', dialogContract.readSelectedScope(dialog), activeDialogTab),
+    );
   }
 
   function parseCustomInterval(): CustomIntervalResult {
@@ -539,10 +540,11 @@ function createWebPageAssistantView({
 
   async function dispatchAction(action: string, node: HTMLElement) {
     if (action === 'open-settings') return openSettings({ tab: 'refresh' });
-    if (action === 'switch-tab') return renderDialog({ scope: getSelectedScope(), tab: node.dataset.partTab });
+    if (action === 'switch-tab')
+      return renderDialog({ scope: dialogContract.readSelectedScope(dialog), tab: node.dataset.partTab });
     if (action === 'close-dialog') return closeDialog();
     if (initializationError) throw new Error(initializationError);
-    let scope = getSelectedScope();
+    let scope = dialogContract.readSelectedScope(dialog);
     let command: ViewCommand = { type: action, scope };
     let tab = 'refresh';
     let message = '';
@@ -638,7 +640,7 @@ function createWebPageAssistantView({
         dialogGeneration === actionGeneration &&
         !dialog?.querySelector('[data-part-role="message"]')?.textContent
       ) {
-        setMessage(`操作失败：${(error as Error | null)?.message || error}`, 'error');
+        setMessage(`操作失败：${errorMessage(error)}`, 'error');
       }
     } finally {
       if (isWrite && !disposed && actionNode.isConnected !== false) {
@@ -655,7 +657,7 @@ function createWebPageAssistantView({
   function handleRootChange(event: Event) {
     const target = event.target as Element | null;
     if (!target?.matches?.('input[name="part-scope"]')) return;
-    const selectedScope = getSelectedScope();
+    const selectedScope = dialogContract.readSelectedScope(dialog);
     renderDialog({ message: `将保存到${scopeLabel(selectedScope)}。`, scope: selectedScope, tab: activeDialogTab });
   }
 
@@ -687,7 +689,7 @@ function createWebPageAssistantView({
     if (!dialog) return;
     updateDialogStatus();
     if (change.kind === 'settings' && pendingSubmissions.size === 0 && editRevision === 0) {
-      renderDialog({ scope: getSelectedScope(), tab: activeDialogTab });
+      renderDialog({ scope: dialogContract.readSelectedScope(dialog), tab: activeDialogTab });
     }
   }
 
@@ -710,7 +712,7 @@ function createWebPageAssistantView({
         startup = {
           ok: false,
           code: 'storage-failed',
-          message: String((error as Error | null)?.message || error),
+          message: errorMessage(error),
           state: session.getState(),
         };
       }
@@ -753,8 +755,7 @@ function createWebPageAssistantView({
     widgetButton = null;
     countdownNodes = [];
     widgetStatusNode = null;
-    for (const styleId of ownedStyleIds) documentObject.getElementById(styleId)?.remove();
-    ownedStyleIds.clear();
+    for (const remove of styleRemovers.splice(0)) remove();
   }
 
   return { update, openSettings, dispose };

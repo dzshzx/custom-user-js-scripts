@@ -31,6 +31,7 @@
 // @license      MIT
 // ==/UserScript==
 
+import { ensureStyle } from '../shared/shared-dom.lib.ts';
 import * as PageAssistantSettings from './web-page-assistant-settings.lib.ts';
 import { createWebPageAssistantStoragePort, normalizeWidgetPosition } from './web-page-assistant-storage.lib.ts';
 import { createWebPageAssistantSession } from './web-page-assistant-session.lib.ts';
@@ -78,10 +79,7 @@ import type { WidgetPosition } from './web-page-assistant-storage.lib.ts';
     getWindowTarget: () => window,
     getStyle: () => document.getElementById(UNLOCKER_STYLE_ID),
     installStyle(cssText) {
-      const style = document.createElement('style');
-      style.id = UNLOCKER_STYLE_ID;
-      style.textContent = cssText;
-      document.documentElement.append(style);
+      ensureStyle(document, UNLOCKER_STYLE_ID, cssText, document.documentElement);
     },
     removeStyle() {
       document.getElementById(UNLOCKER_STYLE_ID)?.remove();
