@@ -53,6 +53,13 @@ export function signature(): string {
   return t + '.' + S2 + '.' + md5('' + t + S1);
 }
 
+export type Aborter = AbortController | { signal: undefined; abort(): void };
+
+// Without AbortController the work cannot be interrupted; callers branch on `signal`.
+export function createAborter(): Aborter {
+  return typeof AbortController === 'function' ? new AbortController() : { signal: undefined, abort() {} };
+}
+
 export function cancelled(): Error {
   return Object.assign(new Error('Request cancelled'), { name: 'AbortError' });
 }
@@ -80,15 +87,15 @@ export function createRequest({ base, fetch: fetcher = globalThis.fetch, timers 
   ): Promise<unknown> {
     for (let attempt = 1; attempt <= 3; attempt++) {
       if (signal?.aborted) throw cancelled();
-      const controller = typeof AbortController === 'function' ? new AbortController() : null;
-      const abort = () => controller?.abort();
+      const controller = createAborter();
+      const abort = () => controller.abort();
       signal?.addEventListener('abort', abort, { once: true });
-      const timer = controller ? timers.setTimeout(abort, 12000) : null;
+      const timer = controller.signal ? timers.setTimeout(abort, 12000) : null;
       let failure: RequestError | undefined;
       try {
         const response = await fetcher(base + path + '?' + new URLSearchParams(params as Record<string, string>), {
           headers: { jdsignature: signature(), connection: 'keep-alive' },
-          signal: controller?.signal || signal,
+          signal: controller.signal || signal,
         });
         if (signal?.aborted) throw cancelled();
         if (!response.ok)

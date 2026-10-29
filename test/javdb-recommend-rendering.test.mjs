@@ -155,6 +155,7 @@ test(
       assert.equal(window.document.querySelector('.jdb-ra-sec').dataset.period, '596');
       assert.equal(select.value, '596');
       assert.deepEqual(requests, [593, 596]);
+      assert.equal(storage.getItem('javdb_recommend_last_period'), '596');
     } finally {
       await window.happyDOM.close();
     }

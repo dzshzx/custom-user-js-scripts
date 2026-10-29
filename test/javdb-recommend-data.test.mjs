@@ -40,6 +40,7 @@ function detailStore() {
       values.delete(key);
     },
     clear: async () => values.clear(),
+    keys: async () => [...values.keys()],
     entries: async () => {
       scans++;
       return [...values.entries()];
@@ -243,6 +244,7 @@ test('failing detail storage and full localStorage leave fetched data usable', a
   const details = detailStore();
   details.get =
     details.set =
+    details.keys =
     details.entries =
       async () => {
         throw new Error('full');
@@ -388,4 +390,57 @@ test('timeouts use twelve seconds and retry at most three attempts with bounded 
   await rejection;
   assert.equal(calls, 3);
   assert.equal(jobs.size, 0);
+});
+
+test('index hits are not rewritten while detail-sourced hits refresh the index', async () => {
+  const { data, store, details, time } = await setup();
+  put(store, I + 2, { fetchedAt: time, movies: [movie] });
+  putDetails(details, { 1: { fetchedAt: time, movies: [movie] } });
+  const writes = [];
+  const setItem = store.setItem;
+  store.setItem = (key, value) => {
+    writes.push(key);
+    setItem(key, value);
+  };
+  const result = await data.search({ query: 'match' }).done;
+  assert.equal(result.hitPeriods, 3);
+  assert.deepEqual(writes.sort(), [I + 1, I + 3]);
+  writes.length = 0;
+  const lease = data.acquirePeriod(2, { purpose: 'search' });
+  await lease.promise;
+  lease.release();
+  assert.deepEqual(writes, []);
+  data.dispose();
+});
+
+test('detail writes below the bound count keys without scanning entries', async () => {
+  const { data, details } = await setup();
+  let keyScans = 0;
+  details.keys = async () => {
+    keyScans++;
+    return [...details.values.keys()];
+  };
+  for (const period of [3, 2, 1]) {
+    const lease = data.acquirePeriod(period);
+    await lease.promise;
+    lease.release();
+  }
+  await tick();
+  assert.equal(details.values.size, 3);
+  assert.equal(keyScans, 3);
+  assert.equal(details.scans, 0);
+  data.dispose();
+});
+
+test('last browsed period round-trips through the injected storage under its legacy key', async () => {
+  const { data, store } = await setup();
+  assert.equal(data.getLastPeriod(), null);
+  data.setLastPeriod(2);
+  assert.equal(store.values.get('javdb_recommend_last_period'), '2');
+  assert.equal(data.getLastPeriod(), 2);
+  store.setItem = () => {
+    throw new Error('full');
+  };
+  assert.doesNotThrow(() => data.setLastPeriod(1));
+  data.dispose();
 });

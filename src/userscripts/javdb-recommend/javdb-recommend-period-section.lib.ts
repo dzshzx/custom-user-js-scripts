@@ -1,3 +1,4 @@
+import { MOVIE_FIELDS } from './javdb-recommend-data.lib.ts';
 import type { Movie, Period } from './javdb-recommend-data.lib.ts';
 
 export type PeriodSectionMode = 'browse' | 'search';
@@ -88,15 +89,7 @@ function coverUrl(value: unknown) {
 
 function movieSignature(movies: unknown) {
   return JSON.stringify(
-    (Array.isArray(movies) ? movies : []).map((movie: MaybeMovie) => [
-      movie && movie.id,
-      movie && movie.number,
-      movie && movie.title,
-      movie && movie.origin_title,
-      movie && movie.cover_url,
-      movie && movie.score,
-      movie && movie.release_date,
-    ]),
+    (Array.isArray(movies) ? movies : []).map((movie: MaybeMovie) => MOVIE_FIELDS.map((key) => movie && movie[key])),
   );
 }
 

@@ -28,11 +28,9 @@ interface CompatibleGridLayout {
 }
 
 var BASE = location.origin;
-var periods: Period[] = [],
-  searching = false;
-var LS_KEY = 'javdb_recommend_last_period';
 export function bootArchivePage(data: ArchiveData): ArchivePageView {
   var disposed = false;
+  var periods: Period[] = [];
   document.title = '佳片推荐 · 历史期数 - JavDB';
   // 只清理可识别的官网 404 内容与本脚本旧根；保留其他脚本先挂载的节点和 body 状态。
   document.body.classList.remove('rails-default-error-page');
@@ -360,7 +358,7 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
   }
 
   function startStream() {
-    var saved = parseInt(localStorage.getItem(LS_KEY) as string, 10);
+    var saved = data.getLastPeriod();
     var idx = periods.findIndex(function (p) {
       return p.period === saved;
     });
@@ -408,9 +406,7 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
       return;
     }
     currentIdx = idx;
-    try {
-      localStorage.setItem(LS_KEY, String(period));
-    } catch (e) {}
+    data.setLastPeriod(period);
     select.value = String(period);
     if (loadedSections[period]) {
       scrollToPeriod(period);
@@ -481,31 +477,40 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
 
   var resultSections: PeriodSection[] = [];
 
-  function exitResultsMode() {
-    resultsEl.hidden = true;
+  function clearResultSections() {
     resultSections.forEach(function (section) {
       section.dispose();
     });
     resultSections = [];
     resultsEl.replaceChildren();
+  }
+
+  function exitResultsMode() {
+    resultsEl.hidden = true;
+    clearResultSections();
     streamEl.style.display = '';
     sentinel.style.display = '';
+  }
+
+  // 回到「已加载」视图并按当前关键词即时过滤
+  function applyLoadedFilter() {
+    exitResultsMode();
+    var q = currentQuery();
+    var hits = applyFilter(q);
+    setStatus(q ? '已加载内容中命中 ' + hits + ' 部' : periods.length ? readyText() : '加载期数列表中…');
   }
 
   var debounceTimer: ReturnType<typeof setTimeout> | null = null;
   $('jdb-ra-search').addEventListener('input', function () {
     clearTimeout(debounceTimer as number | undefined);
     debounceTimer = setTimeout(function () {
-      if (searching) return; // 全期搜索进行中不打断
+      if (activeSearch !== null) return; // 全期搜索进行中不打断
       if (searchScope() === 'all') {
         // 全期模式不做即时过滤，等待显式触发
         if (currentQuery()) setStatus('回车或点击「全期搜索」，在全部期数中搜索');
         return;
       }
-      exitResultsMode();
-      var q = currentQuery();
-      var hits = applyFilter(q);
-      setStatus(q ? '已加载内容中命中 ' + hits + ' 部' : periods.length ? readyText() : '加载期数列表中…');
+      applyLoadedFilter();
     }, 300);
   });
 
@@ -517,11 +522,8 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
   document.querySelectorAll('input[name="jdb-ra-scope"]').forEach(function (radio) {
     radio.addEventListener('change', function () {
       if (searchScope() === 'loaded') {
-        if (searching) stopSearch('已停止全期搜索');
-        exitResultsMode();
-        var q = currentQuery();
-        var hits = applyFilter(q);
-        setStatus(q ? '已加载内容中命中 ' + hits + ' 部' : periods.length ? readyText() : '加载期数列表中…');
+        if (activeSearch !== null) stopSearch('已停止全期搜索');
+        applyLoadedFilter();
         return;
       }
       // 切到「全部期数」：撤销即时过滤，等待显式触发全期搜索
@@ -531,10 +533,9 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
   });
 
   var searchGeneration = 0;
-  var activeSearch: SearchJob | null = null;
+  var activeSearch: SearchJob | null = null; // 非空即全期搜索进行中
 
   function stopSearch(label?: string) {
-    searching = false;
     searchGeneration += 1;
     if (activeSearch) activeSearch.cancel();
     activeSearch = null;
@@ -567,20 +568,15 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
       setStatus('请先输入关键词');
       return;
     }
-    if (searching) {
+    if (activeSearch !== null) {
       stopSearch('已停止搜索');
       return;
     }
-    searching = true;
     var generation = ++searchGeneration;
     var btnEl = $('jdb-ra-gsearch');
     btnEl.textContent = '停止';
     enterResultsMode();
-    resultSections.forEach(function (section) {
-      section.dispose();
-    });
-    resultSections = [];
-    resultsEl.replaceChildren();
+    clearResultSections();
     activeSearch = data.search({
       query: q,
       onUpdate: (update) => {
@@ -591,7 +587,7 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
     });
     activeSearch.done.then((result) => {
       if (disposed || generation !== searchGeneration) return;
-      searching = false;
+      activeSearch = null;
       btnEl.textContent = '全期搜索';
       setStatus(
         (result.status === 'partial'
@@ -617,7 +613,7 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
 
   $('jdb-ra-gsearch').addEventListener('click', function () {
     // 停止不受范围限制；启动只在「全部期数」段，避免与即时过滤混淆
-    if (!searching && searchScope() !== 'all') {
+    if (activeSearch === null && searchScope() !== 'all') {
       setStatus('搜索全部期数：先把搜索框左侧范围切换到「全部期数」');
       return;
     }

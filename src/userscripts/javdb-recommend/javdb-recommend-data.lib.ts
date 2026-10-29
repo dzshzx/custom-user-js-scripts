@@ -1,7 +1,18 @@
-import { clear, createStore, del, entries, get, set } from 'idb-keyval';
+import { clear, createStore, del, entries, get, keys, set } from 'idb-keyval';
 import QuickLRU from 'quick-lru';
-import { cancelled, delay } from './javdb-recommend-request.lib.ts';
-import type { ApiRequest, RequestTimers } from './javdb-recommend-request.lib.ts';
+import { cancelled, createAborter, delay } from './javdb-recommend-request.lib.ts';
+import type { Aborter, ApiRequest, RequestTimers } from './javdb-recommend-request.lib.ts';
+
+// The movie fields the index projects and section signatures compare.
+export const MOVIE_FIELDS = [
+  'id',
+  'number',
+  'title',
+  'origin_title',
+  'cover_url',
+  'score',
+  'release_date',
+] as const satisfies readonly (keyof Movie)[];
 
 export interface Movie {
   id?: string | number;
@@ -30,6 +41,7 @@ export interface DetailStore {
   set(key: string, value: DetailEntry): Promise<void>;
   del(key: string): Promise<void>;
   clear(): Promise<void>;
+  keys(): Promise<string[]>;
   entries(): Promise<[string, DetailEntry][]>;
 }
 
@@ -82,6 +94,7 @@ export interface SearchResult {
   groups: SearchGroup[];
 }
 
+// Update groups arrive in completion order; the final result is sorted by catalog index.
 export interface SearchUpdate extends SearchResult {
   group: SearchGroup | undefined;
 }
@@ -100,12 +113,12 @@ export interface ArchiveData {
   loadCatalog(options?: LoadCatalogOptions): Promise<CatalogResult>;
   acquirePeriod(period: number, options?: AcquireOptions): PeriodLease;
   search(options?: SearchOptions): SearchJob;
+  getLastPeriod(): number | null;
+  setLastPeriod(period: number): void;
   invalidateCatalog(): void;
   clearCaches(): void;
   dispose(): void;
 }
-
-type DataOpts = ArchiveDataOptions;
 
 export interface ArchiveDataOptions {
   storage: Storage;
@@ -126,8 +139,6 @@ interface IndexCache extends DetailEntry {
   version: 1;
 }
 
-type Aborter = AbortController | { signal: undefined; abort(): void };
-
 interface CatalogWork {
   aborter: Aborter;
   promise: Promise<CatalogResult>;
@@ -144,6 +155,7 @@ const CATALOG = 'javdb_recommend_periods_cache_v1';
 const LEGACY_DETAILS = 'javdb_recommend_details_cache_v1';
 const DETAIL_LIMIT = 48;
 const INDEX = 'javdb_recommend_search_index_v1_';
+const LAST_PERIOD = 'javdb_recommend_last_period';
 const HOUR = 3600000,
   MONTH = 30 * 24 * HOUR;
 const unique = (list: Period[]): Period[] =>
@@ -155,13 +167,7 @@ const unique = (list: Period[]): Period[] =>
         .map((item): [number, Period] => [item.period, item]),
     ).values(),
   ].reverse();
-const project = (movie: Movie): Movie =>
-  Object.fromEntries(
-    ['id', 'number', 'title', 'origin_title', 'cover_url', 'score', 'release_date'].map((key) => [
-      key,
-      movie[key as keyof Movie] || '',
-    ]),
-  );
+const project = (movie: Movie): Movie => Object.fromEntries(MOVIE_FIELDS.map((key) => [key, movie[key] || '']));
 
 // Per-period detail entries in the page origin's IndexedDB. Every call is async
 // so a missing indexedDB (or a blocked open) surfaces as a rejection.
@@ -172,11 +178,18 @@ export function createDetailStore(dbName = 'javdb-recommend-archive', storeName 
     set: async (key, value) => set(key, value, store),
     del: async (key) => del(key, store),
     clear: async () => clear(store),
+    keys: async () => keys<string>(store),
     entries: async () => entries<string, DetailEntry>(store),
   };
 }
 
-export function createArchiveData({ storage, details, request, now = Date.now, timers = globalThis }: DataOpts) {
+export function createArchiveData({
+  storage,
+  details,
+  request,
+  now = Date.now,
+  timers = globalThis,
+}: ArchiveDataOptions) {
   let periods: Period[] = [],
     generation = 0,
     disposed = false,
@@ -185,8 +198,6 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
   const memory = new QuickLRU<number, DetailEntry>({ maxSize: 24 }),
     requests = new Map<number, NetworkRequest>(),
     liveLeases = new Set<PeriodLease>();
-  const controller = (): Aborter =>
-    typeof AbortController === 'function' ? new AbortController() : { signal: undefined, abort() {} };
   const read = <T extends { version: 1 }>(key: string): T | null => {
     try {
       const value = JSON.parse(storage.getItem(key)!);
@@ -245,15 +256,20 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
   function saveIndex(period: number, entry: DetailEntry) {
     write(INDEX + period, { fetchedAt: entry.fetchedAt, movies: entry.movies.map(project) });
   }
-  function remember(period: number, entry: DetailEntry) {
-    memory.set(period, entry);
+  // Search reads the projected index first; a fresh local entry also refreshes that index.
+  function searchable(period: number, local: DetailEntry | null | undefined): DetailEntry | null {
+    const indexed = index(period);
+    if (indexed) return indexed;
+    if (!fresh(local, period)) return null;
+    saveIndex(period, local!);
+    return local!;
   }
   async function saveDetail(period: number, entry: DetailEntry) {
     if (!details) return;
     try {
       await details.set(String(period), { ...entry, accessedAt: now() });
+      if ((await details.keys()).length <= DETAIL_LIMIT) return;
       const stored = await details.entries();
-      if (stored.length <= DETAIL_LIMIT) return;
       const stamp = (value: DetailEntry | undefined) => value?.accessedAt || value?.fetchedAt || 0;
       const stale = stored
         .filter(([key]) => key !== String(period))
@@ -275,7 +291,7 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
       return Promise.resolve({ periods: periods.slice(), degraded: false, source: '本地缓存' });
     }
     const epoch = generation,
-      aborter = controller();
+      aborter = createAborter();
     const work = { aborter } as CatalogWork;
     work.promise = (async (): Promise<CatalogResult> => {
       try {
@@ -338,26 +354,21 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
       assertActive();
       local = memory.get(period) || (diskEntries ? diskEntries[period] : await readDetail(period));
       assertActive();
-      const cached =
-        purpose === 'search'
-          ? index(period) || (fresh(local, period) ? local : null)
-          : fresh(local, period)
-            ? local
-            : null;
+      const cached = purpose === 'search' ? searchable(period, local) : fresh(local, period) ? local : null;
       if (cached) {
         if (purpose === 'navigation') {
-          remember(period, cached);
+          memory.set(period, cached);
           if (now() - (cached.accessedAt || 0) >= HOUR) {
             cached.accessedAt = now();
             saveDetail(period, cached);
           }
+          saveIndex(period, cached);
         }
-        saveIndex(period, cached);
         return { movies: cached.movies, fetchedAt: cached.fetchedAt, degraded: false, source: 'cache' };
       }
       network = requests.get(period);
       if (!network) {
-        const aborter = controller();
+        const aborter = createAborter();
         network = { aborter, consumers: new Set() } as NetworkRequest;
         const item = network;
         item.promise = (async () => request('/api/v1/movies/recommend', { period }, { signal: aborter.signal }))()
@@ -377,14 +388,14 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
         assertActive();
         saveIndex(period, entry);
         if (purpose === 'navigation') {
-          remember(period, entry);
+          memory.set(period, entry);
           saveDetail(period, entry);
         }
         return { ...entry, degraded: false, source: 'network' };
       } catch (error) {
         assertActive();
         if (network.aborter.signal?.aborted || !valid(local)) throw error;
-        if (purpose === 'navigation') remember(period, local!);
+        if (purpose === 'navigation') memory.set(period, local!);
         return { movies: local!.movies, fetchedAt: local!.fetchedAt, degraded: true, source: 'cache', error };
       }
     })();
@@ -414,7 +425,7 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
   function search({ query, onUpdate }: SearchOptions = {}): SearchJob {
     activeSearch?.cancel();
     const epoch = generation,
-      aborter = controller(),
+      aborter = createAborter(),
       leases = new Set<PeriodLease>();
     let stopped = disposed,
       cursor = 0;
@@ -433,6 +444,8 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
         .trim()
         .toLowerCase();
     const cancelledSearch = () => stopped || disposed || epoch !== generation;
+    const emitUpdate = (group: SearchGroup | undefined) =>
+      notify(onUpdate, { ...result, groups: result.groups.slice(), group });
     const report = (period: number, index: number, entry: { movies: Movie[]; degraded?: boolean }) => {
       const movies = entry.movies.filter((movie) =>
         (movie.number + ' ' + (movie.title || '') + ' ' + (movie.origin_title || '')).toLowerCase().includes(q),
@@ -446,7 +459,7 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
         result.hits += movies.length;
         result.hitPeriods++;
       }
-      notify(onUpdate, { ...result, groups: result.groups.slice().sort((a, b) => a.index - b.index), group });
+      emitUpdate(group);
     };
     // One detail-store scan for the entire local pass and missing-period fallbacks.
     let diskEntries: Record<string, DetailEntry> = {};
@@ -464,12 +477,9 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
         if (!cancelledSearch()) diskEntries = await readAllDetails();
         if (!cancelledSearch())
           periods.slice().forEach((item, i) => {
-            const local = memory.get(item.period) || diskEntries[item.period];
-            const entry = index(item.period) || (fresh(local, item.period) ? local : null);
-            if (entry) {
-              saveIndex(item.period, entry);
-              report(item.period, i, entry);
-            } else missing.push({ period: item.period, index: i });
+            const entry = searchable(item.period, memory.get(item.period) || diskEntries[item.period]);
+            if (entry) report(item.period, i, entry);
+            else missing.push({ period: item.period, index: i });
           });
         async function worker() {
           while (!cancelledSearch() && cursor < missing.length) {
@@ -483,7 +493,7 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
               if (!cancelledSearch()) {
                 result.completed++;
                 result.failed++;
-                notify(onUpdate, { ...result, groups: result.groups.slice(), group: undefined });
+                emitUpdate(undefined);
               }
             } finally {
               lease.release();
@@ -521,8 +531,23 @@ export function createArchiveData({ storage, details, request, now = Date.now, t
   }
   return {
     loadCatalog,
-    acquirePeriod: (period: number, options?: AcquireOptions) => acquire(period, options),
+    acquirePeriod: acquire,
     search,
+    getLastPeriod() {
+      try {
+        const period = parseInt(storage.getItem(LAST_PERIOD)!, 10);
+        return Number.isFinite(period) ? period : null;
+      } catch {
+        return null;
+      }
+    },
+    setLastPeriod(period) {
+      try {
+        storage.setItem(LAST_PERIOD, String(period));
+      } catch {
+        /* Remembering the last period is best effort. */
+      }
+    },
     invalidateCatalog() {
       cancelWork();
       storage.removeItem(CATALOG);
