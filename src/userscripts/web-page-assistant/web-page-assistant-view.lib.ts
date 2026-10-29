@@ -11,7 +11,7 @@ import { createDragAnchor, createHoverExpansion, createPanelPlacement } from '..
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
 import type { DragAnchor, HoverExpansion, PanelPlacement, WidgetTimers } from '../shared/shared-widget-shell.lib.ts';
 import type { DialogTab } from './web-page-assistant-presentation.lib.ts';
-import type { Scope, ScopeKeys, UnlockerOption, UnlockerSetting } from './web-page-assistant-settings.lib.ts';
+import type { Scope, ScopeKeys, UnlockerSetting } from './web-page-assistant-settings.lib.ts';
 import type {
   SessionChange,
   SessionCommand,
@@ -124,16 +124,9 @@ const PANEL_MIN_WIDTH = 52;
 const PANEL_SAFE_MARGIN = 12;
 // Placement offset between widget and panel; the panel's hover bridge spans it.
 const PANEL_GAP = 8;
-const PRESETS = [
-  { label: '30 秒', ms: 30 * 1000 },
-  { label: '1 分钟', ms: 60 * 1000 },
-  { label: '3 分钟', ms: 3 * 60 * 1000 },
-  { label: '5 分钟', ms: 5 * 60 * 1000 },
-  { label: '10 分钟', ms: 10 * 60 * 1000 },
-  { label: '15 分钟', ms: 15 * 60 * 1000 },
-  { label: '30 分钟', ms: 30 * 60 * 1000 },
-  { label: '60 分钟', ms: 60 * 60 * 1000 },
-];
+const PRESET_INTERVALS_MS = [30, 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 30 * 60, 60 * 60].map(
+  (seconds) => seconds * 1000,
+);
 const WRITE_ACTIONS = new Set([
   'save-preset',
   'save-custom',
@@ -167,19 +160,8 @@ function scopeLabel(scope: Scope | null | undefined): string {
 }
 
 function unlockerStatusText(snapshot: SessionState, scope: Scope | null | undefined): string {
-  const setting = snapshot.appliedUnlocker?.setting;
-  if (!setting?.enabled) return '当前未启用网页限制解除。';
-  const labels = [
-    ['allowSelection', '选择文本'],
-    ['allowCopy', '复制/剪切'],
-    ['allowContextMenu', '右键菜单'],
-    ['allowDrag', '拖拽'],
-    ['suppressBeforeUnload', '离开提示'],
-  ]
-    .filter(([option]) => setting[option as UnlockerOption])
-    .map(([, label]) => label);
-  if (!labels.length) return '网页限制解除已保存，但没有启用任何能力。';
-  return `${scopeLabel(snapshot.appliedUnlocker?.scope || scope)}已启用：${labels.join('、')}。`;
+  const applied = snapshot.appliedUnlocker;
+  return PageAssistantSettings.describeUnlockerSetting(applied?.setting, scopeLabel(applied?.scope || scope));
 }
 
 function createWebPageAssistantView({
@@ -227,7 +209,6 @@ function createWebPageAssistantView({
   let openPromise: Promise<OpenSettingsResult> | null = null;
   let pendingOpenIntent: OpenIntent | null = null;
   const pendingSubmissions = new Set<Submission>();
-  const pendingActionTokens = new WeakMap<Element, object>();
   const ownedStyleIds = new Set<string>();
   let finishDisposed: (value: OpenSettingsResult) => void;
   const disposedPromise = new Promise<OpenSettingsResult>((resolve) => {
@@ -332,24 +313,23 @@ function createWebPageAssistantView({
     return `${scopeLabel(runtimeState.activeMatch.scope)}自动刷新已启用，每 ${formatInterval(runtimeState.activeMatch.setting.intervalMs)} 刷新一次。`;
   }
 
-  function installStyles() {
-    if (!documentObject.getElementById(TOKEN_STYLE_ID)) {
-      const tokenStyle = documentObject.createElement('style');
-      tokenStyle.id = TOKEN_STYLE_ID;
-      tokenStyle.textContent = tokenCss;
-      documentObject.documentElement.append(tokenStyle);
-      ownedStyleIds.add(TOKEN_STYLE_ID);
-    }
-    if (!documentObject.getElementById(STYLE_ID)) ownedStyleIds.add(STYLE_ID);
-    installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID });
-    if (!documentObject.getElementById(DIALOG_STYLE_ID)) ownedStyleIds.add(DIALOG_STYLE_ID);
-    installAssistantDialogStyles({ documentObject, rootId: ROOT_ID, styleId: DIALOG_STYLE_ID });
+  // Installs a style the page does not have yet and owns it for dispose.
+  function ensureStyle(styleId: string, install: () => void) {
+    if (documentObject.getElementById(styleId)) return;
+    install();
+    ownedStyleIds.add(styleId);
   }
 
   function ensureRoot(): HTMLElement | null {
     if (disposed) return null;
     if (root && root.isConnected !== false) return root;
-    installStyles();
+    ensureStyle(TOKEN_STYLE_ID, () => {
+      const tokenStyle = documentObject.createElement('style');
+      tokenStyle.id = TOKEN_STYLE_ID;
+      tokenStyle.textContent = tokenCss;
+      documentObject.documentElement.append(tokenStyle);
+    });
+    ensureStyle(STYLE_ID, () => installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID }));
     root = documentObject.getElementById(ROOT_ID);
     if (!root) {
       root = documentObject.createElement('div');
@@ -466,6 +446,10 @@ function createWebPageAssistantView({
   function renderDialog({ message = '', tone = 'info', scope = null, tab = null }: RenderDialogOptions = {}) {
     if (disposed) return;
     ensureRoot();
+    // Most pages never open the settings, so their styles wait for the first dialog.
+    ensureStyle(DIALOG_STYLE_ID, () =>
+      installAssistantDialogStyles({ documentObject, rootId: ROOT_ID, styleId: DIALOG_STYLE_ID }),
+    );
     const preserved = captureDialogState();
     if (!dialog) {
       const active = documentObject.activeElement;
@@ -484,7 +468,7 @@ function createWebPageAssistantView({
     dialog.addEventListener('cancel', handleDialogCancel);
     root!.append(dialog);
     dialog.showModal?.();
-    dialogContract.applyModel(dialog, model, PRESETS);
+    dialogContract.applyModel(dialog, model, PRESET_INTERVALS_MS);
     restoreDialogState(preserved);
     setMessage(initializationError || model.message, initializationError ? 'error' : tone);
     if (initializationError) disableDialogWrites();
@@ -509,18 +493,7 @@ function createWebPageAssistantView({
 
   function updateDialogStatus() {
     if (!dialog) return;
-    const model = createDialogViewModel('', getSelectedScope(), activeDialogTab);
-    for (const [role, text] of [
-      [dialogContract.roles.status, model.statusText],
-      [dialogContract.roles.pageKey, model.pageRefreshText],
-      [dialogContract.roles.siteKey, model.siteRefreshText],
-      [dialogContract.roles.unlockerStatus, model.unlockerStatusText],
-      [dialogContract.roles.unlockerPageKey, model.pageUnlockerText],
-      [dialogContract.roles.unlockerSiteKey, model.siteUnlockerText],
-    ]) {
-      const node = dialog.querySelector(dialogContract.roleSelector(role));
-      if (node) node.textContent = text;
-    }
+    dialogContract.applyStatusTexts(dialog, createDialogViewModel('', getSelectedScope(), activeDialogTab));
   }
 
   function parseCustomInterval(): CustomIntervalResult {
@@ -633,11 +606,11 @@ function createWebPageAssistantView({
     const action = actionNode.dataset.partAction!;
     if (!WRITE_ACTIONS.has(action) && !['open-settings', 'switch-tab', 'close-dialog', 'toggle-pause'].includes(action))
       return;
-    if (action === 'close-dialog' && dialog && actionNode === dialog && event.target === dialog) {
-      closeDialog();
+    // The backdrop carries close-dialog: only a click on the backdrop itself closes.
+    if (action === 'close-dialog' && dialog && actionNode === dialog) {
+      if (event.target === dialog) closeDialog();
       return;
     }
-    if (action === 'close-dialog' && dialog && actionNode === dialog) return;
     if (
       action === 'open-settings' &&
       actionNode.classList.contains('part-widget-button') &&
@@ -650,9 +623,8 @@ function createWebPageAssistantView({
     const pendingLabel = isWrite ? actionNode.textContent : null;
     const actionDialog = dialog;
     const actionGeneration = dialogGeneration;
-    const actionToken = {};
+    // A disabled button cannot be clicked again, so one pending write per node.
     if (isWrite) {
-      pendingActionTokens.set(actionNode, actionToken);
       (actionNode as HTMLButtonElement).disabled = true;
       actionNode.textContent = '处理中…';
     }
@@ -669,12 +641,9 @@ function createWebPageAssistantView({
         setMessage(`操作失败：${(error as Error | null)?.message || error}`, 'error');
       }
     } finally {
-      if (isWrite && pendingActionTokens.get(actionNode) === actionToken) {
-        pendingActionTokens.delete(actionNode);
-        if (!disposed && actionNode.isConnected !== false) {
-          (actionNode as HTMLButtonElement).disabled = false;
-          actionNode.textContent = pendingLabel;
-        }
+      if (isWrite && !disposed && actionNode.isConnected !== false) {
+        (actionNode as HTMLButtonElement).disabled = false;
+        actionNode.textContent = pendingLabel;
       }
     }
   }
@@ -791,4 +760,4 @@ function createWebPageAssistantView({
   return { update, openSettings, dispose };
 }
 
-export { createWebPageAssistantView };
+export { createWebPageAssistantView, ROOT_ID, SCRIPT_NAME };

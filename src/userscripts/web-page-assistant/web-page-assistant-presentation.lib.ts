@@ -55,11 +55,6 @@ export interface DialogViewModel {
   focusRole: string;
 }
 
-export interface IntervalPreset {
-  label: string;
-  ms: number;
-}
-
 export interface WidgetViewModel {
   enabled?: boolean;
   summary: string;
@@ -197,7 +192,9 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
     };
   }
 
-  function applyModel(dialogNode: HTMLElement, model: DialogViewModel, presets: readonly IntervalPreset[]) {
+  // The status lines are the only dialog text that follows live state, so a
+  // countdown or settings change can refresh them without a rebuild.
+  function applyStatusTexts(dialogNode: HTMLElement, model: DialogViewModel) {
     const textByRole = [
       [roles.status, model.statusText],
       [roles.pageKey, model.pageRefreshText],
@@ -210,18 +207,22 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
       const node = dialogNode.querySelector(roleSelector(role));
       if (node) node.textContent = text;
     }
+  }
+
+  function applyModel(dialogNode: HTMLElement, model: DialogViewModel, presetIntervalsMs: readonly number[]) {
+    applyStatusTexts(dialogNode, model);
 
     const scopeInput = dialogNode.querySelector(`input[name="part-scope"][value="${model.selectedScope}"]`);
     if (scopeInput) (scopeInput as HTMLInputElement).checked = true;
 
     const presetsNode = dialogNode.querySelector(roleSelector(roles.presets));
-    for (const preset of presets) {
+    for (const ms of presetIntervalsMs) {
       const presetButton = dialogNode.ownerDocument.createElement('button');
       presetButton.type = 'button';
       presetButton.className = 'part-preset';
       presetButton.dataset.partAction = actions.savePreset;
-      presetButton.dataset.intervalMs = String(preset.ms);
-      presetButton.textContent = preset.label;
+      presetButton.dataset.intervalMs = String(ms);
+      presetButton.textContent = formatInterval(ms);
       presetsNode!.append(presetButton);
     }
 
@@ -269,6 +270,7 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
     focusRoleForTab,
     readSelectedScope,
     createViewModel,
+    applyStatusTexts,
     applyModel,
     readUnlockerFormSetting,
   };

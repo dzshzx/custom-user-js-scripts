@@ -7,6 +7,14 @@ export interface WidgetPosition {
   top: number;
 }
 
+function normalizeWidgetPosition(value: unknown): WidgetPosition | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const left = Number((value as { left?: unknown }).left);
+  const top = Number((value as { top?: unknown }).top);
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+  return { left: Math.round(left), top: Math.round(top) };
+}
+
 export interface StorageSettingsContract {
   emptySettings: () => Settings;
   normalizeSettings: (value: unknown) => Settings;
@@ -19,7 +27,6 @@ export interface StorageLogger {
 export interface WebPageAssistantStorageAdapters extends GmOverrides {
   scriptName: string;
   settingsContract: StorageSettingsContract;
-  normalizeWidgetPosition: (value: unknown) => WidgetPosition | null;
   storageKey: string;
   /** Per-site key the widget position is read from and written to. */
   widgetPositionKey: string;
@@ -30,7 +37,6 @@ export interface WebPageAssistantStorageAdapters extends GmOverrides {
   localStorageAdapter: Pick<Storage, 'getItem' | 'setItem'>;
   eventTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> | null;
   logger: StorageLogger;
-  toPromise?: (value: unknown) => Promise<unknown>;
 }
 
 /** GM.addValueChangeListener resolves the listener id asynchronously. */
@@ -47,17 +53,10 @@ export interface WebPageAssistantStoragePort {
   registerSettingsMenu(label: string, callback: () => void): boolean;
 }
 
-function maybePromise(value: unknown): Promise<unknown> {
-  return value && typeof (value as PromiseLike<unknown>).then === 'function'
-    ? (value as Promise<unknown>)
-    : Promise.resolve(value);
-}
-
 function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdapters): WebPageAssistantStoragePort {
   const {
     scriptName,
     settingsContract,
-    normalizeWidgetPosition: normalizePosition,
     storageKey,
     widgetPositionKey,
     sharedWidgetPositionKey = null,
@@ -66,7 +65,6 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
     localStorageAdapter,
     eventTarget,
     logger,
-    toPromise = maybePromise,
   } = adapters;
   // GM overrides (gmGetValue, gmApi, ...) in `adapters` replace the probed
   // manager API; production passes none and gets the resolved globals.
@@ -76,7 +74,7 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
     if (gm.getValue) {
       return {
         available: true,
-        value: await toPromise(gm.getValue(key, fallbackValue as Tampermonkey.StorageValue)),
+        value: await gm.getValue(key, fallbackValue as Tampermonkey.StorageValue),
       };
     }
 
@@ -85,7 +83,7 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
 
   async function writePrimaryValue(key: string, value: unknown) {
     if (gm.setValue) {
-      await toPromise(gm.setValue(key, value as Tampermonkey.StorageValue));
+      await gm.setValue(key, value as Tampermonkey.StorageValue);
       return true;
     }
 
@@ -208,10 +206,10 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
       try {
         const primary = await readPrimaryValue(widgetPositionKey, null);
         if (primary.available) {
-          const sitePosition = normalizePosition(primary.value);
+          const sitePosition = normalizeWidgetPosition(primary.value);
           if (sitePosition || !sharedWidgetPositionKey) return sitePosition;
           // A site the widget was never dragged on keeps the shared position.
-          return normalizePosition((await readPrimaryValue(sharedWidgetPositionKey, null)).value);
+          return normalizeWidgetPosition((await readPrimaryValue(sharedWidgetPositionKey, null)).value);
         }
       } catch (error) {
         logger.warn(`${scriptName}: failed to read widget position.`, error);
@@ -219,7 +217,7 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
 
       return readFallbackJson(
         fallbackWidgetPositionKey,
-        normalizePosition,
+        normalizeWidgetPosition,
         null,
         `${scriptName}: failed to read fallback widget position.`,
       );
@@ -228,7 +226,7 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
       return writeSettingsTo(nextSettings);
     },
     async writeWidgetPosition(position) {
-      const normalized = normalizePosition(position);
+      const normalized = normalizeWidgetPosition(position);
       if (!normalized) return null;
 
       try {
@@ -255,4 +253,4 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
   };
 }
 
-export { createWebPageAssistantStoragePort };
+export { createWebPageAssistantStoragePort, normalizeWidgetPosition };

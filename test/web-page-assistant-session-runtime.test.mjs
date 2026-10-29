@@ -193,7 +193,7 @@ test('persisted application failure retains settings, cleans installation and re
   const result = await h.session.dispatch({ type: 'save-unlocker', scope: 'page', setting: { enabled: true } });
   assert.equal(result.code, 'application-failed');
   assert.equal(result.persisted, true);
-  assert.ok(result.state.matchedUnlocker);
+  assert.equal(Object.keys(result.state.settings.unlocker.pages).length, 1);
   assert.equal(result.state.appliedUnlocker, null);
   assert.equal(cleanup, 1);
   await h.session.dispatch(save());

@@ -32,10 +32,10 @@
 // ==/UserScript==
 
 import * as PageAssistantSettings from './web-page-assistant-settings.lib.ts';
-import { createWebPageAssistantStoragePort } from './web-page-assistant-storage.lib.ts';
+import { createWebPageAssistantStoragePort, normalizeWidgetPosition } from './web-page-assistant-storage.lib.ts';
 import { createWebPageAssistantSession } from './web-page-assistant-session.lib.ts';
 import { createUnlockerRuntime } from './web-page-assistant-unlocker.lib.ts';
-import { createWebPageAssistantView } from './web-page-assistant-view.lib.ts';
+import { createWebPageAssistantView, ROOT_ID, SCRIPT_NAME } from './web-page-assistant-view.lib.ts';
 import type { WebPageAssistantView } from './web-page-assistant-view.lib.ts';
 import type { WidgetPosition } from './web-page-assistant-storage.lib.ts';
 
@@ -44,8 +44,6 @@ import type { WidgetPosition } from './web-page-assistant-storage.lib.ts';
 
   if (window.top !== window.self) return;
 
-  const SCRIPT_NAME = 'Web Page Assistant';
-  const ROOT_ID = 'page-auto-refresh-timer-root';
   const UNLOCKER_STYLE_ID = `${ROOT_ID}-unlocker-style`;
   const STORAGE_KEY = 'pageAutoRefreshTimerSettings';
   const WIDGET_POSITION_KEY = 'pageAutoRefreshTimerWidgetPosition';
@@ -53,14 +51,6 @@ import type { WidgetPosition } from './web-page-assistant-storage.lib.ts';
     pageKey: `${location.origin}${location.pathname}${location.search}`,
     siteKey: location.hostname,
   };
-
-  function normalizeWidgetPosition(value: unknown): WidgetPosition | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const left = Number((value as { left?: unknown }).left);
-    const top = Number((value as { top?: unknown }).top);
-    if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
-    return { left: Math.round(left), top: Math.round(top) };
-  }
 
   function documentReady(): Promise<unknown> {
     if (document.readyState !== 'loading') return Promise.resolve();
@@ -70,7 +60,6 @@ import type { WidgetPosition } from './web-page-assistant-storage.lib.ts';
   const storage = createWebPageAssistantStoragePort({
     scriptName: SCRIPT_NAME,
     settingsContract: PageAssistantSettings,
-    normalizeWidgetPosition,
     storageKey: STORAGE_KEY,
     // Each site keeps its own widget position so it can be moved off one
     // site's corner controls without moving it everywhere else.

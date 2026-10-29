@@ -109,8 +109,6 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
 
     #${rootId} .part-widget {
       position: fixed;
-      right: 18px;
-      bottom: 18px;
       width: 154px;
       height: 48px;
       pointer-events: none;
@@ -127,7 +125,6 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
     }
 
     #${rootId} .part-widget-panel-header,
-    #${rootId} .part-dialog-header,
     #${rootId} .part-dialog-actions,
     #${rootId} .part-custom-row,
     #${rootId} .part-scope-grid {
@@ -136,8 +133,7 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
       gap: 8px;
     }
 
-    #${rootId} .part-widget-panel-header,
-    #${rootId} .part-dialog-header {
+    #${rootId} .part-widget-panel-header {
       justify-content: space-between;
     }
 

@@ -11,21 +11,15 @@ export interface UnlockerAdapters {
   rootId: string;
 }
 
-export interface UnlockerCapability {
+interface CapabilitySpec {
   option: UnlockerOption;
-  label: string;
   type: string;
-}
-
-interface CapabilitySpec extends UnlockerCapability {
   target: () => EventTarget;
   handler: (event: Event) => void;
 }
 
 export interface UnlockerRuntime {
-  describe(setting: UnlockerSetting | null | undefined, scopeText: string): string;
-  getCapabilitySpecs(): UnlockerCapability[];
-  install(this: Pick<UnlockerRuntime, 'uninstall'>, setting: UnlockerSetting | null | undefined): void;
+  install(setting: UnlockerSetting | null | undefined): void;
   uninstall(): void;
 }
 
@@ -41,20 +35,20 @@ function createUnlockerRuntime(adapters: UnlockerAdapters): UnlockerRuntime {
     rootId,
   } = adapters;
   const capabilitySpecs: CapabilitySpec[] = [
-    { option: 'allowSelection', label: '选择文本', target: getDocumentTarget, type: 'selectstart', handler: stopEvent },
-    { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'copy', handler: stopEvent },
-    { option: 'allowCopy', label: '复制/剪切', target: getDocumentTarget, type: 'cut', handler: stopEvent },
+    { option: 'allowSelection', target: getDocumentTarget, type: 'selectstart', handler: stopEvent },
+    { option: 'allowCopy', target: getDocumentTarget, type: 'copy', handler: stopEvent },
+    { option: 'allowCopy', target: getDocumentTarget, type: 'cut', handler: stopEvent },
     {
       option: 'allowContextMenu',
-      label: '右键菜单',
+
       target: getDocumentTarget,
       type: 'contextmenu',
       handler: stopEvent,
     },
-    { option: 'allowDrag', label: '拖拽', target: getDocumentTarget, type: 'dragstart', handler: stopEvent },
+    { option: 'allowDrag', target: getDocumentTarget, type: 'dragstart', handler: stopEvent },
     {
       option: 'suppressBeforeUnload',
-      label: '离开提示',
+
       target: getWindowTarget,
       type: 'beforeunload',
       handler: stopBeforeUnload,
@@ -89,28 +83,18 @@ function createUnlockerRuntime(adapters: UnlockerAdapters): UnlockerRuntime {
     `);
   }
 
-  function describe(setting: UnlockerSetting | null | undefined, scopeText: string) {
-    if (!setting?.enabled) return '当前未启用网页限制解除。';
-
-    const labels: string[] = [];
-    const seenOptions = new Set<UnlockerOption>();
-    for (const spec of capabilitySpecs) {
-      if (!setting[spec.option] || seenOptions.has(spec.option)) continue;
-      labels.push(spec.label);
-      seenOptions.add(spec.option);
+  function uninstall() {
+    for (const cleanup of cleanupStack) {
+      cleanup();
     }
+    cleanupStack = [];
 
-    if (!labels.length) return '网页限制解除已保存，但没有启用任何能力。';
-    return `${scopeText}已启用：${labels.join('、')}。`;
+    removeStyle();
   }
 
   return {
-    describe,
-    getCapabilitySpecs() {
-      return capabilitySpecs.map(({ option, label, type }) => ({ option, label, type }));
-    },
     install(setting) {
-      this.uninstall();
+      uninstall();
       if (!hasUnlockerAction(setting)) return;
 
       installSelectionStyle(setting);
@@ -120,14 +104,7 @@ function createUnlockerRuntime(adapters: UnlockerAdapters): UnlockerRuntime {
         }
       }
     },
-    uninstall() {
-      for (const cleanup of cleanupStack) {
-        cleanup();
-      }
-      cleanupStack = [];
-
-      removeStyle();
-    },
+    uninstall,
   };
 }
 

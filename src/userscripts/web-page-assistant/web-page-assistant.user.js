@@ -48,6 +48,7 @@
     defaultUnlockerSetting: () => defaultUnlockerSetting,
     deleteRefreshSetting: () => deleteRefreshSetting,
     deleteUnlockerSetting: () => deleteUnlockerSetting,
+    describeUnlockerSetting: () => describeUnlockerSetting,
     emptySettings: () => emptySettings,
     getRefreshSetting: () => getRefreshSetting,
     getUnlockerSetting: () => getUnlockerSetting,
@@ -479,6 +480,19 @@
     };
     return normalizeSettings(next);
   }
+  var UNLOCKER_OPTION_LABELS = {
+    allowSelection: "选择文本",
+    allowCopy: "复制/剪切",
+    allowContextMenu: "右键菜单",
+    allowDrag: "拖拽",
+    suppressBeforeUnload: "离开提示"
+  };
+  function describeUnlockerSetting(setting, scopeText) {
+    if (!setting?.enabled) return "当前未启用网页限制解除。";
+    const labels = Object.keys(UNLOCKER_OPTION_LABELS).filter((option) => setting[option]).map((option) => UNLOCKER_OPTION_LABELS[option]);
+    if (!labels.length) return "网页限制解除已保存，但没有启用任何能力。";
+    return `${scopeText}已启用：${labels.join("、")}。`;
+  }
   function deleteUnlockerSetting(sourceSettings, scope, key) {
     const next = normalizeSettings(sourceSettings);
     const bucket = scope === "site" ? next.unlocker.sites : next.unlocker.pages;
@@ -540,14 +554,17 @@
   }
 
   // src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts
-  function maybePromise(value) {
-    return value && typeof value.then === "function" ? value : Promise.resolve(value);
+  function normalizeWidgetPosition(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const left = Number(value.left);
+    const top = Number(value.top);
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+    return { left: Math.round(left), top: Math.round(top) };
   }
   function createWebPageAssistantStoragePort(adapters) {
     const {
       scriptName,
       settingsContract,
-      normalizeWidgetPosition: normalizePosition,
       storageKey,
       widgetPositionKey,
       sharedWidgetPositionKey = null,
@@ -555,22 +572,21 @@
       fallbackWidgetPositionKey,
       localStorageAdapter,
       eventTarget,
-      logger,
-      toPromise = maybePromise
+      logger
     } = adapters;
     const gm = resolveGmApi(adapters);
     async function readPrimaryValue(key, fallbackValue) {
       if (gm.getValue) {
         return {
           available: true,
-          value: await toPromise(gm.getValue(key, fallbackValue))
+          value: await gm.getValue(key, fallbackValue)
         };
       }
       return { available: false, value: fallbackValue };
     }
     async function writePrimaryValue(key, value) {
       if (gm.setValue) {
-        await toPromise(gm.setValue(key, value));
+        await gm.setValue(key, value);
         return true;
       }
       return false;
@@ -679,16 +695,16 @@
         try {
           const primary = await readPrimaryValue(widgetPositionKey, null);
           if (primary.available) {
-            const sitePosition = normalizePosition(primary.value);
+            const sitePosition = normalizeWidgetPosition(primary.value);
             if (sitePosition || !sharedWidgetPositionKey) return sitePosition;
-            return normalizePosition((await readPrimaryValue(sharedWidgetPositionKey, null)).value);
+            return normalizeWidgetPosition((await readPrimaryValue(sharedWidgetPositionKey, null)).value);
           }
         } catch (error) {
           logger.warn(`${scriptName}: failed to read widget position.`, error);
         }
         return readFallbackJson(
           fallbackWidgetPositionKey,
-          normalizePosition,
+          normalizeWidgetPosition,
           null,
           `${scriptName}: failed to read fallback widget position.`
         );
@@ -697,7 +713,7 @@
         return writeSettingsTo(nextSettings);
       },
       async writeWidgetPosition(position) {
-        const normalized = normalizePosition(position);
+        const normalized = normalizeWidgetPosition(position);
         if (!normalized) return null;
         try {
           if (await writePrimaryValue(widgetPositionKey, normalized)) return normalized;
@@ -871,9 +887,7 @@
           refresh: runtime.getState(),
           appliedUnlocker,
           applicationError,
-          applicationErrors,
-          matchedRefresh: resolveActiveRefreshSetting(settings, keys),
-          matchedUnlocker: resolveActiveUnlockerSetting(settings, keys)
+          applicationErrors
         })
       );
     }
@@ -1062,20 +1076,18 @@
       rootId
     } = adapters;
     const capabilitySpecs = [
-      { option: "allowSelection", label: "选择文本", target: getDocumentTarget, type: "selectstart", handler: stopEvent },
-      { option: "allowCopy", label: "复制/剪切", target: getDocumentTarget, type: "copy", handler: stopEvent },
-      { option: "allowCopy", label: "复制/剪切", target: getDocumentTarget, type: "cut", handler: stopEvent },
+      { option: "allowSelection", target: getDocumentTarget, type: "selectstart", handler: stopEvent },
+      { option: "allowCopy", target: getDocumentTarget, type: "copy", handler: stopEvent },
+      { option: "allowCopy", target: getDocumentTarget, type: "cut", handler: stopEvent },
       {
         option: "allowContextMenu",
-        label: "右键菜单",
         target: getDocumentTarget,
         type: "contextmenu",
         handler: stopEvent
       },
-      { option: "allowDrag", label: "拖拽", target: getDocumentTarget, type: "dragstart", handler: stopEvent },
+      { option: "allowDrag", target: getDocumentTarget, type: "dragstart", handler: stopEvent },
       {
         option: "suppressBeforeUnload",
-        label: "离开提示",
         target: getWindowTarget,
         type: "beforeunload",
         handler: stopBeforeUnload
@@ -1104,25 +1116,16 @@
       }
     `);
     }
-    function describe(setting, scopeText) {
-      if (!setting?.enabled) return "当前未启用网页限制解除。";
-      const labels = [];
-      const seenOptions = /* @__PURE__ */ new Set();
-      for (const spec of capabilitySpecs) {
-        if (!setting[spec.option] || seenOptions.has(spec.option)) continue;
-        labels.push(spec.label);
-        seenOptions.add(spec.option);
+    function uninstall() {
+      for (const cleanup of cleanupStack) {
+        cleanup();
       }
-      if (!labels.length) return "网页限制解除已保存，但没有启用任何能力。";
-      return `${scopeText}已启用：${labels.join("、")}。`;
+      cleanupStack = [];
+      removeStyle();
     }
     return {
-      describe,
-      getCapabilitySpecs() {
-        return capabilitySpecs.map(({ option, label, type }) => ({ option, label, type }));
-      },
       install(setting) {
-        this.uninstall();
+        uninstall();
         if (!hasUnlockerAction2(setting)) return;
         installSelectionStyle(setting);
         for (const spec of capabilitySpecs) {
@@ -1131,13 +1134,7 @@
           }
         }
       },
-      uninstall() {
-        for (const cleanup of cleanupStack) {
-          cleanup();
-        }
-        cleanupStack = [];
-        removeStyle();
-      }
+      uninstall
     };
   }
 
@@ -1241,8 +1238,6 @@
 
     #${rootId} .part-widget {
       position: fixed;
-      right: 18px;
-      bottom: 18px;
       width: 154px;
       height: 48px;
       pointer-events: none;
@@ -1259,7 +1254,6 @@
     }
 
     #${rootId} .part-widget-panel-header,
-    #${rootId} .part-dialog-header,
     #${rootId} .part-dialog-actions,
     #${rootId} .part-custom-row,
     #${rootId} .part-scope-grid {
@@ -1268,8 +1262,7 @@
       gap: 8px;
     }
 
-    #${rootId} .part-widget-panel-header,
-    #${rootId} .part-dialog-header {
+    #${rootId} .part-widget-panel-header {
       justify-content: space-between;
     }
 
@@ -1769,11 +1762,6 @@
       #${rootId} .part-custom-row button {
         flex: 1 1 100%;
         width: 100%;
-      }
-
-      #${rootId} .part-widget {
-        right: 12px;
-        bottom: 12px;
       }
     }
   `;
@@ -2602,7 +2590,7 @@
         focusRole: focusRoleForTab(nextTab)
       };
     }
-    function applyModel(dialogNode, model, presets) {
+    function applyStatusTexts(dialogNode, model) {
       const textByRole = [
         [roles.status, model.statusText],
         [roles.pageKey, model.pageRefreshText],
@@ -2615,16 +2603,19 @@
         const node = dialogNode.querySelector(roleSelector(role));
         if (node) node.textContent = text;
       }
+    }
+    function applyModel(dialogNode, model, presetIntervalsMs) {
+      applyStatusTexts(dialogNode, model);
       const scopeInput = dialogNode.querySelector(`input[name="part-scope"][value="${model.selectedScope}"]`);
       if (scopeInput) scopeInput.checked = true;
       const presetsNode = dialogNode.querySelector(roleSelector(roles.presets));
-      for (const preset of presets) {
+      for (const ms of presetIntervalsMs) {
         const presetButton = dialogNode.ownerDocument.createElement("button");
         presetButton.type = "button";
         presetButton.className = "part-preset";
         presetButton.dataset.partAction = actions.savePreset;
-        presetButton.dataset.intervalMs = String(preset.ms);
-        presetButton.textContent = preset.label;
+        presetButton.dataset.intervalMs = String(ms);
+        presetButton.textContent = formatInterval2(ms);
         presetsNode.append(presetButton);
       }
       dialogNode.querySelector(roleSelector(roles.customValue)).value = model.customInterval.value;
@@ -2661,6 +2652,7 @@
       focusRoleForTab,
       readSelectedScope,
       createViewModel,
+      applyStatusTexts,
       applyModel,
       readUnlockerFormSetting
     };
@@ -4716,16 +4708,9 @@ ${root} :focus-visible {
   var PANEL_MIN_WIDTH = 52;
   var PANEL_SAFE_MARGIN2 = 12;
   var PANEL_GAP2 = 8;
-  var PRESETS = [
-    { label: "30 秒", ms: 30 * 1e3 },
-    { label: "1 分钟", ms: 60 * 1e3 },
-    { label: "3 分钟", ms: 3 * 60 * 1e3 },
-    { label: "5 分钟", ms: 5 * 60 * 1e3 },
-    { label: "10 分钟", ms: 10 * 60 * 1e3 },
-    { label: "15 分钟", ms: 15 * 60 * 1e3 },
-    { label: "30 分钟", ms: 30 * 60 * 1e3 },
-    { label: "60 分钟", ms: 60 * 60 * 1e3 }
-  ];
+  var PRESET_INTERVALS_MS = [30, 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 30 * 60, 60 * 60].map(
+    (seconds) => seconds * 1e3
+  );
   var WRITE_ACTIONS = /* @__PURE__ */ new Set([
     "save-preset",
     "save-custom",
@@ -4755,17 +4740,8 @@ ${root} :focus-visible {
     return scope === "page" ? "当前页面" : "整个站点";
   }
   function unlockerStatusText(snapshot, scope) {
-    const setting = snapshot.appliedUnlocker?.setting;
-    if (!setting?.enabled) return "当前未启用网页限制解除。";
-    const labels = [
-      ["allowSelection", "选择文本"],
-      ["allowCopy", "复制/剪切"],
-      ["allowContextMenu", "右键菜单"],
-      ["allowDrag", "拖拽"],
-      ["suppressBeforeUnload", "离开提示"]
-    ].filter(([option]) => setting[option]).map(([, label]) => label);
-    if (!labels.length) return "网页限制解除已保存，但没有启用任何能力。";
-    return `${scopeLabel(snapshot.appliedUnlocker?.scope || scope)}已启用：${labels.join("、")}。`;
+    const applied = snapshot.appliedUnlocker;
+    return describeUnlockerSetting(applied?.setting, scopeLabel(applied?.scope || scope));
   }
   function createWebPageAssistantView({
     session,
@@ -4811,7 +4787,6 @@ ${root} :focus-visible {
     let openPromise = null;
     let pendingOpenIntent = null;
     const pendingSubmissions = /* @__PURE__ */ new Set();
-    const pendingActionTokens = /* @__PURE__ */ new WeakMap();
     const ownedStyleIds = /* @__PURE__ */ new Set();
     let finishDisposed;
     const disposedPromise = new Promise((resolve) => {
@@ -4904,23 +4879,21 @@ ${root} :focus-visible {
       }
       return `${scopeLabel(runtimeState.activeMatch.scope)}自动刷新已启用，每 ${formatInterval(runtimeState.activeMatch.setting.intervalMs)} 刷新一次。`;
     }
-    function installStyles() {
-      if (!documentObject.getElementById(TOKEN_STYLE_ID)) {
-        const tokenStyle = documentObject.createElement("style");
-        tokenStyle.id = TOKEN_STYLE_ID;
-        tokenStyle.textContent = tokenCss;
-        documentObject.documentElement.append(tokenStyle);
-        ownedStyleIds.add(TOKEN_STYLE_ID);
-      }
-      if (!documentObject.getElementById(STYLE_ID)) ownedStyleIds.add(STYLE_ID);
-      installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID });
-      if (!documentObject.getElementById(DIALOG_STYLE_ID)) ownedStyleIds.add(DIALOG_STYLE_ID);
-      installAssistantDialogStyles({ documentObject, rootId: ROOT_ID, styleId: DIALOG_STYLE_ID });
+    function ensureStyle(styleId, install) {
+      if (documentObject.getElementById(styleId)) return;
+      install();
+      ownedStyleIds.add(styleId);
     }
     function ensureRoot() {
       if (disposed) return null;
       if (root && root.isConnected !== false) return root;
-      installStyles();
+      ensureStyle(TOKEN_STYLE_ID, () => {
+        const tokenStyle = documentObject.createElement("style");
+        tokenStyle.id = TOKEN_STYLE_ID;
+        tokenStyle.textContent = tokenCss;
+        documentObject.documentElement.append(tokenStyle);
+      });
+      ensureStyle(STYLE_ID, () => installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID }));
       root = documentObject.getElementById(ROOT_ID);
       if (!root) {
         root = documentObject.createElement("div");
@@ -5024,6 +4997,10 @@ ${root} :focus-visible {
     function renderDialog({ message = "", tone = "info", scope = null, tab = null } = {}) {
       if (disposed) return;
       ensureRoot();
+      ensureStyle(
+        DIALOG_STYLE_ID,
+        () => installAssistantDialogStyles({ documentObject, rootId: ROOT_ID, styleId: DIALOG_STYLE_ID })
+      );
       const preserved = captureDialogState();
       if (!dialog) {
         const active = documentObject.activeElement;
@@ -5040,7 +5017,7 @@ ${root} :focus-visible {
       dialog.addEventListener("cancel", handleDialogCancel);
       root.append(dialog);
       dialog.showModal?.();
-      dialogContract.applyModel(dialog, model, PRESETS);
+      dialogContract.applyModel(dialog, model, PRESET_INTERVALS_MS);
       restoreDialogState(preserved);
       setMessage(initializationError || model.message, initializationError ? "error" : tone);
       if (initializationError) disableDialogWrites();
@@ -5062,18 +5039,7 @@ ${root} :focus-visible {
     }
     function updateDialogStatus() {
       if (!dialog) return;
-      const model = createDialogViewModel("", getSelectedScope(), activeDialogTab);
-      for (const [role, text] of [
-        [dialogContract.roles.status, model.statusText],
-        [dialogContract.roles.pageKey, model.pageRefreshText],
-        [dialogContract.roles.siteKey, model.siteRefreshText],
-        [dialogContract.roles.unlockerStatus, model.unlockerStatusText],
-        [dialogContract.roles.unlockerPageKey, model.pageUnlockerText],
-        [dialogContract.roles.unlockerSiteKey, model.siteUnlockerText]
-      ]) {
-        const node = dialog.querySelector(dialogContract.roleSelector(role));
-        if (node) node.textContent = text;
-      }
+      dialogContract.applyStatusTexts(dialog, createDialogViewModel("", getSelectedScope(), activeDialogTab));
     }
     function parseCustomInterval() {
       const valueNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.customValue));
@@ -5178,11 +5144,10 @@ ${root} :focus-visible {
       const action = actionNode.dataset.partAction;
       if (!WRITE_ACTIONS.has(action) && !["open-settings", "switch-tab", "close-dialog", "toggle-pause"].includes(action))
         return;
-      if (action === "close-dialog" && dialog && actionNode === dialog && event.target === dialog) {
-        closeDialog();
+      if (action === "close-dialog" && dialog && actionNode === dialog) {
+        if (event.target === dialog) closeDialog();
         return;
       }
-      if (action === "close-dialog" && dialog && actionNode === dialog) return;
       if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && widgetShell?.anchor.isDragSuppressed())
         return;
       event.preventDefault();
@@ -5191,9 +5156,7 @@ ${root} :focus-visible {
       const pendingLabel = isWrite ? actionNode.textContent : null;
       const actionDialog = dialog;
       const actionGeneration = dialogGeneration;
-      const actionToken = {};
       if (isWrite) {
-        pendingActionTokens.set(actionNode, actionToken);
         actionNode.disabled = true;
         actionNode.textContent = "处理中…";
       }
@@ -5206,12 +5169,9 @@ ${root} :focus-visible {
           setMessage(`操作失败：${error?.message || error}`, "error");
         }
       } finally {
-        if (isWrite && pendingActionTokens.get(actionNode) === actionToken) {
-          pendingActionTokens.delete(actionNode);
-          if (!disposed && actionNode.isConnected !== false) {
-            actionNode.disabled = false;
-            actionNode.textContent = pendingLabel;
-          }
+        if (isWrite && !disposed && actionNode.isConnected !== false) {
+          actionNode.disabled = false;
+          actionNode.textContent = pendingLabel;
         }
       }
     }
@@ -5321,30 +5281,20 @@ ${root} :focus-visible {
   (function() {
     "use strict";
     if (window.top !== window.self) return;
-    const SCRIPT_NAME2 = "Web Page Assistant";
-    const ROOT_ID2 = "page-auto-refresh-timer-root";
-    const UNLOCKER_STYLE_ID = `${ROOT_ID2}-unlocker-style`;
+    const UNLOCKER_STYLE_ID = `${ROOT_ID}-unlocker-style`;
     const STORAGE_KEY = "pageAutoRefreshTimerSettings";
     const WIDGET_POSITION_KEY = "pageAutoRefreshTimerWidgetPosition";
     const keys = {
       pageKey: `${location.origin}${location.pathname}${location.search}`,
       siteKey: location.hostname
     };
-    function normalizeWidgetPosition(value) {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-      const left = Number(value.left);
-      const top = Number(value.top);
-      if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
-      return { left: Math.round(left), top: Math.round(top) };
-    }
     function documentReady() {
       if (document.readyState !== "loading") return Promise.resolve();
       return new Promise((resolve) => document.addEventListener("DOMContentLoaded", resolve, { once: true }));
     }
     const storage = createWebPageAssistantStoragePort({
-      scriptName: SCRIPT_NAME2,
+      scriptName: SCRIPT_NAME,
       settingsContract: web_page_assistant_settings_lib_exports,
-      normalizeWidgetPosition,
       storageKey: STORAGE_KEY,
       // Each site keeps its own widget position so it can be moved off one
       // site's corner controls without moving it everywhere else.
@@ -5358,7 +5308,7 @@ ${root} :focus-visible {
     });
     const unlocker = createUnlockerRuntime({
       hasUnlockerAction,
-      rootContainsTarget: (target) => Boolean(document.getElementById(ROOT_ID2)?.contains(target)),
+      rootContainsTarget: (target) => Boolean(document.getElementById(ROOT_ID)?.contains(target)),
       getDocumentTarget: () => document,
       getWindowTarget: () => window,
       getStyle: () => document.getElementById(UNLOCKER_STYLE_ID),
@@ -5371,7 +5321,7 @@ ${root} :focus-visible {
       removeStyle() {
         document.getElementById(UNLOCKER_STYLE_ID)?.remove();
       },
-      rootId: ROOT_ID2
+      rootId: ROOT_ID
     });
     let widgetPosition = null;
     const interfaceReady = Promise.all([storage.readWidgetPosition(), documentReady()]).then(([position]) => {
@@ -5411,7 +5361,7 @@ ${root} :focus-visible {
     });
     storage.registerSettingsMenu("网页助手设置", () => {
       view.openSettings().catch((error) => {
-        console.warn(`${SCRIPT_NAME2}: failed to open settings menu.`, error);
+        console.warn(`${SCRIPT_NAME}: failed to open settings menu.`, error);
       });
     });
     window.addEventListener("pagehide", (event) => {
@@ -5421,7 +5371,7 @@ ${root} :focus-visible {
     });
     session.start().then((result) => {
       if (!result.ok && result.code !== "application-failed") {
-        console.warn(`${SCRIPT_NAME2}: failed to initialize.`, result.state.applicationError || result.code);
+        console.warn(`${SCRIPT_NAME}: failed to initialize.`, result.state.applicationError || result.code);
       }
     });
   })();

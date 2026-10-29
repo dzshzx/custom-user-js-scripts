@@ -38,28 +38,16 @@ function createSettingsContract() {
   };
 }
 
-function normalizeWidgetPosition(value) {
-  if (!value || typeof value !== 'object') return null;
-  const left = Number(value.left);
-  const top = Number(value.top);
-  if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
-  return { left: Math.round(left), top: Math.round(top) };
-}
-
 function baseAdapters(overrides = {}) {
   return {
     scriptName: 'Web Page Assistant',
     settingsContract: createSettingsContract(),
-    normalizeWidgetPosition,
     storageKey: 'settings',
     widgetPositionKey: 'position',
     fallbackStorageKey: 'fallbackSettings',
     fallbackWidgetPositionKey: 'fallbackPosition',
     localStorageAdapter: createLocalStorage(),
     logger: { warn() {} },
-    toPromise(value) {
-      return value && typeof value.then === 'function' ? value : Promise.resolve(value);
-    },
     ...overrides,
   };
 }

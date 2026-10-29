@@ -287,11 +287,6 @@ function installAssistantDialogStyles({ documentObject, rootId, styleId }: Assis
         flex: 1 1 100%;
         width: 100%;
       }
-
-      #${rootId} .part-widget {
-        right: 12px;
-        bottom: 12px;
-      }
     }
   `;
   documentObject.documentElement.append(style);

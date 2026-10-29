@@ -226,6 +226,23 @@ function setUnlockerSetting(
   return normalizeSettings(next);
 }
 
+const UNLOCKER_OPTION_LABELS: Record<UnlockerOption, string> = {
+  allowSelection: '选择文本',
+  allowCopy: '复制/剪切',
+  allowContextMenu: '右键菜单',
+  allowDrag: '拖拽',
+  suppressBeforeUnload: '离开提示',
+};
+
+function describeUnlockerSetting(setting: UnlockerSetting | null | undefined, scopeText: string): string {
+  if (!setting?.enabled) return '当前未启用网页限制解除。';
+  const labels = (Object.keys(UNLOCKER_OPTION_LABELS) as UnlockerOption[])
+    .filter((option) => setting[option])
+    .map((option) => UNLOCKER_OPTION_LABELS[option]);
+  if (!labels.length) return '网页限制解除已保存，但没有启用任何能力。';
+  return `${scopeText}已启用：${labels.join('、')}。`;
+}
+
 function deleteUnlockerSetting(sourceSettings: unknown, scope: Scope, key: string): Settings {
   const next = normalizeSettings(sourceSettings);
   const bucket = scope === 'site' ? next.unlocker.sites : next.unlocker.pages;
@@ -252,4 +269,5 @@ export {
   defaultUnlockerSetting,
   setUnlockerSetting,
   deleteUnlockerSetting,
+  describeUnlockerSetting,
 };

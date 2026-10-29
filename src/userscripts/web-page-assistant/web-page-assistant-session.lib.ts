@@ -22,8 +22,6 @@ export interface SessionState {
   appliedUnlocker: Settings.UnlockerMatch | null;
   applicationError: string | null;
   applicationErrors: Record<SessionArea, string | null>;
-  matchedRefresh: Settings.RefreshMatch | null;
-  matchedUnlocker: Settings.UnlockerMatch | null;
 }
 
 export interface SessionResult {
@@ -117,8 +115,6 @@ function createWebPageAssistantSession({
         appliedUnlocker,
         applicationError,
         applicationErrors,
-        matchedRefresh: Settings.resolveActiveRefreshSetting(settings, keys),
-        matchedUnlocker: Settings.resolveActiveUnlockerSetting(settings, keys),
       }),
     );
   }

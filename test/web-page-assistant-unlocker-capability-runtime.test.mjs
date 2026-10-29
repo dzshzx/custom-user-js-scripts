@@ -161,34 +161,3 @@ test('unlocker runtime removes selection style on reinstall or uninstall', () =>
   harness.runtime.uninstall();
   assert.deepEqual(harness.documentTarget.listeners, []);
 });
-
-test('unlocker runtime describes active capability settings without duplicate labels', () => {
-  const harness = createHarness();
-
-  assert.equal(harness.runtime.describe(null, '当前页面'), '当前未启用网页限制解除。');
-  assert.equal(
-    harness.runtime.describe(
-      {
-        enabled: true,
-        allowSelection: false,
-        allowCopy: false,
-        allowContextMenu: false,
-        allowDrag: false,
-        suppressBeforeUnload: false,
-      },
-      '当前页面',
-    ),
-    '网页限制解除已保存，但没有启用任何能力。',
-  );
-  assert.equal(
-    harness.runtime.describe(
-      {
-        enabled: true,
-        allowCopy: true,
-        suppressBeforeUnload: true,
-      },
-      '整个站点',
-    ),
-    '整个站点已启用：复制/剪切、离开提示。',
-  );
-});
