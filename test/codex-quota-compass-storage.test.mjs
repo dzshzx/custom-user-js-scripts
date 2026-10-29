@@ -7,20 +7,7 @@ import {
   createSnapshotArchiveStoragePort,
 } from '../src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts';
 
-function createLocalStorage(initial = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    getItem(key) {
-      return values.get(key) ?? null;
-    },
-    setItem(key, value) {
-      values.set(key, value);
-    },
-    value(key) {
-      return values.get(key);
-    },
-  };
-}
+import { createMemoryStorage as createLocalStorage } from './helpers/dom-env.mjs';
 
 test('createSnapshotArchiveStoragePort prefers GM storage for read and write', async () => {
   const writes = [];
@@ -289,4 +276,128 @@ test('createSnapshotArchiveStoragePort mirrors the merged archive when migrating
     JSON.stringify({ snapshots: [{ snapshotId: 'gm-1' }, { snapshotId: 'local-1' }] }),
   );
   assert.deepEqual(port.getBackendInfo(), { id: 'gm', label: 'GM storage' });
+});
+
+test('createSnapshotArchiveStoragePort keeps the GM label when the migration write lands in localStorage', async () => {
+  const localStorage = createLocalStorage({
+    [DEFAULT_ARCHIVE_FALLBACK_KEY]: JSON.stringify({ snapshots: [{ snapshotId: 'local-1' }] }),
+  });
+  const port = createSnapshotArchiveStoragePort({
+    gmGetValue: async () => ({ snapshots: [{ snapshotId: 'gm-1' }] }),
+    gmSetValue: async () => {
+      throw new Error('gm write blocked');
+    },
+    localStorage,
+    mergeArchives: (primaryArchive, incomingArchive) => ({
+      archive: { snapshots: [...primaryArchive.snapshots, ...incomingArchive.snapshots] },
+      changed: true,
+    }),
+    logger: { warn() {} },
+  });
+
+  const archive = await port.read();
+  assert.deepEqual(archive, { snapshots: [{ snapshotId: 'gm-1' }, { snapshotId: 'local-1' }] });
+  assert.deepEqual(port.getBackendInfo(), { id: 'gm', label: 'GM storage' });
+  assert.equal(localStorage.value(DEFAULT_ARCHIVE_FALLBACK_KEY), JSON.stringify(archive));
+});
+
+test('createSnapshotArchiveStoragePort keeps a degraded mirror across a localStorage detour until GM mirrors again', async () => {
+  let failGmRead = false;
+  let failMirror = true;
+  const values = new Map([[DEFAULT_ARCHIVE_FALLBACK_KEY, JSON.stringify({ snapshots: [] })]]);
+  const port = createSnapshotArchiveStoragePort({
+    gmGetValue: async () => {
+      if (failGmRead) throw new Error('blocked');
+      return { snapshots: [{ snapshotId: 'gm-1' }] };
+    },
+    gmSetValue: async () => {},
+    localStorage: {
+      getItem: (key) => values.get(key) ?? null,
+      setItem(key, value) {
+        if (failMirror) throw new Error('quota exceeded');
+        values.set(key, value);
+      },
+    },
+    logger: { warn() {} },
+  });
+
+  await port.write({ snapshots: [{ snapshotId: 'gm-2' }] });
+  assert.equal(port.getBackendInfo().degraded, true);
+
+  failGmRead = true;
+  await port.read();
+  assert.equal(port.getBackendInfo().id, 'localStorage');
+
+  // Nothing has rewritten the mirror, so the degraded label is still the truth.
+  failGmRead = false;
+  await port.read();
+  assert.equal(port.getBackendInfo().degraded, true);
+
+  failMirror = false;
+  await port.write({ snapshots: [{ snapshotId: 'gm-3' }] });
+  assert.deepEqual(port.getBackendInfo(), { id: 'gm', label: 'GM storage' });
+});
+
+test('createSnapshotArchiveStoragePort warns and still answers the merged archive when the migration write fails everywhere', async () => {
+  const warnings = [];
+  const port = createSnapshotArchiveStoragePort({
+    gmGetValue: async () => ({ snapshots: [{ snapshotId: 'gm-1' }] }),
+    gmSetValue: async () => {
+      throw new Error('gm write blocked');
+    },
+    localStorage: {
+      getItem: () => JSON.stringify({ snapshots: [{ snapshotId: 'local-1' }] }),
+      setItem() {
+        throw new Error('quota exceeded');
+      },
+    },
+    mergeArchives: (primaryArchive, incomingArchive) => ({
+      archive: { snapshots: [...primaryArchive.snapshots, ...incomingArchive.snapshots] },
+      changed: true,
+    }),
+    logger: {
+      warn(message) {
+        warnings.push(message);
+      },
+    },
+  });
+
+  assert.deepEqual(await port.read(), { snapshots: [{ snapshotId: 'gm-1' }, { snapshotId: 'local-1' }] });
+  assert.equal(port.getBackendInfo().id, 'gm');
+  assert.ok(warnings.includes('Codex Quota Compass: failed to migrate fallback archive into userscript storage.'));
+});
+
+test('createSnapshotArchiveStoragePort lets a throwing merger reject the read', async () => {
+  const port = createSnapshotArchiveStoragePort({
+    gmGetValue: async () => ({ snapshots: [] }),
+    gmSetValue: async () => {},
+    localStorage: createLocalStorage({ [DEFAULT_ARCHIVE_FALLBACK_KEY]: JSON.stringify({ snapshots: [] }) }),
+    mergeArchives: () => {
+      throw new Error('merge exploded');
+    },
+    logger: { warn() {} },
+  });
+
+  await assert.rejects(port.read(), /merge exploded/);
+});
+
+test('createSnapshotArchiveStoragePort never reads the fallback copy without a merger', async () => {
+  const gets = [];
+  const port = createSnapshotArchiveStoragePort({
+    gmGetValue: async () => ({ snapshots: [{ snapshotId: 'gm-1' }] }),
+    gmSetValue: async () => {
+      throw new Error('must not write');
+    },
+    localStorage: {
+      getItem(key) {
+        gets.push(key);
+        return null;
+      },
+      setItem() {},
+    },
+    logger: { warn() {} },
+  });
+
+  assert.deepEqual(await port.read(), { snapshots: [{ snapshotId: 'gm-1' }] });
+  assert.deepEqual(gets, []);
 });

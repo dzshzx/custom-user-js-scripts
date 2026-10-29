@@ -19,7 +19,8 @@ user history; its GitHub token is a credential.
    the installed-script contract and change only with an explicit migration.
 2. The Codex Quota Compass `Snapshot Archive` is written to manager storage and
    mirrored to page `localStorage`; reads merge both and migrate the mirror
-   into manager storage. The mirror keeps history reachable when the manager
+   into manager storage (the migration write refreshes the mirror too, so
+   both copies hold the merged archive). The mirror keeps history reachable when the manager
    API is missing or changes, and lets the export/import path work everywhere.
 3. Gist Sync settings and the GitHub token are stored in manager storage only —
    never mirrored, never written to page storage. Without manager storage the

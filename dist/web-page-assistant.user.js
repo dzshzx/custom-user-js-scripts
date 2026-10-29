@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.24
+// @version      0.3.25
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -556,6 +556,31 @@
   function promised(fn) {
     return fn ? async (...args) => fn(...args) : null;
   }
+  function valueChangeOf(add, remove) {
+    return {
+      subscribe(name, listener, onError = () => {
+      }) {
+        const listenerId = add(name, listener);
+        if (listenerId === void 0 || listenerId === null) return () => {
+        };
+        if (typeof listenerId.then !== "function") {
+          const id = listenerId;
+          return () => remove?.(id);
+        }
+        const pending = listenerId.then(
+          (id) => id,
+          (error) => {
+            onError(error);
+            return null;
+          }
+        );
+        return () => {
+          if (remove) pending.then((id) => id !== null && remove(id)).catch(() => {
+          });
+        };
+      }
+    };
+  }
   function modernGlobal() {
     return typeof GM !== "undefined" ? GM : null;
   }
@@ -563,25 +588,19 @@
     const legacy = legacyGlobals();
     const gm = overrides.gm || modernGlobal();
     const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
+    const modernAdd = bindModern(gm, "addValueChangeListener");
     let valueChange = null;
     if (legacyAdd) {
-      valueChange = {
-        add: legacyAdd,
-        remove: pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
-      };
-    } else if (typeof gm?.addValueChangeListener === "function") {
-      valueChange = {
-        add: gm.addValueChangeListener.bind(gm),
-        remove: bindModern(gm, "removeValueChangeListener")
-      };
+      valueChange = valueChangeOf(
+        legacyAdd,
+        pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
+      );
+    } else if (modernAdd) {
+      valueChange = valueChangeOf(modernAdd, bindModern(gm, "removeValueChangeListener"));
     }
     return {
-      getValue: promised(
-        pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue")
-      ),
-      setValue: promised(
-        pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue")
-      ),
+      getValue: promised(pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue")),
+      setValue: promised(pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue")),
       valueChange,
       registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
       xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),
@@ -591,14 +610,27 @@
   }
 
   // src/userscripts/shared/shared-gm-json-store.lib.ts
+  var UNAVAILABLE = /* @__PURE__ */ Symbol("unavailable");
   function createGmFirstJsonStore(options) {
-    const { scriptName, subject, key, normalize, mirror = false, eventTarget = null } = options;
-    const fallbackKey = options.fallbackKey || null;
-    const logger = options.logger === void 0 ? globalThis.console : options.logger;
+    const {
+      scriptName,
+      subject,
+      key,
+      inheritFrom = [],
+      fallbackKey,
+      normalize = (raw) => raw,
+      mirror = false,
+      eventTarget = null,
+      logger = globalThis.console
+    } = options;
     const warn = (message, error) => logger?.warn?.(`${scriptName}: ${message}`, error);
-    const gmApi = () => resolveGmApi(options);
+    let resolved = null;
+    const gmApi = () => {
+      if (!resolved?.getValue || !resolved.setValue) resolved = resolveGmApi(options);
+      return resolved;
+    };
     function fallbackStorage() {
-      const storage = options.localStorage === void 0 ? globalThis.localStorage : options.localStorage;
+      const storage = options.localStorage ?? globalThis.localStorage;
       if (!storage) throw new Error("localStorage is unavailable.");
       return storage;
     }
@@ -607,80 +639,88 @@
       fallbackStorage().setItem(fallbackKey, JSON.stringify(value));
     }
     function readFallback() {
-      if (!fallbackKey) return { available: false, value: null };
+      if (!fallbackKey) return UNAVAILABLE;
       try {
-        return { available: true, value: normalize(JSON.parse(fallbackStorage().getItem(fallbackKey) || "null")) };
+        return normalize(JSON.parse(fallbackStorage().getItem(fallbackKey) || "null"));
       } catch (error) {
         warn(`failed to read ${subject} from fallback storage.`, error);
-        return { available: false, value: null };
+        return UNAVAILABLE;
       }
     }
-    async function read() {
+    async function readGm(getValue) {
+      let value = normalize(null);
+      for (const name of [key, ...inheritFrom]) {
+        value = normalize(await getValue(name, null));
+        if (value !== null && value !== void 0) break;
+      }
+      return value;
+    }
+    async function readWithSource() {
       let gmFailed = false;
       const { getValue } = gmApi();
       if (getValue) {
         try {
-          return { backend: "gm", value: normalize(await getValue(key, null)), gmFailed: false };
+          return { backend: "gm", value: await readGm(getValue), gmFailed: false };
         } catch (error) {
           gmFailed = true;
           warn(`failed to read ${subject} from userscript storage.`, error);
         }
       }
       const fallback = readFallback();
-      return fallback.available ? { backend: "localStorage", value: fallback.value, gmFailed } : { backend: "none", value: null, gmFailed };
+      return fallback === UNAVAILABLE ? { backend: "none", value: null, gmFailed } : { backend: "localStorage", value: fallback, gmFailed };
     }
-    async function write(value, { fallbackOnly = false } = {}) {
+    async function read() {
+      const { backend, value } = await readWithSource();
+      return { backend, value };
+    }
+    function tryMirror(value) {
+      if (!mirror || !fallbackKey) return true;
+      try {
+        writeFallback(value);
+        return true;
+      } catch (error) {
+        warn(`failed to mirror ${subject} to fallback storage.`, error);
+        return false;
+      }
+    }
+    async function writeTo(value, fallbackOnly) {
       const { setValue } = gmApi();
       if (!fallbackOnly && setValue) {
-        let written = false;
         try {
           await setValue(key, value);
-          written = true;
+          return { backend: "gm", mirrorDegraded: !tryMirror(value) };
         } catch (error) {
           warn(`failed to write ${subject} to userscript storage.`, error);
-        }
-        if (written) {
-          let mirrorDegraded = false;
-          if (mirror && fallbackKey) {
-            try {
-              writeFallback(value);
-            } catch (error) {
-              mirrorDegraded = true;
-              warn(`failed to mirror ${subject} to fallback storage.`, error);
-            }
-          }
-          return { backend: "gm", mirrorDegraded };
         }
       }
       writeFallback(value);
       return { backend: "localStorage", mirrorDegraded: false };
     }
+    const write = (value) => writeTo(value, false);
+    async function update(transform2) {
+      const { backend, value, gmFailed } = await readWithSource();
+      const fallback = () => {
+        const copy = readFallback();
+        return copy === UNAVAILABLE ? null : copy;
+      };
+      const next = transform2({ backend, value, fallback });
+      if (next === void 0) return { backend, value };
+      return { backend, value: next, written: await writeTo(next, gmFailed) };
+    }
     function subscribeGm(listener) {
       const { valueChange } = gmApi();
       if (!valueChange) return null;
-      const { add, remove } = valueChange;
       const watchFailed = (error) => warn(`failed to watch ${subject} in userscript storage.`, error);
-      let listenerId;
       try {
-        listenerId = add(key, (name, oldValue, newValue, remote) => {
-          listener({ backend: "gm", key: name, oldValue, newValue, remote: Boolean(remote) });
-        });
+        return valueChange.subscribe(
+          key,
+          (name, oldValue, newValue, remote) => listener({ backend: "gm", key: name, oldValue, newValue, remote: Boolean(remote) }),
+          watchFailed
+        );
       } catch (error) {
         watchFailed(error);
         return null;
       }
-      if (listenerId === void 0 || listenerId === null) return null;
-      if (typeof listenerId.then !== "function") {
-        const id = listenerId;
-        return () => remove?.(id);
-      }
-      const pending = listenerId;
-      pending.catch(watchFailed);
-      return () => {
-        if (!remove) return;
-        pending.then((id) => remove(id)).catch(() => {
-        });
-      };
     }
     function subscribe(listener) {
       const cleanups = [];
@@ -704,7 +744,7 @@
         }
       };
     }
-    return { read, readFallback, write, subscribe };
+    return { read, write, update, subscribe };
   }
 
   // src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts
@@ -716,60 +756,38 @@
     return { left: Math.round(left), top: Math.round(top) };
   }
   function createWebPageAssistantStoragePort(adapters) {
-    const {
-      scriptName,
-      settingsContract,
-      storageKey,
-      widgetPositionKey,
-      sharedWidgetPositionKey = null,
-      fallbackStorageKey,
-      fallbackWidgetPositionKey,
-      localStorageAdapter,
-      eventTarget,
-      logger
-    } = adapters;
+    const { scriptName, settingsContract, localStorageAdapter, eventTarget, logger } = adapters;
+    const { normalizeSettings: normalizeSettings2, emptySettings: emptySettings2 } = settingsContract;
     const gm = resolveGmApi(adapters);
-    const storeOptions = { ...adapters, scriptName, localStorage: localStorageAdapter, logger };
     const settingsStore = createGmFirstJsonStore({
-      ...storeOptions,
+      ...adapters,
+      localStorage: localStorageAdapter,
       subject: "settings",
-      key: storageKey,
-      fallbackKey: fallbackStorageKey,
-      normalize: settingsContract.normalizeSettings,
+      key: adapters.storageKey,
+      fallbackKey: adapters.fallbackStorageKey,
+      normalize: normalizeSettings2,
       eventTarget
     });
-    const sitePositionStore = createGmFirstJsonStore({
-      ...storeOptions,
+    const positionStore = createGmFirstJsonStore({
+      ...adapters,
+      localStorage: localStorageAdapter,
       subject: "widget position",
-      key: widgetPositionKey,
-      fallbackKey: fallbackWidgetPositionKey,
-      normalize: normalizeWidgetPosition,
-      eventTarget: null
+      key: adapters.widgetPositionKey,
+      inheritFrom: adapters.sharedWidgetPositionKey ? [adapters.sharedWidgetPositionKey] : [],
+      fallbackKey: adapters.fallbackWidgetPositionKey,
+      normalize: normalizeWidgetPosition
     });
-    const sharedPositionStore = sharedWidgetPositionKey ? createGmFirstJsonStore({
-      ...storeOptions,
-      subject: "shared widget position",
-      key: sharedWidgetPositionKey,
-      fallbackKey: null,
-      normalize: normalizeWidgetPosition,
-      eventTarget: null
-    }) : null;
-    async function readSettings() {
-      const result = await settingsStore.read();
-      return { result, settings: result.value ?? settingsContract.emptySettings() };
-    }
     return {
       async readSettings() {
-        return (await readSettings()).settings;
+        return (await settingsStore.read()).value ?? emptySettings2();
       },
       // Applies one change to the latest stored settings instead of a copy held
-      // since page load, so saves from other tabs are kept. Settings read from
-      // fallback storage after a GM failure are never written over the GM copy.
+      // since page load, so saves from other tabs are kept.
       async updateSettings(transform2) {
-        const latest = await readSettings();
-        const next = settingsContract.normalizeSettings(transform2(latest.settings));
-        await settingsStore.write(next, { fallbackOnly: latest.result.gmFailed });
-        return next;
+        const { value } = await settingsStore.update(
+          (latest) => normalizeSettings2(transform2(latest.value ?? emptySettings2()))
+        );
+        return value ?? emptySettings2();
       },
       // Calls onChange when another tab changes the settings. Returns an
       // unsubscribe function; managers without change events only get the
@@ -780,20 +798,17 @@
         });
       },
       async readWidgetPosition() {
-        const site = await sitePositionStore.read();
-        if (site.backend !== "gm" || site.value || !sharedPositionStore) return site.value;
-        const shared = await sharedPositionStore.read();
-        return shared.gmFailed ? sitePositionStore.readFallback().value : shared.value;
+        return (await positionStore.read()).value;
       },
       async writeSettings(nextSettings) {
-        const normalized = settingsContract.normalizeSettings(nextSettings);
+        const normalized = normalizeSettings2(nextSettings);
         await settingsStore.write(normalized);
         return normalized;
       },
       async writeWidgetPosition(position) {
         const normalized = normalizeWidgetPosition(position);
         if (!normalized) return null;
-        await sitePositionStore.write(normalized);
+        await positionStore.write(normalized);
         return normalized;
       },
       registerSettingsMenu(label, callback) {

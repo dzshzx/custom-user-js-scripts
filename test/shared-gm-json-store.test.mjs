@@ -2,23 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createGmFirstJsonStore } from '../src/userscripts/shared/shared-gm-json-store.lib.ts';
-
-function createLocalStorage(initial = {}, { failGet = false, failSet = false } = {}) {
-  const values = new Map(Object.entries(initial));
-  const writes = [];
-  return {
-    writes,
-    getItem(key) {
-      if (failGet) throw new Error('get blocked');
-      return values.get(key) ?? null;
-    },
-    setItem(key, value) {
-      if (failSet) throw new Error('set blocked');
-      writes.push([key, value]);
-      values.set(key, value);
-    },
-  };
-}
+import { createMemoryStorage } from './helpers/dom-env.mjs';
 
 function createGm(initial = {}, { failGet = false, failSet = false } = {}) {
   const values = new Map(Object.entries(initial));
@@ -46,6 +30,8 @@ function createLogger() {
 // Stands in for a manager without any storage API, so the test never probes
 // the real globals.
 const NO_GM = { gm: {} };
+// Node has no global localStorage; an explicit undefined keeps that obvious.
+const NO_LOCAL_STORAGE = { localStorage: undefined };
 
 function baseOptions(overrides = {}) {
   return {
@@ -54,21 +40,18 @@ function baseOptions(overrides = {}) {
     key: 'gmKey',
     fallbackKey: 'localKey',
     normalize: (raw) => (raw && typeof raw === 'object' ? { ...raw, normalized: true } : null),
+    logger: createLogger(),
     ...overrides,
   };
 }
 
 test('GM available: reads and writes through GM and leaves localStorage alone without mirror', async () => {
   const gm = createGm({ gmKey: { from: 'gm' } });
-  const localStorage = createLocalStorage({ localKey: JSON.stringify({ from: 'local' }) });
+  const localStorage = createMemoryStorage({ localKey: JSON.stringify({ from: 'local' }) });
   const logger = createLogger();
   const store = createGmFirstJsonStore(baseOptions({ ...gm, localStorage, logger }));
 
-  assert.deepEqual(await store.read(), {
-    backend: 'gm',
-    value: { from: 'gm', normalized: true },
-    gmFailed: false,
-  });
+  assert.deepEqual(await store.read(), { backend: 'gm', value: { from: 'gm', normalized: true } });
   assert.deepEqual(await store.write({ next: 1 }), { backend: 'gm', mirrorDegraded: false });
   assert.deepEqual(gm.writes, [['gmKey', { next: 1 }]]);
   assert.deepEqual(localStorage.writes, []);
@@ -83,19 +66,30 @@ test('GM available: passes null as the GM default and normalizes a missing value
         defaults.push([key, fallback]);
         return fallback;
       },
-      localStorage: createLocalStorage(),
-      logger: createLogger(),
+      localStorage: createMemoryStorage(),
     }),
   );
 
-  assert.deepEqual(await store.read(), { backend: 'gm', value: null, gmFailed: false });
+  assert.deepEqual(await store.read(), { backend: 'gm', value: null });
   assert.deepEqual(defaults, [['gmKey', null]]);
+});
+
+test('inheritFrom: an empty primary key reads the inherited GM keys in order, never writes them', async () => {
+  const gm = createGm({ sharedKey: { from: 'shared' } });
+  const store = createGmFirstJsonStore(
+    baseOptions({ ...gm, inheritFrom: ['legacyKey', 'sharedKey'], localStorage: createMemoryStorage() }),
+  );
+
+  assert.deepEqual(await store.read(), { backend: 'gm', value: { from: 'shared', normalized: true } });
+  await store.write({ own: true });
+  assert.deepEqual(gm.writes, [['gmKey', { own: true }]]);
+  assert.deepEqual(await store.read(), { backend: 'gm', value: { own: true, normalized: true } });
 });
 
 test('GM available with mirror: a GM write is copied to localStorage', async () => {
   const gm = createGm();
-  const localStorage = createLocalStorage();
-  const store = createGmFirstJsonStore(baseOptions({ ...gm, localStorage, mirror: true, logger: createLogger() }));
+  const localStorage = createMemoryStorage();
+  const store = createGmFirstJsonStore(baseOptions({ ...gm, localStorage, mirror: true }));
 
   assert.deepEqual(await store.write({ next: 2 }), { backend: 'gm', mirrorDegraded: false });
   assert.deepEqual(gm.writes, [['gmKey', { next: 2 }]]);
@@ -109,7 +103,7 @@ test('GM available but the mirror write fails: degraded, warned, still GM', asyn
     baseOptions({
       ...gm,
       subject: 'archive',
-      localStorage: createLocalStorage({}, { failSet: true }),
+      localStorage: createMemoryStorage({}, { failSet: true }),
       mirror: true,
       logger,
     }),
@@ -120,39 +114,29 @@ test('GM available but the mirror write fails: degraded, warned, still GM', asyn
   assert.deepEqual(logger.warnings, ['Test Script: failed to mirror archive to fallback storage.']);
 
   // A missing localStorage degrades the mirror the same way.
-  const missing = createGmFirstJsonStore(
-    baseOptions({ ...createGm(), localStorage: null, mirror: true, logger: createLogger() }),
-  );
+  const missing = createGmFirstJsonStore(baseOptions({ ...createGm(), ...NO_LOCAL_STORAGE, mirror: true }));
   assert.deepEqual(await missing.write({ next: 4 }), { backend: 'gm', mirrorDegraded: true });
 });
 
 test('GM missing: falls back to localStorage without a warning', async () => {
-  const localStorage = createLocalStorage({ localKey: JSON.stringify({ from: 'local' }) });
+  const localStorage = createMemoryStorage({ localKey: JSON.stringify({ from: 'local' }) });
   const logger = createLogger();
   const store = createGmFirstJsonStore(baseOptions({ ...NO_GM, localStorage, logger }));
 
-  assert.deepEqual(await store.read(), {
-    backend: 'localStorage',
-    value: { from: 'local', normalized: true },
-    gmFailed: false,
-  });
+  assert.deepEqual(await store.read(), { backend: 'localStorage', value: { from: 'local', normalized: true } });
   assert.deepEqual(await store.write({ next: 5 }), { backend: 'localStorage', mirrorDegraded: false });
   assert.deepEqual(localStorage.writes, [['localKey', JSON.stringify({ next: 5 })]]);
   assert.deepEqual(logger.warnings, []);
 });
 
-test('GM throws: falls back to localStorage, flags gmFailed and warns', async () => {
-  const localStorage = createLocalStorage({ localKey: JSON.stringify({ from: 'local' }) });
+test('GM throws: falls back to localStorage and warns', async () => {
+  const localStorage = createMemoryStorage({ localKey: JSON.stringify({ from: 'local' }) });
   const logger = createLogger();
   const store = createGmFirstJsonStore(
     baseOptions({ ...createGm({}, { failGet: true, failSet: true }), localStorage, logger }),
   );
 
-  assert.deepEqual(await store.read(), {
-    backend: 'localStorage',
-    value: { from: 'local', normalized: true },
-    gmFailed: true,
-  });
+  assert.deepEqual(await store.read(), { backend: 'localStorage', value: { from: 'local', normalized: true } });
   assert.deepEqual(await store.write({ next: 6 }), { backend: 'localStorage', mirrorDegraded: false });
   assert.deepEqual(localStorage.writes, [['localKey', JSON.stringify({ next: 6 })]]);
   assert.deepEqual(logger.warnings, [
@@ -170,14 +154,12 @@ test('GM throws from a rejected promise just like a synchronous throw', async ()
           throw new Error('async blocked');
         },
       },
-      localStorage: createLocalStorage({ localKey: JSON.stringify({ from: 'local' }) }),
+      localStorage: createMemoryStorage({ localKey: JSON.stringify({ from: 'local' }) }),
       logger,
     }),
   );
 
-  const result = await store.read();
-  assert.equal(result.backend, 'localStorage');
-  assert.equal(result.gmFailed, true);
+  assert.equal((await store.read()).backend, 'localStorage');
   assert.equal(logger.warnings.length, 1);
 });
 
@@ -186,95 +168,159 @@ test('neither backend available: read answers none and write throws', async () =
   const store = createGmFirstJsonStore(
     baseOptions({
       ...createGm({}, { failGet: true, failSet: true }),
-      localStorage: createLocalStorage({}, { failGet: true, failSet: true }),
+      localStorage: createMemoryStorage({}, { failGet: true, failSet: true }),
       logger,
     }),
   );
 
-  assert.deepEqual(await store.read(), { backend: 'none', value: null, gmFailed: true });
+  assert.deepEqual(await store.read(), { backend: 'none', value: null });
   assert.deepEqual(logger.warnings, [
     'Test Script: failed to read settings from userscript storage.',
     'Test Script: failed to read settings from fallback storage.',
   ]);
   await assert.rejects(store.write({ next: 7 }), /set blocked/);
 
-  const bare = createGmFirstJsonStore(baseOptions({ ...NO_GM, localStorage: null, logger: createLogger() }));
-  assert.deepEqual(await bare.read(), { backend: 'none', value: null, gmFailed: false });
+  const bare = createGmFirstJsonStore(baseOptions({ ...NO_GM, ...NO_LOCAL_STORAGE }));
+  assert.deepEqual(await bare.read(), { backend: 'none', value: null });
   await assert.rejects(bare.write({ next: 8 }), /localStorage is unavailable/);
 });
 
 test('unparseable fallback JSON counts as an unavailable fallback', async () => {
   const logger = createLogger();
   const store = createGmFirstJsonStore(
-    baseOptions({ ...NO_GM, localStorage: createLocalStorage({ localKey: '{broken' }), logger }),
+    baseOptions({ ...NO_GM, localStorage: createMemoryStorage({ localKey: '{broken' }), logger }),
   );
 
-  assert.deepEqual(await store.read(), { backend: 'none', value: null, gmFailed: false });
-  assert.deepEqual(store.readFallback(), { available: false, value: null });
-  assert.deepEqual(logger.warnings, [
-    'Test Script: failed to read settings from fallback storage.',
-    'Test Script: failed to read settings from fallback storage.',
-  ]);
+  assert.deepEqual(await store.read(), { backend: 'none', value: null });
+  assert.deepEqual(logger.warnings, ['Test Script: failed to read settings from fallback storage.']);
 });
 
-test('readFallback reads only localStorage', () => {
+test('update: writes the transformed value GM first and hands the fallback copy to the transform', async () => {
   const gm = createGm({ gmKey: { from: 'gm' } });
+  const localStorage = createMemoryStorage({ localKey: JSON.stringify({ from: 'local' }) });
+  const store = createGmFirstJsonStore(baseOptions({ ...gm, localStorage, mirror: true }));
+
+  const seen = [];
+  const result = await store.update((current) => {
+    seen.push({ backend: current.backend, value: current.value, fallback: current.fallback() });
+    return { merged: true };
+  });
+  assert.deepEqual(seen, [
+    { backend: 'gm', value: { from: 'gm', normalized: true }, fallback: { from: 'local', normalized: true } },
+  ]);
+  assert.deepEqual(result, {
+    backend: 'gm',
+    value: { merged: true },
+    written: { backend: 'gm', mirrorDegraded: false },
+  });
+  assert.deepEqual(gm.writes, [['gmKey', { merged: true }]]);
+  assert.deepEqual(localStorage.writes, [['localKey', JSON.stringify({ merged: true })]]);
+});
+
+test('update: returning undefined writes nothing', async () => {
+  const gm = createGm({ gmKey: { from: 'gm' } });
+  const localStorage = createMemoryStorage();
+  const store = createGmFirstJsonStore(baseOptions({ ...gm, localStorage }));
+
+  assert.deepEqual(await store.update(() => undefined), { backend: 'gm', value: { from: 'gm', normalized: true } });
+  assert.deepEqual(gm.writes, []);
+  assert.deepEqual(localStorage.writes, []);
+});
+
+test('update: a value derived after a GM read failure never overwrites the GM copy', async () => {
+  const gm = createGm({ gmKey: { from: 'gm' } });
+  let failRead = true;
+  const localStorage = createMemoryStorage({ localKey: JSON.stringify({ from: 'local' }) });
   const store = createGmFirstJsonStore(
     baseOptions({
       ...gm,
-      localStorage: createLocalStorage({ localKey: JSON.stringify({ from: 'local' }) }),
-      logger: createLogger(),
+      gmGetValue(key, fallback) {
+        if (failRead) throw new Error('read failed');
+        return gm.gmGetValue(key, fallback);
+      },
+      localStorage,
     }),
   );
-  assert.deepEqual(store.readFallback(), { available: true, value: { from: 'local', normalized: true } });
 
-  const empty = createGmFirstJsonStore(
-    baseOptions({ ...gm, localStorage: createLocalStorage(), logger: createLogger() }),
-  );
-  assert.deepEqual(empty.readFallback(), { available: true, value: null });
-});
+  const degraded = await store.update((current) => ({ ...current.value, touched: true }));
+  assert.deepEqual(degraded, {
+    backend: 'localStorage',
+    value: { from: 'local', normalized: true, touched: true },
+    written: { backend: 'localStorage', mirrorDegraded: false },
+  });
+  assert.deepEqual(gm.writes, []);
+  assert.deepEqual(localStorage.writes, [['localKey', JSON.stringify(degraded.value)]]);
 
-test('fallbackOnly writes skip GM even when it is available', async () => {
-  const gm = createGm();
-  const localStorage = createLocalStorage();
-  const store = createGmFirstJsonStore(baseOptions({ ...gm, localStorage, mirror: true, logger: createLogger() }));
+  // Once GM reads again, the write goes GM first.
+  failRead = false;
+  const healthy = await store.update(() => ({ next: true }));
+  assert.deepEqual(healthy.written, { backend: 'gm', mirrorDegraded: false });
+  assert.deepEqual(gm.writes, [['gmKey', { next: true }]]);
 
-  assert.deepEqual(await store.write({ next: 9 }, { fallbackOnly: true }), {
+  // GM merely absent is not a failure: the value lands wherever it can, without a warning.
+  const logger = createLogger();
+  const absent = createGmFirstJsonStore(baseOptions({ ...NO_GM, localStorage: createMemoryStorage(), logger }));
+  assert.deepEqual((await absent.update(() => ({ next: 2 }))).written, {
     backend: 'localStorage',
     mirrorDegraded: false,
   });
-  assert.deepEqual(gm.writes, []);
-  assert.deepEqual(localStorage.writes, [['localKey', JSON.stringify({ next: 9 })]]);
+  assert.deepEqual(logger.warnings, []);
+});
+
+test('update: with no fallback key the fallback copy is null and a failed GM read answers none', async () => {
+  const gm = createGm({}, { failGet: true });
+  const store = createGmFirstJsonStore(baseOptions({ ...gm, fallbackKey: undefined, ...NO_LOCAL_STORAGE }));
+
+  const seen = [];
+  const result = await store.update((current) => {
+    seen.push({ backend: current.backend, fallback: current.fallback() });
+    return undefined;
+  });
+  assert.deepEqual(seen, [{ backend: 'none', fallback: null }]);
+  assert.deepEqual(result, { backend: 'none', value: null });
 });
 
 test('without a fallback key the store is GM only and never touches localStorage', async () => {
-  const localStorage = createLocalStorage({ localKey: JSON.stringify({ from: 'local' }) });
+  const localStorage = createMemoryStorage({ localKey: JSON.stringify({ from: 'local' }) });
   const logger = createLogger();
   const failing = createGmFirstJsonStore(
-    baseOptions({
-      ...createGm({}, { failGet: true }),
-      fallbackKey: null,
-      localStorage,
-      mirror: true,
-      logger,
-    }),
+    baseOptions({ ...createGm({}, { failGet: true }), fallbackKey: undefined, localStorage, mirror: true, logger }),
   );
-  assert.deepEqual(await failing.read(), { backend: 'none', value: null, gmFailed: true });
-  assert.deepEqual(failing.readFallback(), { available: false, value: null });
+  assert.deepEqual(await failing.read(), { backend: 'none', value: null });
   assert.deepEqual(logger.warnings, ['Test Script: failed to read settings from userscript storage.']);
 
   const gm = createGm();
-  const working = createGmFirstJsonStore(
-    baseOptions({ ...gm, fallbackKey: null, localStorage, mirror: true, logger: createLogger() }),
-  );
+  const working = createGmFirstJsonStore(baseOptions({ ...gm, fallbackKey: undefined, localStorage, mirror: true }));
   assert.deepEqual(await working.write({ next: 10 }), { backend: 'gm', mirrorDegraded: false });
   assert.deepEqual(localStorage.writes, []);
 
-  const missing = createGmFirstJsonStore(
-    baseOptions({ ...NO_GM, fallbackKey: null, localStorage, logger: createLogger() }),
-  );
-  assert.deepEqual(await missing.read(), { backend: 'none', value: null, gmFailed: false });
+  const missing = createGmFirstJsonStore(baseOptions({ ...NO_GM, fallbackKey: undefined, localStorage }));
+  assert.deepEqual(await missing.read(), { backend: 'none', value: null });
   await assert.rejects(missing.write({ next: 11 }), /no fallback storage/i);
+});
+
+test('a manager API that appears after construction is picked up and then kept', async () => {
+  // The modern object is passed by reference, so a getter on it sees every probe.
+  let getValue;
+  let probes = 0;
+  const modern = { setValue: async () => {} };
+  Object.defineProperty(modern, 'getValue', {
+    get() {
+      probes += 1;
+      return getValue;
+    },
+  });
+  const store = createGmFirstJsonStore(
+    baseOptions({ gm: modern, localStorage: createMemoryStorage({ localKey: JSON.stringify({ from: 'local' }) }) }),
+  );
+
+  assert.equal((await store.read()).backend, 'localStorage');
+  getValue = async () => ({ from: 'gm' });
+  assert.equal((await store.read()).backend, 'gm');
+  const probesWhenFound = probes;
+  await store.read();
+  await store.write({ next: 12 });
+  assert.equal(probes, probesWhenFound);
 });
 
 test('subscribe forwards legacy GM changes and removes the synchronous listener id', () => {
@@ -292,8 +338,7 @@ test('subscribe forwards legacy GM changes and removes the synchronous listener 
       gmRemoveValueChangeListener(id) {
         removed.push(id);
       },
-      localStorage: createLocalStorage(),
-      logger: createLogger(),
+      localStorage: createMemoryStorage(),
     }),
   );
 
@@ -314,8 +359,7 @@ test('subscribe waits for a promised GM listener id before removing it', async (
         addValueChangeListener: () => Promise.resolve(7),
         removeValueChangeListener: (id) => removed.push(id),
       },
-      localStorage: createLocalStorage(),
-      logger: createLogger(),
+      localStorage: createMemoryStorage(),
     }),
   );
 
@@ -325,6 +369,23 @@ test('subscribe waits for a promised GM listener id before removing it', async (
   await Promise.resolve();
   await Promise.resolve();
   assert.deepEqual(removed, [7]);
+
+  // A remove that rejects or throws after the promised id arrives is swallowed (no unhandled rejection).
+  for (const removeValueChangeListener of [
+    () => Promise.reject(new Error('remove rejected')),
+    () => {
+      throw new Error('remove threw');
+    },
+  ]) {
+    const failing = createGmFirstJsonStore(
+      baseOptions({
+        gm: { addValueChangeListener: () => Promise.resolve(8), removeValueChangeListener },
+        localStorage: createMemoryStorage(),
+      }),
+    );
+    failing.subscribe(() => {})();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 });
 
 test('subscribe warns when watching GM fails and never throws', async () => {
@@ -364,7 +425,7 @@ test('subscribe forwards same-origin storage events for the fallback key and uns
   const store = createGmFirstJsonStore(
     baseOptions({
       ...NO_GM,
-      localStorage: createLocalStorage(),
+      localStorage: createMemoryStorage(),
       eventTarget: {
         addEventListener(type, handler) {
           if (type === 'storage') handlers.add(handler);
@@ -373,7 +434,6 @@ test('subscribe forwards same-origin storage events for the fallback key and uns
           if (type === 'storage') handlers.delete(handler);
         },
       },
-      logger: createLogger(),
     }),
   );
 
@@ -406,7 +466,6 @@ test('unsubscribe swallows errors from either side', () => {
           throw new Error('remove blocked');
         },
       },
-      logger: createLogger(),
     }),
   );
 

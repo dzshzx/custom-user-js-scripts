@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.25
+// @version      0.5.26
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -1917,6 +1917,31 @@ ${text.slice(0, 800)}`);
   function promised(fn) {
     return fn ? async (...args) => fn(...args) : null;
   }
+  function valueChangeOf(add, remove) {
+    return {
+      subscribe(name, listener, onError = () => {
+      }) {
+        const listenerId = add(name, listener);
+        if (listenerId === void 0 || listenerId === null) return () => {
+        };
+        if (typeof listenerId.then !== "function") {
+          const id = listenerId;
+          return () => remove?.(id);
+        }
+        const pending = listenerId.then(
+          (id) => id,
+          (error) => {
+            onError(error);
+            return null;
+          }
+        );
+        return () => {
+          if (remove) pending.then((id) => id !== null && remove(id)).catch(() => {
+          });
+        };
+      }
+    };
+  }
   function modernGlobal() {
     return typeof GM !== "undefined" ? GM : null;
   }
@@ -1924,25 +1949,19 @@ ${text.slice(0, 800)}`);
     const legacy = legacyGlobals();
     const gm = overrides.gm || modernGlobal();
     const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
+    const modernAdd = bindModern(gm, "addValueChangeListener");
     let valueChange = null;
     if (legacyAdd) {
-      valueChange = {
-        add: legacyAdd,
-        remove: pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
-      };
-    } else if (typeof gm?.addValueChangeListener === "function") {
-      valueChange = {
-        add: gm.addValueChangeListener.bind(gm),
-        remove: bindModern(gm, "removeValueChangeListener")
-      };
+      valueChange = valueChangeOf(
+        legacyAdd,
+        pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
+      );
+    } else if (modernAdd) {
+      valueChange = valueChangeOf(modernAdd, bindModern(gm, "removeValueChangeListener"));
     }
     return {
-      getValue: promised(
-        pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue")
-      ),
-      setValue: promised(
-        pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue")
-      ),
+      getValue: promised(pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue")),
+      setValue: promised(pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue")),
       valueChange,
       registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
       xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),
@@ -1952,14 +1971,27 @@ ${text.slice(0, 800)}`);
   }
 
   // src/userscripts/shared/shared-gm-json-store.lib.ts
+  var UNAVAILABLE = /* @__PURE__ */ Symbol("unavailable");
   function createGmFirstJsonStore(options) {
-    const { scriptName, subject, key, normalize, mirror = false, eventTarget = null } = options;
-    const fallbackKey = options.fallbackKey || null;
-    const logger = options.logger === void 0 ? globalThis.console : options.logger;
+    const {
+      scriptName,
+      subject,
+      key,
+      inheritFrom = [],
+      fallbackKey,
+      normalize = (raw) => raw,
+      mirror = false,
+      eventTarget = null,
+      logger = globalThis.console
+    } = options;
     const warn = (message, error) => logger?.warn?.(`${scriptName}: ${message}`, error);
-    const gmApi = () => resolveGmApi(options);
+    let resolved = null;
+    const gmApi = () => {
+      if (!resolved?.getValue || !resolved.setValue) resolved = resolveGmApi(options);
+      return resolved;
+    };
     function fallbackStorage() {
-      const storage = options.localStorage === void 0 ? globalThis.localStorage : options.localStorage;
+      const storage = options.localStorage ?? globalThis.localStorage;
       if (!storage) throw new Error("localStorage is unavailable.");
       return storage;
     }
@@ -1968,80 +2000,88 @@ ${text.slice(0, 800)}`);
       fallbackStorage().setItem(fallbackKey, JSON.stringify(value));
     }
     function readFallback() {
-      if (!fallbackKey) return { available: false, value: null };
+      if (!fallbackKey) return UNAVAILABLE;
       try {
-        return { available: true, value: normalize(JSON.parse(fallbackStorage().getItem(fallbackKey) || "null")) };
+        return normalize(JSON.parse(fallbackStorage().getItem(fallbackKey) || "null"));
       } catch (error) {
         warn(`failed to read ${subject} from fallback storage.`, error);
-        return { available: false, value: null };
+        return UNAVAILABLE;
       }
     }
-    async function read() {
+    async function readGm(getValue) {
+      let value = normalize(null);
+      for (const name of [key, ...inheritFrom]) {
+        value = normalize(await getValue(name, null));
+        if (value !== null && value !== void 0) break;
+      }
+      return value;
+    }
+    async function readWithSource() {
       let gmFailed = false;
       const { getValue } = gmApi();
       if (getValue) {
         try {
-          return { backend: "gm", value: normalize(await getValue(key, null)), gmFailed: false };
+          return { backend: "gm", value: await readGm(getValue), gmFailed: false };
         } catch (error) {
           gmFailed = true;
           warn(`failed to read ${subject} from userscript storage.`, error);
         }
       }
       const fallback2 = readFallback();
-      return fallback2.available ? { backend: "localStorage", value: fallback2.value, gmFailed } : { backend: "none", value: null, gmFailed };
+      return fallback2 === UNAVAILABLE ? { backend: "none", value: null, gmFailed } : { backend: "localStorage", value: fallback2, gmFailed };
     }
-    async function write(value, { fallbackOnly = false } = {}) {
+    async function read() {
+      const { backend, value } = await readWithSource();
+      return { backend, value };
+    }
+    function tryMirror(value) {
+      if (!mirror || !fallbackKey) return true;
+      try {
+        writeFallback(value);
+        return true;
+      } catch (error) {
+        warn(`failed to mirror ${subject} to fallback storage.`, error);
+        return false;
+      }
+    }
+    async function writeTo(value, fallbackOnly) {
       const { setValue } = gmApi();
       if (!fallbackOnly && setValue) {
-        let written = false;
         try {
           await setValue(key, value);
-          written = true;
+          return { backend: "gm", mirrorDegraded: !tryMirror(value) };
         } catch (error) {
           warn(`failed to write ${subject} to userscript storage.`, error);
-        }
-        if (written) {
-          let mirrorDegraded = false;
-          if (mirror && fallbackKey) {
-            try {
-              writeFallback(value);
-            } catch (error) {
-              mirrorDegraded = true;
-              warn(`failed to mirror ${subject} to fallback storage.`, error);
-            }
-          }
-          return { backend: "gm", mirrorDegraded };
         }
       }
       writeFallback(value);
       return { backend: "localStorage", mirrorDegraded: false };
     }
+    const write = (value) => writeTo(value, false);
+    async function update(transform2) {
+      const { backend, value, gmFailed } = await readWithSource();
+      const fallback2 = () => {
+        const copy = readFallback();
+        return copy === UNAVAILABLE ? null : copy;
+      };
+      const next = transform2({ backend, value, fallback: fallback2 });
+      if (next === void 0) return { backend, value };
+      return { backend, value: next, written: await writeTo(next, gmFailed) };
+    }
     function subscribeGm(listener) {
       const { valueChange } = gmApi();
       if (!valueChange) return null;
-      const { add, remove } = valueChange;
       const watchFailed = (error) => warn(`failed to watch ${subject} in userscript storage.`, error);
-      let listenerId;
       try {
-        listenerId = add(key, (name, oldValue, newValue, remote) => {
-          listener({ backend: "gm", key: name, oldValue, newValue, remote: Boolean(remote) });
-        });
+        return valueChange.subscribe(
+          key,
+          (name, oldValue, newValue, remote) => listener({ backend: "gm", key: name, oldValue, newValue, remote: Boolean(remote) }),
+          watchFailed
+        );
       } catch (error) {
         watchFailed(error);
         return null;
       }
-      if (listenerId === void 0 || listenerId === null) return null;
-      if (typeof listenerId.then !== "function") {
-        const id = listenerId;
-        return () => remove?.(id);
-      }
-      const pending = listenerId;
-      pending.catch(watchFailed);
-      return () => {
-        if (!remove) return;
-        pending.then((id) => remove(id)).catch(() => {
-        });
-      };
     }
     function subscribe(listener) {
       const cleanups = [];
@@ -2065,7 +2105,7 @@ ${text.slice(0, 800)}`);
         }
       };
     }
-    return { read, readFallback, write, subscribe };
+    return { read, write, update, subscribe };
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts
@@ -2076,9 +2116,13 @@ ${text.slice(0, 800)}`);
     gm: { id: "gm", label: "GM storage" },
     localStorage: { id: "localStorage", label: "localStorage" }
   };
+  var GM_MIRROR_DEGRADED = {
+    ...STORAGE_BACKENDS.gm,
+    label: "GM storage (mirror unavailable)",
+    degraded: true,
+    mirrorError: "Snapshot Archive mirror write failed."
+  };
   function createSnapshotArchiveStoragePort(options = {}) {
-    const archiveKey = options.archiveKey || DEFAULT_ARCHIVE_KEY;
-    const fallbackKey = options.fallbackKey || DEFAULT_ARCHIVE_FALLBACK_KEY;
     const scriptName = options.scriptName || "Codex Quota Compass";
     const logger = options.logger || globalThis.console;
     const mergeArchives = options.mergeArchives ?? null;
@@ -2086,64 +2130,57 @@ ${text.slice(0, 800)}`);
     const store = createGmFirstJsonStore({
       ...options,
       scriptName,
+      logger,
       subject: "archive",
-      key: archiveKey,
-      fallbackKey,
-      localStorage: options.localStorage || void 0,
-      normalize: (archive) => archive,
-      mirror: true,
-      logger
+      key: options.archiveKey || DEFAULT_ARCHIVE_KEY,
+      fallbackKey: options.fallbackKey || DEFAULT_ARCHIVE_FALLBACK_KEY,
+      mirror: true
     });
     let backendInfo = STORAGE_BACKENDS.pending;
     let mirrorDegraded = false;
-    function gmBackendInfo() {
-      return mirrorDegraded ? {
-        ...STORAGE_BACKENDS.gm,
-        label: "GM storage (mirror unavailable)",
-        degraded: true,
-        mirrorError: "Snapshot Archive mirror write failed."
-      } : STORAGE_BACKENDS.gm;
+    const gmInfo = () => mirrorDegraded ? GM_MIRROR_DEGRADED : STORAGE_BACKENDS.gm;
+    function noteWrite(written) {
+      if (written.backend !== "gm") return STORAGE_BACKENDS.localStorage;
+      mirrorDegraded = written.mirrorDegraded;
+      return gmInfo();
     }
     function mergeStorageArchives(primaryArchive, fallbackArchive) {
       const normalizedPrimary = normalizeArchive(primaryArchive);
-      const normalizedFallback = normalizeArchive(fallbackArchive);
-      if (!mergeArchives) {
-        return { archive: normalizedPrimary, changed: false };
-      }
-      const merged = mergeArchives(normalizedPrimary, normalizedFallback);
+      const merged = mergeArchives?.(normalizedPrimary, normalizeArchive(fallbackArchive));
       return {
         archive: merged?.archive || normalizedPrimary,
         changed: merged?.changed ?? Number(merged?.report?.added) > 0
       };
     }
     return {
+      // GM reads merge the localStorage mirror back in and migrate the result
+      // to GM (ADR-0003); the migration write refreshes the mirror as well.
       async read() {
-        const primary = await store.read();
-        if (primary.backend === "gm") {
-          const merged = mergeStorageArchives(primary.value, store.readFallback().value);
-          if (merged.changed) {
-            try {
-              const migrated = await store.write(merged.archive);
-              if (migrated.backend === "gm") mirrorDegraded = migrated.mirrorDegraded;
-            } catch (error) {
-              logger?.warn?.(`${scriptName}: failed to migrate fallback archive into userscript storage.`, error);
-            }
-          }
-          backendInfo = gmBackendInfo();
-          return merged.archive;
+        let mergedArchive = null;
+        let result;
+        try {
+          result = await store.update((current) => {
+            if (current.backend !== "gm") return void 0;
+            const merged = mergeStorageArchives(current.value, mergeArchives ? current.fallback() : null);
+            mergedArchive = merged.archive;
+            return merged.changed ? merged.archive : void 0;
+          });
+        } catch (error) {
+          if (mergedArchive === null) throw error;
+          logger.warn(`${scriptName}: failed to migrate fallback archive into userscript storage.`, error);
+          result = { backend: "gm", value: mergedArchive };
         }
-        if (primary.backend === "none") throw new Error("Both Snapshot Archive storage reads failed.");
-        backendInfo = STORAGE_BACKENDS.localStorage;
-        return primary.value;
+        if (result.backend === "none") throw new Error("Both Snapshot Archive storage reads failed.");
+        if (result.backend === "localStorage") {
+          backendInfo = STORAGE_BACKENDS.localStorage;
+          return result.value;
+        }
+        if (result.written?.backend === "gm") mirrorDegraded = result.written.mirrorDegraded;
+        backendInfo = gmInfo();
+        return mergedArchive;
       },
       async write(nextArchive) {
-        const result = await store.write(nextArchive);
-        if (result.backend === "gm") {
-          mirrorDegraded = result.mirrorDegraded;
-          backendInfo = gmBackendInfo();
-        } else {
-          backendInfo = STORAGE_BACKENDS.localStorage;
-        }
+        backendInfo = noteWrite(await store.write(nextArchive));
         return nextArchive;
       },
       getBackendInfo() {
@@ -2152,15 +2189,9 @@ ${text.slice(0, 800)}`);
       subscribeToChanges(listener) {
         if (typeof listener !== "function") return () => {
         };
-        return store.subscribe((change) => {
-          listener({
-            key: change.key,
-            oldValue: change.oldValue,
-            newValue: change.newValue,
-            remote: change.remote,
-            backendInfo: STORAGE_BACKENDS[change.backend]
-          });
-        });
+        return store.subscribe(
+          ({ backend, ...change }) => listener({ ...change, backendInfo: STORAGE_BACKENDS[backend] })
+        );
       }
     };
   }
@@ -9499,7 +9530,7 @@ ${root} :focus-visible {
     const DEBUG_KEY = "__codexQuotaCompassDebug";
     const LAST_RESULT_KEY = "__codexQuotaCompassLastResult";
     const RUNNING_KEY = "__codexQuotaCompassRunning";
-    const SCRIPT_VERSION = "0.5.25";
+    const SCRIPT_VERSION = "0.5.26";
     const { t: t3 } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,

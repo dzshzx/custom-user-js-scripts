@@ -27,7 +27,9 @@ export const domSkip = domAvailable
 // global never leaks across files.
 // @floating-ui/dom reads the global `window` and DOM constructors once a
 // global window exists; tests that assert panel placement pass
-// `globalWindow: true`. `settings` passes happy-dom browser settings through.
+// `globalWindow: true`. `settings` passes happy-dom browser settings through;
+// iframes get a document by default, as in a browser, so code that works
+// inside a frame it created (the Feishu anchor download) behaves the same here.
 export function createDomWindow({
   url = 'https://chatgpt.com/',
   globalDocument = true,
@@ -37,7 +39,7 @@ export function createDomWindow({
   if (!domAvailable) {
     throw new Error('happy-dom is not installed.');
   }
-  const window = new happyDomModule.Window({ url, settings });
+  const window = new happyDomModule.Window({ url, settings: { enableIframePageLoading: true, ...settings } });
   if (globalDocument) globalThis.document = window.document;
   if (globalWindow) {
     globalThis.window = window;
@@ -47,11 +49,21 @@ export function createDomWindow({
   return window;
 }
 
-export function createMemoryStorage() {
-  const map = new Map();
+// An in-memory localStorage: `writes` records every setItem, `value(key)`
+// reads the raw stored string, `failGet`/`failSet` make the backend throw.
+export function createMemoryStorage(initial = {}, { failGet = false, failSet = false } = {}) {
+  const map = new Map(Object.entries(initial));
+  const writes = [];
   return {
-    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    writes,
+    value: (key) => map.get(key),
+    getItem: (key) => {
+      if (failGet) throw new Error('get blocked');
+      return map.has(key) ? map.get(key) : null;
+    },
     setItem: (key, value) => {
+      if (failSet) throw new Error('set blocked');
+      writes.push([key, String(value)]);
       map.set(key, String(value));
     },
     removeItem: (key) => {

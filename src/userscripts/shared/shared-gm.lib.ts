@@ -4,17 +4,11 @@
 // never touch the globals themselves. Explicit overrides win, which is how tests
 // and hosts inject fakes.
 
-// The adapter's own contract: what callers may rely on whichever manager family
-// answered. getValue/setValue always return a promise, whether the manager's
-// function is synchronous (`GM_*`) or promise-based (`GM.*`); other results stay
-// `unknown` where the families differ.
+// What a manager (or a test override) supplies: synchronous or promise-based.
 export type GmValueChangeListener = (name: string, oldValue: unknown, newValue: unknown, remote: boolean) => void;
 export type GmListenerId = number | Promise<number>;
-export type GmGetValue = (key: string, defaultValue?: Tampermonkey.StorageValue) => Promise<unknown>;
-export type GmSetValue = (key: string, value: Tampermonkey.StorageValue) => Promise<void>;
-// What a manager or a test override may supply: synchronous or promise-based.
-export type GmGetValueSource = (key: string, defaultValue?: Tampermonkey.StorageValue) => unknown;
-export type GmSetValueSource = (key: string, value: Tampermonkey.StorageValue) => unknown;
+export type GmGetValue = (key: string, defaultValue?: Tampermonkey.StorageValue) => unknown;
+export type GmSetValue = (key: string, value: Tampermonkey.StorageValue) => unknown;
 export type GmAddValueChangeListener = (name: string, listener: GmValueChangeListener) => GmListenerId;
 export type GmRemoveValueChangeListener = (listenerId: number) => unknown;
 export type GmRegisterMenuCommand = (caption: string, onClick: () => void) => unknown;
@@ -23,14 +17,23 @@ export type GmDownload = (details: Tampermonkey.DownloadRequest) => unknown;
 // The promise-based `GM.*` object, or a test fake standing in for it.
 export type GmModernApi = { readonly [method: string]: unknown };
 
+// The adapter's own contract, the same whichever manager family answered:
+// getValue/setValue always return a promise, value-change subscriptions hide
+// the listener id; other results stay `unknown` where the families differ.
+type Promised<F extends (...args: never[]) => unknown> = (...args: Parameters<F>) => Promise<unknown>;
+
 export interface GmValueChange {
-  add: GmAddValueChangeListener;
-  remove: GmRemoveValueChangeListener | null;
+  /**
+   * Returns an unsubscribe function. A synchronous failure of the manager's
+   * add function throws; an asynchronous one (the modern `GM.*` resolves the
+   * listener id later) is reported through `onError`.
+   */
+  subscribe(name: string, listener: GmValueChangeListener, onError?: (error: unknown) => void): () => void;
 }
 
 export interface GmApi {
-  getValue: GmGetValue | null;
-  setValue: GmSetValue | null;
+  getValue: Promised<GmGetValue> | null;
+  setValue: Promised<GmSetValue> | null;
   valueChange: GmValueChange | null;
   registerMenuCommand: GmRegisterMenuCommand | null;
   xmlHttpRequest: GmXmlHttpRequest | null;
@@ -39,8 +42,8 @@ export interface GmApi {
 
 export interface GmOverrides {
   gm?: GmModernApi | null;
-  gmGetValue?: GmGetValueSource | null;
-  gmSetValue?: GmSetValueSource | null;
+  gmGetValue?: GmGetValue | null;
+  gmSetValue?: GmSetValue | null;
   gmAddValueChangeListener?: GmAddValueChangeListener | null;
   gmRemoveValueChangeListener?: GmRemoveValueChangeListener | null;
   gmRegisterMenuCommand?: GmRegisterMenuCommand | null;
@@ -61,15 +64,10 @@ function bindModern<T>(gm: GmModernApi | null, ...names: string[]): T | null {
   return null;
 }
 
-function legacyGlobals(): Omit<GmApi, 'valueChange' | 'getValue' | 'setValue'> & {
-  getValue: GmGetValueSource | null;
-  setValue: GmSetValueSource | null;
-  addValueChangeListener: GmAddValueChangeListener | null;
-  removeValueChangeListener: GmRemoveValueChangeListener | null;
-} {
+function legacyGlobals() {
   return {
-    getValue: typeof GM_getValue === 'function' ? GM_getValue : null,
-    setValue: typeof GM_setValue === 'function' ? GM_setValue : null,
+    getValue: typeof GM_getValue === 'function' ? (GM_getValue as GmGetValue) : null,
+    setValue: typeof GM_setValue === 'function' ? (GM_setValue as GmSetValue) : null,
     addValueChangeListener: typeof GM_addValueChangeListener === 'function' ? GM_addValueChangeListener : null,
     removeValueChangeListener: typeof GM_removeValueChangeListener === 'function' ? GM_removeValueChangeListener : null,
     registerMenuCommand: typeof GM_registerMenuCommand === 'function' ? GM_registerMenuCommand : null,
@@ -79,10 +77,34 @@ function legacyGlobals(): Omit<GmApi, 'valueChange' | 'getValue' | 'setValue'> &
 }
 
 // One promise shape for both families; a synchronous throw becomes a rejection.
-function promised<A extends unknown[]>(
-  fn: ((...args: A) => unknown) | null,
-): ((...args: A) => Promise<unknown>) | null {
-  return fn ? async (...args: A) => fn(...args) : null;
+function promised<F extends (...args: never[]) => unknown>(fn: F | null): Promised<F> | null {
+  return fn ? async (...args) => fn(...args) : null;
+}
+
+// Pairs add/remove from the same API family, because listener ids are not
+// interchangeable between them; the modern `add` may return a promise of the id.
+function valueChangeOf(add: GmAddValueChangeListener, remove: GmRemoveValueChangeListener | null): GmValueChange {
+  return {
+    subscribe(name, listener, onError = () => {}) {
+      const listenerId = add(name, listener);
+      if (listenerId === undefined || listenerId === null) return () => {};
+      if (typeof (listenerId as Promise<number>).then !== 'function') {
+        const id = listenerId as number;
+        return () => remove?.(id);
+      }
+      const pending = (listenerId as Promise<number>).then(
+        (id) => id,
+        (error) => {
+          onError(error);
+          return null;
+        },
+      );
+      return () => {
+        // Unsubscribing is best effort (usually during unload): a failing remove is swallowed.
+        if (remove) pending.then((id) => id !== null && remove(id)).catch(() => {});
+      };
+    },
+  };
 }
 
 function modernGlobal(): GmModernApi | null {
@@ -96,38 +118,26 @@ function modernGlobal(): GmModernApi | null {
  * Overrides: `gmGetValue`, `gmSetValue`, `gmAddValueChangeListener`,
  * `gmRemoveValueChangeListener`, `gmRegisterMenuCommand`, `gmXmlhttpRequest`,
  * `gmDownload`, and `gm` for the modern object.
- *
- * `getValue`/`setValue` are wrapped so they always return a promise.
- *
- * `valueChange` pairs add/remove from the same API family, because listener
- * ids are not interchangeable between them; the modern `add` may return a
- * promise of the id.
  */
 function resolveGmApi(overrides: GmOverrides = {}): GmApi {
   const legacy = legacyGlobals();
   const gm = overrides.gm || modernGlobal();
 
   const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
+  const modernAdd = bindModern<GmAddValueChangeListener>(gm, 'addValueChangeListener');
   let valueChange: GmValueChange | null = null;
   if (legacyAdd) {
-    valueChange = {
-      add: legacyAdd,
-      remove: pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener),
-    };
-  } else if (typeof gm?.addValueChangeListener === 'function') {
-    valueChange = {
-      add: gm.addValueChangeListener.bind(gm),
-      remove: bindModern<GmRemoveValueChangeListener>(gm, 'removeValueChangeListener'),
-    };
+    valueChange = valueChangeOf(
+      legacyAdd,
+      pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener),
+    );
+  } else if (modernAdd) {
+    valueChange = valueChangeOf(modernAdd, bindModern<GmRemoveValueChangeListener>(gm, 'removeValueChangeListener'));
   }
 
   return {
-    getValue: promised(
-      pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern<GmGetValueSource>(gm, 'getValue'),
-    ),
-    setValue: promised(
-      pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern<GmSetValueSource>(gm, 'setValue'),
-    ) as GmSetValue | null,
+    getValue: promised(pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern<GmGetValue>(gm, 'getValue')),
+    setValue: promised(pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern<GmSetValue>(gm, 'setValue')),
     valueChange,
     registerMenuCommand:
       pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) ||

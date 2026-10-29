@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.27
+// @version      0.1.28
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -1136,6 +1136,31 @@ ${root} :focus-visible {
   function promised(fn) {
     return fn ? async (...args) => fn(...args) : null;
   }
+  function valueChangeOf(add, remove) {
+    return {
+      subscribe(name, listener, onError = () => {
+      }) {
+        const listenerId = add(name, listener);
+        if (listenerId === void 0 || listenerId === null) return () => {
+        };
+        if (typeof listenerId.then !== "function") {
+          const id = listenerId;
+          return () => remove?.(id);
+        }
+        const pending = listenerId.then(
+          (id) => id,
+          (error) => {
+            onError(error);
+            return null;
+          }
+        );
+        return () => {
+          if (remove) pending.then((id) => id !== null && remove(id)).catch(() => {
+          });
+        };
+      }
+    };
+  }
   function modernGlobal() {
     return typeof GM !== "undefined" ? GM : null;
   }
@@ -1143,25 +1168,19 @@ ${root} :focus-visible {
     const legacy = legacyGlobals();
     const gm = overrides.gm || modernGlobal();
     const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
+    const modernAdd = bindModern(gm, "addValueChangeListener");
     let valueChange = null;
     if (legacyAdd) {
-      valueChange = {
-        add: legacyAdd,
-        remove: pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
-      };
-    } else if (typeof gm?.addValueChangeListener === "function") {
-      valueChange = {
-        add: gm.addValueChangeListener.bind(gm),
-        remove: bindModern(gm, "removeValueChangeListener")
-      };
+      valueChange = valueChangeOf(
+        legacyAdd,
+        pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
+      );
+    } else if (modernAdd) {
+      valueChange = valueChangeOf(modernAdd, bindModern(gm, "removeValueChangeListener"));
     }
     return {
-      getValue: promised(
-        pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue")
-      ),
-      setValue: promised(
-        pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue")
-      ),
+      getValue: promised(pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue")),
+      setValue: promised(pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue")),
       valueChange,
       registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
       xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),
@@ -1905,6 +1924,14 @@ ${root} :focus-visible {
 
   // src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.ts
   var LIB_NAME = "FeishuPreviewImageExportLogicLib";
+  var GmDownloadError = class extends Error {
+    code;
+    constructor(code) {
+      super(`GM_download failed: ${code}`);
+      this.name = "GmDownloadError";
+      this.code = code;
+    }
+  };
   var DEFAULT_DOWNLOAD_TIMEOUT_MS = 12e4;
   var FORMAT_CHARS = /\p{Cf}/gu;
   function sanitizeFilePart(value, fallback) {
@@ -1915,6 +1942,9 @@ ${root} :focus-visible {
     return index_lite_default.getExtension(String(type || "")) || "bin";
   }
   function toUserMessage(error) {
+    if (error instanceof GmDownloadError) {
+      return error.code === "not_succeeded" ? "已取消导出。" : `扩展下载失败（${error.code}），请重试。`;
+    }
     const text = errorMessage(error);
     const httpMatch = /^Failed to fetch image: (\d+)/.exec(text);
     if (httpMatch) {
@@ -1929,12 +1959,8 @@ ${root} :focus-visible {
     if (text.includes("GM_download timed out")) {
       return "下载超时，请重试。";
     }
-    if (text.includes("GM_download failed: not_succeeded")) {
-      return "已取消导出。";
-    }
-    const gmFailed = /GM_download failed: (.+)$/.exec(text);
-    if (gmFailed) {
-      return `扩展下载失败（${gmFailed[1]}），请重试。`;
+    if (text.includes("Download frame has no document")) {
+      return "下载通道创建失败，请刷新页面后重试。";
     }
     if (text.includes("Failed to read blob")) {
       return "图片数据读取失败，请重试。";
@@ -1969,20 +1995,23 @@ ${root} :focus-visible {
       frame.style.display = "none";
       frame.setAttribute("aria-hidden", "true");
       documentObject.body.appendChild(frame);
-      const frameDocument = frame.contentDocument ?? documentObject;
-      const view = frameDocument.defaultView ?? documentObject.defaultView;
+      const frameDocument = frame.contentDocument;
+      const view = frameDocument?.defaultView;
+      if (!frameDocument || !view) {
+        frame.remove();
+        throw new Error("Download frame has no document");
+      }
       const blobUrl = dataUrlToBlobUrl(view, url);
       const anchor = frameDocument.createElement("a");
       anchor.href = blobUrl || url;
       anchor.download = filename;
       anchor.rel = "noopener";
-      (frameDocument.body ?? frameDocument.documentElement).appendChild(anchor);
+      frameDocument.body.appendChild(anchor);
       anchor.click();
-      const cleanup = () => {
-        if (blobUrl) view?.URL.revokeObjectURL(blobUrl);
+      view.setTimeout(() => {
+        if (blobUrl) view.URL.revokeObjectURL(blobUrl);
         frame.remove();
-      };
-      (documentObject.defaultView ?? globalThis).setTimeout(cleanup, 1e4);
+      }, 1e4);
     }
     function gmDownloadPromise(url, filename) {
       return new Promise((resolve, reject) => {
@@ -1993,7 +2022,7 @@ ${root} :focus-visible {
           clearTimeout(timer);
           fn();
         };
-        const failed = (error) => settle(() => reject(new Error(`GM_download failed: ${errorMessage(error)}`)));
+        const failed = (error) => settle(() => reject(new GmDownloadError(errorMessage(error))));
         const timer = setTimeout(() => settle(() => reject(new Error("GM_download timed out"))), downloadTimeoutMs);
         try {
           gmDownload({

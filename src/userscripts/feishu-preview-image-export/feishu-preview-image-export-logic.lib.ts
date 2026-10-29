@@ -26,6 +26,18 @@ export interface ExportResult {
 }
 
 const LIB_NAME = 'FeishuPreviewImageExportLogicLib';
+
+// GM_download 的失败带着原始错误码（Tampermonkey 的 error 字段、'timeout'，或同步抛错的文字）；
+// message 仍是英文进 console，给用户的文案按 code 分支。
+export class GmDownloadError extends Error {
+  readonly code: string;
+
+  constructor(code: string) {
+    super(`GM_download failed: ${code}`);
+    this.name = 'GmDownloadError';
+    this.code = code;
+  }
+}
 // GM_download 的保存对话框会等用户操作，超时取宽一些；超时只报失败，不再走后备，避免重复下载。
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120_000;
 // Unicode 格式类字符（零宽、方向控制、不可见运算符等）：飞书标题里的水印会带上它们，GM_download 遇到即失败。
@@ -48,6 +60,11 @@ function extensionFromMime(type: unknown): string {
 
 // 内部错误保持英文进 console；给用户的是这里映射的中文文案。经 errorMessage 取文字，遇到怪对象也不抛错。
 function toUserMessage(error: unknown): string {
+  if (error instanceof GmDownloadError) {
+    // Tampermonkey 对用户在另存为里点「取消」报 not_succeeded，与别的运行期失败分不开；用户决定（2026-10-29，#32）
+    // 这种情况一律不走后备下载、只提示。
+    return error.code === 'not_succeeded' ? '已取消导出。' : `扩展下载失败（${error.code}），请重试。`;
+  }
   const text = errorMessage(error);
   const httpMatch = /^Failed to fetch image: (\d+)/.exec(text);
   if (httpMatch) {
@@ -62,14 +79,8 @@ function toUserMessage(error: unknown): string {
   if (text.includes('GM_download timed out')) {
     return '下载超时，请重试。';
   }
-  // Tampermonkey 对用户在另存为里点「取消」报 not_succeeded，与别的运行期失败分不开；用户决定（2026-10-29，#32）
-  // 这种情况一律不走后备下载、只提示。
-  if (text.includes('GM_download failed: not_succeeded')) {
-    return '已取消导出。';
-  }
-  const gmFailed = /GM_download failed: (.+)$/.exec(text);
-  if (gmFailed) {
-    return `扩展下载失败（${gmFailed[1]}），请重试。`;
+  if (text.includes('Download frame has no document')) {
+    return '下载通道创建失败，请刷新页面后重试。';
   }
   if (text.includes('Failed to read blob')) {
     return '图片数据读取失败，请重试。';
@@ -115,21 +126,25 @@ function createImageExportRuntime(
     frame.style.display = 'none';
     frame.setAttribute('aria-hidden', 'true');
     documentObject.body.appendChild(frame);
-    const frameDocument = frame.contentDocument ?? documentObject;
-    const view = (frameDocument.defaultView ?? documentObject.defaultView) as (Window & typeof globalThis) | null;
+    const frameDocument = frame.contentDocument;
+    const view = frameDocument?.defaultView as (Window & typeof globalThis) | null;
+    if (!frameDocument || !view) {
+      // 顶层文档不能当替身：它的 click 处理器会拦下这次点击，下载静默失败。
+      frame.remove();
+      throw new Error('Download frame has no document');
+    }
     const blobUrl = dataUrlToBlobUrl(view, url);
     const anchor = frameDocument.createElement('a');
     anchor.href = blobUrl || url;
     anchor.download = filename;
     anchor.rel = 'noopener';
-    (frameDocument.body ?? frameDocument.documentElement).appendChild(anchor);
+    frameDocument.body.appendChild(anchor);
     anchor.click();
     // 下载由浏览器异步接手；iframe 与 blob URL 留一会儿再收，免得下载还没开始就被撤掉。
-    const cleanup = () => {
-      if (blobUrl) view?.URL.revokeObjectURL(blobUrl);
+    view.setTimeout(() => {
+      if (blobUrl) view.URL.revokeObjectURL(blobUrl);
       frame.remove();
-    };
-    (documentObject.defaultView ?? globalThis).setTimeout(cleanup, 10_000);
+    }, 10_000);
   }
 
   function gmDownloadPromise(url: string, filename: string) {
@@ -143,7 +158,7 @@ function createImageExportRuntime(
         clearTimeout(timer);
         fn();
       };
-      const failed = (error: unknown) => settle(() => reject(new Error(`GM_download failed: ${errorMessage(error)}`)));
+      const failed = (error: unknown) => settle(() => reject(new GmDownloadError(errorMessage(error))));
       const timer = setTimeout(() => settle(() => reject(new Error('GM_download timed out'))), downloadTimeoutMs);
       try {
         gmDownload!({

@@ -52,66 +52,42 @@ export interface WebPageAssistantStoragePort {
 }
 
 function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdapters): WebPageAssistantStoragePort {
-  const {
-    scriptName,
-    settingsContract,
-    storageKey,
-    widgetPositionKey,
-    sharedWidgetPositionKey = null,
-    fallbackStorageKey,
-    fallbackWidgetPositionKey,
-    localStorageAdapter,
-    eventTarget,
-    logger,
-  } = adapters;
+  const { scriptName, settingsContract, localStorageAdapter, eventTarget, logger } = adapters;
+  const { normalizeSettings, emptySettings } = settingsContract;
   // GM overrides (gmGetValue, gm, ...) in `adapters` replace the probed
   // manager API; production passes none and gets the resolved globals.
   const gm = resolveGmApi(adapters);
-  const storeOptions = { ...adapters, scriptName, localStorage: localStorageAdapter, logger };
   const settingsStore = createGmFirstJsonStore({
-    ...storeOptions,
+    ...adapters,
+    localStorage: localStorageAdapter,
     subject: 'settings',
-    key: storageKey,
-    fallbackKey: fallbackStorageKey,
-    normalize: settingsContract.normalizeSettings,
+    key: adapters.storageKey,
+    fallbackKey: adapters.fallbackStorageKey,
+    normalize: normalizeSettings,
     eventTarget,
   });
-  const sitePositionStore = createGmFirstJsonStore({
-    ...storeOptions,
+  // A site the widget was never dragged on keeps the shared position.
+  const positionStore = createGmFirstJsonStore({
+    ...adapters,
+    localStorage: localStorageAdapter,
     subject: 'widget position',
-    key: widgetPositionKey,
-    fallbackKey: fallbackWidgetPositionKey,
+    key: adapters.widgetPositionKey,
+    inheritFrom: adapters.sharedWidgetPositionKey ? [adapters.sharedWidgetPositionKey] : [],
+    fallbackKey: adapters.fallbackWidgetPositionKey,
     normalize: normalizeWidgetPosition,
-    eventTarget: null,
   });
-  const sharedPositionStore = sharedWidgetPositionKey
-    ? createGmFirstJsonStore({
-        ...storeOptions,
-        subject: 'shared widget position',
-        key: sharedWidgetPositionKey,
-        fallbackKey: null,
-        normalize: normalizeWidgetPosition,
-        eventTarget: null,
-      })
-    : null;
-
-  async function readSettings() {
-    const result = await settingsStore.read();
-    return { result, settings: result.value ?? settingsContract.emptySettings() };
-  }
 
   return {
     async readSettings() {
-      return (await readSettings()).settings;
+      return (await settingsStore.read()).value ?? emptySettings();
     },
     // Applies one change to the latest stored settings instead of a copy held
-    // since page load, so saves from other tabs are kept. Settings read from
-    // fallback storage after a GM failure are never written over the GM copy.
+    // since page load, so saves from other tabs are kept.
     async updateSettings(transform) {
-      const latest = await readSettings();
-      const next = settingsContract.normalizeSettings(transform(latest.settings));
-      await settingsStore.write(next, { fallbackOnly: latest.result.gmFailed });
-      return next;
+      const { value } = await settingsStore.update((latest) =>
+        normalizeSettings(transform(latest.value ?? emptySettings())),
+      );
+      return value ?? emptySettings();
     },
     // Calls onChange when another tab changes the settings. Returns an
     // unsubscribe function; managers without change events only get the
@@ -122,21 +98,17 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
       });
     },
     async readWidgetPosition() {
-      const site = await sitePositionStore.read();
-      if (site.backend !== 'gm' || site.value || !sharedPositionStore) return site.value;
-      // A site the widget was never dragged on keeps the shared position.
-      const shared = await sharedPositionStore.read();
-      return shared.gmFailed ? sitePositionStore.readFallback().value : shared.value;
+      return (await positionStore.read()).value;
     },
     async writeSettings(nextSettings) {
-      const normalized = settingsContract.normalizeSettings(nextSettings);
+      const normalized = normalizeSettings(nextSettings);
       await settingsStore.write(normalized);
       return normalized;
     },
     async writeWidgetPosition(position) {
       const normalized = normalizeWidgetPosition(position);
       if (!normalized) return null;
-      await sitePositionStore.write(normalized);
+      await positionStore.write(normalized);
       return normalized;
     },
     registerSettingsMenu(label, callback) {

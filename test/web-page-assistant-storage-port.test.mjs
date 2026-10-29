@@ -4,28 +4,13 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { createWebPageAssistantStoragePort } from '../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts';
+import { createMemoryStorage as createLocalStorage } from './helpers/dom-env.mjs';
 
 const entryPath = path.resolve(
   import.meta.dirname,
   '../src/userscripts/web-page-assistant/web-page-assistant.entry.ts',
 );
 const entryContent = await readFile(entryPath, 'utf8');
-
-function createLocalStorage(initial = {}) {
-  const store = new Map(Object.entries(initial));
-  const writes = [];
-
-  return {
-    writes,
-    getItem(key) {
-      return store.has(key) ? store.get(key) : null;
-    },
-    setItem(key, value) {
-      writes.push([key, value]);
-      store.set(key, value);
-    },
-  };
-}
 
 function createSettingsContract() {
   return {
