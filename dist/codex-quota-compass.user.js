@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.23
+// @version      0.5.24
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -465,6 +465,8 @@
     createQuotaCalculator: () => createQuotaCalculator,
     firstDayOfMonthLocal: () => firstDayOfMonthLocal,
     firstDayOfMonthUTC: () => firstDayOfMonthUTC,
+    roundNumber: () => roundNumber,
+    toNumber: () => toNumber,
     ymdLocal: () => ymdLocal,
     ymdUTC: () => ymdUTC
   });
@@ -692,977 +694,6 @@
     const matches = input.match(escapedStringRegExp);
     if (!matches) return input;
     return matches[1].replace(doubleQuoteRegExp, "'");
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts
-  var MAIN_PRIMARY_WINDOW_KEY = "main.primaryWindow";
-  var MAIN_SEVEN_DAY_WINDOW_KEY = "main.sevenDayWindow";
-  function toNumber(value) {
-    return Number.isFinite(Number(value)) ? Number(value) : 0;
-  }
-  function roundNumber(value, digits = 2) {
-    return Number(Number(value).toFixed(digits));
-  }
-  function pad2(value) {
-    return String(value).padStart(2, "0");
-  }
-  function lastItem(items) {
-    return items.length ? items[items.length - 1] : void 0;
-  }
-  function ymdUTC(value) {
-    return lightFormat(new UTCDate(value), "yyyy-MM-dd");
-  }
-  function ymdLocal(value) {
-    return lightFormat(new Date(value), "yyyy-MM-dd");
-  }
-  function addDaysLocalMs(value, days) {
-    return addDays(value, days).getTime();
-  }
-  function firstDayOfMonthUTC(value) {
-    return lightFormat(new UTCDate(value), "yyyy-MM-01");
-  }
-  function firstDayOfMonthLocal(value) {
-    return lightFormat(new Date(value), "yyyy-MM-01");
-  }
-  function tokenTotal(row = {}) {
-    return toNumber(row.text_total_tokens) || toNumber(row.cached_text_input_tokens) + toNumber(row.uncached_text_input_tokens) + toNumber(row.text_output_tokens);
-  }
-  function utcOffsetLabel(value) {
-    const offsetMinutes = -new Date(value).getTimezoneOffset();
-    const sign = offsetMinutes >= 0 ? "+" : "-";
-    const absolute = Math.abs(offsetMinutes);
-    return `UTC${sign}${pad2(Math.floor(absolute / 60))}:${pad2(absolute % 60)}`;
-  }
-  function buildQuotaSnapshotResult({ config, diagnostics, windows, periods, resetCredits = null }) {
-    const rollingLabel = `近${config.ROLLING_DAYS}天`;
-    return {
-      配置: {
-        日期桶模式: config.DATE_BUCKET_MODE,
-        USD_PER_CREDIT: config.USD_PER_CREDIT,
-        ROLLING_DAYS: config.ROLLING_DAYS
-      },
-      时区诊断: diagnostics,
-      限制窗口概览: windows,
-      ...resetCredits ? { 重置券: resetCredits } : {},
-      主7天窗口_上次重置至今: {
-        汇总: periods.sinceReset.summary,
-        反推周额度: periods.sinceReset.weeklyEstimate,
-        每日明细: periods.sinceReset.rows,
-        客户端汇总: periods.sinceReset.clients
-      },
-      本月初至今: {
-        汇总: periods.monthToDate.summary,
-        每日明细: periods.monthToDate.rows,
-        客户端汇总: periods.monthToDate.clients
-      },
-      [rollingLabel]: {
-        汇总: periods.rolling.summary,
-        每日明细: periods.rolling.rows,
-        客户端汇总: periods.rolling.clients,
-        ...periods.rolling.modelSummaries ? { 模型汇总: periods.rolling.modelSummaries } : {},
-        ...periods.rolling.modelSummaryError ? { 模型汇总错误: periods.rolling.modelSummaryError } : {}
-      }
-    };
-  }
-  function createQuotaCalculator({
-    config,
-    fetchUsage,
-    fetchDailyUsage,
-    fetchDailyTokenBreakdown = null,
-    fetchRateLimitResetCredits = null,
-    now = () => Date.now(),
-    formatLocalTime = (ms) => new Date(ms).toLocaleString(),
-    getBrowserTimeZone = () => globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || "未知"
-  }) {
-    if (!config || typeof config !== "object") {
-      throw new Error("Codex quota calculator requires config.");
-    }
-    if (typeof fetchUsage !== "function") {
-      throw new Error("Codex quota calculator requires fetchUsage.");
-    }
-    if (typeof fetchDailyUsage !== "function") {
-      throw new Error("Codex quota calculator requires fetchDailyUsage.");
-    }
-    const dayMs = 24 * 60 * 60 * 1e3;
-    const ymdForApi = (ms) => config.DATE_BUCKET_MODE === "utc" ? ymdUTC(ms) : ymdLocal(ms);
-    const addDaysForApi = (ms, days) => config.DATE_BUCKET_MODE === "utc" ? ms + days * dayMs : addDaysLocalMs(ms, days);
-    const firstDayOfMonthForApi = (ms) => config.DATE_BUCKET_MODE === "utc" ? firstDayOfMonthUTC(ms) : firstDayOfMonthLocal(ms);
-    const fmtUTC = (ms) => new Date(ms).toISOString().replace("T", " ").replace(".000Z", " UTC");
-    function windowIdentity({ key, label, backendField, sourceName = "" }) {
-      return { key, label, backendField, sourceName };
-    }
-    const SEVEN_DAY_CLASS_MIN_SECONDS = 6 * 86400;
-    function isSevenDayClassWindow(windowRow) {
-      return toNumber(windowRow?.limit_window_seconds) >= SEVEN_DAY_CLASS_MIN_SECONDS;
-    }
-    function mainWindowEntries(usage) {
-      return ["primary_window", "secondary_window"].map((field) => ({ field, row: usage?.rate_limit?.[field] })).filter((entry) => entry.row);
-    }
-    function findMainSevenDayEntry(usage) {
-      return mainWindowEntries(usage).filter((entry) => isSevenDayClassWindow(entry.row)).sort((left, right) => toNumber(right.row.limit_window_seconds) - toNumber(left.row.limit_window_seconds))[0] ?? null;
-    }
-    function additionalWindowKey(name, suffix) {
-      return `additional.${String(name || "unknown").trim() || "unknown"}.${suffix}`;
-    }
-    function parseWindow(identity, windowRow) {
-      const usedPercent = toNumber(windowRow?.used_percent);
-      const windowSeconds = toNumber(windowRow?.limit_window_seconds);
-      const resetAfterSeconds = toNumber(windowRow?.reset_after_seconds);
-      const resetAtSeconds = toNumber(windowRow?.reset_at);
-      const resetAtMs = resetAtSeconds * 1e3;
-      const windowStartMs = resetAtMs - windowSeconds * 1e3;
-      const serverNowMs = resetAtMs - resetAfterSeconds * 1e3;
-      return {
-        窗口Key: identity.key,
-        名称: identity.label,
-        后端字段: identity.backendField,
-        来源: identity.sourceName,
-        已用百分比: usedPercent,
-        已用比例小数: roundNumber(usedPercent / 100, 4),
-        窗口秒数: windowSeconds,
-        窗口天数: roundNumber(windowSeconds / 86400, 4),
-        本轮开始_UTC: fmtUTC(windowStartMs),
-        本轮开始_本地: formatLocalTime(windowStartMs),
-        下次重置_UTC: fmtUTC(resetAtMs),
-        下次重置_本地: formatLocalTime(resetAtMs),
-        后端当前_UTC: fmtUTC(serverNowMs),
-        后端当前_本地: formatLocalTime(serverNowMs),
-        距离重置小时: roundNumber(resetAfterSeconds / 3600, 2),
-        _windowStartMs: windowStartMs,
-        _resetAtMs: resetAtMs,
-        _serverNowMs: serverNowMs
-      };
-    }
-    function collectWindows(usage) {
-      const windows = [];
-      const sevenDayEntry = findMainSevenDayEntry(usage);
-      for (const entry of mainWindowEntries(usage)) {
-        const isSevenDay = entry.field === sevenDayEntry?.field;
-        windows.push(
-          parseWindow(
-            windowIdentity({
-              key: isSevenDay ? MAIN_SEVEN_DAY_WINDOW_KEY : MAIN_PRIMARY_WINDOW_KEY,
-              label: isSevenDay ? "主限制 - 7天窗口" : "主限制 - 5小时窗口",
-              backendField: entry.field
-            }),
-            entry.row
-          )
-        );
-      }
-      for (const item of usage?.additional_rate_limits ?? []) {
-        const name = item.limit_name || item.metered_feature || "额外限制";
-        for (const field of ["primary_window", "secondary_window"]) {
-          const row = item?.rate_limit?.[field];
-          if (!row) continue;
-          const isSevenDay = isSevenDayClassWindow(row);
-          windows.push(
-            parseWindow(
-              windowIdentity({
-                key: additionalWindowKey(name, isSevenDay ? "sevenDayWindow" : "primaryWindow"),
-                label: `${name} - ${isSevenDay ? "7天窗口" : "5小时窗口"}`,
-                backendField: field,
-                sourceName: name
-              }),
-              row
-            )
-          );
-        }
-      }
-      return windows;
-    }
-    function parseDailyRows(json) {
-      return (json?.data ?? []).slice().sort((left, right) => String(left.date).localeCompare(String(right.date))).map((day) => {
-        const totals = day.totals ?? {};
-        const credits = toNumber(totals.credits);
-        return {
-          日期桶: day.date,
-          Credits: roundNumber(credits, 6),
-          折算USD: roundNumber(credits * config.USD_PER_CREDIT, 2),
-          用户数: toNumber(totals.users),
-          线程数: toNumber(totals.threads),
-          轮数: toNumber(totals.turns),
-          Token总量: tokenTotal(totals),
-          缓存输入Token: toNumber(totals.cached_text_input_tokens),
-          非缓存输入Token: toNumber(totals.uncached_text_input_tokens),
-          输出Token: toNumber(totals.text_output_tokens),
-          客户端数量: Array.isArray(day.clients) ? day.clients.length : 0,
-          客户端Credits: (day.clients ?? []).map((client) => `${client.client_id ?? "UNKNOWN"}:${roundNumber(toNumber(client.credits), 2)}`).join(" | ")
-        };
-      });
-    }
-    function summarizeClients(json) {
-      const rowsByClient = /* @__PURE__ */ new Map();
-      for (const day of json?.data ?? []) {
-        for (const client of day.clients ?? []) {
-          const id = client.client_id ?? "UNKNOWN";
-          const row = rowsByClient.get(id) ?? {
-            客户端: id,
-            Credits: 0,
-            折算USD: 0,
-            线程数: 0,
-            轮数: 0,
-            Token总量: 0,
-            缓存输入Token: 0,
-            非缓存输入Token: 0,
-            输出Token: 0
-          };
-          const credits = toNumber(client.credits);
-          row.Credits += credits;
-          row.折算USD += credits * config.USD_PER_CREDIT;
-          row.线程数 += toNumber(client.threads);
-          row.轮数 += toNumber(client.turns);
-          row.Token总量 += tokenTotal(client);
-          row.缓存输入Token += toNumber(client.cached_text_input_tokens);
-          row.非缓存输入Token += toNumber(client.uncached_text_input_tokens);
-          row.输出Token += toNumber(client.text_output_tokens);
-          rowsByClient.set(id, row);
-        }
-      }
-      return [...rowsByClient.values()].map((row) => ({
-        ...row,
-        Credits: roundNumber(row.Credits, 6),
-        折算USD: roundNumber(row.折算USD, 2)
-      })).sort((left, right) => right.Credits - left.Credits);
-    }
-    async function collectDailyUsage(startDate, endExclusiveDate) {
-      const json = await fetchDailyUsage(startDate, endExclusiveDate);
-      return {
-        rows: parseDailyRows(json),
-        clients: summarizeClients(json)
-      };
-    }
-    function summarizeModels(json, rangeCredits) {
-      const rowsByModel = /* @__PURE__ */ new Map();
-      for (const day of json?.data ?? []) {
-        for (const entry of day.models ?? []) {
-          const model = entry.model ?? "UNKNOWN";
-          const speed = entry.speed ?? "";
-          const key = `${model}::${speed}`;
-          const row = rowsByModel.get(key) ?? { 模型: model, 速度: speed, Credits: 0 };
-          row.Credits += toNumber(entry.credits);
-          rowsByModel.set(key, row);
-        }
-      }
-      const rows = [...rowsByModel.values()];
-      const totalRelative = rows.reduce((sum, row) => sum + row.Credits, 0);
-      const scale = totalRelative > 0 ? toNumber(rangeCredits) / totalRelative : 0;
-      return rows.map((row) => ({
-        模型: row.模型,
-        速度: row.速度,
-        Credits: roundNumber(row.Credits * scale, 2),
-        折算USD: roundNumber(row.Credits * scale * config.USD_PER_CREDIT, 2),
-        占比百分比: totalRelative > 0 ? roundNumber(row.Credits / totalRelative * 100, 1) : 0
-      })).sort((left, right) => right.Credits - left.Credits || right.占比百分比 - left.占比百分比);
-    }
-    async function collectModelSummaries(startDate, endExclusiveDate, rangeCredits) {
-      if (typeof fetchDailyTokenBreakdown !== "function") {
-        return { modelSummaries: null, modelSummaryError: "" };
-      }
-      try {
-        const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
-        return { modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: "" };
-      } catch (error) {
-        return { modelSummaries: [], modelSummaryError: String(error?.message || error) };
-      }
-    }
-    function parseResetCreditRows(json) {
-      return (json?.credits ?? []).slice().sort((left, right) => String(left?.expires_at || "").localeCompare(String(right?.expires_at || ""))).map((credit) => ({
-        标题: credit?.title || credit?.reset_type || "-",
-        状态: credit?.status || "-",
-        过期时间_本地: credit?.expires_at ? formatLocalTime(Date.parse(credit.expires_at)) : "-"
-      }));
-    }
-    async function collectResetCredits(usage) {
-      const counts = usage?.rate_limit_reset_credits;
-      const hasDetailFetch = typeof fetchRateLimitResetCredits === "function";
-      if (!counts && !hasDetailFetch) return null;
-      const section = {
-        可用张数: counts ? toNumber(counts.available_count) : null,
-        当前适用张数: counts ? toNumber(counts.applicable_available_count) : null,
-        明细: []
-      };
-      if (hasDetailFetch) {
-        try {
-          section.明细 = parseResetCreditRows(await fetchRateLimitResetCredits());
-        } catch (error) {
-          section.明细错误 = String(error?.message || error);
-        }
-      }
-      return section;
-    }
-    function summarizeRows(rangeName, rows, startDate, endExclusiveDate) {
-      const credits = rows.reduce((sum, row) => sum + toNumber(row.Credits), 0);
-      return {
-        范围: rangeName,
-        日期桶口径: config.DATE_BUCKET_MODE === "utc" ? "UTC日期桶" : "本地日期桶",
-        API_start_date: startDate,
-        API_end_date_排他: endExclusiveDate,
-        返回日期桶数: rows.length,
-        首个返回日期桶: rows[0]?.日期桶 ?? "",
-        最后返回日期桶: lastItem(rows)?.日期桶 ?? "",
-        累计Credits: roundNumber(credits, 6),
-        累计折算USD: roundNumber(credits * config.USD_PER_CREDIT, 2),
-        累计Token: rows.reduce((sum, row) => sum + toNumber(row.Token总量), 0),
-        累计线程数: rows.reduce((sum, row) => sum + toNumber(row.线程数), 0),
-        累计轮数: rows.reduce((sum, row) => sum + toNumber(row.轮数), 0)
-      };
-    }
-    function publicWindowRow(windowRow) {
-      const { _windowStartMs, _resetAtMs, _serverNowMs, ...visible } = windowRow;
-      return visible;
-    }
-    function buildWeeklyEstimate({ mainSecondary, sinceResetRows, sinceResetSummary, sinceResetStartDate }) {
-      const usedPercent = toNumber(mainSecondary.已用百分比);
-      const usedRatio = usedPercent / 100;
-      const includedCredits = toNumber(sinceResetSummary.累计Credits);
-      const resetDayRow = sinceResetRows.find((row) => row.日期桶 === sinceResetStartDate);
-      const resetDayCredits = toNumber(resetDayRow?.Credits);
-      const excludedCredits = Math.max(0, includedCredits - resetDayCredits);
-      if (usedRatio <= 0) {
-        return {
-          依据: "主限制 - 7天窗口",
-          已用百分比: usedPercent,
-          说明: "已用比例为 0，无法反推总额度。"
-        };
-      }
-      const totalWithResetDay = includedCredits / usedRatio;
-      const totalWithoutResetDay = excludedCredits / usedRatio;
-      const remainingWithResetDay = Math.max(0, totalWithResetDay - includedCredits);
-      const remainingWithoutResetDay = Math.max(0, totalWithoutResetDay - excludedCredits);
-      return {
-        依据: "主限制 - 7天窗口",
-        已用百分比: usedPercent,
-        已用比例小数: roundNumber(usedRatio, 4),
-        剩余比例小数: roundNumber(1 - usedRatio, 4),
-        说明: "used_percent 表示已经用掉的比例；例如 45 = 已用 45%，不是剩余 45%。",
-        日期桶口径: config.DATE_BUCKET_MODE === "utc" ? "UTC日期桶" : "本地日期桶",
-        包含重置日_已用Credits: roundNumber(includedCredits, 6),
-        包含重置日_已用折算USD: roundNumber(includedCredits * config.USD_PER_CREDIT, 2),
-        重置日整天Credits: roundNumber(resetDayCredits, 6),
-        重置日整天折算USD: roundNumber(resetDayCredits * config.USD_PER_CREDIT, 2),
-        排除重置日_已用Credits: roundNumber(excludedCredits, 6),
-        排除重置日_已用折算USD: roundNumber(excludedCredits * config.USD_PER_CREDIT, 2),
-        反推周总Credits_包含重置日: roundNumber(totalWithResetDay, 2),
-        反推周总USD_包含重置日: roundNumber(totalWithResetDay * config.USD_PER_CREDIT, 2),
-        反推周总Credits_排除重置日: roundNumber(totalWithoutResetDay, 2),
-        反推周总USD_排除重置日: roundNumber(totalWithoutResetDay * config.USD_PER_CREDIT, 2),
-        剩余Credits_包含重置日口径: roundNumber(remainingWithResetDay, 2),
-        剩余USD_包含重置日口径: roundNumber(remainingWithResetDay * config.USD_PER_CREDIT, 2),
-        剩余Credits_排除重置日口径: roundNumber(remainingWithoutResetDay, 2),
-        剩余USD_排除重置日口径: roundNumber(remainingWithoutResetDay * config.USD_PER_CREDIT, 2),
-        误差说明: "daily analytics 只能按天聚合，不能切到具体小时分钟；实际值通常介于“排除重置日”和“包含重置日”之间。used_percent 也是整数，存在四舍五入或截断误差。"
-      };
-    }
-    async function run() {
-      const usage = await fetchUsage();
-      const windows = collectWindows(usage);
-      const sevenDayEntry = findMainSevenDayEntry(usage);
-      if (!sevenDayEntry) {
-        throw new Error("rate_limit 的 primary/secondary_window 均不含 7 天级别窗口，无法反推主限制 - 7天窗口。");
-      }
-      const mainSecondary = parseWindow(
-        windowIdentity({
-          key: MAIN_SEVEN_DAY_WINDOW_KEY,
-          label: "主限制 - 7天窗口",
-          backendField: sevenDayEntry.field
-        }),
-        sevenDayEntry.row
-      );
-      const apiNowMs = mainSecondary._serverNowMs || now();
-      const apiTodayDate = ymdForApi(apiNowMs);
-      const endExclusiveDate = ymdForApi(addDaysForApi(apiNowMs, 1));
-      const sinceResetStartDate = ymdForApi(mainSecondary._windowStartMs);
-      const monthStartDate = firstDayOfMonthForApi(apiNowMs);
-      const rollingStartDate = ymdForApi(addDaysForApi(apiNowMs, -(config.ROLLING_DAYS - 1)));
-      const sinceReset = await collectDailyUsage(sinceResetStartDate, endExclusiveDate);
-      const sinceResetSummary = summarizeRows(
-        `上次重置至今近似 ${sinceResetStartDate} ~ ${apiTodayDate}`,
-        sinceReset.rows,
-        sinceResetStartDate,
-        endExclusiveDate
-      );
-      const weeklyEstimate = buildWeeklyEstimate({
-        mainSecondary,
-        sinceResetRows: sinceReset.rows,
-        sinceResetSummary,
-        sinceResetStartDate
-      });
-      const monthToDate = await collectDailyUsage(monthStartDate, endExclusiveDate);
-      const monthToDateSummary = summarizeRows(
-        `本月初至今 ${monthStartDate} ~ ${apiTodayDate}`,
-        monthToDate.rows,
-        monthStartDate,
-        endExclusiveDate
-      );
-      const rolling = await collectDailyUsage(rollingStartDate, endExclusiveDate);
-      const rollingSummary = summarizeRows(
-        `近${config.ROLLING_DAYS}天 ${rollingStartDate} ~ ${apiTodayDate}`,
-        rolling.rows,
-        rollingStartDate,
-        endExclusiveDate
-      );
-      const rollingModels = await collectModelSummaries(
-        rollingStartDate,
-        endExclusiveDate,
-        rolling.rows.reduce((sum, row) => sum + toNumber(row.Credits), 0)
-      );
-      const resetCredits = await collectResetCredits(usage);
-      return buildQuotaSnapshotResult({
-        config,
-        resetCredits,
-        diagnostics: {
-          浏览器本地时区: getBrowserTimeZone(),
-          浏览器UTC偏移: utcOffsetLabel(apiNowMs),
-          后端当前_UTC: fmtUTC(apiNowMs),
-          后端当前_本地: formatLocalTime(apiNowMs),
-          七天窗口开始_UTC: fmtUTC(mainSecondary._windowStartMs),
-          七天窗口开始_本地: formatLocalTime(mainSecondary._windowStartMs),
-          下次重置_UTC: fmtUTC(mainSecondary._resetAtMs),
-          下次重置_本地: formatLocalTime(mainSecondary._resetAtMs),
-          API_start_date_上次重置至今: sinceResetStartDate,
-          API_start_date_本月初至今: monthStartDate,
-          [`API_start_date_近${config.ROLLING_DAYS}天`]: rollingStartDate,
-          API_end_date_排他: endExclusiveDate
-        },
-        windows: windows.map(publicWindowRow),
-        periods: {
-          sinceReset: {
-            summary: sinceResetSummary,
-            weeklyEstimate,
-            rows: sinceReset.rows,
-            clients: sinceReset.clients
-          },
-          monthToDate: {
-            summary: monthToDateSummary,
-            rows: monthToDate.rows,
-            clients: monthToDate.clients
-          },
-          rolling: {
-            summary: rollingSummary,
-            rows: rolling.rows,
-            clients: rolling.clients,
-            modelSummaries: rollingModels.modelSummaries,
-            modelSummaryError: rollingModels.modelSummaryError
-          }
-        }
-      });
-    }
-    return { run };
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.ts
-  function createDefaultQuotaRuntimeConfig(overrides = {}) {
-    return {
-      DEBUG: false,
-      DATE_BUCKET_MODE: "utc",
-      USD_PER_CREDIT: 40 / 1e3,
-      ROLLING_DAYS: 30,
-      MANUAL_ACCESS_TOKEN: "",
-      USAGE_PATH: "/backend-api/wham/usage",
-      DAILY_USAGE_PATH: "/backend-api/wham/analytics/daily-workspace-usage-counts",
-      DAILY_TOKEN_BREAKDOWN_PATH: "/backend-api/wham/usage/daily-token-usage-breakdown",
-      RESET_CREDITS_PATH: "/backend-api/wham/rate-limit-reset-credits",
-      ...overrides
-    };
-  }
-  function stripBearer(value) {
-    return String(value || "").replace(/^Bearer\s+/i, "").trim();
-  }
-  function looksLikeJwt(value) {
-    return typeof value === "string" && value.length > 100 && value.split(".").length >= 3;
-  }
-  function findAccessToken(input, depth = 0) {
-    if (!input || typeof input !== "object" || depth > 8) return "";
-    for (const [key, value] of Object.entries(input)) {
-      if (typeof value === "string" && /access/i.test(key) && looksLikeJwt(value)) {
-        return value;
-      }
-      if (value && typeof value === "object") {
-        const found = findAccessToken(value, depth + 1);
-        if (found) return found;
-      }
-    }
-    return "";
-  }
-  function createUnauthorizedError(path) {
-    return new Error(
-      [
-        `HTTP 401 Unauthorized: ${path}`,
-        "",
-        "没有拿到有效 Authorization。",
-        "处理方式：",
-        "1. 先确认你已经登录 chatgpt.com，并在同一个页面运行脚本。",
-        "2. 刷新 Codex Usage / Analytics 页面后重试。",
-        "3. 仍失败时，可在 Network 面板找到成功的 /backend-api/wham/usage 请求，",
-        "   复制 Authorization: Bearer 后面的 token，只在自己电脑临时填到 CONFIG.MANUAL_ACCESS_TOKEN。",
-        "",
-        "不要把 token、Cookie、填过 token 的脚本或截图发给任何人。"
-      ].join("\n")
-    );
-  }
-  function createQuotaRuntime({
-    config = createDefaultQuotaRuntimeConfig(),
-    coreLib,
-    fetchImpl = globalThis.fetch?.bind(globalThis),
-    location: location2 = globalThis.location,
-    now = () => Date.now(),
-    formatLocalTime = (ms) => new Date(ms).toLocaleString(),
-    getBrowserTimeZone = () => globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || "未知"
-  } = {}) {
-    if (!coreLib?.createQuotaCalculator) {
-      throw new Error("CodexQuotaCompassCoreLib calculator is unavailable.");
-    }
-    if (typeof fetchImpl !== "function") {
-      throw new Error("Codex quota runtime requires fetchImpl.");
-    }
-    async function getAccessToken() {
-      const manual = stripBearer(config.MANUAL_ACCESS_TOKEN);
-      if (manual) return manual;
-      try {
-        const response = await fetchImpl("/api/auth/session", {
-          credentials: "include",
-          headers: { accept: "application/json" }
-        });
-        if (!response.ok) return "";
-        return findAccessToken(await response.json());
-      } catch {
-        return "";
-      }
-    }
-    async function run() {
-      if (location2?.hostname !== "chatgpt.com") {
-        throw new Error("请在 chatgpt.com 页面运行，例如 Codex Usage / Analytics 页面。");
-      }
-      const accessToken = await getAccessToken();
-      const headers = { accept: "application/json" };
-      if (accessToken) {
-        headers.authorization = `Bearer ${accessToken}`;
-      }
-      async function apiGet(path) {
-        const response = await fetchImpl(path, {
-          method: "GET",
-          credentials: "include",
-          headers
-        });
-        if (!response.ok) {
-          const text = await response.text().catch(() => "");
-          if (response.status === 401) {
-            throw createUnauthorizedError(path);
-          }
-          throw new Error(`HTTP ${response.status} ${response.statusText}: ${path}
-${text.slice(0, 800)}`);
-        }
-        return response.json();
-      }
-      function dailyRangeQuery(startDate, endExclusiveDate) {
-        return new URLSearchParams({
-          start_date: startDate,
-          end_date: endExclusiveDate,
-          group_by: "day"
-        });
-      }
-      return coreLib.createQuotaCalculator({
-        config,
-        fetchUsage: () => apiGet(config.USAGE_PATH),
-        fetchDailyUsage: (startDate, endExclusiveDate) => apiGet(`${config.DAILY_USAGE_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`),
-        fetchDailyTokenBreakdown: (startDate, endExclusiveDate) => apiGet(`${config.DAILY_TOKEN_BREAKDOWN_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`),
-        fetchRateLimitResetCredits: () => apiGet(config.RESET_CREDITS_PATH),
-        now,
-        formatLocalTime,
-        getBrowserTimeZone
-      }).run();
-    }
-    return { run };
-  }
-
-  // src/userscripts/shared/shared-gm.lib.ts
-  function pickFunction(override, legacy) {
-    if (typeof override === "function") return override;
-    if (typeof legacy === "function") return legacy;
-    return null;
-  }
-  function bindModern(gm, ...names) {
-    for (const name of names) {
-      if (typeof gm?.[name] === "function") return gm[name].bind(gm);
-    }
-    return null;
-  }
-  function legacyGlobals() {
-    return {
-      getValue: typeof GM_getValue === "function" ? GM_getValue : null,
-      setValue: typeof GM_setValue === "function" ? GM_setValue : null,
-      addValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
-      removeValueChangeListener: typeof GM_removeValueChangeListener === "function" ? GM_removeValueChangeListener : null,
-      registerMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
-      xmlHttpRequest: typeof GM_xmlhttpRequest === "function" ? GM_xmlhttpRequest : null,
-      download: typeof GM_download === "function" ? GM_download : null
-    };
-  }
-  function modernGlobal() {
-    return typeof GM !== "undefined" ? GM : null;
-  }
-  function resolveGmApi(overrides = {}) {
-    const legacy = legacyGlobals();
-    const gm = overrides.gm || overrides.gmApi || modernGlobal();
-    const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
-    let valueChange = null;
-    if (legacyAdd) {
-      valueChange = {
-        add: legacyAdd,
-        remove: pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
-      };
-    } else if (typeof gm?.addValueChangeListener === "function") {
-      valueChange = {
-        add: gm.addValueChangeListener.bind(gm),
-        remove: bindModern(gm, "removeValueChangeListener")
-      };
-    }
-    return {
-      getValue: pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue"),
-      setValue: pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue"),
-      valueChange,
-      registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
-      xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),
-      // Legacy only: GM.download does not share GM_download's callback contract.
-      download: pickFunction(overrides.gmDownload, legacy.download)
-    };
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts
-  var DEFAULT_ARCHIVE_KEY = "codexQuotaCompassSnapshotArchive";
-  var DEFAULT_ARCHIVE_FALLBACK_KEY = "codexQuotaCompassSnapshotArchiveFallback";
-  var STORAGE_BACKENDS = {
-    pending: { id: "pending", label: "pending" },
-    gm: { id: "gm", label: "GM storage" },
-    localStorage: { id: "localStorage", label: "localStorage" }
-  };
-  function maybePromise(value) {
-    return value && typeof value.then === "function" ? value : Promise.resolve(value);
-  }
-  function createArchiveMerger(options) {
-    if (typeof options.mergeArchives === "function") {
-      return options.mergeArchives;
-    }
-    return null;
-  }
-  function createArchiveNormalizer(options) {
-    if (typeof options.normalizeArchive === "function") {
-      return options.normalizeArchive;
-    }
-    return (archive) => archive;
-  }
-  function createSnapshotArchiveStoragePort(options = {}) {
-    const archiveKey = options.archiveKey || DEFAULT_ARCHIVE_KEY;
-    const fallbackKey = options.fallbackKey || DEFAULT_ARCHIVE_FALLBACK_KEY;
-    const scriptName = options.scriptName || "Codex Quota Compass";
-    const logger = options.logger || globalThis.console;
-    const localStorageObject = options.localStorage || globalThis.localStorage;
-    const mergeArchives = createArchiveMerger(options);
-    const normalizeArchive = createArchiveNormalizer(options);
-    let backendInfo = STORAGE_BACKENDS.pending;
-    let mirrorDegraded = false;
-    function gmBackendInfo() {
-      return mirrorDegraded ? {
-        ...STORAGE_BACKENDS.gm,
-        label: "GM storage (mirror unavailable)",
-        degraded: true,
-        mirrorError: "Snapshot Archive mirror write failed."
-      } : STORAGE_BACKENDS.gm;
-    }
-    async function readFromGmStorage() {
-      const { getValue } = resolveGmApi(options);
-      if (getValue) {
-        return await maybePromise(getValue(archiveKey, null));
-      }
-      throw new Error("GM storage is unavailable.");
-    }
-    async function writeToGmStorage(nextArchive) {
-      const { setValue } = resolveGmApi(options);
-      if (setValue) {
-        await maybePromise(setValue(archiveKey, nextArchive));
-        return nextArchive;
-      }
-      throw new Error("GM storage is unavailable.");
-    }
-    function readFromLocalStorage() {
-      if (!localStorageObject?.getItem) {
-        throw new Error("localStorage is unavailable.");
-      }
-      return JSON.parse(localStorageObject.getItem(fallbackKey) || "null");
-    }
-    function writeToLocalStorage(nextArchive) {
-      if (!localStorageObject?.setItem) {
-        throw new Error("localStorage is unavailable.");
-      }
-      localStorageObject.setItem(fallbackKey, JSON.stringify(nextArchive));
-      return nextArchive;
-    }
-    function mergeStorageArchives(primaryArchive, fallbackArchive) {
-      const normalizedPrimary = normalizeArchive(primaryArchive);
-      const normalizedFallback = normalizeArchive(fallbackArchive);
-      if (!mergeArchives) {
-        return { archive: normalizedPrimary, changed: false };
-      }
-      const merged = mergeArchives(normalizedPrimary, normalizedFallback);
-      return {
-        archive: merged?.archive || normalizedPrimary,
-        changed: merged?.changed ?? Number(merged?.report?.added) > 0
-      };
-    }
-    function getGmValueChangeAdapter() {
-      return resolveGmApi(options).valueChange;
-    }
-    return {
-      async read() {
-        let gmArchive = null;
-        let gmAvailable = false;
-        try {
-          gmArchive = await readFromGmStorage();
-          gmAvailable = true;
-          backendInfo = gmBackendInfo();
-        } catch (error) {
-          logger?.warn?.(`${scriptName}: failed to read userscript archive storage.`, error);
-        }
-        let fallbackArchive = null;
-        let fallbackAvailable = false;
-        try {
-          fallbackArchive = readFromLocalStorage();
-          fallbackAvailable = true;
-        } catch (error) {
-          logger?.warn?.(`${scriptName}: failed to read fallback archive storage.`, error);
-        }
-        if (gmAvailable) {
-          const merged = mergeStorageArchives(gmArchive, fallbackArchive);
-          if (merged.changed) {
-            try {
-              await writeToGmStorage(merged.archive);
-            } catch (error) {
-              logger?.warn?.(`${scriptName}: failed to migrate fallback archive into userscript storage.`, error);
-            }
-          }
-          backendInfo = gmBackendInfo();
-          return merged.archive;
-        }
-        if (!fallbackAvailable) throw new Error("Both Snapshot Archive storage reads failed.");
-        backendInfo = STORAGE_BACKENDS.localStorage;
-        return fallbackArchive;
-      },
-      async write(nextArchive) {
-        try {
-          await writeToGmStorage(nextArchive);
-          try {
-            writeToLocalStorage(nextArchive);
-            mirrorDegraded = false;
-          } catch (error) {
-            mirrorDegraded = true;
-            logger?.warn?.(`${scriptName}: failed to mirror userscript archive storage to fallback storage.`, error);
-          }
-          backendInfo = gmBackendInfo();
-          return nextArchive;
-        } catch (error) {
-          logger?.warn?.(`${scriptName}: failed to write userscript archive storage.`, error);
-        }
-        writeToLocalStorage(nextArchive);
-        backendInfo = STORAGE_BACKENDS.localStorage;
-        return nextArchive;
-      },
-      getBackendInfo() {
-        return backendInfo;
-      },
-      subscribeToChanges(listener) {
-        if (typeof listener !== "function") return () => {
-        };
-        const adapter = getGmValueChangeAdapter();
-        if (!adapter) return () => {
-        };
-        const listenerId = adapter.add(archiveKey, (key, oldValue, newValue, remote) => {
-          listener({
-            key,
-            oldValue,
-            newValue,
-            remote: Boolean(remote),
-            backendInfo: STORAGE_BACKENDS.gm
-          });
-        });
-        return () => {
-          if (adapter.remove && listenerId !== void 0 && listenerId !== null) {
-            adapter.remove(listenerId);
-          }
-        };
-      }
-    };
-  }
-
-  // src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts
-  var import_fast_json_stable_stringify = __toESM(require_fast_json_stable_stringify(), 1);
-
-  // node_modules/yocto-queue/index.js
-  var Node2 = class {
-    value;
-    next;
-    constructor(value) {
-      this.value = value;
-    }
-  };
-  var Queue = class {
-    #head;
-    #tail;
-    #size;
-    constructor() {
-      this.clear();
-    }
-    enqueue(value) {
-      const node = new Node2(value);
-      if (this.#head) {
-        this.#tail.next = node;
-        this.#tail = node;
-      } else {
-        this.#head = node;
-        this.#tail = node;
-      }
-      this.#size++;
-    }
-    dequeue() {
-      const current = this.#head;
-      if (!current) {
-        return;
-      }
-      this.#head = this.#head.next;
-      this.#size--;
-      if (!this.#head) {
-        this.#tail = void 0;
-      }
-      return current.value;
-    }
-    peek() {
-      if (!this.#head) {
-        return;
-      }
-      return this.#head.value;
-    }
-    clear() {
-      this.#head = void 0;
-      this.#tail = void 0;
-      this.#size = 0;
-    }
-    get size() {
-      return this.#size;
-    }
-    *[Symbol.iterator]() {
-      let current = this.#head;
-      while (current) {
-        yield current.value;
-        current = current.next;
-      }
-    }
-    *drain() {
-      while (this.#head) {
-        yield this.dequeue();
-      }
-    }
-  };
-
-  // node_modules/p-limit/index.js
-  function pLimit(concurrency) {
-    let rejectOnClear = false;
-    if (typeof concurrency === "object") {
-      ({ concurrency, rejectOnClear = false } = concurrency);
-    }
-    validateConcurrency(concurrency);
-    if (typeof rejectOnClear !== "boolean") {
-      throw new TypeError("Expected `rejectOnClear` to be a boolean");
-    }
-    const queue = new Queue();
-    let activeCount = 0;
-    const resumeNext = () => {
-      if (activeCount < concurrency && queue.size > 0) {
-        activeCount++;
-        queue.dequeue().run();
-      }
-    };
-    const next = () => {
-      activeCount--;
-      resumeNext();
-    };
-    const run = async (function_, resolve, arguments_) => {
-      const result = (async () => function_(...arguments_))();
-      resolve(result);
-      try {
-        await result;
-      } catch {
-      }
-      next();
-    };
-    const enqueue = (function_, resolve, reject, arguments_) => {
-      const queueItem = { reject };
-      new Promise((internalResolve) => {
-        queueItem.run = internalResolve;
-        queue.enqueue(queueItem);
-      }).then(run.bind(void 0, function_, resolve, arguments_));
-      if (activeCount < concurrency) {
-        resumeNext();
-      }
-    };
-    const generator = (function_, ...arguments_) => new Promise((resolve, reject) => {
-      enqueue(function_, resolve, reject, arguments_);
-    });
-    Object.defineProperties(generator, {
-      activeCount: {
-        get: () => activeCount
-      },
-      pendingCount: {
-        get: () => queue.size
-      },
-      clearQueue: {
-        value() {
-          if (!rejectOnClear) {
-            queue.clear();
-            return;
-          }
-          const abortError = AbortSignal.abort().reason;
-          while (queue.size > 0) {
-            queue.dequeue().reject(abortError);
-          }
-        }
-      },
-      concurrency: {
-        get: () => concurrency,
-        set(newConcurrency) {
-          validateConcurrency(newConcurrency);
-          concurrency = newConcurrency;
-          queueMicrotask(() => {
-            while (activeCount < concurrency && queue.size > 0) {
-              resumeNext();
-            }
-          });
-        }
-      },
-      map: {
-        async value(iterable, function_) {
-          const promises = [];
-          try {
-            Array.from(iterable, (value, index) => {
-              const promise = generator(function_, value, index);
-              promises.push(promise);
-              return promise;
-            });
-          } catch (error) {
-            for (const promise of promises) {
-              promise.catch(() => {
-              });
-            }
-            throw error;
-          }
-          return Promise.all(promises);
-        }
-      }
-    });
-    return generator;
-  }
-  function validateConcurrency(concurrency) {
-    if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
-      throw new TypeError("Expected `concurrency` to be a number from 1 and up");
-    }
   }
 
   // node_modules/valibot/dist/index.mjs
@@ -2236,6 +1267,997 @@ ${text.slice(0, 800)}`);
     };
   }
 
+  // src/userscripts/shared/shared-values.lib.ts
+  function isRecord(value) {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+  var coerce = (transform2) => pipe(
+    optional(unknown(), () => void 0),
+    transform(transform2)
+  );
+  function errorMessage(error) {
+    try {
+      if (error instanceof Error) return error.message;
+      if (typeof error === "string") return error;
+      if (error && typeof error === "object") {
+        const record2 = error;
+        for (const key of ["error", "message"]) {
+          const value = record2[key];
+          if (typeof value === "string" && value) return value;
+        }
+        return JSON.stringify(error) ?? "";
+      }
+      return String(error);
+    } catch {
+      return "unknown error";
+    }
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts
+  var MAIN_PRIMARY_WINDOW_KEY = "main.primaryWindow";
+  var MAIN_SEVEN_DAY_WINDOW_KEY = "main.sevenDayWindow";
+  function toNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  function roundNumber(value, digits = 2) {
+    return Number(Number(value).toFixed(digits));
+  }
+  function pad2(value) {
+    return String(value).padStart(2, "0");
+  }
+  function lastItem(items) {
+    return items.length ? items[items.length - 1] : void 0;
+  }
+  function ymdUTC(value) {
+    return lightFormat(new UTCDate(value), "yyyy-MM-dd");
+  }
+  function ymdLocal(value) {
+    return lightFormat(new Date(value), "yyyy-MM-dd");
+  }
+  function addDaysLocalMs(value, days) {
+    return addDays(value, days).getTime();
+  }
+  function firstDayOfMonthUTC(value) {
+    return lightFormat(new UTCDate(value), "yyyy-MM-01");
+  }
+  function firstDayOfMonthLocal(value) {
+    return lightFormat(new Date(value), "yyyy-MM-01");
+  }
+  function tokenTotal(row = {}) {
+    return toNumber(row.text_total_tokens) || toNumber(row.cached_text_input_tokens) + toNumber(row.uncached_text_input_tokens) + toNumber(row.text_output_tokens);
+  }
+  function utcOffsetLabel(value) {
+    const offsetMinutes = -new Date(value).getTimezoneOffset();
+    const sign = offsetMinutes >= 0 ? "+" : "-";
+    const absolute = Math.abs(offsetMinutes);
+    return `UTC${sign}${pad2(Math.floor(absolute / 60))}:${pad2(absolute % 60)}`;
+  }
+  function buildQuotaSnapshotResult({ config, diagnostics, windows, periods, resetCredits = null }) {
+    const rollingLabel = `近${config.ROLLING_DAYS}天`;
+    return {
+      配置: {
+        日期桶模式: config.DATE_BUCKET_MODE,
+        USD_PER_CREDIT: config.USD_PER_CREDIT,
+        ROLLING_DAYS: config.ROLLING_DAYS
+      },
+      时区诊断: diagnostics,
+      限制窗口概览: windows,
+      ...resetCredits ? { 重置券: resetCredits } : {},
+      主7天窗口_上次重置至今: {
+        汇总: periods.sinceReset.summary,
+        反推周额度: periods.sinceReset.weeklyEstimate,
+        每日明细: periods.sinceReset.rows,
+        客户端汇总: periods.sinceReset.clients
+      },
+      本月初至今: {
+        汇总: periods.monthToDate.summary,
+        每日明细: periods.monthToDate.rows,
+        客户端汇总: periods.monthToDate.clients
+      },
+      [rollingLabel]: {
+        汇总: periods.rolling.summary,
+        每日明细: periods.rolling.rows,
+        客户端汇总: periods.rolling.clients,
+        ...periods.rolling.modelSummaries ? { 模型汇总: periods.rolling.modelSummaries } : {},
+        ...periods.rolling.modelSummaryError ? { 模型汇总错误: periods.rolling.modelSummaryError } : {}
+      }
+    };
+  }
+  function createQuotaCalculator({
+    config,
+    fetchUsage,
+    fetchDailyUsage,
+    fetchDailyTokenBreakdown = null,
+    fetchRateLimitResetCredits = null,
+    now = () => Date.now(),
+    formatLocalTime = (ms) => new Date(ms).toLocaleString(),
+    getBrowserTimeZone = () => globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || "未知"
+  }) {
+    if (!config || typeof config !== "object") {
+      throw new Error("Codex quota calculator requires config.");
+    }
+    if (typeof fetchUsage !== "function") {
+      throw new Error("Codex quota calculator requires fetchUsage.");
+    }
+    if (typeof fetchDailyUsage !== "function") {
+      throw new Error("Codex quota calculator requires fetchDailyUsage.");
+    }
+    const dayMs = 24 * 60 * 60 * 1e3;
+    const ymdForApi = (ms) => config.DATE_BUCKET_MODE === "utc" ? ymdUTC(ms) : ymdLocal(ms);
+    const addDaysForApi = (ms, days) => config.DATE_BUCKET_MODE === "utc" ? ms + days * dayMs : addDaysLocalMs(ms, days);
+    const firstDayOfMonthForApi = (ms) => config.DATE_BUCKET_MODE === "utc" ? firstDayOfMonthUTC(ms) : firstDayOfMonthLocal(ms);
+    const fmtUTC = (ms) => new Date(ms).toISOString().replace("T", " ").replace(".000Z", " UTC");
+    function windowIdentity({ key, label, backendField, sourceName = "" }) {
+      return { key, label, backendField, sourceName };
+    }
+    const SEVEN_DAY_CLASS_MIN_SECONDS = 6 * 86400;
+    function isSevenDayClassWindow(windowRow) {
+      return toNumber(windowRow?.limit_window_seconds) >= SEVEN_DAY_CLASS_MIN_SECONDS;
+    }
+    function mainWindowEntries(usage) {
+      return ["primary_window", "secondary_window"].map((field) => ({ field, row: usage?.rate_limit?.[field] })).filter((entry) => entry.row);
+    }
+    function findMainSevenDayEntry(usage) {
+      return mainWindowEntries(usage).filter((entry) => isSevenDayClassWindow(entry.row)).sort((left, right) => toNumber(right.row.limit_window_seconds) - toNumber(left.row.limit_window_seconds))[0] ?? null;
+    }
+    function additionalWindowKey(name, suffix) {
+      return `additional.${String(name || "unknown").trim() || "unknown"}.${suffix}`;
+    }
+    function parseWindow(identity, windowRow) {
+      const usedPercent = toNumber(windowRow?.used_percent);
+      const windowSeconds = toNumber(windowRow?.limit_window_seconds);
+      const resetAfterSeconds = toNumber(windowRow?.reset_after_seconds);
+      const resetAtSeconds = toNumber(windowRow?.reset_at);
+      const resetAtMs = resetAtSeconds * 1e3;
+      const windowStartMs = resetAtMs - windowSeconds * 1e3;
+      const serverNowMs = resetAtMs - resetAfterSeconds * 1e3;
+      return {
+        窗口Key: identity.key,
+        名称: identity.label,
+        后端字段: identity.backendField,
+        来源: identity.sourceName,
+        已用百分比: usedPercent,
+        已用比例小数: roundNumber(usedPercent / 100, 4),
+        窗口秒数: windowSeconds,
+        窗口天数: roundNumber(windowSeconds / 86400, 4),
+        本轮开始_UTC: fmtUTC(windowStartMs),
+        本轮开始_本地: formatLocalTime(windowStartMs),
+        下次重置_UTC: fmtUTC(resetAtMs),
+        下次重置_本地: formatLocalTime(resetAtMs),
+        后端当前_UTC: fmtUTC(serverNowMs),
+        后端当前_本地: formatLocalTime(serverNowMs),
+        距离重置小时: roundNumber(resetAfterSeconds / 3600, 2),
+        _windowStartMs: windowStartMs,
+        _resetAtMs: resetAtMs,
+        _serverNowMs: serverNowMs
+      };
+    }
+    function collectWindows(usage) {
+      const windows = [];
+      const sevenDayEntry = findMainSevenDayEntry(usage);
+      for (const entry of mainWindowEntries(usage)) {
+        const isSevenDay = entry.field === sevenDayEntry?.field;
+        windows.push(
+          parseWindow(
+            windowIdentity({
+              key: isSevenDay ? MAIN_SEVEN_DAY_WINDOW_KEY : MAIN_PRIMARY_WINDOW_KEY,
+              label: isSevenDay ? "主限制 - 7天窗口" : "主限制 - 5小时窗口",
+              backendField: entry.field
+            }),
+            entry.row
+          )
+        );
+      }
+      for (const item of usage?.additional_rate_limits ?? []) {
+        const name = item.limit_name || item.metered_feature || "额外限制";
+        for (const field of ["primary_window", "secondary_window"]) {
+          const row = item?.rate_limit?.[field];
+          if (!row) continue;
+          const isSevenDay = isSevenDayClassWindow(row);
+          windows.push(
+            parseWindow(
+              windowIdentity({
+                key: additionalWindowKey(name, isSevenDay ? "sevenDayWindow" : "primaryWindow"),
+                label: `${name} - ${isSevenDay ? "7天窗口" : "5小时窗口"}`,
+                backendField: field,
+                sourceName: name
+              }),
+              row
+            )
+          );
+        }
+      }
+      return windows;
+    }
+    function parseDailyRows(json) {
+      return (json?.data ?? []).slice().sort((left, right) => String(left.date).localeCompare(String(right.date))).map((day) => {
+        const totals = day.totals ?? {};
+        const credits = toNumber(totals.credits);
+        return {
+          日期桶: day.date,
+          Credits: roundNumber(credits, 6),
+          折算USD: roundNumber(credits * config.USD_PER_CREDIT, 2),
+          用户数: toNumber(totals.users),
+          线程数: toNumber(totals.threads),
+          轮数: toNumber(totals.turns),
+          Token总量: tokenTotal(totals),
+          缓存输入Token: toNumber(totals.cached_text_input_tokens),
+          非缓存输入Token: toNumber(totals.uncached_text_input_tokens),
+          输出Token: toNumber(totals.text_output_tokens),
+          客户端数量: Array.isArray(day.clients) ? day.clients.length : 0,
+          客户端Credits: (day.clients ?? []).map((client) => `${client.client_id ?? "UNKNOWN"}:${roundNumber(toNumber(client.credits), 2)}`).join(" | ")
+        };
+      });
+    }
+    function summarizeClients(json) {
+      const rowsByClient = /* @__PURE__ */ new Map();
+      for (const day of json?.data ?? []) {
+        for (const client of day.clients ?? []) {
+          const id = client.client_id ?? "UNKNOWN";
+          const row = rowsByClient.get(id) ?? {
+            客户端: id,
+            Credits: 0,
+            折算USD: 0,
+            线程数: 0,
+            轮数: 0,
+            Token总量: 0,
+            缓存输入Token: 0,
+            非缓存输入Token: 0,
+            输出Token: 0
+          };
+          const credits = toNumber(client.credits);
+          row.Credits += credits;
+          row.折算USD += credits * config.USD_PER_CREDIT;
+          row.线程数 += toNumber(client.threads);
+          row.轮数 += toNumber(client.turns);
+          row.Token总量 += tokenTotal(client);
+          row.缓存输入Token += toNumber(client.cached_text_input_tokens);
+          row.非缓存输入Token += toNumber(client.uncached_text_input_tokens);
+          row.输出Token += toNumber(client.text_output_tokens);
+          rowsByClient.set(id, row);
+        }
+      }
+      return [...rowsByClient.values()].map((row) => ({
+        ...row,
+        Credits: roundNumber(row.Credits, 6),
+        折算USD: roundNumber(row.折算USD, 2)
+      })).sort((left, right) => right.Credits - left.Credits);
+    }
+    async function collectDailyUsage(startDate, endExclusiveDate) {
+      const json = await fetchDailyUsage(startDate, endExclusiveDate);
+      return {
+        rows: parseDailyRows(json),
+        clients: summarizeClients(json)
+      };
+    }
+    function summarizeModels(json, rangeCredits) {
+      const rowsByModel = /* @__PURE__ */ new Map();
+      for (const day of json?.data ?? []) {
+        for (const entry of day.models ?? []) {
+          const model = entry.model ?? "UNKNOWN";
+          const speed = entry.speed ?? "";
+          const key = `${model}::${speed}`;
+          const row = rowsByModel.get(key) ?? { 模型: model, 速度: speed, Credits: 0 };
+          row.Credits += toNumber(entry.credits);
+          rowsByModel.set(key, row);
+        }
+      }
+      const rows = [...rowsByModel.values()];
+      const totalRelative = rows.reduce((sum, row) => sum + row.Credits, 0);
+      const scale = totalRelative > 0 ? toNumber(rangeCredits) / totalRelative : 0;
+      return rows.map((row) => ({
+        模型: row.模型,
+        速度: row.速度,
+        Credits: roundNumber(row.Credits * scale, 2),
+        折算USD: roundNumber(row.Credits * scale * config.USD_PER_CREDIT, 2),
+        占比百分比: totalRelative > 0 ? roundNumber(row.Credits / totalRelative * 100, 1) : 0
+      })).sort((left, right) => right.Credits - left.Credits || right.占比百分比 - left.占比百分比);
+    }
+    async function collectModelSummaries(startDate, endExclusiveDate) {
+      if (typeof fetchDailyTokenBreakdown !== "function") {
+        return () => ({ modelSummaries: null, modelSummaryError: "" });
+      }
+      try {
+        const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
+        return (rangeCredits) => ({ modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: "" });
+      } catch (error) {
+        return () => ({ modelSummaries: [], modelSummaryError: errorMessage(error) });
+      }
+    }
+    function parseResetCreditRows(json) {
+      return (json?.credits ?? []).slice().sort((left, right) => String(left?.expires_at || "").localeCompare(String(right?.expires_at || ""))).map((credit) => ({
+        标题: credit?.title || credit?.reset_type || "-",
+        状态: credit?.status || "-",
+        过期时间_本地: credit?.expires_at ? formatLocalTime(Date.parse(credit.expires_at)) : "-"
+      }));
+    }
+    async function collectResetCredits(usage) {
+      const counts = usage?.rate_limit_reset_credits;
+      const hasDetailFetch = typeof fetchRateLimitResetCredits === "function";
+      if (!counts && !hasDetailFetch) return null;
+      const section = {
+        可用张数: counts ? toNumber(counts.available_count) : null,
+        当前适用张数: counts ? toNumber(counts.applicable_available_count) : null,
+        明细: []
+      };
+      if (hasDetailFetch) {
+        try {
+          section.明细 = parseResetCreditRows(await fetchRateLimitResetCredits());
+        } catch (error) {
+          section.明细错误 = errorMessage(error);
+        }
+      }
+      return section;
+    }
+    function summarizeRows(rangeName, rows, startDate, endExclusiveDate) {
+      const credits = rows.reduce((sum, row) => sum + toNumber(row.Credits), 0);
+      return {
+        范围: rangeName,
+        日期桶口径: config.DATE_BUCKET_MODE === "utc" ? "UTC日期桶" : "本地日期桶",
+        API_start_date: startDate,
+        API_end_date_排他: endExclusiveDate,
+        返回日期桶数: rows.length,
+        首个返回日期桶: rows[0]?.日期桶 ?? "",
+        最后返回日期桶: lastItem(rows)?.日期桶 ?? "",
+        累计Credits: roundNumber(credits, 6),
+        累计折算USD: roundNumber(credits * config.USD_PER_CREDIT, 2),
+        累计Token: rows.reduce((sum, row) => sum + toNumber(row.Token总量), 0),
+        累计线程数: rows.reduce((sum, row) => sum + toNumber(row.线程数), 0),
+        累计轮数: rows.reduce((sum, row) => sum + toNumber(row.轮数), 0)
+      };
+    }
+    function publicWindowRow(windowRow) {
+      const { _windowStartMs, _resetAtMs, _serverNowMs, ...visible } = windowRow;
+      return visible;
+    }
+    function buildWeeklyEstimate({ mainSecondary, sinceResetRows, sinceResetSummary, sinceResetStartDate }) {
+      const usedPercent = toNumber(mainSecondary.已用百分比);
+      const usedRatio = usedPercent / 100;
+      const includedCredits = toNumber(sinceResetSummary.累计Credits);
+      const resetDayRow = sinceResetRows.find((row) => row.日期桶 === sinceResetStartDate);
+      const resetDayCredits = toNumber(resetDayRow?.Credits);
+      const excludedCredits = Math.max(0, includedCredits - resetDayCredits);
+      if (usedRatio <= 0) {
+        return {
+          依据: "主限制 - 7天窗口",
+          已用百分比: usedPercent,
+          说明: "已用比例为 0，无法反推总额度。"
+        };
+      }
+      const totalWithResetDay = includedCredits / usedRatio;
+      const totalWithoutResetDay = excludedCredits / usedRatio;
+      const remainingWithResetDay = Math.max(0, totalWithResetDay - includedCredits);
+      const remainingWithoutResetDay = Math.max(0, totalWithoutResetDay - excludedCredits);
+      return {
+        依据: "主限制 - 7天窗口",
+        已用百分比: usedPercent,
+        已用比例小数: roundNumber(usedRatio, 4),
+        剩余比例小数: roundNumber(1 - usedRatio, 4),
+        说明: "used_percent 表示已经用掉的比例；例如 45 = 已用 45%，不是剩余 45%。",
+        日期桶口径: config.DATE_BUCKET_MODE === "utc" ? "UTC日期桶" : "本地日期桶",
+        包含重置日_已用Credits: roundNumber(includedCredits, 6),
+        包含重置日_已用折算USD: roundNumber(includedCredits * config.USD_PER_CREDIT, 2),
+        重置日整天Credits: roundNumber(resetDayCredits, 6),
+        重置日整天折算USD: roundNumber(resetDayCredits * config.USD_PER_CREDIT, 2),
+        排除重置日_已用Credits: roundNumber(excludedCredits, 6),
+        排除重置日_已用折算USD: roundNumber(excludedCredits * config.USD_PER_CREDIT, 2),
+        反推周总Credits_包含重置日: roundNumber(totalWithResetDay, 2),
+        反推周总USD_包含重置日: roundNumber(totalWithResetDay * config.USD_PER_CREDIT, 2),
+        反推周总Credits_排除重置日: roundNumber(totalWithoutResetDay, 2),
+        反推周总USD_排除重置日: roundNumber(totalWithoutResetDay * config.USD_PER_CREDIT, 2),
+        剩余Credits_包含重置日口径: roundNumber(remainingWithResetDay, 2),
+        剩余USD_包含重置日口径: roundNumber(remainingWithResetDay * config.USD_PER_CREDIT, 2),
+        剩余Credits_排除重置日口径: roundNumber(remainingWithoutResetDay, 2),
+        剩余USD_排除重置日口径: roundNumber(remainingWithoutResetDay * config.USD_PER_CREDIT, 2),
+        误差说明: "daily analytics 只能按天聚合，不能切到具体小时分钟；实际值通常介于“排除重置日”和“包含重置日”之间。used_percent 也是整数，存在四舍五入或截断误差。"
+      };
+    }
+    async function run() {
+      const usage = await fetchUsage();
+      const windows = collectWindows(usage);
+      const sevenDayEntry = findMainSevenDayEntry(usage);
+      if (!sevenDayEntry) {
+        throw new Error("rate_limit 的 primary/secondary_window 均不含 7 天级别窗口，无法反推主限制 - 7天窗口。");
+      }
+      const mainSecondary = parseWindow(
+        windowIdentity({
+          key: MAIN_SEVEN_DAY_WINDOW_KEY,
+          label: "主限制 - 7天窗口",
+          backendField: sevenDayEntry.field
+        }),
+        sevenDayEntry.row
+      );
+      const apiNowMs = mainSecondary._serverNowMs || now();
+      const apiTodayDate = ymdForApi(apiNowMs);
+      const endExclusiveDate = ymdForApi(addDaysForApi(apiNowMs, 1));
+      const sinceResetStartDate = ymdForApi(mainSecondary._windowStartMs);
+      const monthStartDate = firstDayOfMonthForApi(apiNowMs);
+      const rollingStartDate = ymdForApi(addDaysForApi(apiNowMs, -(config.ROLLING_DAYS - 1)));
+      const [sinceResetResult, monthToDateResult, rollingResult, rollingModelsResult, resetCreditsResult] = await Promise.allSettled([
+        collectDailyUsage(sinceResetStartDate, endExclusiveDate),
+        collectDailyUsage(monthStartDate, endExclusiveDate),
+        collectDailyUsage(rollingStartDate, endExclusiveDate),
+        collectModelSummaries(rollingStartDate, endExclusiveDate),
+        collectResetCredits(usage)
+      ]);
+      const settledValue = (result) => {
+        if (result.status === "rejected") throw result.reason;
+        return result.value;
+      };
+      const sinceReset = settledValue(sinceResetResult);
+      const monthToDate = settledValue(monthToDateResult);
+      const rolling = settledValue(rollingResult);
+      const summarizeRollingModels = settledValue(rollingModelsResult);
+      const resetCredits = settledValue(resetCreditsResult);
+      const sinceResetSummary = summarizeRows(
+        `上次重置至今近似 ${sinceResetStartDate} ~ ${apiTodayDate}`,
+        sinceReset.rows,
+        sinceResetStartDate,
+        endExclusiveDate
+      );
+      const weeklyEstimate = buildWeeklyEstimate({
+        mainSecondary,
+        sinceResetRows: sinceReset.rows,
+        sinceResetSummary,
+        sinceResetStartDate
+      });
+      const monthToDateSummary = summarizeRows(
+        `本月初至今 ${monthStartDate} ~ ${apiTodayDate}`,
+        monthToDate.rows,
+        monthStartDate,
+        endExclusiveDate
+      );
+      const rollingSummary = summarizeRows(
+        `近${config.ROLLING_DAYS}天 ${rollingStartDate} ~ ${apiTodayDate}`,
+        rolling.rows,
+        rollingStartDate,
+        endExclusiveDate
+      );
+      const rollingModels = summarizeRollingModels(rolling.rows.reduce((sum, row) => sum + toNumber(row.Credits), 0));
+      return buildQuotaSnapshotResult({
+        config,
+        resetCredits,
+        diagnostics: {
+          浏览器本地时区: getBrowserTimeZone(),
+          浏览器UTC偏移: utcOffsetLabel(apiNowMs),
+          后端当前_UTC: fmtUTC(apiNowMs),
+          后端当前_本地: formatLocalTime(apiNowMs),
+          七天窗口开始_UTC: fmtUTC(mainSecondary._windowStartMs),
+          七天窗口开始_本地: formatLocalTime(mainSecondary._windowStartMs),
+          下次重置_UTC: fmtUTC(mainSecondary._resetAtMs),
+          下次重置_本地: formatLocalTime(mainSecondary._resetAtMs),
+          API_start_date_上次重置至今: sinceResetStartDate,
+          API_start_date_本月初至今: monthStartDate,
+          [`API_start_date_近${config.ROLLING_DAYS}天`]: rollingStartDate,
+          API_end_date_排他: endExclusiveDate
+        },
+        windows: windows.map(publicWindowRow),
+        periods: {
+          sinceReset: {
+            summary: sinceResetSummary,
+            weeklyEstimate,
+            rows: sinceReset.rows,
+            clients: sinceReset.clients
+          },
+          monthToDate: {
+            summary: monthToDateSummary,
+            rows: monthToDate.rows,
+            clients: monthToDate.clients
+          },
+          rolling: {
+            summary: rollingSummary,
+            rows: rolling.rows,
+            clients: rolling.clients,
+            modelSummaries: rollingModels.modelSummaries,
+            modelSummaryError: rollingModels.modelSummaryError
+          }
+        }
+      });
+    }
+    return { run };
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-runtime.lib.ts
+  function createDefaultQuotaRuntimeConfig(overrides = {}) {
+    return {
+      DEBUG: false,
+      DATE_BUCKET_MODE: "utc",
+      USD_PER_CREDIT: 40 / 1e3,
+      ROLLING_DAYS: 30,
+      MANUAL_ACCESS_TOKEN: "",
+      USAGE_PATH: "/backend-api/wham/usage",
+      DAILY_USAGE_PATH: "/backend-api/wham/analytics/daily-workspace-usage-counts",
+      DAILY_TOKEN_BREAKDOWN_PATH: "/backend-api/wham/usage/daily-token-usage-breakdown",
+      RESET_CREDITS_PATH: "/backend-api/wham/rate-limit-reset-credits",
+      ...overrides
+    };
+  }
+  function stripBearer(value) {
+    return String(value || "").replace(/^Bearer\s+/i, "").trim();
+  }
+  function looksLikeJwt(value) {
+    return typeof value === "string" && value.length > 100 && value.split(".").length >= 3;
+  }
+  function findAccessToken(input, depth = 0) {
+    if (!input || typeof input !== "object" || depth > 8) return "";
+    for (const [key, value] of Object.entries(input)) {
+      if (typeof value === "string" && /access/i.test(key) && looksLikeJwt(value)) {
+        return value;
+      }
+      if (value && typeof value === "object") {
+        const found = findAccessToken(value, depth + 1);
+        if (found) return found;
+      }
+    }
+    return "";
+  }
+  function createUnauthorizedError(path) {
+    return new Error(
+      [
+        `HTTP 401 Unauthorized: ${path}`,
+        "",
+        "没有拿到有效 Authorization。",
+        "处理方式：",
+        "1. 先确认你已经登录 chatgpt.com，并在同一个页面运行脚本。",
+        "2. 刷新 Codex Usage / Analytics 页面后重试。",
+        "3. 仍失败时，可在 Network 面板找到成功的 /backend-api/wham/usage 请求，",
+        "   复制 Authorization: Bearer 后面的 token，只在自己电脑临时填到 CONFIG.MANUAL_ACCESS_TOKEN。",
+        "",
+        "不要把 token、Cookie、填过 token 的脚本或截图发给任何人。"
+      ].join("\n")
+    );
+  }
+  function createQuotaRuntime({
+    config = createDefaultQuotaRuntimeConfig(),
+    coreLib,
+    fetchImpl = globalThis.fetch?.bind(globalThis),
+    location: location2 = globalThis.location,
+    now = () => Date.now(),
+    formatLocalTime = (ms) => new Date(ms).toLocaleString(),
+    getBrowserTimeZone = () => globalThis.Intl?.DateTimeFormat?.().resolvedOptions().timeZone || "未知"
+  } = {}) {
+    if (!coreLib?.createQuotaCalculator) {
+      throw new Error("CodexQuotaCompassCoreLib calculator is unavailable.");
+    }
+    if (typeof fetchImpl !== "function") {
+      throw new Error("Codex quota runtime requires fetchImpl.");
+    }
+    async function getAccessToken() {
+      const manual = stripBearer(config.MANUAL_ACCESS_TOKEN);
+      if (manual) return manual;
+      try {
+        const response = await fetchImpl("/api/auth/session", {
+          credentials: "include",
+          headers: { accept: "application/json" }
+        });
+        if (!response.ok) return "";
+        return findAccessToken(await response.json());
+      } catch {
+        return "";
+      }
+    }
+    async function run() {
+      if (location2?.hostname !== "chatgpt.com") {
+        throw new Error("请在 chatgpt.com 页面运行，例如 Codex Usage / Analytics 页面。");
+      }
+      const accessToken = await getAccessToken();
+      const headers = { accept: "application/json" };
+      if (accessToken) {
+        headers.authorization = `Bearer ${accessToken}`;
+      }
+      async function apiGet(path) {
+        const response = await fetchImpl(path, {
+          method: "GET",
+          credentials: "include",
+          headers
+        });
+        if (!response.ok) {
+          const text = await response.text().catch(() => "");
+          if (response.status === 401) {
+            throw createUnauthorizedError(path);
+          }
+          throw new Error(`HTTP ${response.status} ${response.statusText}: ${path}
+${text.slice(0, 800)}`);
+        }
+        return response.json();
+      }
+      function dailyRangeQuery(startDate, endExclusiveDate) {
+        return new URLSearchParams({
+          start_date: startDate,
+          end_date: endExclusiveDate,
+          group_by: "day"
+        });
+      }
+      return coreLib.createQuotaCalculator({
+        config,
+        fetchUsage: () => apiGet(config.USAGE_PATH),
+        fetchDailyUsage: (startDate, endExclusiveDate) => apiGet(`${config.DAILY_USAGE_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`),
+        fetchDailyTokenBreakdown: (startDate, endExclusiveDate) => apiGet(`${config.DAILY_TOKEN_BREAKDOWN_PATH}?${dailyRangeQuery(startDate, endExclusiveDate)}`),
+        fetchRateLimitResetCredits: () => apiGet(config.RESET_CREDITS_PATH),
+        now,
+        formatLocalTime,
+        getBrowserTimeZone
+      }).run();
+    }
+    return { run };
+  }
+
+  // src/userscripts/shared/shared-gm.lib.ts
+  function pickFunction(override, legacy) {
+    if (typeof override === "function") return override;
+    if (typeof legacy === "function") return legacy;
+    return null;
+  }
+  function bindModern(gm, ...names) {
+    for (const name of names) {
+      if (typeof gm?.[name] === "function") return gm[name].bind(gm);
+    }
+    return null;
+  }
+  function legacyGlobals() {
+    return {
+      getValue: typeof GM_getValue === "function" ? GM_getValue : null,
+      setValue: typeof GM_setValue === "function" ? GM_setValue : null,
+      addValueChangeListener: typeof GM_addValueChangeListener === "function" ? GM_addValueChangeListener : null,
+      removeValueChangeListener: typeof GM_removeValueChangeListener === "function" ? GM_removeValueChangeListener : null,
+      registerMenuCommand: typeof GM_registerMenuCommand === "function" ? GM_registerMenuCommand : null,
+      xmlHttpRequest: typeof GM_xmlhttpRequest === "function" ? GM_xmlhttpRequest : null,
+      download: typeof GM_download === "function" ? GM_download : null
+    };
+  }
+  function modernGlobal() {
+    return typeof GM !== "undefined" ? GM : null;
+  }
+  function resolveGmApi(overrides = {}) {
+    const legacy = legacyGlobals();
+    const gm = overrides.gm || modernGlobal();
+    const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
+    let valueChange = null;
+    if (legacyAdd) {
+      valueChange = {
+        add: legacyAdd,
+        remove: pickFunction(overrides.gmRemoveValueChangeListener, legacy.removeValueChangeListener)
+      };
+    } else if (typeof gm?.addValueChangeListener === "function") {
+      valueChange = {
+        add: gm.addValueChangeListener.bind(gm),
+        remove: bindModern(gm, "removeValueChangeListener")
+      };
+    }
+    return {
+      getValue: pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue"),
+      setValue: pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue"),
+      valueChange,
+      registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
+      xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),
+      // Legacy only: GM.download does not share GM_download's callback contract.
+      download: pickFunction(overrides.gmDownload, legacy.download)
+    };
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-storage.lib.ts
+  var DEFAULT_ARCHIVE_KEY = "codexQuotaCompassSnapshotArchive";
+  var DEFAULT_ARCHIVE_FALLBACK_KEY = "codexQuotaCompassSnapshotArchiveFallback";
+  var STORAGE_BACKENDS = {
+    pending: { id: "pending", label: "pending" },
+    gm: { id: "gm", label: "GM storage" },
+    localStorage: { id: "localStorage", label: "localStorage" }
+  };
+  function createSnapshotArchiveStoragePort(options = {}) {
+    const archiveKey = options.archiveKey || DEFAULT_ARCHIVE_KEY;
+    const fallbackKey = options.fallbackKey || DEFAULT_ARCHIVE_FALLBACK_KEY;
+    const scriptName = options.scriptName || "Codex Quota Compass";
+    const logger = options.logger || globalThis.console;
+    const localStorageObject = options.localStorage || globalThis.localStorage;
+    const mergeArchives = options.mergeArchives ?? null;
+    const normalizeArchive = options.normalizeArchive ?? ((archive) => archive);
+    let backendInfo = STORAGE_BACKENDS.pending;
+    let mirrorDegraded = false;
+    function gmBackendInfo() {
+      return mirrorDegraded ? {
+        ...STORAGE_BACKENDS.gm,
+        label: "GM storage (mirror unavailable)",
+        degraded: true,
+        mirrorError: "Snapshot Archive mirror write failed."
+      } : STORAGE_BACKENDS.gm;
+    }
+    async function readFromGmStorage() {
+      const { getValue } = resolveGmApi(options);
+      if (getValue) {
+        return await getValue(archiveKey, null);
+      }
+      throw new Error("GM storage is unavailable.");
+    }
+    async function writeToGmStorage(nextArchive) {
+      const { setValue } = resolveGmApi(options);
+      if (setValue) {
+        await setValue(archiveKey, nextArchive);
+        return nextArchive;
+      }
+      throw new Error("GM storage is unavailable.");
+    }
+    function readFromLocalStorage() {
+      if (!localStorageObject?.getItem) {
+        throw new Error("localStorage is unavailable.");
+      }
+      return JSON.parse(localStorageObject.getItem(fallbackKey) || "null");
+    }
+    function writeToLocalStorage(nextArchive) {
+      if (!localStorageObject?.setItem) {
+        throw new Error("localStorage is unavailable.");
+      }
+      localStorageObject.setItem(fallbackKey, JSON.stringify(nextArchive));
+      return nextArchive;
+    }
+    function mergeStorageArchives(primaryArchive, fallbackArchive) {
+      const normalizedPrimary = normalizeArchive(primaryArchive);
+      const normalizedFallback = normalizeArchive(fallbackArchive);
+      if (!mergeArchives) {
+        return { archive: normalizedPrimary, changed: false };
+      }
+      const merged = mergeArchives(normalizedPrimary, normalizedFallback);
+      return {
+        archive: merged?.archive || normalizedPrimary,
+        changed: merged?.changed ?? Number(merged?.report?.added) > 0
+      };
+    }
+    function getGmValueChangeAdapter() {
+      return resolveGmApi(options).valueChange;
+    }
+    return {
+      async read() {
+        let gmArchive = null;
+        let gmAvailable = false;
+        try {
+          gmArchive = await readFromGmStorage();
+          gmAvailable = true;
+          backendInfo = gmBackendInfo();
+        } catch (error) {
+          logger?.warn?.(`${scriptName}: failed to read userscript archive storage.`, error);
+        }
+        let fallbackArchive = null;
+        let fallbackAvailable = false;
+        try {
+          fallbackArchive = readFromLocalStorage();
+          fallbackAvailable = true;
+        } catch (error) {
+          logger?.warn?.(`${scriptName}: failed to read fallback archive storage.`, error);
+        }
+        if (gmAvailable) {
+          const merged = mergeStorageArchives(gmArchive, fallbackArchive);
+          if (merged.changed) {
+            try {
+              await writeToGmStorage(merged.archive);
+            } catch (error) {
+              logger?.warn?.(`${scriptName}: failed to migrate fallback archive into userscript storage.`, error);
+            }
+          }
+          backendInfo = gmBackendInfo();
+          return merged.archive;
+        }
+        if (!fallbackAvailable) throw new Error("Both Snapshot Archive storage reads failed.");
+        backendInfo = STORAGE_BACKENDS.localStorage;
+        return fallbackArchive;
+      },
+      async write(nextArchive) {
+        try {
+          await writeToGmStorage(nextArchive);
+          try {
+            writeToLocalStorage(nextArchive);
+            mirrorDegraded = false;
+          } catch (error) {
+            mirrorDegraded = true;
+            logger?.warn?.(`${scriptName}: failed to mirror userscript archive storage to fallback storage.`, error);
+          }
+          backendInfo = gmBackendInfo();
+          return nextArchive;
+        } catch (error) {
+          logger?.warn?.(`${scriptName}: failed to write userscript archive storage.`, error);
+        }
+        writeToLocalStorage(nextArchive);
+        backendInfo = STORAGE_BACKENDS.localStorage;
+        return nextArchive;
+      },
+      getBackendInfo() {
+        return backendInfo;
+      },
+      subscribeToChanges(listener) {
+        if (typeof listener !== "function") return () => {
+        };
+        const adapter = getGmValueChangeAdapter();
+        if (!adapter) return () => {
+        };
+        const listenerId = adapter.add(archiveKey, (key, oldValue, newValue, remote) => {
+          listener({
+            key,
+            oldValue,
+            newValue,
+            remote: Boolean(remote),
+            backendInfo: STORAGE_BACKENDS.gm
+          });
+        });
+        return () => {
+          if (adapter.remove && listenerId !== void 0 && listenerId !== null) {
+            adapter.remove(listenerId);
+          }
+        };
+      }
+    };
+  }
+
+  // src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts
+  var import_fast_json_stable_stringify = __toESM(require_fast_json_stable_stringify(), 1);
+
+  // node_modules/yocto-queue/index.js
+  var Node2 = class {
+    value;
+    next;
+    constructor(value) {
+      this.value = value;
+    }
+  };
+  var Queue = class {
+    #head;
+    #tail;
+    #size;
+    constructor() {
+      this.clear();
+    }
+    enqueue(value) {
+      const node = new Node2(value);
+      if (this.#head) {
+        this.#tail.next = node;
+        this.#tail = node;
+      } else {
+        this.#head = node;
+        this.#tail = node;
+      }
+      this.#size++;
+    }
+    dequeue() {
+      const current = this.#head;
+      if (!current) {
+        return;
+      }
+      this.#head = this.#head.next;
+      this.#size--;
+      if (!this.#head) {
+        this.#tail = void 0;
+      }
+      return current.value;
+    }
+    peek() {
+      if (!this.#head) {
+        return;
+      }
+      return this.#head.value;
+    }
+    clear() {
+      this.#head = void 0;
+      this.#tail = void 0;
+      this.#size = 0;
+    }
+    get size() {
+      return this.#size;
+    }
+    *[Symbol.iterator]() {
+      let current = this.#head;
+      while (current) {
+        yield current.value;
+        current = current.next;
+      }
+    }
+    *drain() {
+      while (this.#head) {
+        yield this.dequeue();
+      }
+    }
+  };
+
+  // node_modules/p-limit/index.js
+  function pLimit(concurrency) {
+    let rejectOnClear = false;
+    if (typeof concurrency === "object") {
+      ({ concurrency, rejectOnClear = false } = concurrency);
+    }
+    validateConcurrency(concurrency);
+    if (typeof rejectOnClear !== "boolean") {
+      throw new TypeError("Expected `rejectOnClear` to be a boolean");
+    }
+    const queue = new Queue();
+    let activeCount = 0;
+    const resumeNext = () => {
+      if (activeCount < concurrency && queue.size > 0) {
+        activeCount++;
+        queue.dequeue().run();
+      }
+    };
+    const next = () => {
+      activeCount--;
+      resumeNext();
+    };
+    const run = async (function_, resolve, arguments_) => {
+      const result = (async () => function_(...arguments_))();
+      resolve(result);
+      try {
+        await result;
+      } catch {
+      }
+      next();
+    };
+    const enqueue = (function_, resolve, reject, arguments_) => {
+      const queueItem = { reject };
+      new Promise((internalResolve) => {
+        queueItem.run = internalResolve;
+        queue.enqueue(queueItem);
+      }).then(run.bind(void 0, function_, resolve, arguments_));
+      if (activeCount < concurrency) {
+        resumeNext();
+      }
+    };
+    const generator = (function_, ...arguments_) => new Promise((resolve, reject) => {
+      enqueue(function_, resolve, reject, arguments_);
+    });
+    Object.defineProperties(generator, {
+      activeCount: {
+        get: () => activeCount
+      },
+      pendingCount: {
+        get: () => queue.size
+      },
+      clearQueue: {
+        value() {
+          if (!rejectOnClear) {
+            queue.clear();
+            return;
+          }
+          const abortError = AbortSignal.abort().reason;
+          while (queue.size > 0) {
+            queue.dequeue().reject(abortError);
+          }
+        }
+      },
+      concurrency: {
+        get: () => concurrency,
+        set(newConcurrency) {
+          validateConcurrency(newConcurrency);
+          concurrency = newConcurrency;
+          queueMicrotask(() => {
+            while (activeCount < concurrency && queue.size > 0) {
+              resumeNext();
+            }
+          });
+        }
+      },
+      map: {
+        async value(iterable, function_) {
+          const promises = [];
+          try {
+            Array.from(iterable, (value, index) => {
+              const promise = generator(function_, value, index);
+              promises.push(promise);
+              return promise;
+            });
+          } catch (error) {
+            for (const promise of promises) {
+              promise.catch(() => {
+              });
+            }
+            throw error;
+          }
+          return Promise.all(promises);
+        }
+      }
+    });
+    return generator;
+  }
+  function validateConcurrency(concurrency) {
+    if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
+      throw new TypeError("Expected `concurrency` to be a number from 1 and up");
+    }
+  }
+
   // src/userscripts/codex-quota-compass/codex-quota-compass-contract.lib.ts
   var MAIN_SEVEN_DAY_WINDOW_KEY2 = "main.sevenDayWindow";
   var SINCE_RESET_KEY = "主7天窗口_上次重置至今";
@@ -2341,16 +2363,6 @@ ${text.slice(0, 800)}`);
   var DAY_MS = 24 * 60 * 60 * 1e3;
   var SETTLE_BUFFER_MS = 15 * 60 * 1e3;
   var DEFAULT_USD_PER_CREDIT = 40 / 1e3;
-  function isPlainObject(value) {
-    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-  }
-  function toNumber2(value) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  function round2(value) {
-    return Number(Number(value).toFixed(2));
-  }
   function isDateKey(value) {
     return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
   }
@@ -2367,30 +2379,30 @@ ${text.slice(0, 800)}`);
     return nowMs >= end + buffer;
   }
   function makeRecord(date2, credits, usdPerCredit, settled, settledAt) {
-    const creditsNum = toNumber2(credits);
+    const creditsNum = toNumber(credits);
     return {
       date: date2,
       credits: creditsNum,
-      usd: round2(creditsNum * usdPerCredit),
+      usd: roundNumber(creditsNum * usdPerCredit),
       settled: Boolean(settled),
       settledAt: settled ? settledAt || null : null
     };
   }
   function upsertLedgerRow(ledger, row, nowMs, options = {}) {
-    if (!isPlainObject(ledger) || !isPlainObject(row)) return ledger;
+    if (!isRecord(ledger) || !isRecord(row)) return ledger;
     const date2 = isDateKey(row.date) ? row.date : null;
     if (!date2) return ledger;
     const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit : DEFAULT_USD_PER_CREDIT;
     const buffer = Number.isFinite(options.buffer) ? options.buffer : SETTLE_BUFFER_MS;
     const nowIso = options.nowIso || (Number.isFinite(nowMs) ? new Date(nowMs).toISOString() : null);
-    const credits = toNumber2(row.credits);
+    const credits = toNumber(row.credits);
     const settledNow = isSettled(date2, nowMs, buffer);
     const existing = ledger[date2];
     if (!existing) {
       ledger[date2] = makeRecord(date2, credits, usdPerCredit, settledNow, nowIso);
       return ledger;
     }
-    const nextCredits = Math.max(toNumber2(existing.credits), credits);
+    const nextCredits = Math.max(toNumber(existing.credits), credits);
     const settled = existing.settled || settledNow;
     const settledAt = existing.settled ? existing.settledAt : settledNow ? nowIso : null;
     ledger[date2] = makeRecord(date2, nextCredits, usdPerCredit, settled, settledAt);
@@ -2404,7 +2416,7 @@ ${text.slice(0, 800)}`);
     return ledger;
   }
   function extractDailyRowsFromSnapshot(snapshot) {
-    const details = isPlainObject(snapshot?.periodDetails) ? snapshot.periodDetails : {};
+    const details = isRecord(snapshot?.periodDetails) ? snapshot.periodDetails : {};
     const periods = ["rolling", "monthToDate", "sinceReset"];
     const rows = [];
     for (const key of periods) {
@@ -2413,7 +2425,7 @@ ${text.slice(0, 800)}`);
       for (const bucket of buckets) {
         const date2 = bucket?.["日期桶"];
         if (!isDateKey(date2)) continue;
-        rows.push({ date: date2, credits: toNumber2(bucket?.Credits ?? bucket?.credits) });
+        rows.push({ date: date2, credits: toNumber(bucket?.Credits ?? bucket?.credits) });
       }
     }
     return rows;
@@ -2428,15 +2440,15 @@ ${text.slice(0, 800)}`);
   }
   function normalizeLedger(rawLedger, options = {}) {
     const ledger = {};
-    if (!isPlainObject(rawLedger)) return ledger;
+    if (!isRecord(rawLedger)) return ledger;
     const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit : DEFAULT_USD_PER_CREDIT;
     for (const [date2, record2] of Object.entries(rawLedger)) {
-      if (!isDateKey(date2) || !isPlainObject(record2)) continue;
+      if (!isDateKey(date2) || !isRecord(record2)) continue;
       const settled = Boolean(record2.settled);
       ledger[date2] = {
         date: date2,
-        credits: toNumber2(record2.credits),
-        usd: Number.isFinite(Number(record2.usd)) ? round2(Number(record2.usd)) : round2(toNumber2(record2.credits) * usdPerCredit),
+        credits: toNumber(record2.credits),
+        usd: Number.isFinite(Number(record2.usd)) ? roundNumber(Number(record2.usd)) : roundNumber(toNumber(record2.credits) * usdPerCredit),
         settled,
         settledAt: settled ? typeof record2.settledAt === "string" ? record2.settledAt : null : null
       };
@@ -2464,14 +2476,27 @@ ${text.slice(0, 800)}`);
     }
     return out;
   }
-  function sortedRecordsDesc(ledger) {
-    return Object.values(normalizeLedger(ledger)).sort((a4, b) => b.date.localeCompare(a4.date));
+  var PreparedLedger = class {
+    records;
+    desc;
+    constructor(ledger) {
+      this.records = Object.values(normalizeLedger(ledger));
+      this.desc = this.records.slice().sort((a4, b) => b.date.localeCompare(a4.date));
+    }
+  };
+  function prepareLedger(ledger) {
+    return ledger instanceof PreparedLedger ? ledger : new PreparedLedger(ledger);
+  }
+  function inDateRange(record2, from, to) {
+    if (from && record2.date < from) return false;
+    if (to && record2.date > to) return false;
+    return true;
   }
   function sumRecords(records) {
     return records.reduce(
       (acc, record2) => {
-        acc.totalCredits += toNumber2(record2.credits);
-        acc.totalUsd += toNumber2(record2.usd);
+        acc.totalCredits += toNumber(record2.credits);
+        acc.totalUsd += toNumber(record2.usd);
         return acc;
       },
       { totalCredits: 0, totalUsd: 0 }
@@ -2502,14 +2527,10 @@ ${text.slice(0, 800)}`);
     return { month, from: `${month}-01`, to };
   }
   function sumRangeRaw(ledger, { from, to } = {}) {
-    const records = Object.values(normalizeLedger(ledger)).filter((record2) => {
-      if (from && record2.date < from) return false;
-      if (to && record2.date > to) return false;
-      return true;
-    });
-    return sumRecords(records);
+    return sumRecords(prepareLedger(ledger).records.filter((record2) => inDateRange(record2, from, to)));
   }
   function aggregateWeekly(ledger, { nowMs, count = 8, buffer = SETTLE_BUFFER_MS } = {}) {
+    const prepared = prepareLedger(ledger);
     const today = currentUtcDate(nowMs);
     let current = null;
     const blocks = [];
@@ -2517,16 +2538,29 @@ ${text.slice(0, 800)}`);
       const to = shiftDateKey(today, -7 * i3);
       const from = shiftDateKey(today, -7 * i3 - 6);
       if (i3 === 0) {
-        const raw = sumRangeRaw(ledger, { from, to });
-        current = { from, to, totalCredits: round2(raw.totalCredits), totalUsd: round2(raw.totalUsd), settled: false };
+        const raw = sumRangeRaw(prepared, { from, to });
+        current = {
+          from,
+          to,
+          totalCredits: roundNumber(raw.totalCredits),
+          totalUsd: roundNumber(raw.totalUsd),
+          settled: false
+        };
       } else {
-        const agg = aggregateRange(ledger, { from, to, nowMs, buffer });
-        blocks.push({ from, to, totalCredits: round2(agg.totalCredits), totalUsd: round2(agg.totalUsd), settled: true });
+        const agg = aggregateRange(prepared, { from, to, nowMs, buffer });
+        blocks.push({
+          from,
+          to,
+          totalCredits: roundNumber(agg.totalCredits),
+          totalUsd: roundNumber(agg.totalUsd),
+          settled: true
+        });
       }
     }
     return { current, blocks };
   }
   function aggregateMonthlyList(ledger, { nowMs, count = 6, buffer = SETTLE_BUFFER_MS } = {}) {
+    const prepared = prepareLedger(ledger);
     const currentMonth = currentUtcDate(nowMs).slice(0, 7);
     let current = null;
     const months = [];
@@ -2534,23 +2568,23 @@ ${text.slice(0, 800)}`);
       const month = shiftMonthKey(currentMonth, -i3);
       const { from, to } = utcMonthRange(month, nowMs);
       if (i3 === 0) {
-        const raw = sumRangeRaw(ledger, { from, to });
+        const raw = sumRangeRaw(prepared, { from, to });
         current = {
           month,
           from,
           to,
-          totalCredits: round2(raw.totalCredits),
-          totalUsd: round2(raw.totalUsd),
+          totalCredits: roundNumber(raw.totalCredits),
+          totalUsd: roundNumber(raw.totalUsd),
           settled: false
         };
       } else {
-        const agg = aggregateMonth(ledger, month, { nowMs, buffer });
+        const agg = aggregateMonth(prepared, month, { nowMs, buffer });
         months.push({
           month,
           from,
           to,
-          totalCredits: round2(agg.totalCredits),
-          totalUsd: round2(agg.totalUsd),
+          totalCredits: roundNumber(agg.totalCredits),
+          totalUsd: roundNumber(agg.totalUsd),
           settled: true
         });
       }
@@ -2561,8 +2595,8 @@ ${text.slice(0, 800)}`);
     const result = aggregateRange(ledger, { nowMs, buffer });
     const days = result.days;
     return {
-      totalCredits: round2(result.totalCredits),
-      totalUsd: round2(result.totalUsd),
+      totalCredits: roundNumber(result.totalCredits),
+      totalUsd: roundNumber(result.totalUsd),
       coverDays: days.length,
       fromDate: days.length ? days[days.length - 1].date : null,
       toDate: days.length ? days[0].date : null,
@@ -2582,11 +2616,7 @@ ${text.slice(0, 800)}`);
     return { settled, inProgress };
   }
   function aggregateRange(ledger, { from, to, nowMs, buffer = SETTLE_BUFFER_MS } = {}) {
-    const inRange = sortedRecordsDesc(ledger).filter((record2) => {
-      if (from && record2.date < from) return false;
-      if (to && record2.date > to) return false;
-      return true;
-    });
+    const inRange = prepareLedger(ledger).desc.filter((record2) => inDateRange(record2, from, to));
     const { settled, inProgress } = splitSettled(inRange, nowMs, buffer);
     return { ...sumRecords(settled), days: settled, inProgress };
   }
@@ -2603,6 +2633,18 @@ ${text.slice(0, 800)}`);
     const range = utcMonthRange(yyyymm, nowMs);
     return aggregateRange(ledger, { from: range.from, to: range.to, nowMs, buffer });
   }
+  function aggregateLedgerViews(rawLedger, options) {
+    const { nowMs, cycleStartDate } = options;
+    const ledger = prepareLedger(rawLedger);
+    return {
+      daily: aggregateDaily(ledger, { nowMs, limit: options.dailyLimit }),
+      cycle: aggregateCycle(ledger, cycleStartDate, { nowMs }),
+      month: aggregateMonth(ledger, options.month, { nowMs }),
+      weekly: aggregateWeekly(ledger, { nowMs, count: options.weekCount }),
+      monthly: aggregateMonthlyList(ledger, { nowMs, count: options.monthCount }),
+      allTime: aggregateAllTime(ledger, { nowMs })
+    };
+  }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-archive.lib.ts
   var ARCHIVE_SCHEMA_VERSION = 2;
@@ -2611,9 +2653,6 @@ ${text.slice(0, 800)}`);
   var SUPPORTED_EXPORT_VERSIONS = /* @__PURE__ */ new Set([1, 2]);
   var MAX_RETAINED_SNAPSHOTS = 5;
   var DEFAULT_USD_PER_CREDIT2 = 40 / 1e3;
-  function isPlainObject2(value) {
-    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-  }
   var JsonValueSchema = lazy(
     () => union([
       pipe(
@@ -2641,14 +2680,10 @@ ${text.slice(0, 800)}`);
   function sortSnapshotsByCaptureTime(snapshots) {
     return snapshots.slice().sort((left, right) => String(left.capturedAt || "").localeCompare(String(right.capturedAt || "")));
   }
-  var coerce = (transform2) => pipe(
-    optional(unknown(), () => void 0),
-    transform(transform2)
-  );
-  var plainObjectValue = coerce((value) => sanitizeValue(isPlainObject2(value) ? value : {}));
+  var plainObjectValue = coerce((value) => sanitizeValue(isRecord(value) ? value : {}));
   var nullableString = fallback(string(), null);
   var SnapshotSchema = pipe(
-    custom(isPlainObject2),
+    custom(isRecord),
     object({
       snapshotId: coerce((value) => typeof value === "string" && value.trim() ? value.trim() : null),
       capturedAt: pipe(
@@ -2688,7 +2723,7 @@ ${text.slice(0, 800)}`);
     };
   }
   function normalizeSnapshotArchive(rawArchive) {
-    const archiveObject = Array.isArray(rawArchive) ? { snapshots: rawArchive } : isPlainObject2(rawArchive) ? rawArchive : {};
+    const archiveObject = Array.isArray(rawArchive) ? { snapshots: rawArchive } : isRecord(rawArchive) ? rawArchive : {};
     const archive = parse(SnapshotArchiveSchema, archiveObject);
     return {
       schemaVersion: ARCHIVE_SCHEMA_VERSION,
@@ -2715,29 +2750,24 @@ ${text.slice(0, 800)}`);
       snapshots: normalized.snapshots.slice(-MAX_RETAINED_SNAPSHOTS)
     };
   }
-  function cycleStartDateFromArchive(archive) {
-    const snapshots = normalizeSnapshotArchive(archive).snapshots;
+  function cycleStartDateFromSnapshots(snapshots) {
     const latest = snapshots[snapshots.length - 1];
     const win = Array.isArray(latest?.windowSnapshot) ? latest.windowSnapshot.find(isMainSevenDayWindow) : null;
     const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(win?.["本轮开始_UTC"] || ""));
     return match ? match[1] : null;
   }
   function buildLedgerCostViews(archive, options = {}) {
-    const migrated = migrateArchive(archive, options.nowMs);
+    return ledgerCostViewsFromMigrated(migrateArchive(archive, options.nowMs), options);
+  }
+  function ledgerCostViewsFromMigrated(migrated, options) {
     const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
-    const cycleStartDate = options.cycleStartDate || cycleStartDateFromArchive(migrated);
-    return {
-      cycleStartDate,
-      daily: aggregateDaily(migrated.ledger, { nowMs, limit: options.dailyLimit }),
-      cycle: aggregateCycle(migrated.ledger, cycleStartDate, { nowMs }),
-      month: aggregateMonth(migrated.ledger, options.month, { nowMs }),
-      weekly: aggregateWeekly(migrated.ledger, { nowMs, count: options.weekCount }),
-      monthly: aggregateMonthlyList(migrated.ledger, { nowMs, count: options.monthCount }),
-      allTime: aggregateAllTime(migrated.ledger, { nowMs })
-    };
+    const cycleStartDate = options.cycleStartDate || cycleStartDateFromSnapshots(migrated.snapshots);
+    return { cycleStartDate, ...aggregateLedgerViews(migrated.ledger, { ...options, nowMs, cycleStartDate }) };
   }
   function summarizeSnapshotArchive(archive) {
-    const normalized = normalizeSnapshotArchive(archive);
+    return summarizeNormalizedArchive(normalizeSnapshotArchive(archive));
+  }
+  function summarizeNormalizedArchive(normalized) {
     const first = normalized.snapshots[0] || null;
     const last = normalized.snapshots[normalized.snapshots.length - 1] || null;
     return {
@@ -2767,7 +2797,7 @@ ${text.slice(0, 800)}`);
     });
   }
   function createQuotaSnapshot({ result, capturedAt, scriptVersion, snapshotId }) {
-    if (!isPlainObject2(result)) {
+    if (!isRecord(result)) {
       throw new Error("Cannot create Quota Snapshot without a result object.");
     }
     return normalizeSnapshot({
@@ -2823,13 +2853,9 @@ ${text.slice(0, 800)}`);
   }
   function contentKey(ledger, snapshots) {
     return (0, import_fast_json_stable_stringify.default)({
-      ledger: isPlainObject2(ledger) ? ledger : {},
+      ledger: isRecord(ledger) ? ledger : {},
       snapshots: Array.isArray(snapshots) ? snapshots : []
     });
-  }
-  function archiveContentKey(archive) {
-    const normalized = normalizeSnapshotArchive(archive);
-    return contentKey(normalized.ledger, normalized.snapshots);
   }
   function exportDocumentContentKey(documentObject) {
     return contentKey(documentObject?.ledger, documentObject?.snapshots);
@@ -2850,7 +2876,8 @@ ${text.slice(0, 800)}`);
       ledger,
       snapshots: merged.archive.snapshots.slice(-MAX_RETAINED_SNAPSHOTS)
     };
-    return { archive, report: merged.report, changed: archiveContentKey(current) !== archiveContentKey(archive) };
+    const changed = contentKey(current.ledger, current.snapshots) !== contentKey(archive.ledger, archive.snapshots);
+    return { archive, report: merged.report, changed };
   }
   function buildSnapshotExportDocument(archive, exportedAt) {
     const migrated = migrateArchive(archive, Date.parse(exportedAt) || Date.now());
@@ -2864,7 +2891,7 @@ ${text.slice(0, 800)}`);
     };
   }
   function previewImportArchiveDocument(currentArchive, documentObject, nowMs = Date.now()) {
-    if (!isPlainObject2(documentObject) || !is(SupportedExportDocumentSchema, documentObject)) {
+    if (!isRecord(documentObject) || !is(SupportedExportDocumentSchema, documentObject)) {
       throw new Error("Unsupported Snapshot Export document.");
     }
     const incomingSnapshots = Array.isArray(documentObject.snapshots) ? documentObject.snapshots : [];
@@ -2878,15 +2905,11 @@ ${text.slice(0, 800)}`);
       changed: merged.changed
     };
   }
-  function toNumber3(value) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
   function sumRows(rows) {
     return rows.reduce(
       (acc, row) => {
-        acc.totalCredits += toNumber3(row?.credits ?? row?.Credits);
-        acc.totalUsd += toNumber3(row?.usd ?? row?.折算USD);
+        acc.totalCredits += toNumber(row?.credits ?? row?.Credits);
+        acc.totalUsd += toNumber(row?.usd ?? row?.折算USD);
         return acc;
       },
       { totalCredits: 0, totalUsd: 0 }
@@ -2906,8 +2929,8 @@ ${text.slice(0, 800)}`);
         rows: [],
         summary: {
           ...extra,
-          totalCredits: toNumber3(period.totalCredits),
-          totalUsd: toNumber3(period.totalUsd),
+          totalCredits: toNumber(period.totalCredits),
+          totalUsd: toNumber(period.totalUsd),
           startDate: period.startDate || "",
           endDateExclusive: period.endExclusiveDate || ""
         }
@@ -2926,8 +2949,8 @@ ${text.slice(0, 800)}`);
         return true;
       }).map((row) => ({
         date: row?.日期桶 || "",
-        credits: toNumber3(row?.Credits),
-        usd: toNumber3(row?.折算USD)
+        credits: toNumber(row?.Credits),
+        usd: toNumber(row?.折算USD)
       }));
       const summary = sumRows(filtered);
       return {
@@ -2953,8 +2976,8 @@ ${text.slice(0, 800)}`);
         snapshotId: snapshot.snapshotId,
         capturedAt: snapshot.capturedAt,
         scriptVersion: snapshot.scriptVersion,
-        monthlyCredits: toNumber3(snapshot.periodSummaries?.monthToDate?.totalCredits),
-        rollingCredits: toNumber3(snapshot.periodSummaries?.rolling?.totalCredits),
+        monthlyCredits: toNumber(snapshot.periodSummaries?.monthToDate?.totalCredits),
+        rollingCredits: toNumber(snapshot.periodSummaries?.rolling?.totalCredits),
         weeklyUsedPercent: snapshot.periodSummaries?.sinceReset?.usedPercent ?? null
       }));
     }
@@ -3051,8 +3074,8 @@ ${text.slice(0, 800)}`);
         const timestamp = nowMs();
         const archive = migrateArchive(await read(), timestamp);
         return {
-          summary: summarizeSnapshotArchive(archive),
-          ledgerCost: buildLedgerCostViews(archive, { ...options, nowMs: timestamp })
+          summary: summarizeNormalizedArchive(archive),
+          ledgerCost: ledgerCostViewsFromMigrated(archive, { ...options, nowMs: timestamp })
         };
       },
       async importArchiveDocument(documentObject) {
@@ -3088,9 +3111,6 @@ ${text.slice(0, 800)}`);
   var GIST_FILENAME = "codex-quota-compass-snapshot-archive.v1.json";
   var SUPPORTED_IMPORT_VERSIONS = /* @__PURE__ */ new Set([1, 2]);
   var UNKNOWN_WRITE_PREFIX = "Remote write outcome unknown. Verify the Gist before retrying. ";
-  function maybePromise2(value) {
-    return value && typeof value.then === "function" ? value : Promise.resolve(value);
-  }
   function describeHttpStatus(status) {
     if (status === 401) {
       return "GitHub rejected the token (HTTP 401). Check the token and its Gists permission.";
@@ -3119,16 +3139,12 @@ ${text.slice(0, 800)}`);
     const trimmed = String(filename || "").trim();
     return trimmed || GIST_FILENAME;
   }
-  var coerce2 = (transform2) => pipe(
-    optional(unknown(), () => void 0),
-    transform(transform2)
-  );
   var RemoteSyncSettingsSchema = object({
-    enabled: coerce2(Boolean),
-    provider: coerce2(() => "github-gist"),
+    enabled: coerce(Boolean),
+    provider: coerce(() => "github-gist"),
     token: fallback(string(), ""),
-    gistId: coerce2(normalizeGistId),
-    filename: coerce2(normalizeFilename),
+    gistId: coerce(normalizeGistId),
+    filename: coerce(normalizeFilename),
     clientId: fallback(
       pipe(
         string(),
@@ -3150,14 +3166,14 @@ ${text.slice(0, 800)}`);
     async function readRaw() {
       const { getValue } = resolveGmApi(options);
       if (getValue) {
-        return maybePromise2(getValue(REMOTE_SYNC_SETTINGS_KEY, null));
+        return await getValue(REMOTE_SYNC_SETTINGS_KEY, null);
       }
       throw new Error("GM storage is required for remote sync settings.");
     }
     async function writeRaw(settings) {
       const { setValue } = resolveGmApi(options);
       if (setValue) {
-        await maybePromise2(setValue(REMOTE_SYNC_SETTINGS_KEY, settings));
+        await setValue(REMOTE_SYNC_SETTINGS_KEY, settings);
         return settings;
       }
       throw new Error("GM storage is required for remote sync settings.");
@@ -3246,11 +3262,8 @@ ${text.slice(0, 800)}`);
   function createJsonRequester(options = {}) {
     return getGmXmlHttpRequest(options) ? createGmJsonRequester(options) : createFetchJsonRequester(options);
   }
-  function createArchiveExportDocument(archive, exportedAt) {
-    return buildSnapshotExportDocument(archive || { snapshots: [] }, exportedAt);
-  }
   function createEmptyExportDocument(exportedAt) {
-    return createArchiveExportDocument({ snapshots: [] }, exportedAt);
+    return buildSnapshotExportDocument({ snapshots: [] }, exportedAt);
   }
   function publicStatus(settings) {
     const gistLabel = settings.gistId ? `GitHub Gist ${settings.gistId}` : "GitHub Gist";
@@ -3311,7 +3324,7 @@ ${text.slice(0, 800)}`);
     return validateArchiveDocument(JSON.parse(content));
   }
   function archiveFilePayload(archive, exportedAt) {
-    return JSON.stringify(createArchiveExportDocument(archive, exportedAt));
+    return JSON.stringify(buildSnapshotExportDocument(archive || { snapshots: [] }, exportedAt));
   }
   function sameArchiveContent(left, right) {
     return exportDocumentContentKey(left) === exportDocumentContentKey(right);
@@ -3330,35 +3343,22 @@ ${text.slice(0, 800)}`);
         headers: gitHubHeaders(token)
       });
     }
-    async function createGist(archive, exportedAt) {
+    async function writeGist(method, url, archive, exportedAt, extra = {}) {
       return requestJson({
-        method: "POST",
-        url: `${GITHUB_API_BASE}/gists`,
+        method,
+        url,
         headers: gitHubHeaders(token, { "Content-Type": "application/json" }),
-        body: {
-          description: GIST_DESCRIPTION,
-          public: false,
-          files: {
-            [filename]: {
-              content: archiveFilePayload(archive, exportedAt)
-            }
-          }
-        }
+        body: { ...extra, files: { [filename]: { content: archiveFilePayload(archive, exportedAt) } } }
       });
     }
-    async function updateGist(gistId, archive, exportedAt) {
-      return requestJson({
-        method: "PATCH",
-        url: `${GITHUB_API_BASE}/gists/${encodeURIComponent(gistId)}`,
-        headers: gitHubHeaders(token, { "Content-Type": "application/json" }),
-        body: {
-          files: {
-            [filename]: {
-              content: archiveFilePayload(archive, exportedAt)
-            }
-          }
-        }
+    function createGist(archive, exportedAt) {
+      return writeGist("POST", `${GITHUB_API_BASE}/gists`, archive, exportedAt, {
+        description: GIST_DESCRIPTION,
+        public: false
       });
+    }
+    function updateGist(gistId, archive, exportedAt) {
+      return writeGist("PATCH", `${GITHUB_API_BASE}/gists/${encodeURIComponent(gistId)}`, archive, exportedAt);
     }
     async function findExistingArchiveGist() {
       for (let page = 1; page <= GIST_MAX_PAGES; page += 1) {
@@ -3390,14 +3390,8 @@ ${text.slice(0, 800)}`);
     function enqueue(operation) {
       return queue(operation);
     }
-    async function getSettings() {
-      return settingsStore.read();
-    }
-    async function saveSettings(nextSettings) {
-      return settingsStore.write(nextSettings);
-    }
     async function configure(patch = {}) {
-      const current = await getSettings();
+      const current = await settingsStore.read();
       const next = {
         ...current,
         ...patch,
@@ -3408,10 +3402,10 @@ ${text.slice(0, 800)}`);
         clientId: current.clientId || createClientId(),
         lastError: ""
       };
-      return publicStatus(await saveSettings(next));
+      return publicStatus(await settingsStore.write(next));
     }
     async function getStatus() {
-      return publicStatus(await getSettings());
+      return publicStatus(await settingsStore.read());
     }
     function isSameSyncTarget(started, latest) {
       return latest.enabled && Boolean(latest.token) && latest.token === started.token && latest.gistId === started.gistId && latest.filename === started.filename;
@@ -3423,16 +3417,16 @@ ${text.slice(0, 800)}`);
       });
     }
     async function assertSyncTargetCurrent(started) {
-      const latest = await getSettings();
+      const latest = await settingsStore.read();
       if (!isSameSyncTarget(started, latest)) throw supersededError(latest);
     }
     async function saveSyncOutcome(started, outcome) {
-      const latest = await getSettings();
+      const latest = await settingsStore.read();
       if (!isSameSyncTarget(started, latest)) return latest;
-      return saveSettings({ ...latest, ...outcome });
+      return settingsStore.write({ ...latest, ...outcome });
     }
     async function markSyncFailure(settings, error) {
-      const rawMessage = error?.message || String(error);
+      const rawMessage = errorMessage(error);
       const message = settings.token ? rawMessage.split(settings.token).join("[redacted]") : rawMessage;
       await saveSyncOutcome(settings, { lastError: message });
       return message;
@@ -3441,7 +3435,7 @@ ${text.slice(0, 800)}`);
       return { status: latest.enabled ? "superseded" : "disabled", settings: publicStatus(latest) };
     }
     async function syncNow() {
-      const settings = await getSettings();
+      const settings = await settingsStore.read();
       if (!settings.enabled) {
         return { status: "disabled", settings: publicStatus(settings) };
       }
@@ -3526,7 +3520,7 @@ ${text.slice(0, 800)}`);
       } catch (error) {
         if (error?.superseded) return supersededResult(error.latest);
         const unknown2 = remoteWritePending && !error?.status;
-        const failure = unknown2 ? new Error(UNKNOWN_WRITE_PREFIX + (error?.message || String(error))) : error;
+        const failure = unknown2 ? new Error(UNKNOWN_WRITE_PREFIX + errorMessage(error)) : error;
         const message = await markSyncFailure(settings, failure).catch(
           () => "GitHub Gist sync failed; status could not be saved."
         );
@@ -3539,7 +3533,7 @@ ${text.slice(0, 800)}`);
     }
     return {
       configure: (patch) => enqueue(() => configure(patch)),
-      getSettings: () => enqueue(getSettings),
+      getSettings: () => enqueue(() => settingsStore.read()),
       getStatus: () => enqueue(getStatus),
       syncNow: () => enqueue(syncNow)
     };
@@ -3588,7 +3582,6 @@ ${text.slice(0, 800)}`);
     const state = {
       lifecycle: "idle",
       result: null,
-      calculationError: null,
       archiveSummary: null,
       ledgerCost: null,
       importReport: null,
@@ -3605,9 +3598,6 @@ ${text.slice(0, 800)}`);
         onChange(getState());
       } catch {
       }
-    }
-    function errorMessage(error) {
-      return error?.message || String(error);
     }
     function clearTimer() {
       if (timer !== null) clock.clearTimeout(timer);
@@ -3710,7 +3700,7 @@ ${text.slice(0, 800)}`);
       if (running) return running;
       if (!runGuard.acquire()) return Promise.resolve({ status: "skipped", reason: "already-running" });
       state.operations.run = true;
-      state.calculationError = state.errors.calculation = null;
+      state.errors.calculation = null;
       state.errors.persistence = null;
       notify();
       running = (async () => {
@@ -3720,8 +3710,8 @@ ${text.slice(0, 800)}`);
           state.result = result;
           state.importReport = null;
         } catch (error) {
-          state.calculationError = state.errors.calculation = errorMessage(error);
-          return { status: "error", error: state.calculationError, completed: [] };
+          state.errors.calculation = errorMessage(error);
+          return { status: "error", error: state.errors.calculation, completed: [] };
         }
         try {
           await archiveStore.saveSnapshot(result);
@@ -3829,13 +3819,11 @@ ${text.slice(0, 800)}`);
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-view-model.lib.ts
   function normalizePanelSyncStatus(syncStatus, storageBackend) {
-    const source = syncStatus || storageBackend || { id: "pending", label: "pending" };
-    const backendId = source.backendId || source.id || "pending";
-    const backendLabel = source.backendLabel || source.label || backendId;
+    const source = syncStatus || (storageBackend ? { backendId: storageBackend.id, backendLabel: storageBackend.label } : {});
+    const backendId = source.backendId || "pending";
     return {
       backendId,
-      backendLabel,
-      crossDeviceCapable: Boolean(source.crossDeviceCapable),
+      backendLabel: source.backendLabel || backendId,
       localOnly: Boolean(source.localOnly),
       reason: source.reason || ""
     };
@@ -4084,14 +4072,12 @@ ${text.slice(0, 800)}`);
   function buildCostViewModel(ledgerCost) {
     if (!ledgerCost) return null;
     const allDays = (ledgerCost.daily?.days || []).map(mapDailyRow);
-    const today = ledgerCost.daily?.inProgress ? mapDailyRow(ledgerCost.daily.inProgress) : null;
     const allTime = ledgerCost.allTime || {};
     return {
       cycleStartDate: ledgerCost.cycleStartDate || null,
-      today,
       day: {
         rows: allDays.slice(0, 30),
-        today
+        today: ledgerCost.daily?.inProgress ? mapDailyRow(ledgerCost.daily.inProgress) : null
       },
       week: {
         current: mapBucket(ledgerCost.weekly?.current),
@@ -4106,8 +4092,7 @@ ${text.slice(0, 800)}`);
         totalUsd: allTime.totalUsd || 0,
         coverDays: allTime.coverDays || 0,
         fromDate: allTime.fromDate || null,
-        toDate: allTime.toDate || null,
-        rows: allDays
+        toDate: allTime.toDate || null
       },
       allDays
     };
@@ -4192,12 +4177,10 @@ ${text.slice(0, 800)}`);
     remoteSyncStatus
   }) {
     const snapshotAccess = createQuotaSnapshotAccess(result);
-    const rollingKey = snapshotAccess.rollingKey;
     const weekly = snapshotAccess.sinceReset.weeklyEstimate;
     const sinceReset = snapshotAccess.sinceReset.summary;
     const month = snapshotAccess.monthToDate.summary;
     const rolling = snapshotAccess.rolling.summary;
-    const mainSevenDayWindow = snapshotAccess.mainSevenDayWindow;
     const recentSnapshots = Array.isArray(archiveSummary?.recentSnapshots) ? archiveSummary.recentSnapshots.slice(0, 5).map((row) => ({
       capturedAt: row?.capturedAt || "-",
       snapshotId: row?.snapshotId || "legacy",
@@ -4206,21 +4189,7 @@ ${text.slice(0, 800)}`);
     })) : [];
     const normalizedSyncStatus = normalizePanelSyncStatus(syncStatus, storageBackend);
     const normalizedRemoteSyncStatus = normalizeRemoteSyncStatus(remoteSyncStatus);
-    const archiveHealth = {
-      isLoaded: Boolean(archiveSummary),
-      snapshotCount: archiveSummary?.snapshotCount || 0,
-      hasSnapshots: Boolean((archiveSummary?.snapshotCount || 0) > 0),
-      earliestCapturedAt: archiveSummary?.earliestCapturedAt || null,
-      latestCapturedAt: archiveSummary?.latestCapturedAt || null,
-      storageBackendLabel: normalizedSyncStatus.backendLabel,
-      importReport
-    };
-    const transfer = {
-      noteKey: "transferNote",
-      syncStatus: normalizedSyncStatus,
-      remoteSyncStatus: normalizedRemoteSyncStatus,
-      actions: createTransferActions()
-    };
+    const transfer = { noteKey: "transferNote", actions: createTransferActions() };
     const detailMetrics = createDetailMetrics({
       weekly,
       sinceReset,
@@ -4239,28 +4208,17 @@ ${text.slice(0, 800)}`);
       detailMetrics
     });
     return {
-      rollingKey,
-      weekly,
-      sinceReset,
-      month,
       rolling,
-      syncStatus: normalizedSyncStatus,
       remoteSyncStatus: normalizedRemoteSyncStatus,
       syncBanner: createSyncBanner(normalizedSyncStatus, normalizedRemoteSyncStatus),
-      archiveHealth,
-      transfer,
       tabs: panelViews.tabs,
       views: panelViews.views,
       heroMetric: createHeroMetric({
         weekly,
-        mainSevenDayWindow
+        mainSevenDayWindow: snapshotAccess.mainSevenDayWindow
       }),
       secondaryMetrics: createSecondaryMetrics({ weekly }),
       detailMetrics,
-      rollingRows: snapshotAccess.rolling.dailyRows,
-      sinceResetRows: snapshotAccess.sinceReset.dailyRows,
-      sinceResetClients: snapshotAccess.sinceReset.clientSummaries,
-      mainSevenDayWindow,
       cost: buildCostViewModel(ledgerCost),
       archive: {
         isLoaded: Boolean(archiveSummary),
@@ -4567,6 +4525,17 @@ ${text.slice(0, 800)}`);
   }, x.prototype.render = M, i = [], f = 0, e = function(n2, t3) {
     return n2.__v.__b - t3.__v.__b;
   }, o = /* @__PURE__ */ Symbol(), l = /(PointerCapture)$|Capture$/i, c = 0, a = {}, s = 0;
+
+  // src/userscripts/shared/shared-dom.lib.ts
+  function ensureStyle(documentObject, id, cssText, parent = documentObject.head ?? documentObject.documentElement) {
+    if (documentObject.getElementById(id)) return () => {
+    };
+    const style = documentObject.createElement("style");
+    style.id = id;
+    style.textContent = cssText;
+    parent.append(style);
+    return () => style.remove();
+  }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-stats-styles.lib.ts
   var LIB_NAME = "CodexQuotaCompassPanelStatsStylesLib";
@@ -5281,11 +5250,7 @@ ${text.slice(0, 800)}`);
     if (!rootId) {
       throw new Error("Quota panel renderer requires rootId.");
     }
-    if (documentObject.getElementById(`${rootId}-style`)) return;
-    const style = documentObject.createElement("style");
-    style.id = `${rootId}-style`;
-    style.textContent = createQuotaPanelRendererStyles(rootId);
-    documentObject.head.append(style);
+    ensureStyle(documentObject, `${rootId}-style`, createQuotaPanelRendererStyles(rootId), documentObject.head);
   }
 
   // node_modules/preact/jsx-runtime/dist/jsxRuntime.mjs
@@ -5479,7 +5444,7 @@ ${text.slice(0, 800)}`);
           " ~ ",
           all.toDate || "-"
         ] }),
-        dailyTable(all.rows)
+        dailyTable(cost.allDays)
       ] });
     }
     function drillBody() {
@@ -5512,10 +5477,11 @@ ${text.slice(0, 800)}`);
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-renderer.lib.tsx
+  var DECIMAL_FORMAT = new Intl.NumberFormat(void 0, { maximumFractionDigits: 6 });
+  var ONE_DECIMAL_FORMAT = new Intl.NumberFormat(void 0, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   function formatValue(value) {
     if (value === null || value === void 0 || value === "") return "-";
-    if (typeof value === "number")
-      return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(void 0, { maximumFractionDigits: 6 });
+    if (typeof value === "number") return Number.isInteger(value) ? value.toLocaleString() : DECIMAL_FORMAT.format(value);
     return String(value);
   }
   function safeRows(rows, limit = 12) {
@@ -5524,11 +5490,6 @@ ${text.slice(0, 800)}`);
   function classes(...names) {
     return names.filter(Boolean).join(" ");
   }
-  var DEFAULT_TABS = [
-    { id: "details", labelKey: "tabDetails" },
-    { id: "stats", labelKey: "tabStats" },
-    { id: "archive", labelKey: "tabArchiveWorkspace" }
-  ];
   function createQuotaPanelRenderer({ t: t3, formatTimestamp } = {}) {
     if (typeof t3 !== "function") {
       throw new Error("Quota panel renderer requires a translator function.");
@@ -5650,10 +5611,7 @@ ${text.slice(0, 800)}`);
     function formatMetricDecimal(value) {
       const numericValue = Number(value);
       if (!Number.isFinite(numericValue)) return "-";
-      return numericValue.toLocaleString(void 0, {
-        minimumFractionDigits: 1,
-        maximumFractionDigits: 1
-      });
+      return ONE_DECIMAL_FORMAT.format(numericValue);
     }
     function usdMetricValue(value) {
       return value === null || value === void 0 || value === "" ? "-" : `$${formatMetricDecimal(value)}`;
@@ -5852,7 +5810,7 @@ ${text.slice(0, 800)}`);
       ] });
     }
     function PanelTabs({ model, activePanelView }) {
-      const tabs = Array.isArray(model?.tabs) && model.tabs.length ? model.tabs : DEFAULT_TABS;
+      const tabs = model?.tabs || [];
       return /* @__PURE__ */ a2("div", { class: "cqc-tabs", children: tabs.map((tab) => /* @__PURE__ */ a2(
         "button",
         {
@@ -5902,27 +5860,10 @@ ${text.slice(0, 800)}`);
         `${section?.type}:${section?.id || index}`
       ));
     }
-    function ArchiveView({ viewModel, state, form }) {
-      const view = viewModel?.views?.archive;
-      if (view) return /* @__PURE__ */ a2(SectionsView, { view, viewModel, state, form });
-      return /* @__PURE__ */ a2(M, { children: [
-        /* @__PURE__ */ a2(SyncBanner, { banner: viewModel?.syncBanner }),
-        /* @__PURE__ */ a2(Section, { title: t3("sectionArchiveOverview"), children: /* @__PURE__ */ a2(ArchiveSummary, { model: viewModel?.archive, state }) }),
-        /* @__PURE__ */ a2("div", { class: "cqc-transfer-note", children: t3("transferNote") }),
-        /* @__PURE__ */ a2(
-          DetailActions,
-          {
-            actions: [
-              { action: "export-archive", label: t3("archiveExportAction") },
-              { action: "import-archive", label: t3("archiveImportAction") }
-            ]
-          }
-        )
-      ] });
-    }
     function ActiveView({ viewModel, activePanelView, state = {}, form }) {
       const view = viewModel?.views?.[activePanelView] || viewModel?.views?.details;
-      if (view?.kind === "archiveWorkspace") return /* @__PURE__ */ a2(ArchiveView, { viewModel, state, form });
+      if (view?.kind === "archiveWorkspace")
+        return /* @__PURE__ */ a2(SectionsView, { view, viewModel, state, form });
       if (view?.kind === "stats") {
         return /* @__PURE__ */ a2(
           StatsView,
@@ -5968,7 +5909,7 @@ ${text.slice(0, 800)}`);
     function ErrorState({ error }) {
       return /* @__PURE__ */ a2("div", { class: "cqc-error", children: [
         /* @__PURE__ */ a2("strong", { children: t3("errorTitle") }),
-        /* @__PURE__ */ a2("p", { children: error?.message || error || t3("errorUnknown") }),
+        /* @__PURE__ */ a2("p", { children: error && errorMessage(error) || t3("errorUnknown") }),
         /* @__PURE__ */ a2("button", { type: "button", class: "cqc-refresh", "data-action": "refresh", children: t3("actionRetry") })
       ] });
     }
@@ -6573,7 +6514,7 @@ ${root} :focus-visible {
   // node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
   var min = Math.min;
   var max = Math.max;
-  var round3 = Math.round;
+  var round2 = Math.round;
   var floor = Math.floor;
   var createCoords = (v3) => ({
     x: v3,
@@ -7299,7 +7240,7 @@ ${root} :focus-visible {
     const hasOffset = isHTMLElement(element);
     const offsetWidth = hasOffset ? element.offsetWidth : width;
     const offsetHeight = hasOffset ? element.offsetHeight : height;
-    const shouldFallback = round3(width) !== offsetWidth || round3(height) !== offsetHeight;
+    const shouldFallback = round2(width) !== offsetWidth || round2(height) !== offsetHeight;
     if (shouldFallback) {
       width = offsetWidth;
       height = offsetHeight;
@@ -7324,8 +7265,8 @@ ${root} :focus-visible {
       height,
       $
     } = getCssDimensions(domElement);
-    let x2 = ($ ? round3(rect.width) : rect.width) / width;
-    let y3 = ($ ? round3(rect.height) : rect.height) / height;
+    let x2 = ($ ? round2(rect.width) : rect.width) / width;
+    let y3 = ($ ? round2(rect.height) : rect.height) / height;
     if (!x2 || !Number.isFinite(x2)) {
       x2 = 1;
     }
@@ -8423,6 +8364,15 @@ ${root} :focus-visible {
     function reposition() {
       return isOpenState ? positionPanel() : Promise.resolve(null);
     }
+    let repositionScheduled = false;
+    function scheduleReposition() {
+      if (!isOpenState || repositionScheduled) return;
+      repositionScheduled = true;
+      requestFrame(() => {
+        repositionScheduled = false;
+        void reposition();
+      });
+    }
     return {
       cssText: WIDGET_SHELL_CSS,
       buttonEl,
@@ -8431,6 +8381,7 @@ ${root} :focus-visible {
       close,
       toggle,
       reposition,
+      scheduleReposition,
       isOpen: () => isOpenState,
       destroy
     };
@@ -8725,18 +8676,8 @@ ${root} :focus-visible {
       statusNode.dataset.tone = tone;
     }
     function installShellStyles() {
-      if (documentObject.getElementById(`${rootId}-shell-style`)) return;
-      const style = documentObject.createElement("style");
-      style.id = `${rootId}-shell-style`;
-      style.textContent = [tokenCss, shell.cssText, createShellStyles(rootId)].filter(Boolean).join("\n\n");
-      documentObject.head.append(style);
-    }
-    function requestFrame(callback) {
-      if (typeof windowObject.requestAnimationFrame === "function") {
-        windowObject.requestAnimationFrame(callback);
-      } else {
-        windowObject.setTimeout(callback, 16);
-      }
+      const cssText = [tokenCss, shell.cssText, createShellStyles(rootId)].filter(Boolean).join("\n\n");
+      ensureStyle(documentObject, `${rootId}-shell-style`, cssText, documentObject.head);
     }
     function mount() {
       if (documentObject.getElementById(rootId)) return null;
@@ -8786,10 +8727,7 @@ ${root} :focus-visible {
       shell?.reposition();
     }
     function schedulePanelResize() {
-      if (!shell?.isOpen()) return;
-      requestFrame(() => {
-        if (shell?.isOpen()) shell.reposition();
-      });
+      shell?.scheduleReposition();
     }
     function destroy() {
       themeCleanup?.();
@@ -8997,8 +8935,8 @@ ${root} :focus-visible {
         done(successMessage) {
           settle("success", successMessage, DEFAULT_DURATION_MS);
         },
-        fail(errorMessage) {
-          settle("error", errorMessage, ERROR_DURATION_MS);
+        fail(errorMessage2) {
+          settle("error", errorMessage2, ERROR_DURATION_MS);
         }
       };
     }
@@ -9020,12 +8958,19 @@ ${root} :focus-visible {
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.tsx
   var ROOT_ID = "codex-quota-compass-root";
   var EXPORT_NAME = "codex-quota-compass-snapshot-archive.v1.json";
+  var COMMAND_ACTIONS = /* @__PURE__ */ new Map([
+    ["refresh", "refresh"],
+    ["sync-remote", "sync"],
+    ["save-remote-sync", "save-remote-sync"],
+    ["import-archive", "import-archive"],
+    ["export-archive", "export-archive"]
+  ]);
   function createSnapshotSyncStatus(backendInfo) {
-    const backendId = backendInfo?.backendId || backendInfo?.id || "unavailable";
-    const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
+    const backendId = backendInfo?.id || "unavailable";
+    const backendLabel = backendInfo?.label || backendId;
     const localOnly = backendId === "gm" || backendId === "localStorage";
     const reason = backendId === "gm" ? "Userscript manager storage is local to this manager profile; use GitHub Gist sync for cross-device Snapshot Archive sync." : backendId === "localStorage" ? "localStorage is browser-local and will not sync personal usage history across devices." : backendId === "pending" ? "Snapshot Archive storage has not been loaded yet." : "Snapshot Archive storage is unavailable.";
-    return { backendId, backendLabel, crossDeviceCapable: false, localOnly, reason };
+    return { backendId, backendLabel, localOnly, reason };
   }
   function createBrowserQuotaFiles({ document: document2, window: window2, t: t3 }) {
     const activeUrls = /* @__PURE__ */ new Set();
@@ -9050,17 +8995,17 @@ ${root} :focus-visible {
           settled = true;
           input.removeEventListener("change", changed);
           input.removeEventListener("cancel", cancelled);
-          signal?.removeEventListener("abort", aborted);
+          signal?.removeEventListener("abort", cancelled);
           window2.removeEventListener("focus", focused);
           if (focusTimer != null) window2.clearTimeout(focusTimer);
           if (reader?.readyState === 1) reader.abort();
           input.remove();
-          activePickers.delete(aborted);
+          activePickers.delete(cancelled);
           if (error) reject(error);
           else resolve(value);
         }
-        function aborted() {
-          finish({ status: "cancelled" });
+        function fail(error, stage) {
+          finish(null, Object.assign(error, { stage }));
         }
         function cancelled() {
           finish({ status: "cancelled" });
@@ -9079,23 +9024,23 @@ ${root} :focus-visible {
             return;
           }
           reader = new window2.FileReader();
-          reader.onerror = () => finish(null, Object.assign(new Error(t3("importReadFailed")), { stage: "read" }));
+          reader.onerror = () => fail(new Error(t3("importReadFailed")), "read");
           reader.onload = () => finish({ status: "selected", text: String(reader.result || "") });
           try {
             reader.readAsText(file, "utf-8");
           } catch (error) {
-            finish(null, Object.assign(error, { stage: "read" }));
+            fail(error, "read");
           }
         }
         input.addEventListener("change", changed);
         input.addEventListener("cancel", cancelled);
-        signal?.addEventListener("abort", aborted, { once: true });
-        activePickers.add(aborted);
+        signal?.addEventListener("abort", cancelled, { once: true });
+        activePickers.add(cancelled);
         window2.addEventListener("focus", focused);
         try {
           input.click();
         } catch (error) {
-          finish(null, Object.assign(error, { stage: "select" }));
+          fail(error, "select");
         }
       });
     }
@@ -9156,27 +9101,24 @@ ${root} :focus-visible {
       window: window2,
       storage,
       onAction: handleAction,
-      onOpen: () => {
-        if (!snapshot?.result || snapshot?.calculationError) void dispatch({ type: "refresh", open: true });
-        else {
-          presentation = "snapshot";
-          commitPresentation();
-          shell.setStatus(t3("statusCached"), "success");
-        }
-      }
+      onOpen: () => void open(void 0, { fromShell: true })
     });
     const mounted = shell.mount();
     const refs = mounted?.refs();
     const content = refs?.contentNode;
     const toaster = refs ? createToaster({ root: refs.root }) : null;
-    if (toaster && !document2.getElementById(`${ROOT_ID}-toast-style`)) {
-      const style = document2.createElement("style");
-      style.id = `${ROOT_ID}-toast-style`;
-      style.textContent = toaster.cssText;
-      document2.head.append(style);
-    }
+    if (toaster) ensureStyle(document2, `${ROOT_ID}-toast-style`, toaster.cssText, document2.head);
     function renderState(overrides = {}) {
       return { activePanelView, statsPeriod: activeStatsPeriod, statsDrill, expandedViews, ...overrides };
+    }
+    let viewModelSnapshot = null;
+    let cachedViewModel = null;
+    function currentViewModel() {
+      if (snapshot !== viewModelSnapshot) {
+        viewModelSnapshot = snapshot;
+        cachedViewModel = createViewModel();
+      }
+      return cachedViewModel;
     }
     function createViewModel() {
       if (!snapshot?.result) return null;
@@ -9199,7 +9141,7 @@ ${root} :focus-visible {
     }
     function commitPresentation() {
       if (disposed || !content) return;
-      const viewModel = createViewModel();
+      const viewModel = currentViewModel();
       if (viewModel) activePanelView = renderer.normalizeActivePanelView(viewModel, activePanelView);
       const shown = presentation !== "snapshot" && syncDraft && viewModel ? "snapshot" : presentation;
       K(
@@ -9242,7 +9184,7 @@ ${root} :focus-visible {
         const outcome = {
           status: "error",
           completed: [],
-          error: error?.message || String(error),
+          error: errorMessage(error),
           stage: error?.stage || (type === "export-archive" ? "export" : type === "import-archive" ? "import" : type)
         };
         if (!disposed) {
@@ -9294,12 +9236,13 @@ ${root} :focus-visible {
         return outcome;
       });
     }
-    function open(view) {
+    function open(view, { fromShell = false } = {}) {
       if (view && ["details", "stats", "archive"].includes(view)) activePanelView = view;
-      if (!snapshot?.result || snapshot?.calculationError) return startRefresh({ open: true });
+      if (!snapshot?.result || snapshot.errors?.calculation) return startRefresh({ open: true });
       presentation = "snapshot";
       commitPresentation();
-      if (!shell.isOpen()) shell.openPanel();
+      if (fromShell) shell.setStatus(t3("statusCached"), "success");
+      else if (!shell.isOpen()) shell.openPanel();
       else shell.positionPanelNearButton();
       return Promise.resolve({ status: "ok", completed: ["open"] });
     }
@@ -9383,7 +9326,7 @@ ${root} :focus-visible {
             status: "error",
             completed: ["export"],
             stage: "download",
-            error: error?.message || String(error)
+            error: errorMessage(error)
           };
           notice(t3("exportFailed", { error: outcome.error }), "error");
           return outcome;
@@ -9419,20 +9362,9 @@ ${root} :focus-visible {
         shell.closePanel();
         return;
       }
-      if (action === "refresh") {
-        void dispatch({ type: "refresh" });
-        return;
-      }
-      if (action === "sync-remote") {
-        void dispatch({ type: "sync" });
-        return;
-      }
-      if (action === "save-remote-sync") {
-        void dispatch({ type: "save-remote-sync" });
-        return;
-      }
-      if (action === "import-archive" || action === "export-archive") {
-        void dispatch({ type: action });
+      const commandType = COMMAND_ACTIONS.get(action);
+      if (commandType) {
+        void dispatch({ type: commandType });
         return;
       }
       const target = event.target;
@@ -9488,7 +9420,7 @@ ${root} :focus-visible {
     const DEBUG_KEY = "__codexQuotaCompassDebug";
     const LAST_RESULT_KEY = "__codexQuotaCompassLastResult";
     const RUNNING_KEY = "__codexQuotaCompassRunning";
-    const SCRIPT_VERSION = "0.5.23";
+    const SCRIPT_VERSION = "0.5.24";
     const { t: t3 } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,
@@ -9506,12 +9438,7 @@ ${root} :focus-visible {
       runtime: {
         run: () => createQuotaRuntime({
           config: createDefaultQuotaRuntimeConfig({ DEBUG: window[DEBUG_KEY] === true }),
-          coreLib: codex_quota_compass_core_lib_exports,
-          fetchImpl: fetch.bind(globalThis),
-          location: globalThis.location,
-          now: () => Date.now(),
-          formatLocalTime: (ms) => new Date(ms).toLocaleString(),
-          getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || "未知"
+          coreLib: codex_quota_compass_core_lib_exports
         }).run()
       },
       archiveStore,
@@ -9553,21 +9480,18 @@ ${root} :focus-visible {
     panel.update(application.getState());
     const { registerMenuCommand } = resolveGmApi();
     if (registerMenuCommand) {
-      registerMenuCommand(t3("menuRun"), () => {
-        void panel.dispatch({ type: "refresh", open: true });
-      });
-      registerMenuCommand(t3("menuRemoteConfigure"), () => {
-        void panel.dispatch({ type: "open", view: "archive" });
-      });
-      registerMenuCommand(t3("menuRemoteSync"), () => {
-        void panel.dispatch({ type: "sync" });
-      });
-      registerMenuCommand(t3("menuExport"), () => {
-        void panel.dispatch({ type: "export-archive" });
-      });
-      registerMenuCommand(t3("menuImport"), () => {
-        void panel.dispatch({ type: "import-archive" });
-      });
+      const menu = [
+        ["menuRun", { type: "refresh", open: true }],
+        ["menuRemoteConfigure", { type: "open", view: "archive" }],
+        ["menuRemoteSync", { type: "sync" }],
+        ["menuExport", { type: "export-archive" }],
+        ["menuImport", { type: "import-archive" }]
+      ];
+      for (const [labelKey, command] of menu) {
+        registerMenuCommand(t3(labelKey), () => {
+          void panel.dispatch(command);
+        });
+      }
     }
     void application.start();
     window.addEventListener("pagehide", (event) => {

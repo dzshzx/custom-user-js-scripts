@@ -2,7 +2,7 @@
 // @name         JavDB Recommend Archive
 // @name:zh-CN   JavDB 佳片推荐 · 历史期数
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.0.12
+// @version      0.0.13
 // @description  Adds a "Recommend" entry to the JavDB navbar that opens a standalone archive page for every historical issue (updated Mon/Thu), with flip, search and full-archive keyword search.
 // @description:zh-CN  在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索、全期关键词搜索。
 // @author       dzshzx
@@ -509,6 +509,10 @@
     var t = Math.floor(Date.now() / 1e3);
     return t + "." + S2 + "." + md5("" + t + S1);
   }
+  function createAborter() {
+    return typeof AbortController === "function" ? new AbortController() : { signal: void 0, abort() {
+    } };
+  }
   function cancelled() {
     return Object.assign(new Error("Request cancelled"), { name: "AbortError" });
   }
@@ -532,15 +536,15 @@
     return async function api(path, params, { signal } = {}) {
       for (let attempt = 1; attempt <= 3; attempt++) {
         if (signal?.aborted) throw cancelled();
-        const controller = typeof AbortController === "function" ? new AbortController() : null;
-        const abort = () => controller?.abort();
+        const controller = createAborter();
+        const abort = () => controller.abort();
         signal?.addEventListener("abort", abort, { once: true });
-        const timer = controller ? timers.setTimeout(abort, 12e3) : null;
+        const timer = controller.signal ? timers.setTimeout(abort, 12e3) : null;
         let failure;
         try {
           const response = await fetcher(base + path + "?" + new URLSearchParams(params), {
             headers: { jdsignature: signature(), connection: "keep-alive" },
-            signal: controller?.signal || signal
+            signal: controller.signal || signal
           });
           if (signal?.aborted) throw cancelled();
           if (!response.ok)
@@ -626,13 +630,22 @@
     };
     return promisifyRequest(store.transaction);
   }
+  function keys(customStore = defaultGetStore()) {
+    return customStore("readonly", (store) => {
+      if (store.getAllKeys) {
+        return promisifyRequest(store.getAllKeys());
+      }
+      const items = [];
+      return eachCursor(store, (cursor) => items.push(cursor.key)).then(() => items);
+    });
+  }
   function entries(customStore = defaultGetStore()) {
     return customStore("readonly", (store) => {
       if (store.getAll && store.getAllKeys) {
         return Promise.all([
           promisifyRequest(store.getAllKeys()),
           promisifyRequest(store.getAll())
-        ]).then(([keys, values]) => keys.map((key, i) => [key, values[i]]));
+        ]).then(([keys2, values]) => keys2.map((key, i) => [key, values[i]]));
       }
       const items = [];
       return eachCursor(store, (cursor) => items.push([cursor.key, cursor.value])).then(() => items);
@@ -913,10 +926,20 @@
   };
 
   // src/userscripts/javdb-recommend/javdb-recommend-data.lib.ts
+  var MOVIE_FIELDS = [
+    "id",
+    "number",
+    "title",
+    "origin_title",
+    "cover_url",
+    "score",
+    "release_date"
+  ];
   var CATALOG = "javdb_recommend_periods_cache_v1";
   var LEGACY_DETAILS = "javdb_recommend_details_cache_v1";
   var DETAIL_LIMIT = 48;
   var INDEX = "javdb_recommend_search_index_v1_";
+  var LAST_PERIOD = "javdb_recommend_last_period";
   var HOUR = 36e5;
   var MONTH = 30 * 24 * HOUR;
   var unique = (list) => [
@@ -924,12 +947,7 @@
       list.slice().reverse().map((item) => [item.period, item])
     ).values()
   ].reverse();
-  var project = (movie) => Object.fromEntries(
-    ["id", "number", "title", "origin_title", "cover_url", "score", "release_date"].map((key) => [
-      key,
-      movie[key] || ""
-    ])
-  );
+  var project = (movie) => Object.fromEntries(MOVIE_FIELDS.map((key) => [key, movie[key] || ""]));
   function createDetailStore(dbName = "javdb-recommend-archive", storeName = "details") {
     const store = createStore(dbName, storeName);
     return {
@@ -937,14 +955,19 @@
       set: async (key, value) => set(key, value, store),
       del: async (key) => del(key, store),
       clear: async () => clear(store),
+      keys: async () => keys(store),
       entries: async () => entries(store)
     };
   }
-  function createArchiveData({ storage, details, request, now = Date.now, timers = globalThis }) {
-    let periods2 = [], generation = 0, disposed = false, catalogWork = null, activeSearch = null;
+  function createArchiveData({
+    storage,
+    details,
+    request,
+    now = Date.now,
+    timers = globalThis
+  }) {
+    let periods = [], generation = 0, disposed = false, catalogWork = null, activeSearch = null;
     const memory = new QuickLRU({ maxSize: 24 }), requests = /* @__PURE__ */ new Map(), liveLeases = /* @__PURE__ */ new Set();
-    const controller = () => typeof AbortController === "function" ? new AbortController() : { signal: void 0, abort() {
-    } };
     const read = (key) => {
       try {
         const value = JSON.parse(storage.getItem(key));
@@ -980,7 +1003,7 @@
     } catch {
     }
     const valid = (entry) => entry && Array.isArray(entry.movies) && Number.isFinite(entry.fetchedAt);
-    const ttl = (period) => periods2[0]?.period === period ? 2 * HOUR : MONTH;
+    const ttl = (period) => periods[0]?.period === period ? 2 * HOUR : MONTH;
     const fresh = (entry, period) => valid(entry) && now() - entry.fetchedAt < ttl(period);
     const check = (epoch) => {
       if (disposed || epoch !== generation) throw cancelled();
@@ -993,20 +1016,24 @@
     };
     function index(period) {
       const entry = read(INDEX + period);
-      return valid(entry) && (periods2[0]?.period !== period || fresh(entry, period)) ? entry : null;
+      return valid(entry) && (periods[0]?.period !== period || fresh(entry, period)) ? entry : null;
     }
     function saveIndex(period, entry) {
       write(INDEX + period, { fetchedAt: entry.fetchedAt, movies: entry.movies.map(project) });
     }
-    function remember(period, entry) {
-      memory.set(period, entry);
+    function searchable(period, local) {
+      const indexed = index(period);
+      if (indexed) return indexed;
+      if (!fresh(local, period)) return null;
+      saveIndex(period, local);
+      return local;
     }
     async function saveDetail(period, entry) {
       if (!details) return;
       try {
         await details.set(String(period), { ...entry, accessedAt: now() });
+        if ((await details.keys()).length <= DETAIL_LIMIT) return;
         const stored = await details.entries();
-        if (stored.length <= DETAIL_LIMIT) return;
         const stamp = (value) => value?.accessedAt || value?.fetchedAt || 0;
         const stale = stored.filter(([key]) => key !== String(period)).sort((a, b) => stamp(b[1]) - stamp(a[1])).slice(DETAIL_LIMIT - 1);
         await Promise.all(stale.map(([key]) => details.del(key)));
@@ -1019,10 +1046,10 @@
       const cached = read(CATALOG);
       const usable = cached && Array.isArray(cached.periods) && cached.periods.length && Number.isFinite(cached.fetchedAt);
       if (!force && usable && now() - cached.fetchedAt < 6 * HOUR) {
-        periods2 = unique(cached.periods);
-        return Promise.resolve({ periods: periods2.slice(), degraded: false, source: "本地缓存" });
+        periods = unique(cached.periods);
+        return Promise.resolve({ periods: periods.slice(), degraded: false, source: "本地缓存" });
       }
-      const epoch = generation, aborter = controller();
+      const epoch = generation, aborter = createAborter();
       const work = { aborter };
       work.promise = (async () => {
         try {
@@ -1046,21 +1073,21 @@
               }
             }
             if (overlap >= 0 || batch.length !== 48) {
-              periods2 = overlap >= 0 ? unique(list.concat(cached.periods.slice(overlap + 1))) : list;
+              periods = overlap >= 0 ? unique(list.concat(cached.periods.slice(overlap + 1))) : list;
               write(CATALOG, {
                 fetchedAt: now(),
                 fullFetchedAt: overlap >= 0 ? cached.fullFetchedAt || cached.fetchedAt : now(),
-                periods: periods2
+                periods
               });
-              return { periods: periods2.slice(), degraded: false, source: overlap >= 0 ? "已增量更新" : "已完整更新" };
+              return { periods: periods.slice(), degraded: false, source: overlap >= 0 ? "已增量更新" : "已完整更新" };
             }
           }
         } catch (error) {
           check(epoch);
           if (aborter.signal?.aborted) throw error;
           if (!usable) throw error;
-          periods2 = unique(cached.periods);
-          return { periods: periods2.slice(), degraded: true, source: "本地缓存", error };
+          periods = unique(cached.periods);
+          return { periods: periods.slice(), degraded: true, source: "本地缓存", error };
         } finally {
           if (catalogWork === work) catalogWork = null;
         }
@@ -1083,21 +1110,21 @@
         assertActive();
         local = memory.get(period) || (diskEntries ? diskEntries[period] : await readDetail(period));
         assertActive();
-        const cached = purpose === "search" ? index(period) || (fresh(local, period) ? local : null) : fresh(local, period) ? local : null;
+        const cached = purpose === "search" ? searchable(period, local) : fresh(local, period) ? local : null;
         if (cached) {
           if (purpose === "navigation") {
-            remember(period, cached);
+            memory.set(period, cached);
             if (now() - (cached.accessedAt || 0) >= HOUR) {
               cached.accessedAt = now();
               saveDetail(period, cached);
             }
+            saveIndex(period, cached);
           }
-          saveIndex(period, cached);
           return { movies: cached.movies, fetchedAt: cached.fetchedAt, degraded: false, source: "cache" };
         }
         network = requests.get(period);
         if (!network) {
-          const aborter = controller();
+          const aborter = createAborter();
           network = { aborter, consumers: /* @__PURE__ */ new Set() };
           const item = network;
           item.promise = (async () => request("/api/v1/movies/recommend", { period }, { signal: aborter.signal }))().then((response) => {
@@ -1115,14 +1142,14 @@
           assertActive();
           saveIndex(period, entry);
           if (purpose === "navigation") {
-            remember(period, entry);
+            memory.set(period, entry);
             saveDetail(period, entry);
           }
           return { ...entry, degraded: false, source: "network" };
         } catch (error) {
           assertActive();
           if (network.aborter.signal?.aborted || !valid(local)) throw error;
-          if (purpose === "navigation") remember(period, local);
+          if (purpose === "navigation") memory.set(period, local);
           return { movies: local.movies, fetchedAt: local.fetchedAt, degraded: true, source: "cache", error };
         }
       })();
@@ -1151,12 +1178,12 @@
     }
     function search({ query, onUpdate } = {}) {
       activeSearch?.cancel();
-      const epoch = generation, aborter = controller(), leases = /* @__PURE__ */ new Set();
+      const epoch = generation, aborter = createAborter(), leases = /* @__PURE__ */ new Set();
       let stopped = disposed, cursor = 0;
       const result = {
         status: "complete",
         completed: 0,
-        total: periods2.length,
+        total: periods.length,
         hits: 0,
         hitPeriods: 0,
         failed: 0,
@@ -1165,6 +1192,7 @@
       };
       const missing = [], q = String(query || "").trim().toLowerCase();
       const cancelledSearch = () => stopped || disposed || epoch !== generation;
+      const emitUpdate = (group) => notify(onUpdate, { ...result, groups: result.groups.slice(), group });
       const report = (period, index2, entry) => {
         const movies = entry.movies.filter(
           (movie) => (movie.number + " " + (movie.title || "") + " " + (movie.origin_title || "")).toLowerCase().includes(q)
@@ -1178,7 +1206,7 @@
           result.hits += movies.length;
           result.hitPeriods++;
         }
-        notify(onUpdate, { ...result, groups: result.groups.slice().sort((a, b) => a.index - b.index), group });
+        emitUpdate(group);
       };
       let diskEntries = {};
       const job = {
@@ -1193,13 +1221,10 @@
       job.done = Promise.resolve().then(async () => {
         if (!cancelledSearch()) diskEntries = await readAllDetails();
         if (!cancelledSearch())
-          periods2.slice().forEach((item, i) => {
-            const local = memory.get(item.period) || diskEntries[item.period];
-            const entry = index(item.period) || (fresh(local, item.period) ? local : null);
-            if (entry) {
-              saveIndex(item.period, entry);
-              report(item.period, i, entry);
-            } else missing.push({ period: item.period, index: i });
+          periods.slice().forEach((item, i) => {
+            const entry = searchable(item.period, memory.get(item.period) || diskEntries[item.period]);
+            if (entry) report(item.period, i, entry);
+            else missing.push({ period: item.period, index: i });
           });
         async function worker() {
           while (!cancelledSearch() && cursor < missing.length) {
@@ -1212,7 +1237,7 @@
               if (!cancelledSearch()) {
                 result.completed++;
                 result.failed++;
-                notify(onUpdate, { ...result, groups: result.groups.slice(), group: void 0 });
+                emitUpdate(void 0);
               }
             } finally {
               lease.release();
@@ -1249,15 +1274,29 @@
     }
     return {
       loadCatalog,
-      acquirePeriod: (period, options) => acquire(period, options),
+      acquirePeriod: acquire,
       search,
+      getLastPeriod() {
+        try {
+          const period = parseInt(storage.getItem(LAST_PERIOD), 10);
+          return Number.isFinite(period) ? period : null;
+        } catch {
+          return null;
+        }
+      },
+      setLastPeriod(period) {
+        try {
+          storage.setItem(LAST_PERIOD, String(period));
+        } catch {
+        }
+      },
       invalidateCatalog() {
         cancelWork();
         storage.removeItem(CATALOG);
       },
       clearCaches() {
         cancelWork();
-        periods2 = [];
+        periods = [];
         storage.removeItem(CATALOG);
         details?.clear().catch(() => {
         });
@@ -1320,15 +1359,7 @@
   }
   function movieSignature(movies) {
     return JSON.stringify(
-      (Array.isArray(movies) ? movies : []).map((movie) => [
-        movie && movie.id,
-        movie && movie.number,
-        movie && movie.title,
-        movie && movie.origin_title,
-        movie && movie.cover_url,
-        movie && movie.score,
-        movie && movie.release_date
-      ])
+      (Array.isArray(movies) ? movies : []).map((movie) => MOVIE_FIELDS.map((key) => movie && movie[key]))
     );
   }
   function appendCard({ document: document2, grid, baseUrl, movie }) {
@@ -1867,11 +1898,9 @@
 
   // src/userscripts/javdb-recommend/javdb-recommend-view.lib.ts
   var BASE = location.origin;
-  var periods = [];
-  var searching = false;
-  var LS_KEY = "javdb_recommend_last_period";
   function bootArchivePage(data) {
     var disposed = false;
+    var periods = [];
     document.title = "佳片推荐 · 历史期数 - JavDB";
     document.body.classList.remove("rails-default-error-page");
     document.querySelectorAll("body > .rails-default-error-page, body > .dialog, body > .jdb-ra, body > [data-jdb-ra-page]").forEach(function(node) {
@@ -2142,7 +2171,7 @@
       });
     }
     function startStream() {
-      var saved = parseInt(localStorage.getItem(LS_KEY), 10);
+      var saved = data.getLastPeriod();
       var idx = periods.findIndex(function(p) {
         return p.period === saved;
       });
@@ -2187,10 +2216,7 @@
         return;
       }
       currentIdx = idx;
-      try {
-        localStorage.setItem(LS_KEY, String(period));
-      } catch (e) {
-      }
+      data.setLastPeriod(period);
       select.value = String(period);
       if (loadedSections[period]) {
         scrollToPeriod(period);
@@ -2251,29 +2277,35 @@
       sentinel.style.display = "none";
     }
     var resultSections = [];
-    function exitResultsMode() {
-      resultsEl.hidden = true;
+    function clearResultSections() {
       resultSections.forEach(function(section) {
         section.dispose();
       });
       resultSections = [];
       resultsEl.replaceChildren();
+    }
+    function exitResultsMode() {
+      resultsEl.hidden = true;
+      clearResultSections();
       streamEl.style.display = "";
       sentinel.style.display = "";
+    }
+    function applyLoadedFilter() {
+      exitResultsMode();
+      var q = currentQuery();
+      var hits = applyFilter(q);
+      setStatus(q ? "已加载内容中命中 " + hits + " 部" : periods.length ? readyText() : "加载期数列表中…");
     }
     var debounceTimer = null;
     $("jdb-ra-search").addEventListener("input", function() {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(function() {
-        if (searching) return;
+        if (activeSearch !== null) return;
         if (searchScope() === "all") {
           if (currentQuery()) setStatus("回车或点击「全期搜索」，在全部期数中搜索");
           return;
         }
-        exitResultsMode();
-        var q = currentQuery();
-        var hits = applyFilter(q);
-        setStatus(q ? "已加载内容中命中 " + hits + " 部" : periods.length ? readyText() : "加载期数列表中…");
+        applyLoadedFilter();
       }, 300);
     });
     $("jdb-ra-search").addEventListener("keydown", function(e) {
@@ -2283,11 +2315,8 @@
     document.querySelectorAll('input[name="jdb-ra-scope"]').forEach(function(radio) {
       radio.addEventListener("change", function() {
         if (searchScope() === "loaded") {
-          if (searching) stopSearch("已停止全期搜索");
-          exitResultsMode();
-          var q = currentQuery();
-          var hits = applyFilter(q);
-          setStatus(q ? "已加载内容中命中 " + hits + " 部" : periods.length ? readyText() : "加载期数列表中…");
+          if (activeSearch !== null) stopSearch("已停止全期搜索");
+          applyLoadedFilter();
           return;
         }
         applyFilter("");
@@ -2297,7 +2326,6 @@
     var searchGeneration = 0;
     var activeSearch = null;
     function stopSearch(label) {
-      searching = false;
       searchGeneration += 1;
       if (activeSearch) activeSearch.cancel();
       activeSearch = null;
@@ -2328,20 +2356,15 @@
         setStatus("请先输入关键词");
         return;
       }
-      if (searching) {
+      if (activeSearch !== null) {
         stopSearch("已停止搜索");
         return;
       }
-      searching = true;
       var generation = ++searchGeneration;
       var btnEl = $("jdb-ra-gsearch");
       btnEl.textContent = "停止";
       enterResultsMode();
-      resultSections.forEach(function(section) {
-        section.dispose();
-      });
-      resultSections = [];
-      resultsEl.replaceChildren();
+      clearResultSections();
       activeSearch = data.search({
         query: q,
         onUpdate: (update) => {
@@ -2352,7 +2375,7 @@
       });
       activeSearch.done.then((result) => {
         if (disposed || generation !== searchGeneration) return;
-        searching = false;
+        activeSearch = null;
         btnEl.textContent = "全期搜索";
         setStatus(
           (result.status === "partial" ? "搜索部分完成 · 失败 " + result.failed + " 期 · " : result.status === "cancelled" ? "搜索已停止 · " : "搜索完成 · ") + "命中 " + result.hits + " 部（" + result.hitPeriods + " 期）" + (result.degraded ? " · 使用旧缓存 " + result.degraded + " 期" : "")
@@ -2366,7 +2389,7 @@
       });
     }
     $("jdb-ra-gsearch").addEventListener("click", function() {
-      if (!searching && searchScope() !== "all") {
+      if (activeSearch === null && searchScope() !== "all") {
         setStatus("搜索全部期数：先把搜索框左侧范围切换到「全部期数」");
         return;
       }

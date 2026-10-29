@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.24
+// @version      0.1.25
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -1090,8 +1090,8 @@ ${root} :focus-visible {
         done(successMessage) {
           settle("success", successMessage, DEFAULT_DURATION_MS);
         },
-        fail(errorMessage) {
-          settle("error", errorMessage, ERROR_DURATION_MS);
+        fail(errorMessage2) {
+          settle("error", errorMessage2, ERROR_DURATION_MS);
         }
       };
     }
@@ -1138,7 +1138,7 @@ ${root} :focus-visible {
   }
   function resolveGmApi(overrides = {}) {
     const legacy = legacyGlobals();
-    const gm = overrides.gm || overrides.gmApi || modernGlobal();
+    const gm = overrides.gm || modernGlobal();
     const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
     let valueChange = null;
     if (legacyAdd) {
@@ -1161,6 +1161,17 @@ ${root} :focus-visible {
       // Legacy only: GM.download does not share GM_download's callback contract.
       download: pickFunction(overrides.gmDownload, legacy.download)
     };
+  }
+
+  // src/userscripts/shared/shared-dom.lib.ts
+  function ensureStyle(documentObject, id, cssText, parent = documentObject.head ?? documentObject.documentElement) {
+    if (documentObject.getElementById(id)) return () => {
+    };
+    const style = documentObject.createElement("style");
+    style.id = id;
+    style.textContent = cssText;
+    parent.append(style);
+    return () => style.remove();
   }
 
   // node_modules/filename-reserved-regex/index.js
@@ -1866,18 +1877,8 @@ ${root} :focus-visible {
     })();
   }
 
-  // src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.ts
-  var LIB_NAME = "FeishuPreviewImageExportLogicLib";
-  var DEFAULT_DOWNLOAD_TIMEOUT_MS = 12e4;
-  var FORMAT_CHARS = /\p{Cf}/gu;
-  function sanitizeFilePart(value, fallback) {
-    const text = String(value || "").replace(FORMAT_CHARS, "").trim();
-    return text && filenamify(text, { replacement: "-" }) || fallback;
-  }
-  function extensionFromMime(type) {
-    return index_lite_default.getExtension(String(type || "")) || "bin";
-  }
-  function errorText(error) {
+  // src/userscripts/shared/shared-values.lib.ts
+  function errorMessage(error) {
     try {
       if (error instanceof Error) return error.message;
       if (typeof error === "string") return error;
@@ -1894,8 +1895,20 @@ ${root} :focus-visible {
       return "unknown error";
     }
   }
+
+  // src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.ts
+  var LIB_NAME = "FeishuPreviewImageExportLogicLib";
+  var DEFAULT_DOWNLOAD_TIMEOUT_MS = 12e4;
+  var FORMAT_CHARS = /\p{Cf}/gu;
+  function sanitizeFilePart(value, fallback) {
+    const text = String(value || "").replace(FORMAT_CHARS, "").trim();
+    return text && filenamify(text, { replacement: "-" }) || fallback;
+  }
+  function extensionFromMime(type) {
+    return index_lite_default.getExtension(String(type || "")) || "bin";
+  }
   function toUserMessage(error) {
-    const text = errorText(error);
+    const text = errorMessage(error);
     const httpMatch = /^Failed to fetch image: (\d+)/.exec(text);
     if (httpMatch) {
       return `图片拉取失败（HTTP ${httpMatch[1]}），请确认已登录飞书或稍后重试。`;
@@ -1959,7 +1972,7 @@ ${root} :focus-visible {
           fn();
         };
         const failed = (error) => settle(() => {
-          console.warn(`${LIB_NAME}: GM_download failed (${errorText(error)}); falling back to anchor download.`);
+          console.warn(`${LIB_NAME}: GM_download failed (${errorMessage(error)}); falling back to anchor download.`);
           resolve("failed");
         });
         const timer = setTimeout(() => settle(() => reject(new Error("GM_download timed out"))), downloadTimeoutMs);
@@ -2019,10 +2032,10 @@ ${root} :focus-visible {
       }
       applyTheme(root);
       toaster = createToaster({ root });
-      if (!document.getElementById(STYLE_ID)) {
-        const style = document.createElement("style");
-        style.id = STYLE_ID;
-        style.textContent = [
+      ensureStyle(
+        document,
+        STYLE_ID,
+        [
           buildTokenCss({
             rootSelector: `#${ROOT_ID}`,
             accent: "oklch(55% 0.15 250)",
@@ -2031,9 +2044,9 @@ ${root} :focus-visible {
           // 让 toast 叠在预览页之上，root 自身不拦截页面交互
           `#${ROOT_ID} { position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; }`,
           toaster.cssText
-        ].join("\n\n");
-        document.head.append(style);
-      }
+        ].join("\n\n"),
+        document.head
+      );
       return toaster;
     }
     const gmApi = resolveGmApi();

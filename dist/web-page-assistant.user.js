@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.22
+// @version      0.3.23
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -38,6 +38,17 @@
     for (var name in all)
       __defProp(target, name, { get: all[name], enumerable: true });
   };
+
+  // src/userscripts/shared/shared-dom.lib.ts
+  function ensureStyle(documentObject, id, cssText, parent = documentObject.head ?? documentObject.documentElement) {
+    if (documentObject.getElementById(id)) return () => {
+    };
+    const style = documentObject.createElement("style");
+    style.id = id;
+    style.textContent = cssText;
+    parent.append(style);
+    return () => style.remove();
+  }
 
   // src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts
   var web_page_assistant_settings_lib_exports = {};
@@ -335,6 +346,32 @@
     };
   }
 
+  // src/userscripts/shared/shared-values.lib.ts
+  function isRecord(value) {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+  var coerce = (transform2) => pipe(
+    optional(unknown(), () => void 0),
+    transform(transform2)
+  );
+  function errorMessage(error) {
+    try {
+      if (error instanceof Error) return error.message;
+      if (typeof error === "string") return error;
+      if (error && typeof error === "object") {
+        const record2 = error;
+        for (const key of ["error", "message"]) {
+          const value = record2[key];
+          if (typeof value === "string" && value) return value;
+        }
+        return JSON.stringify(error) ?? "";
+      }
+      return String(error);
+    } catch {
+      return "unknown error";
+    }
+  }
+
   // src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts
   var MIN_INTERVAL_MS = 1e3;
   var MAX_INTERVAL_MS = 60 * 60 * 1e3;
@@ -358,16 +395,9 @@
       }
     };
   }
-  function isRecord(value) {
-    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-  }
   function isValidIntervalMs(value) {
     return Number.isFinite(value) && value >= MIN_INTERVAL_MS && value <= MAX_INTERVAL_MS;
   }
-  var coerce = (transform2) => pipe(
-    optional(unknown(), () => void 0),
-    transform(transform2)
-  );
   var record = (entries) => pipe(custom(isRecord), object(entries));
   function timestampOrNow(value) {
     return Number.isFinite(Number(value)) ? Number(value) : Date.now();
@@ -423,42 +453,47 @@
       setting?.enabled && (setting.allowSelection || setting.allowCopy || setting.allowContextMenu || setting.allowDrag || setting.suppressBeforeUnload)
     );
   }
-  function resolveActiveRefreshSetting(sourceSettings, keys) {
-    const refreshSettings = normalizeScopedSettings(sourceSettings?.refresh, RefreshScopedSchema);
-    const pageSetting = normalizeRefreshSetting(refreshSettings.pages[keys.pageKey]);
-    if (pageSetting) return { scope: "page", key: keys.pageKey, setting: pageSetting };
-    const siteSetting = normalizeRefreshSetting(refreshSettings.sites[keys.siteKey]);
-    if (siteSetting) return { scope: "site", key: keys.siteKey, setting: siteSetting };
+  function bucketOf(scoped, scope) {
+    return scope === "site" ? scoped.sites : scoped.pages;
+  }
+  function settingAt(scoped, scope, key) {
+    const bucket = bucketOf(scoped, scope);
+    return Object.hasOwn(bucket, key) ? bucket[key] : null;
+  }
+  function resolveActiveSetting(scoped, keys, accept) {
+    for (const [scope, key] of [
+      ["page", keys.pageKey],
+      ["site", keys.siteKey]
+    ]) {
+      const setting = settingAt(scoped, scope, key);
+      if (setting && accept(setting)) return { scope, key, setting };
+    }
     return null;
+  }
+  function resolveActiveRefreshSetting(sourceSettings, keys) {
+    return resolveActiveSetting(normalizeScopedSettings(sourceSettings?.refresh, RefreshScopedSchema), keys, () => true);
   }
   function resolveActiveUnlockerSetting(sourceSettings, keys) {
-    const unlockerSettings = normalizeScopedSettings(sourceSettings?.unlocker, UnlockerScopedSchema);
-    const pageSetting = normalizeUnlockerSetting(unlockerSettings.pages[keys.pageKey]);
-    if (hasUnlockerAction(pageSetting)) return { scope: "page", key: keys.pageKey, setting: pageSetting };
-    const siteSetting = normalizeUnlockerSetting(unlockerSettings.sites[keys.siteKey]);
-    if (hasUnlockerAction(siteSetting)) return { scope: "site", key: keys.siteKey, setting: siteSetting };
-    return null;
+    return resolveActiveSetting(
+      normalizeScopedSettings(sourceSettings?.unlocker, UnlockerScopedSchema),
+      keys,
+      hasUnlockerAction
+    );
   }
   function getRefreshSetting(sourceSettings, scope, key) {
-    const settings = normalizeSettings(sourceSettings);
-    const bucket = scope === "site" ? settings.refresh.sites : settings.refresh.pages;
-    return normalizeRefreshSetting(bucket[key]);
+    return settingAt(normalizeSettings(sourceSettings).refresh, scope, key);
   }
   function getUnlockerSetting(sourceSettings, scope, key) {
-    const settings = normalizeSettings(sourceSettings);
-    const bucket = scope === "site" ? settings.unlocker.sites : settings.unlocker.pages;
-    return normalizeUnlockerSetting(bucket[key]);
+    return settingAt(normalizeSettings(sourceSettings).unlocker, scope, key);
   }
   function setRefreshSetting(sourceSettings, scope, key, intervalMs, updatedAt = Date.now()) {
     const next = normalizeSettings(sourceSettings);
-    const bucket = scope === "site" ? next.refresh.sites : next.refresh.pages;
-    bucket[key] = { intervalMs, updatedAt };
+    bucketOf(next.refresh, scope)[key] = { intervalMs, updatedAt };
     return normalizeSettings(next);
   }
   function deleteRefreshSetting(sourceSettings, scope, key) {
     const next = normalizeSettings(sourceSettings);
-    const bucket = scope === "site" ? next.refresh.sites : next.refresh.pages;
-    delete bucket[key];
+    delete bucketOf(next.refresh, scope)[key];
     return next;
   }
   function defaultUnlockerSetting(overrides = {}) {
@@ -473,11 +508,7 @@
     const normalized = normalizeUnlockerSetting(unlockerSetting);
     if (!normalized) return normalizeSettings(sourceSettings);
     const next = normalizeSettings(sourceSettings);
-    const bucket = scope === "site" ? next.unlocker.sites : next.unlocker.pages;
-    bucket[key] = {
-      ...normalized,
-      updatedAt
-    };
+    bucketOf(next.unlocker, scope)[key] = { ...normalized, updatedAt };
     return normalizeSettings(next);
   }
   var UNLOCKER_OPTION_LABELS = {
@@ -495,8 +526,7 @@
   }
   function deleteUnlockerSetting(sourceSettings, scope, key) {
     const next = normalizeSettings(sourceSettings);
-    const bucket = scope === "site" ? next.unlocker.sites : next.unlocker.pages;
-    delete bucket[key];
+    delete bucketOf(next.unlocker, scope)[key];
     return next;
   }
 
@@ -528,7 +558,7 @@
   }
   function resolveGmApi(overrides = {}) {
     const legacy = legacyGlobals();
-    const gm = overrides.gm || overrides.gmApi || modernGlobal();
+    const gm = overrides.gm || modernGlobal();
     const legacyAdd = pickFunction(overrides.gmAddValueChangeListener, legacy.addValueChangeListener);
     let valueChange = null;
     if (legacyAdd) {
@@ -555,7 +585,7 @@
 
   // src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts
   function normalizeWidgetPosition(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    if (!isRecord(value)) return null;
     const left = Number(value.left);
     const top = Number(value.top);
     if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
@@ -846,6 +876,9 @@
   }
 
   // src/userscripts/web-page-assistant/web-page-assistant-session.lib.ts
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
   function createWebPageAssistantSession({
     keys,
     storage,
@@ -857,8 +890,9 @@
     }
   }) {
     let settings = emptySettings();
+    let settingsSnapshot = clone(settings);
     let lifecycle = "idle";
-    let applicationError = null;
+    let startError = null;
     const applicationErrors = { refresh: null, unlocker: null };
     let appliedUnlocker = null;
     let startPromise;
@@ -879,17 +913,16 @@
       reload,
       onStateChange: () => emit("countdown")
     });
+    function commitSettings(next) {
+      settings = next;
+      settingsSnapshot = clone(next);
+    }
     function getState() {
-      return JSON.parse(
-        JSON.stringify({
-          lifecycle,
-          settings,
-          refresh: runtime.getState(),
-          appliedUnlocker,
-          applicationError,
-          applicationErrors
-        })
-      );
+      return {
+        ...clone({ lifecycle, refresh: runtime.getState(), appliedUnlocker, applicationErrors }),
+        settings: settingsSnapshot,
+        applicationError: [startError, ...Object.values(applicationErrors)].filter(Boolean).join("; ") || null
+      };
     }
     function emit(kind, area = null) {
       if (lifecycle === "disposed") return;
@@ -915,7 +948,7 @@
           }
         } catch (error) {
           failed = true;
-          applicationErrors[capability] = String(error?.message || error);
+          applicationErrors[capability] = errorMessage(error);
           if (capability === "refresh") runtime.stop();
           else {
             appliedUnlocker = null;
@@ -926,7 +959,6 @@
           }
         }
       }
-      applicationError = Object.values(applicationErrors).filter(Boolean).join("; ") || null;
       return failed ? "application-failed" : null;
     }
     function changedAreas(previous, next) {
@@ -943,7 +975,7 @@
       const next = normalizeSettings(latest);
       if (JSON.stringify(next) === JSON.stringify(settings)) return;
       const area = combinedArea(changedAreas(settings, next));
-      settings = next;
+      commitSettings(next);
       if (area) apply(area);
       emit("settings", area);
     }
@@ -975,7 +1007,7 @@
         try {
           const [loaded] = await Promise.all([storage.readSettings(), ready()]);
           if (lifecycle === "disposed") return result("disposed");
-          settings = normalizeSettings(loaded);
+          commitSettings(normalizeSettings(loaded));
           lifecycle = "ready";
           const code = apply("all");
           emit("lifecycle");
@@ -984,7 +1016,7 @@
         } catch (error) {
           if (lifecycle === "disposed") return result("disposed");
           lifecycle = "error";
-          applicationError = String(error?.message || error);
+          startError = errorMessage(error);
           emit("lifecycle");
           return result("storage-failed");
         }
@@ -1019,10 +1051,10 @@
         next = normalizeSettings(await storage.updateSettings(change));
       } catch (error) {
         if (lifecycle === "disposed") return result("disposed");
-        return { ...result("storage-failed"), message: String(error?.message || error) };
+        return { ...result("storage-failed"), message: errorMessage(error) };
       }
       const applied = combinedArea([.../* @__PURE__ */ new Set([area, ...changedAreas(settings, next)])]);
-      settings = next;
+      commitSettings(next);
       if (lifecycle === "disposed") return result("disposed", true, scope);
       const code = apply(applied);
       emit("settings", applied);
@@ -1144,10 +1176,7 @@
     if (!documentObject || !rootId || !styleId) {
       throw new Error(`${LIB_NAME}: documentObject, rootId, and styleId are required.`);
     }
-    if (documentObject.getElementById(styleId)) return;
-    const style = documentObject.createElement("style");
-    style.id = styleId;
-    style.textContent = `
+    const cssText = `
 	      #${rootId} {
 	        position: fixed;
 	        z-index: 2147483647;
@@ -1479,7 +1508,7 @@
     }
 
 `;
-    documentObject.documentElement.append(style);
+    return ensureStyle(documentObject, styleId, cssText, documentObject.documentElement);
   }
 
   // src/userscripts/web-page-assistant/web-page-assistant-presentation-dialog-styles.lib.ts
@@ -1488,10 +1517,7 @@
     if (!documentObject || !rootId || !styleId) {
       throw new Error(`${LIB_NAME2}: documentObject, rootId, and styleId are required.`);
     }
-    if (documentObject.getElementById(styleId)) return;
-    const style = documentObject.createElement("style");
-    style.id = styleId;
-    style.textContent = `      #${rootId} .part-backdrop {
+    const cssText = `      #${rootId} .part-backdrop {
       position: fixed;
 	        inset: 0;
 	        width: auto;
@@ -1765,7 +1791,7 @@
       }
     }
   `;
-    documentObject.documentElement.append(style);
+    return ensureStyle(documentObject, styleId, cssText, documentObject.documentElement);
   }
 
   // node_modules/preact/dist/preact.mjs
@@ -2515,7 +2541,7 @@
     return false;
   }
   function createPageAssistantDialogContract(adapters) {
-    const { settingsContract, defaultUnlockerSetting: defaultUnlockerSetting2, formatInterval: formatInterval2, defaultIntervalMs } = adapters;
+    const { formatInterval: formatInterval2, defaultIntervalMs } = adapters;
     const tabs = { refresh: "refresh", unlocker: "unlocker" };
     const roles = {
       status: "status",
@@ -2535,6 +2561,14 @@
       unlockerDrag: "unlocker-drag",
       unlockerBeforeUnload: "unlocker-beforeunload"
     };
+    const unlockerFields = [
+      [roles.unlockerEnabled, "enabled"],
+      [roles.unlockerSelection, "allowSelection"],
+      [roles.unlockerCopy, "allowCopy"],
+      [roles.unlockerContextMenu, "allowContextMenu"],
+      [roles.unlockerDrag, "allowDrag"],
+      [roles.unlockerBeforeUnload, "suppressBeforeUnload"]
+    ];
     const actions = {
       savePreset: "save-preset",
       deletePage: "delete-page",
@@ -2564,10 +2598,10 @@
     function createViewModel(input) {
       const nextTab = normalizeTab(input.preferredTab, input.activeTab);
       const selectedScope = input.preferredScope || input.activeRefreshMatch?.scope || input.activeUnlockerMatch?.scope || "page";
-      const pageSetting = settingsContract.getRefreshSetting(input.settings, "page", input.pageKey);
-      const siteSetting = settingsContract.getRefreshSetting(input.settings, "site", input.siteKey);
-      const pageUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, "page", input.pageKey);
-      const siteUnlockerSetting = settingsContract.getUnlockerSetting(input.settings, "site", input.siteKey);
+      const pageSetting = getRefreshSetting(input.settings, "page", input.pageKey);
+      const siteSetting = getRefreshSetting(input.settings, "site", input.siteKey);
+      const pageUnlockerSetting = getUnlockerSetting(input.settings, "page", input.pageKey);
+      const siteUnlockerSetting = getUnlockerSetting(input.settings, "site", input.siteKey);
       const scopedUnlockerSetting = selectedScope === "site" ? siteUnlockerSetting : pageUnlockerSetting;
       const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
       const customInterval = defaultInterval % (60 * 1e3) === 0 ? { value: String(defaultInterval / (60 * 1e3)), unit: "minutes" } : { value: String(Math.round(defaultInterval / 1e3)), unit: "seconds" };
@@ -2579,7 +2613,7 @@
         siteSetting,
         pageUnlockerSetting,
         siteUnlockerSetting,
-        unlockerFormSetting: scopedUnlockerSetting || defaultUnlockerSetting2({ enabled: false }),
+        unlockerFormSetting: scopedUnlockerSetting || defaultUnlockerSetting({ enabled: false }),
         customInterval,
         statusText: input.statusText,
         unlockerStatusText: input.unlockerStatusText,
@@ -2622,25 +2656,17 @@
       dialogNode.querySelector(roleSelector(roles.customUnit)).value = model.customInterval.unit;
       dialogNode.querySelector(actionSelector(actions.deletePage)).disabled = !model.pageSetting;
       dialogNode.querySelector(actionSelector(actions.deleteSite)).disabled = !model.siteSetting;
-      dialogNode.querySelector(roleSelector(roles.unlockerEnabled)).checked = model.unlockerFormSetting.enabled;
-      dialogNode.querySelector(roleSelector(roles.unlockerSelection)).checked = model.unlockerFormSetting.allowSelection;
-      dialogNode.querySelector(roleSelector(roles.unlockerCopy)).checked = model.unlockerFormSetting.allowCopy;
-      dialogNode.querySelector(roleSelector(roles.unlockerContextMenu)).checked = model.unlockerFormSetting.allowContextMenu;
-      dialogNode.querySelector(roleSelector(roles.unlockerDrag)).checked = model.unlockerFormSetting.allowDrag;
-      dialogNode.querySelector(roleSelector(roles.unlockerBeforeUnload)).checked = model.unlockerFormSetting.suppressBeforeUnload;
+      for (const [role, field] of unlockerFields) {
+        dialogNode.querySelector(roleSelector(role)).checked = model.unlockerFormSetting[field];
+      }
       dialogNode.querySelector(actionSelector(actions.deleteUnlockerPage)).disabled = !model.pageUnlockerSetting;
       dialogNode.querySelector(actionSelector(actions.deleteUnlockerSite)).disabled = !model.siteUnlockerSetting;
       dialogNode.querySelector(roleSelector(model.focusRole))?.focus();
     }
     function readUnlockerFormSetting(dialogNode) {
-      return defaultUnlockerSetting2({
-        enabled: isChecked(dialogNode, roles.unlockerEnabled),
-        allowSelection: isChecked(dialogNode, roles.unlockerSelection),
-        allowCopy: isChecked(dialogNode, roles.unlockerCopy),
-        allowContextMenu: isChecked(dialogNode, roles.unlockerContextMenu),
-        allowDrag: isChecked(dialogNode, roles.unlockerDrag),
-        suppressBeforeUnload: isChecked(dialogNode, roles.unlockerBeforeUnload)
-      });
+      return defaultUnlockerSetting(
+        Object.fromEntries(unlockerFields.map(([role, field]) => [field, isChecked(dialogNode, role)]))
+      );
     }
     return {
       roles,
@@ -4706,8 +4732,6 @@ ${root} :focus-visible {
   var WIDGET_DEFAULT_OFFSET = 18;
   var PANEL_WIDTH = 248;
   var PANEL_MIN_WIDTH = 52;
-  var PANEL_SAFE_MARGIN2 = 12;
-  var PANEL_GAP2 = 8;
   var PRESET_INTERVALS_MS = [30, 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 30 * 60, 60 * 60].map(
     (seconds) => seconds * 1e3
   );
@@ -4757,8 +4781,6 @@ ${root} :focus-visible {
       clearTimeout: clock?.clearTimeout || windowObject.clearTimeout.bind(windowObject)
     };
     const dialogContract = createPageAssistantDialogContract({
-      settingsContract: web_page_assistant_settings_lib_exports,
-      defaultUnlockerSetting,
       formatInterval,
       defaultIntervalMs: 5 * 60 * 1e3
     });
@@ -4787,7 +4809,7 @@ ${root} :focus-visible {
     let openPromise = null;
     let pendingOpenIntent = null;
     const pendingSubmissions = /* @__PURE__ */ new Set();
-    const ownedStyleIds = /* @__PURE__ */ new Set();
+    const styleRemovers = [];
     let finishDisposed;
     const disposedPromise = new Promise((resolve) => {
       finishDisposed = resolve;
@@ -4800,9 +4822,9 @@ ${root} :focus-visible {
       };
     }
     function sizeWidgetPanel(panel) {
-      const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN2 * 2));
+      const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN * 2));
       panel.style.setProperty("--part-panel-width", `${Math.round(width)}px`);
-      panel.style.setProperty("--part-panel-gap", `${PANEL_GAP2}px`);
+      panel.style.setProperty("--part-panel-gap", `${PANEL_GAP}px`);
     }
     function attachWidgetShell() {
       detachWidgetShell();
@@ -4840,7 +4862,7 @@ ${root} :focus-visible {
         reference: widget,
         floating: panel,
         placement: "top-end",
-        gap: PANEL_GAP2,
+        gap: PANEL_GAP,
         strategy: "absolute",
         apply({ x: x2, y: y3, placement: side }) {
           panel.style.setProperty("--part-panel-left", `${Math.round(x2)}px`);
@@ -4865,35 +4887,34 @@ ${root} :focus-visible {
       widgetShell.placement?.update().catch(() => {
       });
     }
-    function currentStatusText(snapshot = latestSnapshot) {
-      const activeMatch = snapshot.refresh.activeMatch;
+    function enabledStatusText(enabledText) {
+      const activeMatch = latestSnapshot.refresh.activeMatch;
       if (!activeMatch) return "当前未启用自动刷新。";
-      return `${scopeLabel(activeMatch.scope)}已启用，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
+      return `${scopeLabel(activeMatch.scope)}${enabledText}，每 ${formatInterval(activeMatch.setting.intervalMs)} 刷新一次。`;
     }
-    function widgetStatusText(snapshot = latestSnapshot) {
-      const runtimeState = snapshot.refresh;
-      if (!runtimeState.activeMatch) return "当前未启用自动刷新。";
-      if (runtimeState.isPaused) {
+    function currentStatusText() {
+      return enabledStatusText("已启用");
+    }
+    function widgetStatusText() {
+      const runtimeState = latestSnapshot.refresh;
+      if (runtimeState.activeMatch && runtimeState.isPaused) {
         const remaining = formatInterval(Math.max(1e3, Math.ceil(runtimeState.remainingMs / 1e3) * 1e3));
         return `自动刷新已暂停，剩余 ${remaining}。`;
       }
-      return `${scopeLabel(runtimeState.activeMatch.scope)}自动刷新已启用，每 ${formatInterval(runtimeState.activeMatch.setting.intervalMs)} 刷新一次。`;
+      return enabledStatusText("自动刷新已启用");
     }
-    function ensureStyle(styleId, install) {
+    function ownStyle(styleId, install) {
       if (documentObject.getElementById(styleId)) return;
-      install();
-      ownedStyleIds.add(styleId);
+      styleRemovers.push(install());
     }
     function ensureRoot() {
       if (disposed) return null;
       if (root && root.isConnected !== false) return root;
-      ensureStyle(TOKEN_STYLE_ID, () => {
-        const tokenStyle = documentObject.createElement("style");
-        tokenStyle.id = TOKEN_STYLE_ID;
-        tokenStyle.textContent = tokenCss;
-        documentObject.documentElement.append(tokenStyle);
-      });
-      ensureStyle(STYLE_ID, () => installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID }));
+      ownStyle(
+        TOKEN_STYLE_ID,
+        () => ensureStyle(documentObject, TOKEN_STYLE_ID, tokenCss, documentObject.documentElement)
+      );
+      ownStyle(STYLE_ID, () => installAssistantBaseStyles({ documentObject, rootId: ROOT_ID, styleId: STYLE_ID }));
       root = documentObject.getElementById(ROOT_ID);
       if (!root) {
         root = documentObject.createElement("div");
@@ -4907,19 +4928,16 @@ ${root} :focus-visible {
       windowObject.addEventListener("resize", handleResize);
       return root;
     }
-    function createWidgetViewModel() {
-      return {
-        enabled: Boolean(latestSnapshot.refresh.activeMatch),
-        summary: currentStatusText()
-      };
-    }
     function renderWidget() {
       if (disposed || latestSnapshot.lifecycle !== "ready") return;
       ensureRoot();
       if (!hasMountedWidget) widgetPosition = positions.get?.() || widgetPosition;
       const returnToWidget = dialogReturnFocus === widgetButton;
       widget?.remove();
-      const rendered = createWidgetElement({ documentObject, model: createWidgetViewModel() });
+      const rendered = createWidgetElement({
+        documentObject,
+        model: { enabled: Boolean(latestSnapshot.refresh.activeMatch), summary: currentStatusText() }
+      });
       widget = rendered.widget;
       widgetButton = rendered.widgetButton;
       countdownNodes = rendered.countdownNodes;
@@ -4935,9 +4953,6 @@ ${root} :focus-visible {
       updateCountdownText();
       updateWidgetStatusText();
     }
-    function getSelectedScope() {
-      return dialogContract.readSelectedScope(dialog);
-    }
     function createDialogViewModel(message = "", preferredScope = null, preferredTab = null) {
       return dialogContract.createViewModel({
         message,
@@ -4950,7 +4965,10 @@ ${root} :focus-visible {
         pageKey: keys.pageKey,
         siteKey: keys.siteKey,
         statusText: currentStatusText(),
-        unlockerStatusText: unlockerStatusText(latestSnapshot, preferredScope || getSelectedScope())
+        unlockerStatusText: unlockerStatusText(
+          latestSnapshot,
+          preferredScope || dialogContract.readSelectedScope(dialog)
+        )
       });
     }
     function captureDialogState() {
@@ -4997,7 +5015,7 @@ ${root} :focus-visible {
     function renderDialog({ message = "", tone = "info", scope = null, tab = null } = {}) {
       if (disposed) return;
       ensureRoot();
-      ensureStyle(
+      ownStyle(
         DIALOG_STYLE_ID,
         () => installAssistantDialogStyles({ documentObject, rootId: ROOT_ID, styleId: DIALOG_STYLE_ID })
       );
@@ -5039,7 +5057,10 @@ ${root} :focus-visible {
     }
     function updateDialogStatus() {
       if (!dialog) return;
-      dialogContract.applyStatusTexts(dialog, createDialogViewModel("", getSelectedScope(), activeDialogTab));
+      dialogContract.applyStatusTexts(
+        dialog,
+        createDialogViewModel("", dialogContract.readSelectedScope(dialog), activeDialogTab)
+      );
     }
     function parseCustomInterval() {
       const valueNode = dialog?.querySelector(dialogContract.roleSelector(dialogContract.roles.customValue));
@@ -5079,10 +5100,11 @@ ${root} :focus-visible {
     }
     async function dispatchAction(action, node) {
       if (action === "open-settings") return openSettings({ tab: "refresh" });
-      if (action === "switch-tab") return renderDialog({ scope: getSelectedScope(), tab: node.dataset.partTab });
+      if (action === "switch-tab")
+        return renderDialog({ scope: dialogContract.readSelectedScope(dialog), tab: node.dataset.partTab });
       if (action === "close-dialog") return closeDialog();
       if (initializationError) throw new Error(initializationError);
-      let scope = getSelectedScope();
+      let scope = dialogContract.readSelectedScope(dialog);
       let command = { type: action, scope };
       let tab = "refresh";
       let message = "";
@@ -5166,7 +5188,7 @@ ${root} :focus-visible {
         if (disposed) return;
         console.warn(`${SCRIPT_NAME}: action failed.`, error);
         if (dialog === actionDialog && dialogGeneration === actionGeneration && !dialog?.querySelector('[data-part-role="message"]')?.textContent) {
-          setMessage(`操作失败：${error?.message || error}`, "error");
+          setMessage(`操作失败：${errorMessage(error)}`, "error");
         }
       } finally {
         if (isWrite && !disposed && actionNode.isConnected !== false) {
@@ -5181,7 +5203,7 @@ ${root} :focus-visible {
     function handleRootChange(event) {
       const target = event.target;
       if (!target?.matches?.('input[name="part-scope"]')) return;
-      const selectedScope = getSelectedScope();
+      const selectedScope = dialogContract.readSelectedScope(dialog);
       renderDialog({ message: `将保存到${scopeLabel(selectedScope)}。`, scope: selectedScope, tab: activeDialogTab });
     }
     function handleResize() {
@@ -5208,7 +5230,7 @@ ${root} :focus-visible {
       if (!dialog) return;
       updateDialogStatus();
       if (change.kind === "settings" && pendingSubmissions.size === 0 && editRevision === 0) {
-        renderDialog({ scope: getSelectedScope(), tab: activeDialogTab });
+        renderDialog({ scope: dialogContract.readSelectedScope(dialog), tab: activeDialogTab });
       }
     }
     function mergeIntent(next = {}) {
@@ -5229,7 +5251,7 @@ ${root} :focus-visible {
           startup = {
             ok: false,
             code: "storage-failed",
-            message: String(error?.message || error),
+            message: errorMessage(error),
             state: session.getState()
           };
         }
@@ -5271,8 +5293,7 @@ ${root} :focus-visible {
       widgetButton = null;
       countdownNodes = [];
       widgetStatusNode = null;
-      for (const styleId of ownedStyleIds) documentObject.getElementById(styleId)?.remove();
-      ownedStyleIds.clear();
+      for (const remove of styleRemovers.splice(0)) remove();
     }
     return { update, openSettings, dispose };
   }
@@ -5313,10 +5334,7 @@ ${root} :focus-visible {
       getWindowTarget: () => window,
       getStyle: () => document.getElementById(UNLOCKER_STYLE_ID),
       installStyle(cssText) {
-        const style = document.createElement("style");
-        style.id = UNLOCKER_STYLE_ID;
-        style.textContent = cssText;
-        document.documentElement.append(style);
+        ensureStyle(document, UNLOCKER_STYLE_ID, cssText, document.documentElement);
       },
       removeStyle() {
         document.getElementById(UNLOCKER_STYLE_ID)?.remove();
