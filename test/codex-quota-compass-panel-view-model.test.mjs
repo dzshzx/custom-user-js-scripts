@@ -93,6 +93,7 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     model.secondaryMetrics.map((metric) => metric.id),
     ['remainingUsdExcludingReset', 'sevenDayUsedPercent'],
   );
+  assert.equal(model.secondaryMetrics[1].value, '40%');
   assert.deepEqual(
     model.detailMetrics.map((metric) => metric.id),
     ['weeklyTotalIncludingReset', 'weeklyTotalExcludingReset', 'sinceResetTotal', 'monthTotal'],

@@ -69,15 +69,15 @@ export interface WebPageAssistantSession {
 
 type ScopedResolver = (settings: Settings.SettingsSource, keys: Settings.ScopeKeys) => unknown;
 
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
 // Settings and applied capabilities have one owner. Only persisted commands
 // and refreshes from storage enter the FIFO; pause remains available while a
 // storage write is pending. Every write is applied to the latest stored
 // settings, so other tabs' saves survive; their change events refresh the
 // in-memory copy between writes.
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
-}
-
 function createWebPageAssistantSession({
   keys,
   storage,
