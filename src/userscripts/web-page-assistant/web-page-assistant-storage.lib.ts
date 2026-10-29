@@ -67,7 +67,7 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
     eventTarget,
     logger,
   } = adapters;
-  // GM overrides (gmGetValue, gmApi, ...) in `adapters` replace the probed
+  // GM overrides (gmGetValue, gm, ...) in `adapters` replace the probed
   // manager API; production passes none and gets the resolved globals.
   const gm = resolveGmApi(adapters);
 
