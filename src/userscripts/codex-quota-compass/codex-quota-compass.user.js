@@ -1558,12 +1558,20 @@
       if (typeof fetchDailyTokenBreakdown !== "function") {
         return () => ({ modelSummaries: null, modelSummaryError: "" });
       }
+      const failed = (error) => ({ modelSummaries: [], modelSummaryError: errorMessage(error) });
+      let json;
       try {
-        const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
-        return (rangeCredits) => ({ modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: "" });
+        json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
       } catch (error) {
-        return () => ({ modelSummaries: [], modelSummaryError: errorMessage(error) });
+        return () => failed(error);
       }
+      return (rangeCredits) => {
+        try {
+          return { modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: "" };
+        } catch (error) {
+          return failed(error);
+        }
+      };
     }
     function parseResetCreditRows(json) {
       return (json?.credits ?? []).slice().sort((left, right) => String(left?.expires_at || "").localeCompare(String(right?.expires_at || ""))).map((credit) => ({
