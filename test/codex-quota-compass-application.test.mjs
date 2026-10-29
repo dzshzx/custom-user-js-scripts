@@ -16,18 +16,10 @@ import {
   normalizeSettings,
   GIST_FILENAME,
 } from '../src/userscripts/codex-quota-compass/codex-quota-compass-remote-sync.lib.ts';
+import { deferred } from './helpers/async.mjs';
 
 const now = () => '2026-09-21T12:00:00.000Z';
 const tick = () => new Promise((resolve) => setImmediate(resolve));
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, resolve, reject };
-}
 function archive(date, credits = 10) {
   return { snapshots: [], ledger: { [date]: { date, credits, usd: credits * 0.04, settled: true, settledAt: now() } } };
 }

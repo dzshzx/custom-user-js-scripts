@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
 import { createWidgetShell } from '../src/userscripts/shared/shared-widget-shell.lib.ts';
+import { flush as flushTimers } from './helpers/async.mjs';
 
 const POSITION_KEY = 'wk-test:position';
 
@@ -49,8 +50,6 @@ function pointerEvent(window, type, props = {}) {
   const event = new window.Event(type, { bubbles: true, cancelable: true });
   return Object.assign(event, { pointerId: 1, button: 0, clientX: 0, clientY: 0, ...props });
 }
-
-const flushTimers = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Panel placement runs happy-dom's synchronous getComputedStyle, so the open
 // animation frame can land well after 16ms on a loaded machine.

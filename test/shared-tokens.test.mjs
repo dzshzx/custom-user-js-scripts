@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
 import { applyTheme, buildTokenCss, resolveTheme } from '../src/userscripts/shared/shared-tokens.lib.ts';
+import { flush as flushObserver } from './helpers/async.mjs';
 
 function withStubbedMatchMedia(media, run) {
   const previous = globalThis.window;
@@ -142,7 +143,6 @@ test('applyTheme observeHost re-resolves when the host element class or style ch
   const documentObject = window.document;
   const root = documentObject.createElement('div');
   documentObject.body.append(root);
-  const flushObserver = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   let hostTheme = null;
   const cleanup = applyTheme(root, {

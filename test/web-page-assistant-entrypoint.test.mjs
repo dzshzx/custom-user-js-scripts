@@ -3,20 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { createMemoryStorage } from './helpers/dom-env.mjs';
 
 const distPath = path.resolve(import.meta.dirname, '../dist/web-page-assistant.user.js');
-
-function createLocalStorage() {
-  const values = new Map();
-  return {
-    getItem(key) {
-      return values.has(key) ? values.get(key) : null;
-    },
-    setItem(key, value) {
-      values.set(key, String(value));
-    },
-  };
-}
 
 async function runScriptFile(context, filePath) {
   const source = await readFile(filePath, 'utf8');
@@ -67,7 +56,7 @@ async function createEntrypointHarness(overrides = {}) {
       hostname: 'example.com',
       reload() {},
     },
-    localStorage: createLocalStorage(),
+    localStorage: createMemoryStorage(),
     window: windowObject,
     GM_getValue() {
       return new Promise(() => {});

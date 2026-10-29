@@ -10,11 +10,10 @@ import {
   sanitizeFilePart,
   toUserMessage,
 } from '../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.ts';
+import { flush } from './helpers/async.mjs';
 
 const distPath = path.resolve(import.meta.dirname, '../dist/feishu-preview-image-export.user.js');
 const distSource = await readFile(distPath, 'utf8');
-
-const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /* ---------- lib 级：纯函数与运行时 ---------- */
 

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createArchiveData } from '../src/userscripts/javdb-recommend/javdb-recommend-data.lib.ts';
 import { createRequest } from '../src/userscripts/javdb-recommend/javdb-recommend-request.lib.ts';
+import { deferred } from './helpers/async.mjs';
 const C = 'javdb_recommend_periods_cache_v1',
   D = 'javdb_recommend_details_cache_v1',
   I = 'javdb_recommend_search_index_v1_';
@@ -52,13 +53,6 @@ const putDetails = (details, entries) => {
 };
 const put = (s, key, value) => s.setItem(key, JSON.stringify({ version: 1, ...value }));
 const movie = { id: 'm', number: 'ABC', title: 'match' };
-const deferred = () => {
-  let resolve;
-  const promise = new Promise((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-};
 const tick = async () => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 };

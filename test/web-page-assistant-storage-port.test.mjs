@@ -167,7 +167,7 @@ test('storage port registers settings menu through available GM adapter', () => 
       gmRegisterMenuCommand(label, handler) {
         legacyCalls.push([label, handler]);
       },
-      gmApi: {
+      gm: {
         registerMenuCommand(label, handler) {
           promiseCalls.push([label, handler]);
         },
@@ -176,7 +176,7 @@ test('storage port registers settings menu through available GM adapter', () => 
   );
   const promisePort = createWebPageAssistantStoragePort(
     baseAdapters({
-      gmApi: {
+      gm: {
         registerMenuCommand(label, handler) {
           promiseCalls.push([label, handler]);
         },
@@ -198,7 +198,7 @@ test("storage port reports only other tabs' settings changes and unsubscribes", 
   const storageHandlers = new Set();
   const port = createWebPageAssistantStoragePort(
     baseAdapters({
-      gmApi: {
+      gm: {
         addValueChangeListener(key, listener) {
           listeners.push([key, listener]);
           return Promise.resolve(7);

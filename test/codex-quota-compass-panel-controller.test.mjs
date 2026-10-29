@@ -4,15 +4,9 @@ import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 import { buildQuotaSnapshotResult } from '../src/userscripts/codex-quota-compass/codex-quota-compass-core.lib.ts';
 import { createQuotaCompassTranslator } from '../src/userscripts/codex-quota-compass/codex-quota-compass-i18n.lib.ts';
 import { createQuotaPanelController } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-controller.lib.tsx';
+import { deferred } from './helpers/async.mjs';
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
-function deferred() {
-  let resolve;
-  const promise = new Promise((yes) => {
-    resolve = yes;
-  });
-  return { promise, resolve };
-}
 function result() {
   return buildQuotaSnapshotResult({
     config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },

@@ -5,17 +5,7 @@ import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.ts';
 import { createWebPageAssistantView } from '../src/userscripts/web-page-assistant/web-page-assistant-view.lib.ts';
 import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts';
-
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const deferred = () => {
-  let resolve;
-  let reject;
-  const promise = new Promise((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-};
+import { deferred, flush } from './helpers/async.mjs';
 
 function createHarness({ readSettings, writeSettings, initialPosition = null, preparedPosition } = {}) {
   const window = createDomWindow({ url: 'https://example.com/article?id=1' });

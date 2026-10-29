@@ -3,13 +3,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
+import { flush } from './helpers/async.mjs';
 
 // Dist-level behavior tests: the dialog/modal wiring lives in the entry IIFE,
 // so these drive the built userscript in a DOM instead of importing libs.
 const distPath = path.resolve(import.meta.dirname, '../dist/web-page-assistant.user.js');
 const distSource = await readFile(distPath, 'utf8');
-
-const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function boot({ gmSetValue, localStorageStub, seedFallbackSettings, clock } = {}) {
   const window = createDomWindow({ url: 'https://example.com/article?id=1' });

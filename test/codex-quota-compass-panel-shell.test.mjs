@@ -6,9 +6,9 @@ import {
   createFloatingPanelShell,
   detectHostTheme,
 } from '../src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell.lib.tsx';
+import { flush } from './helpers/async.mjs';
 
 const POSITION_KEY = 'codexQuotaCompassButtonPosition';
-const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function createMountedShell({ storage, labels, ...options } = {}) {
   const window = createDomWindow();

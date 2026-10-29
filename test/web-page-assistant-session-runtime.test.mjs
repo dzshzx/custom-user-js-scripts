@@ -2,14 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWebPageAssistantSession } from '../src/userscripts/web-page-assistant/web-page-assistant-session.lib.ts';
 import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts';
+import { deferred } from './helpers/async.mjs';
 
-const deferred = () => {
-  let resolve;
-  const promise = new Promise((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-};
 function harness(overrides = {}) {
   let time = 100;
   let reads = 0;
