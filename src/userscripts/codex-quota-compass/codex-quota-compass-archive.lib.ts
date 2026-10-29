@@ -16,6 +16,7 @@ import type {
   ArchivePeriodSummaryProjection,
   ArchiveSourceContext,
 } from './codex-quota-compass-contract.lib.ts';
+import { toNumber } from './codex-quota-compass-core.lib.ts';
 import type { QuotaWindowRow } from './codex-quota-compass-core.lib.ts';
 
 /** A JSON-safe value as produced by `sanitizeValue`. */
@@ -438,11 +439,6 @@ function previewImportArchiveDocument(currentArchive: unknown, documentObject: u
     report: merged.report,
     changed: merged.changed,
   };
-}
-
-function toNumber(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function sumRows(rows: readonly SumRowLike[]): LedgerTotals {

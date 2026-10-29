@@ -148,12 +148,14 @@ interface ArchiveSummaryProps {
   state?: PanelRenderState;
 }
 
+// Shared formatters: same output as Number#toLocaleString with these options,
+// without building an Intl object per table cell.
+const DECIMAL_FORMAT = new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 });
+const ONE_DECIMAL_FORMAT = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
 function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return '-';
-  if (typeof value === 'number')
-    return Number.isInteger(value)
-      ? value.toLocaleString()
-      : value.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  if (typeof value === 'number') return Number.isInteger(value) ? value.toLocaleString() : DECIMAL_FORMAT.format(value);
   return String(value);
 }
 
@@ -164,12 +166,6 @@ function safeRows<T>(rows: readonly T[] | null | undefined, limit = 12): T[] {
 function classes(...names: (string | false | null | undefined)[]): string {
   return names.filter(Boolean).join(' ');
 }
-
-const DEFAULT_TABS: RendererTab[] = [
-  { id: 'details', labelKey: 'tabDetails' },
-  { id: 'stats', labelKey: 'tabStats' },
-  { id: 'archive', labelKey: 'tabArchiveWorkspace' },
-];
 
 // Builds the quota panel's preact components around the injected translator.
 // The controller renders <Panel> into the panel content node; preact diffs
@@ -341,10 +337,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp }: QuotaPanelRendererOpti
   function formatMetricDecimal(value: unknown): string {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return '-';
-    return numericValue.toLocaleString(undefined, {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    });
+    return ONE_DECIMAL_FORMAT.format(numericValue);
   }
 
   function usdMetricValue(value: unknown): string {
@@ -596,7 +589,7 @@ function createQuotaPanelRenderer({ t, formatTimestamp }: QuotaPanelRendererOpti
   }
 
   function PanelTabs({ model, activePanelView }: PanelTabsProps) {
-    const tabs: RendererTab[] = Array.isArray(model?.tabs) && model.tabs.length ? model.tabs : DEFAULT_TABS;
+    const tabs: RendererTab[] = model?.tabs || [];
     return (
       <div class="cqc-tabs">
         {tabs.map((tab) => (
@@ -662,29 +655,10 @@ function createQuotaPanelRenderer({ t, formatTimestamp }: QuotaPanelRendererOpti
     ));
   }
 
-  function ArchiveView({ viewModel, state, form }: ViewProps) {
-    const view = viewModel?.views?.archive;
-    if (view) return <SectionsView view={view} viewModel={viewModel} state={state} form={form} />;
-    return (
-      <>
-        <SyncBanner banner={viewModel?.syncBanner} />
-        <Section title={t('sectionArchiveOverview')}>
-          <ArchiveSummary model={viewModel?.archive} state={state} />
-        </Section>
-        <div class="cqc-transfer-note">{t('transferNote')}</div>
-        <DetailActions
-          actions={[
-            { action: 'export-archive', label: t('archiveExportAction') },
-            { action: 'import-archive', label: t('archiveImportAction') },
-          ]}
-        />
-      </>
-    );
-  }
-
   function ActiveView({ viewModel, activePanelView, state = {}, form }: ViewProps & { activePanelView: string }) {
     const view = viewModel?.views?.[activePanelView as PanelViewId] || viewModel?.views?.details;
-    if (view?.kind === 'archiveWorkspace') return <ArchiveView viewModel={viewModel} state={state} form={form} />;
+    if (view?.kind === 'archiveWorkspace')
+      return <SectionsView view={view} viewModel={viewModel} state={state} form={form} />;
     if (view?.kind === 'stats') {
       return (
         <StatsView

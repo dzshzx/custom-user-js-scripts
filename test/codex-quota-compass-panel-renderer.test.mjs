@@ -504,7 +504,6 @@ test('stats view renders cost dimensions, a live rolling line, and drillable row
     rolling: { 累计折算USD: 8, 累计Credits: 200 },
     cost: {
       cycleStartDate: '2026-06-01',
-      today: { date: '2026-06-05', credits: 50, usd: 2 },
       day: { rows: [{ date: '2026-06-02', credits: 200, usd: 8 }], today: { date: '2026-06-05', credits: 50, usd: 2 } },
       week: {
         current: { from: '2026-05-30', to: '2026-06-05', credits: 50, usd: 2 },
@@ -520,7 +519,6 @@ test('stats view renders cost dimensions, a live rolling line, and drillable row
         coverDays: 5,
         fromDate: '2026-06-02',
         toDate: '2026-06-02',
-        rows: [{ date: '2026-06-02', credits: 200, usd: 8 }],
       },
       allDays: [{ date: '2026-06-02', credits: 200, usd: 8 }],
     },

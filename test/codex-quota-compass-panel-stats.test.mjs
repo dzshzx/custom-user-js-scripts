@@ -22,7 +22,6 @@ function buildStatsView(props, components) {
 
 const COST = {
   cycleStartDate: '2026-06-01',
-  today: { date: '2026-06-20', credits: 5, usd: 0.2 },
   day: {
     rows: [
       { date: '2026-06-02', credits: 200, usd: 8 },
@@ -44,10 +43,6 @@ const COST = {
     coverDays: 2,
     fromDate: '2026-06-02',
     toDate: '2026-06-10',
-    rows: [
-      { date: '2026-06-02', credits: 200, usd: 8 },
-      { date: '2026-06-10', credits: 100, usd: 4 },
-    ],
   },
   allDays: [
     { date: '2026-06-02', credits: 200, usd: 8 },
@@ -104,7 +99,8 @@ test('all period shows a settled total and a flat list, no drill rows', () => {
   const html = buildStatsView({ cost: COST, rolling: ROLLING, period: 'all' }, helpers);
   assert.match(html, /statsAllTotal/);
   assert.match(html, /statsCoverDays/);
-  assert.match(html, /data-rows="2"/);
+  // The flat list is every settled day (allDays).
+  assert.match(html, /data-rows="3"/);
   assert.doesNotMatch(html, /data-action="stats-drill"/);
 });
 

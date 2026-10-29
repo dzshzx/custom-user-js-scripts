@@ -1,3 +1,4 @@
+import { errorMessage } from '../shared/shared-values.lib.ts';
 import { planRemoteSyncSave } from './codex-quota-compass-remote-sync.lib.ts';
 import type {
   RemoteSyncClient,
@@ -27,7 +28,6 @@ export interface QuotaApplicationErrors {
 export interface QuotaApplicationState {
   lifecycle: QuotaLifecycle;
   result: QuotaSnapshotResult | null;
-  calculationError: string | null;
   archiveSummary: SnapshotArchiveSummary | null;
   ledgerCost: LedgerCostViews | null;
   importReport: ArchiveMergeReport | null;
@@ -99,7 +99,6 @@ function createQuotaApplication({
   const state: QuotaApplicationState = {
     lifecycle: 'idle',
     result: null,
-    calculationError: null,
     archiveSummary: null,
     ledgerCost: null,
     importReport: null,
@@ -117,9 +116,6 @@ function createQuotaApplication({
     } catch {
       /* Observers cannot change an operation result. */
     }
-  }
-  function errorMessage(error: unknown): string {
-    return (error as Error | null)?.message || String(error);
   }
   function clearTimer() {
     if (timer !== null) clock.clearTimeout(timer);
@@ -225,7 +221,7 @@ function createQuotaApplication({
     if (running) return running;
     if (!runGuard.acquire()) return Promise.resolve({ status: 'skipped', reason: 'already-running' });
     state.operations.run = true;
-    state.calculationError = state.errors.calculation = null;
+    state.errors.calculation = null;
     state.errors.persistence = null;
     notify();
     running = (async (): Promise<QuotaOperationOutcome> => {
@@ -235,8 +231,8 @@ function createQuotaApplication({
         state.result = result;
         state.importReport = null;
       } catch (error) {
-        state.calculationError = state.errors.calculation = errorMessage(error);
-        return { status: 'error', error: state.calculationError, completed: [] };
+        state.errors.calculation = errorMessage(error);
+        return { status: 'error', error: state.errors.calculation, completed: [] };
       }
       try {
         await archiveStore.saveSnapshot(result);

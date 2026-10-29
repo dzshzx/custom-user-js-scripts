@@ -1,3 +1,6 @@
+import { isRecord } from '../shared/shared-values.lib.ts';
+import { roundNumber, toNumber } from './codex-quota-compass-core.lib.ts';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SETTLE_BUFFER_MS = 15 * 60 * 1000;
 const DEFAULT_USD_PER_CREDIT = 40 / 1000;
@@ -82,19 +85,6 @@ export interface LedgerAllTimeAggregate extends LedgerTotals {
   inProgress: LedgerRecord | null;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function toNumber(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function round2(value: unknown): number {
-  return Number(Number(value).toFixed(2));
-}
-
 function isDateKey(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -125,7 +115,7 @@ function makeRecord(
   return {
     date,
     credits: creditsNum,
-    usd: round2(creditsNum * usdPerCredit),
+    usd: roundNumber(creditsNum * usdPerCredit),
     settled: Boolean(settled),
     settledAt: settled ? settledAt || null : null,
   };
@@ -133,7 +123,7 @@ function makeRecord(
 
 // Insert / grow-by-max / lock-when-settled. Mutates and returns `ledger`.
 function upsertLedgerRow(ledger: Ledger, row: LedgerRowInput, nowMs: number, options: LedgerOptions = {}): Ledger {
-  if (!isPlainObject(ledger) || !isPlainObject(row)) return ledger;
+  if (!isRecord(ledger) || !isRecord(row)) return ledger;
   const date = isDateKey(row.date) ? row.date : null;
   if (!date) return ledger;
 
@@ -173,7 +163,7 @@ function foldDailyRowsIntoLedger(
 
 // Pull {date, credits} rows from a snapshot's periodDetails (rolling widest, others fill gaps).
 function extractDailyRowsFromSnapshot(snapshot: LedgerSnapshotInput | null | undefined): LedgerDailyRow[] {
-  const details: LedgerPeriodDetailsLike = isPlainObject(snapshot?.periodDetails)
+  const details: LedgerPeriodDetailsLike = isRecord(snapshot?.periodDetails)
     ? (snapshot.periodDetails as LedgerPeriodDetailsLike)
     : {};
   const periods = ['rolling', 'monthToDate', 'sinceReset'];
@@ -208,17 +198,17 @@ function foldSnapshotsIntoLedger(
 
 function normalizeLedger(rawLedger: unknown, options: LedgerOptions = {}): Ledger {
   const ledger: Ledger = {};
-  if (!isPlainObject(rawLedger)) return ledger;
+  if (!isRecord(rawLedger)) return ledger;
   const usdPerCredit = Number.isFinite(options.usdPerCredit) ? options.usdPerCredit! : DEFAULT_USD_PER_CREDIT;
   for (const [date, record] of Object.entries(rawLedger)) {
-    if (!isDateKey(date) || !isPlainObject(record)) continue;
+    if (!isDateKey(date) || !isRecord(record)) continue;
     const settled = Boolean(record.settled);
     ledger[date] = {
       date,
       credits: toNumber(record.credits),
       usd: Number.isFinite(Number(record.usd))
-        ? round2(Number(record.usd))
-        : round2(toNumber(record.credits) * usdPerCredit),
+        ? roundNumber(Number(record.usd))
+        : roundNumber(toNumber(record.credits) * usdPerCredit),
       settled,
       settledAt: settled ? (typeof record.settledAt === 'string' ? record.settledAt : null) : null,
     };
@@ -341,10 +331,22 @@ function aggregateWeekly(
     const from = shiftDateKey(today, -7 * i - 6);
     if (i === 0) {
       const raw = sumRangeRaw(prepared, { from, to });
-      current = { from, to, totalCredits: round2(raw.totalCredits), totalUsd: round2(raw.totalUsd), settled: false };
+      current = {
+        from,
+        to,
+        totalCredits: roundNumber(raw.totalCredits),
+        totalUsd: roundNumber(raw.totalUsd),
+        settled: false,
+      };
     } else {
       const agg = aggregateRange(prepared, { from, to, nowMs, buffer });
-      blocks.push({ from, to, totalCredits: round2(agg.totalCredits), totalUsd: round2(agg.totalUsd), settled: true });
+      blocks.push({
+        from,
+        to,
+        totalCredits: roundNumber(agg.totalCredits),
+        totalUsd: roundNumber(agg.totalUsd),
+        settled: true,
+      });
     }
   }
   return { current, blocks };
@@ -369,8 +371,8 @@ function aggregateMonthlyList(
         month,
         from,
         to,
-        totalCredits: round2(raw.totalCredits),
-        totalUsd: round2(raw.totalUsd),
+        totalCredits: roundNumber(raw.totalCredits),
+        totalUsd: roundNumber(raw.totalUsd),
         settled: false,
       };
     } else {
@@ -379,8 +381,8 @@ function aggregateMonthlyList(
         month,
         from,
         to,
-        totalCredits: round2(agg.totalCredits),
-        totalUsd: round2(agg.totalUsd),
+        totalCredits: roundNumber(agg.totalCredits),
+        totalUsd: roundNumber(agg.totalUsd),
         settled: true,
       });
     }
@@ -397,8 +399,8 @@ function aggregateAllTime(
   const result = aggregateRange(ledger, { nowMs, buffer });
   const days = result.days;
   return {
-    totalCredits: round2(result.totalCredits),
-    totalUsd: round2(result.totalUsd),
+    totalCredits: roundNumber(result.totalCredits),
+    totalUsd: roundNumber(result.totalUsd),
     coverDays: days.length,
     fromDate: days.length ? days[days.length - 1].date : null,
     toDate: days.length ? days[0].date : null,

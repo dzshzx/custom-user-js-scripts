@@ -235,7 +235,7 @@ function StatsView({ cost, rolling, period, drill, t, Section, DataTable }: Stat
         <div class="cqc-table-note">
           {t('statsCoverDays', { days: all.coverDays || 0 })} · {all.fromDate || '-'} ~ {all.toDate || '-'}
         </div>
-        {dailyTable(all.rows)}
+        {dailyTable(cost!.allDays)}
       </Section>
     );
   }

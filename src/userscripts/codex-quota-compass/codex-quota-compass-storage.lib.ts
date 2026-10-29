@@ -43,36 +43,14 @@ const STORAGE_BACKENDS: Record<StorageBackendId, StorageBackendInfo> = {
   localStorage: { id: 'localStorage', label: 'localStorage' },
 };
 
-function maybePromise(value: unknown): Promise<unknown> {
-  return value && typeof (value as PromiseLike<unknown>).then === 'function'
-    ? (value as Promise<unknown>)
-    : Promise.resolve(value);
-}
-
-function createArchiveMerger(options: SnapshotArchiveStorageOptions): ArchiveStorageMerger | null {
-  if (typeof options.mergeArchives === 'function') {
-    return options.mergeArchives;
-  }
-
-  return null;
-}
-
-function createArchiveNormalizer(options: SnapshotArchiveStorageOptions): (archive: unknown) => unknown {
-  if (typeof options.normalizeArchive === 'function') {
-    return options.normalizeArchive;
-  }
-
-  return (archive: unknown) => archive;
-}
-
 function createSnapshotArchiveStoragePort(options: SnapshotArchiveStorageOptions = {}) {
   const archiveKey = options.archiveKey || DEFAULT_ARCHIVE_KEY;
   const fallbackKey = options.fallbackKey || DEFAULT_ARCHIVE_FALLBACK_KEY;
   const scriptName = options.scriptName || 'Codex Quota Compass';
   const logger = options.logger || globalThis.console;
   const localStorageObject = options.localStorage || globalThis.localStorage;
-  const mergeArchives = createArchiveMerger(options);
-  const normalizeArchive = createArchiveNormalizer(options);
+  const mergeArchives = options.mergeArchives ?? null;
+  const normalizeArchive = options.normalizeArchive ?? ((archive: unknown) => archive);
   let backendInfo = STORAGE_BACKENDS.pending;
   let mirrorDegraded = false;
   function gmBackendInfo(): StorageBackendInfo {
@@ -89,7 +67,7 @@ function createSnapshotArchiveStoragePort(options: SnapshotArchiveStorageOptions
   async function readFromGmStorage(): Promise<unknown> {
     const { getValue } = resolveGmApi(options);
     if (getValue) {
-      return await maybePromise(getValue(archiveKey, null));
+      return await getValue(archiveKey, null);
     }
 
     throw new Error('GM storage is unavailable.');
@@ -98,7 +76,7 @@ function createSnapshotArchiveStoragePort(options: SnapshotArchiveStorageOptions
   async function writeToGmStorage(nextArchive: unknown): Promise<unknown> {
     const { setValue } = resolveGmApi(options);
     if (setValue) {
-      await maybePromise(setValue(archiveKey, nextArchive as Tampermonkey.StorageValue));
+      await setValue(archiveKey, nextArchive as Tampermonkey.StorageValue);
       return nextArchive;
     }
 
@@ -232,4 +210,4 @@ function createSnapshotArchiveStoragePort(options: SnapshotArchiveStorageOptions
   };
 }
 
-export { DEFAULT_ARCHIVE_KEY, DEFAULT_ARCHIVE_FALLBACK_KEY, STORAGE_BACKENDS, createSnapshotArchiveStoragePort };
+export { DEFAULT_ARCHIVE_KEY, DEFAULT_ARCHIVE_FALLBACK_KEY, createSnapshotArchiveStoragePort };

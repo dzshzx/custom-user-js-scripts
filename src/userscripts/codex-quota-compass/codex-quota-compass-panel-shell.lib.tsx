@@ -1,5 +1,6 @@
 import { render } from 'preact';
 import { Icon } from '../shared/shared-icons.lib.tsx';
+import { ensureStyle } from '../shared/shared-dom.lib.ts';
 import { applyTheme } from '../shared/shared-tokens.lib.ts';
 import { createWidgetShell } from '../shared/shared-widget-shell.lib.ts';
 import { createShellStyles } from './codex-quota-compass-panel-shell-styles.lib.ts';
@@ -143,20 +144,8 @@ function createFloatingPanelShell(
   }
 
   function installShellStyles() {
-    if (documentObject.getElementById(`${rootId}-shell-style`)) return;
-
-    const style = documentObject.createElement('style');
-    style.id = `${rootId}-shell-style`;
-    style.textContent = [tokenCss, shell!.cssText, createShellStyles(rootId)].filter(Boolean).join('\n\n');
-    documentObject.head.append(style);
-  }
-
-  function requestFrame(callback: () => void) {
-    if (typeof windowObject.requestAnimationFrame === 'function') {
-      windowObject.requestAnimationFrame(callback);
-    } else {
-      windowObject.setTimeout(callback, 16);
-    }
+    const cssText = [tokenCss, shell!.cssText, createShellStyles(rootId)].filter(Boolean).join('\n\n');
+    ensureStyle(documentObject, `${rootId}-shell-style`, cssText, documentObject.head);
   }
 
   function mount(): FloatingPanelShell | null {
@@ -220,10 +209,7 @@ function createFloatingPanelShell(
   }
 
   function schedulePanelResize() {
-    if (!shell?.isOpen()) return;
-    requestFrame(() => {
-      if (shell?.isOpen()) shell.reposition();
-    });
+    shell?.scheduleReposition();
   }
 
   function destroy() {

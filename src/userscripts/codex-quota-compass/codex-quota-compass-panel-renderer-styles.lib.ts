@@ -1,3 +1,4 @@
+import { ensureStyle } from '../shared/shared-dom.lib.ts';
 import { createQuotaPanelStatsStyles } from './codex-quota-compass-panel-stats-styles.lib.ts';
 
 // All colors resolve from the CSS variables defined on the shell root
@@ -523,12 +524,7 @@ function installQuotaPanelRendererStyles(documentObject: Document, rootId: strin
   if (!rootId) {
     throw new Error('Quota panel renderer requires rootId.');
   }
-  if (documentObject.getElementById(`${rootId}-style`)) return;
-
-  const style = documentObject.createElement('style');
-  style.id = `${rootId}-style`;
-  style.textContent = createQuotaPanelRendererStyles(rootId);
-  documentObject.head.append(style);
+  ensureStyle(documentObject, `${rootId}-style`, createQuotaPanelRendererStyles(rootId), documentObject.head);
 }
 
-export { createQuotaPanelRendererStyles, installQuotaPanelRendererStyles };
+export { installQuotaPanelRendererStyles };

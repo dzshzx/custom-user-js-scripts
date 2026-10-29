@@ -7,20 +7,9 @@ import type { RemoteSyncStatus } from './codex-quota-compass-remote-sync.lib.ts'
 import type { StorageBackendInfo } from './codex-quota-compass-storage.lib.ts';
 import type { QuotaSnapshotResult } from './codex-quota-compass-core.lib.ts';
 
-/** Loose union of the sync-status shapes the panel accepts (backend info or a richer sync status). */
-interface PanelSyncStatusInput {
-  id?: string;
-  label?: string;
-  backendId?: string;
-  backendLabel?: string;
-  crossDeviceCapable?: unknown;
-  localOnly?: unknown;
-  reason?: string;
-}
 export interface PanelSyncStatus {
   backendId: string;
   backendLabel: string;
-  crossDeviceCapable: boolean;
   localOnly: boolean;
   reason: string;
 }
@@ -119,8 +108,6 @@ export interface PanelTab {
 }
 export interface PanelTransfer {
   noteKey: QuotaMessageKey;
-  syncStatus: PanelSyncStatus;
-  remoteSyncStatus: PanelRemoteSyncStatus;
   actions: PanelTransferAction[];
 }
 export interface PanelStatsView {
@@ -176,7 +163,6 @@ export interface CostBucket {
 }
 export interface CostViewModel {
   cycleStartDate: string | null;
-  today: CostDayRow | null;
   day: { rows: CostDayRow[]; today: CostDayRow | null };
   week: { current: CostBucket | null; blocks: CostBucket[] };
   month: { current: CostBucket | null; rows: CostBucket[] };
@@ -186,7 +172,6 @@ export interface CostViewModel {
     coverDays: number;
     fromDate: string | null;
     toDate: string | null;
-    rows: CostDayRow[];
   };
   allDays: CostDayRow[];
 }
@@ -201,37 +186,27 @@ interface DetailMetricsInput extends WeeklyInput {
   month: PeriodSummary;
   resetCredits: QuotaSnapshotAccess['resetCredits'];
 }
-export interface PanelArchiveHealth {
-  isLoaded: boolean;
-  snapshotCount: number;
-  hasSnapshots: boolean;
-  earliestCapturedAt: string | null;
-  latestCapturedAt: string | null;
-  storageBackendLabel: string;
-  importReport: ArchiveMergeReport | null | undefined;
-}
 export interface QuotaPanelViewModelInput {
   result: QuotaSnapshotResult | Record<string, unknown> | null | undefined;
   ledgerCost?: LedgerCostViews | null;
   archiveSummary?: SnapshotArchiveSummary | null;
   importReport?: ArchiveMergeReport | null;
   storageBackend?: StorageBackendInfo | null;
-  syncStatus?: PanelSyncStatusInput | null;
+  syncStatus?: Partial<PanelSyncStatus> | null;
   remoteSyncStatus?: RemoteSyncStatusInput | RemoteSyncStatus | null;
 }
 
 function normalizePanelSyncStatus(
-  syncStatus: PanelSyncStatusInput | null | undefined,
+  syncStatus: Partial<PanelSyncStatus> | null | undefined,
   storageBackend: StorageBackendInfo | null | undefined,
 ): PanelSyncStatus {
-  const source: PanelSyncStatusInput = syncStatus || storageBackend || { id: 'pending', label: 'pending' };
-  const backendId = source.backendId || source.id || 'pending';
-  const backendLabel = source.backendLabel || source.label || backendId;
+  const source: Partial<PanelSyncStatus> =
+    syncStatus || (storageBackend ? { backendId: storageBackend.id, backendLabel: storageBackend.label } : {});
+  const backendId = source.backendId || 'pending';
 
   return {
     backendId,
-    backendLabel,
-    crossDeviceCapable: Boolean(source.crossDeviceCapable),
+    backendLabel: source.backendLabel || backendId,
     localOnly: Boolean(source.localOnly),
     reason: source.reason || '',
   };
@@ -509,15 +484,13 @@ function mapBucket(bucket: LedgerBucketInput | null | undefined): CostBucket | n
 function buildCostViewModel(ledgerCost: LedgerCostViews | null | undefined): CostViewModel | null {
   if (!ledgerCost) return null;
   const allDays = (ledgerCost.daily?.days || []).map(mapDailyRow);
-  const today = ledgerCost.daily?.inProgress ? mapDailyRow(ledgerCost.daily.inProgress) : null;
   const allTime: Partial<LedgerCostViews['allTime']> = ledgerCost.allTime || {};
 
   return {
     cycleStartDate: ledgerCost.cycleStartDate || null,
-    today,
     day: {
       rows: allDays.slice(0, 30),
-      today,
+      today: ledgerCost.daily?.inProgress ? mapDailyRow(ledgerCost.daily.inProgress) : null,
     },
     week: {
       current: mapBucket(ledgerCost.weekly?.current),
@@ -533,7 +506,6 @@ function buildCostViewModel(ledgerCost: LedgerCostViews | null | undefined): Cos
       coverDays: allTime.coverDays || 0,
       fromDate: allTime.fromDate || null,
       toDate: allTime.toDate || null,
-      rows: allDays,
     },
     allDays,
   };
@@ -625,12 +597,10 @@ function createQuotaPanelViewModel({
   remoteSyncStatus,
 }: QuotaPanelViewModelInput) {
   const snapshotAccess = createQuotaSnapshotAccess(result);
-  const rollingKey = snapshotAccess.rollingKey;
   const weekly = snapshotAccess.sinceReset.weeklyEstimate;
   const sinceReset = snapshotAccess.sinceReset.summary;
   const month = snapshotAccess.monthToDate.summary;
   const rolling = snapshotAccess.rolling.summary;
-  const mainSevenDayWindow = snapshotAccess.mainSevenDayWindow;
   const recentSnapshots = Array.isArray(archiveSummary?.recentSnapshots)
     ? archiveSummary.recentSnapshots.slice(0, 5).map((row) => ({
         capturedAt: row?.capturedAt || '-',
@@ -641,22 +611,7 @@ function createQuotaPanelViewModel({
     : [];
   const normalizedSyncStatus = normalizePanelSyncStatus(syncStatus, storageBackend);
   const normalizedRemoteSyncStatus = normalizeRemoteSyncStatus(remoteSyncStatus);
-  const archiveHealth: PanelArchiveHealth = {
-    isLoaded: Boolean(archiveSummary),
-    snapshotCount: archiveSummary?.snapshotCount || 0,
-    hasSnapshots: Boolean((archiveSummary?.snapshotCount || 0) > 0),
-    earliestCapturedAt: archiveSummary?.earliestCapturedAt || null,
-    latestCapturedAt: archiveSummary?.latestCapturedAt || null,
-    storageBackendLabel: normalizedSyncStatus.backendLabel,
-    importReport,
-  };
-
-  const transfer: PanelTransfer = {
-    noteKey: 'transferNote',
-    syncStatus: normalizedSyncStatus,
-    remoteSyncStatus: normalizedRemoteSyncStatus,
-    actions: createTransferActions(),
-  };
+  const transfer: PanelTransfer = { noteKey: 'transferNote', actions: createTransferActions() };
   const detailMetrics = createDetailMetrics({
     weekly,
     sinceReset,
@@ -676,28 +631,17 @@ function createQuotaPanelViewModel({
   });
 
   return {
-    rollingKey,
-    weekly,
-    sinceReset,
-    month,
     rolling,
-    syncStatus: normalizedSyncStatus,
     remoteSyncStatus: normalizedRemoteSyncStatus,
     syncBanner: createSyncBanner(normalizedSyncStatus, normalizedRemoteSyncStatus),
-    archiveHealth,
-    transfer,
     tabs: panelViews.tabs,
     views: panelViews.views,
     heroMetric: createHeroMetric({
       weekly,
-      mainSevenDayWindow,
+      mainSevenDayWindow: snapshotAccess.mainSevenDayWindow,
     }),
     secondaryMetrics: createSecondaryMetrics({ weekly }),
     detailMetrics,
-    rollingRows: snapshotAccess.rolling.dailyRows,
-    sinceResetRows: snapshotAccess.sinceReset.dailyRows,
-    sinceResetClients: snapshotAccess.sinceReset.clientSummaries,
-    mainSevenDayWindow,
     cost: buildCostViewModel(ledgerCost),
     archive: {
       isLoaded: Boolean(archiveSummary),

@@ -34,7 +34,6 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     syncStatus: {
       backendId: 'gm',
       backendLabel: 'GM storage',
-      crossDeviceCapable: false,
       localOnly: true,
       reason: 'Userscript manager storage is local.',
     },
@@ -52,19 +51,15 @@ test('createQuotaPanelViewModel maps result, history, and archive state', () => 
     },
   });
 
-  assert.equal(model.rollingKey, '近30天');
-  assert.equal(model.weekly.已用百分比, 40);
-  assert.equal(model.mainSevenDayWindow.距离重置小时, 12);
+  assert.equal(model.rolling.累计Credits, 200);
   assert.equal(model.archive.snapshotCount, 1);
   assert.equal(model.archive.storageBackend.label, 'GM storage');
   assert.equal(model.archive.importReport.added, 1);
   assert.equal(model.syncBanner.tone, 'success');
   assert.equal(model.syncBanner.titleKey, 'remoteSyncEnabledTitle');
   assert.equal(model.remoteSyncStatus.endpoint, 'GitHub Gist gist-1');
-  assert.equal(model.archiveHealth.snapshotCount, 1);
-  assert.equal(model.archiveHealth.hasSnapshots, true);
   assert.deepEqual(
-    model.transfer.actions.map((action) => action.action),
+    model.views.archive.sections.find((section) => section.type === 'actions').actions.map((action) => action.action),
     ['export-archive', 'import-archive'],
   );
   assert.deepEqual(
@@ -125,7 +120,6 @@ test('createQuotaPanelViewModel marks localStorage archive as local-only sync', 
     syncStatus: {
       backendId: 'localStorage',
       backendLabel: 'localStorage',
-      crossDeviceCapable: false,
       localOnly: true,
       reason: 'localStorage is browser-local.',
     },
@@ -135,8 +129,7 @@ test('createQuotaPanelViewModel marks localStorage archive as local-only sync', 
 
   assert.equal(model.syncBanner.tone, 'warning');
   assert.equal(model.syncBanner.titleKey, 'syncBannerLocalTitle');
-  assert.equal(model.archiveHealth.hasSnapshots, false);
-  assert.equal(model.transfer.syncStatus.localOnly, true);
+  assert.equal(model.archive.snapshotCount, 0);
   assert.equal(
     model.tabs.some((tab) => tab.id === 'archive'),
     true,
@@ -189,7 +182,6 @@ test('panel mobile regression contract gives every tab content and compact long 
     syncStatus: {
       backendId: 'gm',
       backendLabel: 'GM storage',
-      crossDeviceCapable: true,
       localOnly: false,
     },
   });
@@ -255,7 +247,7 @@ test('createQuotaPanelViewModel surfaces ledger cost views', () => {
     },
   });
   assert.equal(withCost.cost.cycleStartDate, '2026-06-01');
-  assert.equal(withCost.cost.today.date, '2026-06-05');
+  assert.equal(withCost.cost.day.today.date, '2026-06-05');
   assert.equal(withCost.cost.day.rows.length, 1);
   assert.equal(withCost.cost.allDays.length, 1);
   assert.equal(withCost.cost.week.current.from, '2026-05-30');

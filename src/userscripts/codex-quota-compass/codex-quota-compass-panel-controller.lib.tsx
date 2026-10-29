@@ -2,8 +2,10 @@ import { createQuotaPanelViewModel } from './codex-quota-compass-panel-view-mode
 import { render } from 'preact';
 import { createQuotaPanelRenderer } from './codex-quota-compass-panel-renderer.lib.tsx';
 import { createFloatingPanelShell } from './codex-quota-compass-panel-shell.lib.tsx';
+import { ensureStyle } from '../shared/shared-dom.lib.ts';
 import { buildTokenCss } from '../shared/shared-tokens.lib.ts';
 import { createToaster } from '../shared/shared-toast.lib.tsx';
+import { errorMessage } from '../shared/shared-values.lib.ts';
 import type { QuotaMessageKey, QuotaTranslate, TranslationVariables } from './codex-quota-compass-i18n.lib.ts';
 import type {
   QuotaApplication,
@@ -12,16 +14,10 @@ import type {
 } from './codex-quota-compass-application.lib.ts';
 import type { RemoteSyncStatus } from './codex-quota-compass-remote-sync.lib.ts';
 import type { PanelSyncStatus } from './codex-quota-compass-panel-view-model.lib.ts';
+import type { StorageBackendInfo } from './codex-quota-compass-storage.lib.ts';
 import type { PanelPresentation, PanelRenderState, SyncDraft } from './codex-quota-compass-panel-renderer.lib.tsx';
 import type { StatsDrill } from './codex-quota-compass-panel-stats.lib.tsx';
 
-/** Backend descriptor: storage backend info or an already-normalized sync status. */
-interface SnapshotBackendInput {
-  id?: string;
-  label?: string;
-  backendId?: string;
-  backendLabel?: string;
-}
 export type QuotaFilePick = { status: 'cancelled' } | { status: 'selected'; text: string };
 export interface QuotaFileChooseOptions {
   signal?: AbortSignal;
@@ -60,13 +56,23 @@ export interface QuotaPanelControllerOptions {
 }
 type MaybeTranslationVars = TranslationVariables | undefined;
 type OperationError = { message?: string; stage?: string } | null | undefined;
+type PanelAction = Exclude<PanelCommandType, 'open'>;
 
 const ROOT_ID = 'codex-quota-compass-root';
 const EXPORT_NAME = 'codex-quota-compass-snapshot-archive.v1.json';
 
-function createSnapshotSyncStatus(backendInfo: SnapshotBackendInput | null | undefined): PanelSyncStatus {
-  const backendId = backendInfo?.backendId || backendInfo?.id || 'unavailable';
-  const backendLabel = backendInfo?.backendLabel || backendInfo?.label || backendId;
+// Shell buttons that only start a panel command.
+const COMMAND_ACTIONS = new Map<string, PanelAction>([
+  ['refresh', 'refresh'],
+  ['sync-remote', 'sync'],
+  ['save-remote-sync', 'save-remote-sync'],
+  ['import-archive', 'import-archive'],
+  ['export-archive', 'export-archive'],
+]);
+
+function createSnapshotSyncStatus(backendInfo: StorageBackendInfo | null | undefined): PanelSyncStatus {
+  const backendId = backendInfo?.id || 'unavailable';
+  const backendLabel = backendInfo?.label || backendId;
   const localOnly = backendId === 'gm' || backendId === 'localStorage';
   const reason =
     backendId === 'gm'
@@ -76,7 +82,7 @@ function createSnapshotSyncStatus(backendInfo: SnapshotBackendInput | null | und
         : backendId === 'pending'
           ? 'Snapshot Archive storage has not been loaded yet.'
           : 'Snapshot Archive storage is unavailable.';
-  return { backendId, backendLabel, crossDeviceCapable: false, localOnly, reason };
+  return { backendId, backendLabel, localOnly, reason };
 }
 
 // Browser file resources are owned by one adapter. Abort settles a pending
@@ -104,17 +110,17 @@ function createBrowserQuotaFiles({ document, window, t }: BrowserQuotaFilesOptio
         settled = true;
         input.removeEventListener('change', changed);
         input.removeEventListener('cancel', cancelled);
-        signal?.removeEventListener('abort', aborted);
+        signal?.removeEventListener('abort', cancelled);
         window.removeEventListener('focus', focused);
         if (focusTimer != null) window.clearTimeout(focusTimer);
         if (reader?.readyState === 1) reader.abort();
         input.remove();
-        activePickers.delete(aborted);
+        activePickers.delete(cancelled);
         if (error) reject(error);
         else resolve(value);
       }
-      function aborted() {
-        finish({ status: 'cancelled' });
+      function fail(error: unknown, stage: string) {
+        finish(null, Object.assign(error as Error, { stage }));
       }
       function cancelled() {
         finish({ status: 'cancelled' });
@@ -135,23 +141,23 @@ function createBrowserQuotaFiles({ document, window, t }: BrowserQuotaFilesOptio
           return;
         }
         reader = new window.FileReader();
-        reader.onerror = () => finish(null, Object.assign(new Error(t('importReadFailed')), { stage: 'read' }));
+        reader.onerror = () => fail(new Error(t('importReadFailed')), 'read');
         reader.onload = () => finish({ status: 'selected', text: String(reader!.result || '') });
         try {
           reader.readAsText(file, 'utf-8');
         } catch (error) {
-          finish(null, Object.assign(error as Error, { stage: 'read' }));
+          fail(error, 'read');
         }
       }
       input.addEventListener('change', changed);
       input.addEventListener('cancel', cancelled);
-      signal?.addEventListener('abort', aborted, { once: true });
-      activePickers.add(aborted);
+      signal?.addEventListener('abort', cancelled, { once: true });
+      activePickers.add(cancelled);
       window.addEventListener('focus', focused);
       try {
         input.click();
       } catch (error) {
-        finish(null, Object.assign(error as Error, { stage: 'select' }));
+        fail(error, 'select');
       }
     });
   }
@@ -217,28 +223,27 @@ function createQuotaPanelController({ application, document, window, storage, t,
     window,
     storage,
     onAction: handleAction,
-    onOpen: () => {
-      if (!snapshot?.result || snapshot?.calculationError) void dispatch({ type: 'refresh', open: true });
-      else {
-        presentation = 'snapshot';
-        commitPresentation();
-        shell.setStatus(t('statusCached'), 'success');
-      }
-    },
+    onOpen: () => void open(undefined, { fromShell: true }),
   });
   const mounted = shell.mount();
   const refs = mounted?.refs();
   const content = refs?.contentNode;
   const toaster = refs ? createToaster({ root: refs.root }) : null;
-  if (toaster && !document.getElementById(`${ROOT_ID}-toast-style`)) {
-    const style = document.createElement('style');
-    style.id = `${ROOT_ID}-toast-style`;
-    style.textContent = toaster.cssText;
-    document.head.append(style);
-  }
+  if (toaster) ensureStyle(document, `${ROOT_ID}-toast-style`, toaster.cssText, document.head);
 
   function renderState(overrides: Partial<PanelRenderState> = {}): PanelRenderState {
     return { activePanelView, statsPeriod: activeStatsPeriod, statsDrill, expandedViews, ...overrides };
+  }
+  // The view model depends on the snapshot only; form edits, tab switches and
+  // row toggles re-render from the cached one.
+  let viewModelSnapshot: QuotaApplicationState | null = null;
+  let cachedViewModel: ReturnType<typeof createViewModel> = null;
+  function currentViewModel() {
+    if (snapshot !== viewModelSnapshot) {
+      viewModelSnapshot = snapshot;
+      cachedViewModel = createViewModel();
+    }
+    return cachedViewModel;
   }
   function createViewModel() {
     if (!snapshot?.result) return null;
@@ -263,7 +268,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
   }
   function commitPresentation() {
     if (disposed || !content) return;
-    const viewModel = createViewModel();
+    const viewModel = currentViewModel();
     if (viewModel) activePanelView = renderer.normalizeActivePanelView(viewModel, activePanelView);
     // Loading and error states never unmount a sync form holding a draft; the
     // button status line and toasts carry that outcome instead.
@@ -307,7 +312,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
         const outcome: PanelOperationOutcome = {
           status: 'error',
           completed: [],
-          error: error?.message || String(error),
+          error: errorMessage(error),
           stage: error?.stage || (type === 'export-archive' ? 'export' : type === 'import-archive' ? 'import' : type),
         };
         if (!disposed) {
@@ -367,12 +372,15 @@ function createQuotaPanelController({ application, document, window, storage, t,
       return outcome;
     });
   }
-  function open(view?: string): Promise<PanelOperationOutcome> {
+  // Without a usable result, refresh; otherwise show the cached snapshot. The
+  // shell's own open has already placed the panel and reports the cache instead.
+  function open(view?: string, { fromShell = false } = {}): Promise<PanelOperationOutcome> {
     if (view && ['details', 'stats', 'archive'].includes(view)) activePanelView = view;
-    if (!snapshot?.result || snapshot?.calculationError) return startRefresh({ open: true });
+    if (!snapshot?.result || snapshot.errors?.calculation) return startRefresh({ open: true });
     presentation = 'snapshot';
     commitPresentation();
-    if (!shell.isOpen()) shell.openPanel();
+    if (fromShell) shell.setStatus(t('statusCached'), 'success');
+    else if (!shell.isOpen()) shell.openPanel();
     else shell.positionPanelNearButton();
     return Promise.resolve({ status: 'ok', completed: ['open'] });
   }
@@ -458,7 +466,7 @@ function createQuotaPanelController({ application, document, window, storage, t,
           status: 'error',
           completed: ['export'],
           stage: 'download',
-          error: (error as OperationError)?.message || String(error),
+          error: errorMessage(error),
         };
         notice(t('exportFailed', { error: outcome.error }), 'error');
         return outcome;
@@ -494,20 +502,9 @@ function createQuotaPanelController({ application, document, window, storage, t,
       shell.closePanel();
       return;
     }
-    if (action === 'refresh') {
-      void dispatch({ type: 'refresh' });
-      return;
-    }
-    if (action === 'sync-remote') {
-      void dispatch({ type: 'sync' });
-      return;
-    }
-    if (action === 'save-remote-sync') {
-      void dispatch({ type: 'save-remote-sync' });
-      return;
-    }
-    if (action === 'import-archive' || action === 'export-archive') {
-      void dispatch({ type: action });
+    const commandType = COMMAND_ACTIONS.get(action);
+    if (commandType) {
+      void dispatch({ type: commandType });
       return;
     }
     const target = event.target as Element;

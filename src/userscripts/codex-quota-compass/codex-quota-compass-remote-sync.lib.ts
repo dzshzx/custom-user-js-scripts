@@ -1,5 +1,6 @@
 import pLimit from 'p-limit';
 import * as v from 'valibot';
+import { coerce, errorMessage } from '../shared/shared-values.lib.ts';
 import { resolveGmApi } from '../shared/shared-gm.lib.ts';
 import {
   EXPORT_FORMAT,
@@ -115,12 +116,6 @@ const GIST_FILENAME = 'codex-quota-compass-snapshot-archive.v1.json';
 const SUPPORTED_IMPORT_VERSIONS = new Set([1, 2]);
 const UNKNOWN_WRITE_PREFIX = 'Remote write outcome unknown. Verify the Gist before retrying. ';
 
-function maybePromise(value: unknown): Promise<unknown> {
-  return value && typeof (value as PromiseLike<unknown>).then === 'function'
-    ? (value as Promise<unknown>)
-    : Promise.resolve(value);
-}
-
 function describeHttpStatus(status: number): string {
   if (status === 401) {
     return 'GitHub rejected the token (HTTP 401). Check the token and its Gists permission.';
@@ -154,13 +149,6 @@ function normalizeFilename(filename: unknown): string {
   return trimmed || GIST_FILENAME;
 }
 
-// Missing keys still run through the transform, so defaults apply uniformly.
-const coerce = <T>(transform: (value: unknown) => T) =>
-  v.pipe(
-    v.optional(v.unknown(), () => undefined),
-    v.transform(transform),
-  );
-
 const RemoteSyncSettingsSchema = v.object({
   enabled: coerce(Boolean),
   provider: coerce(() => 'github-gist'),
@@ -191,7 +179,7 @@ function createGmSettingsStore(options: GmOverrides = {}): RemoteSyncSettingsSto
   async function readRaw(): Promise<unknown> {
     const { getValue } = resolveGmApi(options);
     if (getValue) {
-      return maybePromise(getValue(REMOTE_SYNC_SETTINGS_KEY, null));
+      return await getValue(REMOTE_SYNC_SETTINGS_KEY, null);
     }
 
     throw new Error('GM storage is required for remote sync settings.');
@@ -200,7 +188,7 @@ function createGmSettingsStore(options: GmOverrides = {}): RemoteSyncSettingsSto
   async function writeRaw(settings: RemoteSyncSettings): Promise<RemoteSyncSettings> {
     const { setValue } = resolveGmApi(options);
     if (setValue) {
-      await maybePromise(setValue(REMOTE_SYNC_SETTINGS_KEY, settings));
+      await setValue(REMOTE_SYNC_SETTINGS_KEY, settings);
       return settings;
     }
 
@@ -304,14 +292,8 @@ function createJsonRequester(options: GmOverrides & FetchRequesterOptions = {}):
   return getGmXmlHttpRequest(options) ? createGmJsonRequester(options) : createFetchJsonRequester(options);
 }
 
-function createArchiveExportDocument(archive: unknown, exportedAt: string): SnapshotExportDocument {
-  // Delegate to the archive lib so the pushed payload is the compact v2 shape
-  // (per-day ledger + last 5 snapshots) instead of full per-snapshot history.
-  return buildSnapshotExportDocument(archive || { snapshots: [] }, exportedAt);
-}
-
 function createEmptyExportDocument(exportedAt: string): SnapshotExportDocument {
-  return createArchiveExportDocument({ snapshots: [] }, exportedAt);
+  return buildSnapshotExportDocument({ snapshots: [] }, exportedAt);
 }
 
 function publicStatus(settings: RemoteSyncSettings): RemoteSyncStatus {
@@ -393,8 +375,9 @@ async function archiveDocumentFromGist(
 }
 
 function archiveFilePayload(archive: unknown, exportedAt: string): string {
-  // Compact (no pretty-print) to keep the synced blob small.
-  return JSON.stringify(createArchiveExportDocument(archive, exportedAt));
+  // The archive lib builds the compact v2 shape (per-day ledger + last 5
+  // snapshots); no pretty-print keeps the synced blob small.
+  return JSON.stringify(buildSnapshotExportDocument(archive || { snapshots: [] }, exportedAt));
 }
 
 // Compare two export documents by the content that actually matters for sync
@@ -425,36 +408,31 @@ function createGitHubGistApi({ requestJson, token, filename }: GistApiOptions) {
     }) as Promise<GistPayload>;
   }
 
-  async function createGist(archive: unknown, exportedAt: string): Promise<GistPayload> {
+  // Writes the archive file; `extra` carries create-only gist fields.
+  async function writeGist(
+    method: 'POST' | 'PATCH',
+    url: string,
+    archive: unknown,
+    exportedAt: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<GistPayload> {
     return requestJson({
-      method: 'POST',
-      url: `${GITHUB_API_BASE}/gists`,
+      method,
+      url,
       headers: gitHubHeaders(token, { 'Content-Type': 'application/json' }),
-      body: {
-        description: GIST_DESCRIPTION,
-        public: false,
-        files: {
-          [filename]: {
-            content: archiveFilePayload(archive, exportedAt),
-          },
-        },
-      },
+      body: { ...extra, files: { [filename]: { content: archiveFilePayload(archive, exportedAt) } } },
     }) as Promise<GistPayload>;
   }
 
-  async function updateGist(gistId: string, archive: unknown, exportedAt: string): Promise<GistPayload> {
-    return requestJson({
-      method: 'PATCH',
-      url: `${GITHUB_API_BASE}/gists/${encodeURIComponent(gistId)}`,
-      headers: gitHubHeaders(token, { 'Content-Type': 'application/json' }),
-      body: {
-        files: {
-          [filename]: {
-            content: archiveFilePayload(archive, exportedAt),
-          },
-        },
-      },
-    }) as Promise<GistPayload>;
+  function createGist(archive: unknown, exportedAt: string): Promise<GistPayload> {
+    return writeGist('POST', `${GITHUB_API_BASE}/gists`, archive, exportedAt, {
+      description: GIST_DESCRIPTION,
+      public: false,
+    });
+  }
+
+  function updateGist(gistId: string, archive: unknown, exportedAt: string): Promise<GistPayload> {
+    return writeGist('PATCH', `${GITHUB_API_BASE}/gists/${encodeURIComponent(gistId)}`, archive, exportedAt);
   }
 
   async function findExistingArchiveGist(): Promise<GistPayload | null> {
@@ -495,16 +473,8 @@ function createRemoteSyncClient(
     return queue(operation);
   }
 
-  async function getSettings(): Promise<RemoteSyncSettings> {
-    return settingsStore.read();
-  }
-
-  async function saveSettings(nextSettings: unknown): Promise<RemoteSyncSettings> {
-    return settingsStore.write(nextSettings);
-  }
-
   async function configure(patch: RemoteSyncSettingsPatch = {}): Promise<RemoteSyncStatus> {
-    const current = await getSettings();
+    const current = await settingsStore.read();
     const next = {
       ...current,
       ...patch,
@@ -515,11 +485,11 @@ function createRemoteSyncClient(
       clientId: current.clientId || createClientId(),
       lastError: '',
     };
-    return publicStatus(await saveSettings(next));
+    return publicStatus(await settingsStore.write(next));
   }
 
   async function getStatus(): Promise<RemoteSyncStatus> {
-    return publicStatus(await getSettings());
+    return publicStatus(await settingsStore.read());
   }
 
   // A sync belongs to the settings it started with. Another tab may disable
@@ -543,7 +513,7 @@ function createRemoteSyncClient(
   }
 
   async function assertSyncTargetCurrent(started: RemoteSyncSettings): Promise<void> {
-    const latest = await getSettings();
+    const latest = await settingsStore.read();
     if (!isSameSyncTarget(started, latest)) throw supersededError(latest);
   }
 
@@ -552,13 +522,13 @@ function createRemoteSyncClient(
     started: RemoteSyncSettings,
     outcome: RemoteSyncSettingsPatch,
   ): Promise<RemoteSyncSettings> {
-    const latest = await getSettings();
+    const latest = await settingsStore.read();
     if (!isSameSyncTarget(started, latest)) return latest;
-    return saveSettings({ ...latest, ...outcome });
+    return settingsStore.write({ ...latest, ...outcome });
   }
 
   async function markSyncFailure(settings: RemoteSyncSettings, error: unknown): Promise<string> {
-    const rawMessage = (error as Error | null)?.message || String(error);
+    const rawMessage = errorMessage(error);
     const message = settings.token ? rawMessage.split(settings.token).join('[redacted]') : rawMessage;
     await saveSyncOutcome(settings, { lastError: message });
     return message;
@@ -569,7 +539,7 @@ function createRemoteSyncClient(
   }
 
   async function syncNow(): Promise<RemoteSyncOutcome> {
-    const settings = await getSettings();
+    const settings = await settingsStore.read();
     if (!settings.enabled) {
       return { status: 'disabled', settings: publicStatus(settings) };
     }
@@ -673,9 +643,7 @@ function createRemoteSyncClient(
       // Nothing was pushed; a completed local merge stays, as on any failure.
       if ((error as SyncCaughtError)?.superseded) return supersededResult((error as SyncCaughtError)!.latest!);
       const unknown = remoteWritePending && !(error as SyncCaughtError)?.status;
-      const failure = unknown
-        ? new Error(UNKNOWN_WRITE_PREFIX + ((error as SyncCaughtError)?.message || String(error)))
-        : error;
+      const failure = unknown ? new Error(UNKNOWN_WRITE_PREFIX + errorMessage(error)) : error;
       const message = await markSyncFailure(settings, failure).catch(
         () => 'GitHub Gist sync failed; status could not be saved.',
       );
@@ -689,7 +657,7 @@ function createRemoteSyncClient(
 
   return {
     configure: (patch?: RemoteSyncSettingsPatch) => enqueue(() => configure(patch)),
-    getSettings: () => enqueue(getSettings),
+    getSettings: () => enqueue(() => settingsStore.read()),
     getStatus: () => enqueue(getStatus),
     syncNow: () => enqueue(syncNow),
   };

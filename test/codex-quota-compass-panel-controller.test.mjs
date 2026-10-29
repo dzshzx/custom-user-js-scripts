@@ -28,7 +28,6 @@ function result() {
 function state(overrides = {}) {
   return {
     result: result(),
-    calculationError: null,
     archiveSummary: null,
     ledgerCost: null,
     importReport: null,
@@ -381,5 +380,32 @@ test(
     assert.deepEqual(f.settled, ['ok']);
     assert.equal((await f.panel.dispatch('sync')).reason, 'disposed');
     f.close();
+  },
+);
+
+test(
+  'opening the panel from its button shows the cached snapshot or refreshes after a failure',
+  { skip: domSkip },
+  async () => {
+    const f = fixture();
+    try {
+      const document = f.window.document;
+      const button = document.querySelector('.cqc-button');
+      const status = document.querySelector('.cqc-status');
+      button.click();
+      await tick();
+      assert.equal(f.runs(), 0);
+      assert.equal(status.dataset.tone, 'success');
+      assert.equal(status.textContent, 'Cached');
+      assert.ok(document.querySelector('.cqc-content').textContent.length > 0);
+      document.querySelector('[data-action="close"]').click();
+
+      f.update({ errors: { calculation: 'boom' } });
+      button.click();
+      await tick();
+      assert.equal(f.runs(), 1);
+    } finally {
+      f.close();
+    }
   },
 );

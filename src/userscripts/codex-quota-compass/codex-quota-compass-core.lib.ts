@@ -1,5 +1,6 @@
 import { UTCDate } from '@date-fns/utc';
 import { addDays, lightFormat } from 'date-fns';
+import { errorMessage } from '../shared/shared-values.lib.ts';
 
 const MAIN_PRIMARY_WINDOW_KEY = 'main.primaryWindow';
 const MAIN_SEVEN_DAY_WINDOW_KEY = 'main.sevenDayWindow';
@@ -252,8 +253,10 @@ export interface QuotaCalculator {
   run(): Promise<QuotaSnapshotResult>;
 }
 
+// Numeric helpers shared with the ledger and archive modules.
 function toNumber(value: unknown): number {
-  return Number.isFinite(Number(value)) ? Number(value) : 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function roundNumber(value: unknown, digits = 2): number {
@@ -587,7 +590,7 @@ function createQuotaCalculator({
       const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
       return (rangeCredits) => ({ modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: '' });
     } catch (error) {
-      return () => ({ modelSummaries: [], modelSummaryError: String((error as Error | null)?.message || error) });
+      return () => ({ modelSummaries: [], modelSummaryError: errorMessage(error) });
     }
   }
 
@@ -618,7 +621,7 @@ function createQuotaCalculator({
       try {
         section.明细 = parseResetCreditRows(await fetchRateLimitResetCredits!());
       } catch (error) {
-        section.明细错误 = String((error as Error | null)?.message || error);
+        section.明细错误 = errorMessage(error);
       }
     }
 
@@ -822,6 +825,8 @@ export {
   createQuotaCalculator,
   firstDayOfMonthLocal,
   firstDayOfMonthUTC,
+  roundNumber,
+  toNumber,
   ymdLocal,
   ymdUTC,
 };

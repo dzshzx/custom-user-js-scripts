@@ -38,7 +38,8 @@ import {
 import { createRemoteSyncClient } from './codex-quota-compass-remote-sync.lib.ts';
 import { createQuotaApplication } from './codex-quota-compass-application.lib.ts';
 import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quota-compass-panel-controller.lib.tsx';
-import type { QuotaPanelController } from './codex-quota-compass-panel-controller.lib.tsx';
+import type { PanelCommand, QuotaPanelController } from './codex-quota-compass-panel-controller.lib.tsx';
+import type { QuotaMessageKey } from './codex-quota-compass-i18n.lib.ts';
 import type { QuotaSnapshotResult } from './codex-quota-compass-core.lib.ts';
 
 declare global {
@@ -76,11 +77,6 @@ declare global {
         createQuotaRuntime({
           config: createDefaultQuotaRuntimeConfig({ DEBUG: window[DEBUG_KEY] === true }),
           coreLib: CoreLib,
-          fetchImpl: fetch.bind(globalThis),
-          location: globalThis.location,
-          now: () => Date.now(),
-          formatLocalTime: (ms) => new Date(ms).toLocaleString(),
-          getBrowserTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || '未知',
         }).run(),
     },
     archiveStore,
@@ -123,21 +119,18 @@ declare global {
 
   const { registerMenuCommand } = resolveGmApi();
   if (registerMenuCommand) {
-    registerMenuCommand(t('menuRun'), () => {
-      void panel.dispatch({ type: 'refresh', open: true });
-    });
-    registerMenuCommand(t('menuRemoteConfigure'), () => {
-      void panel.dispatch({ type: 'open', view: 'archive' });
-    });
-    registerMenuCommand(t('menuRemoteSync'), () => {
-      void panel.dispatch({ type: 'sync' });
-    });
-    registerMenuCommand(t('menuExport'), () => {
-      void panel.dispatch({ type: 'export-archive' });
-    });
-    registerMenuCommand(t('menuImport'), () => {
-      void panel.dispatch({ type: 'import-archive' });
-    });
+    const menu: [QuotaMessageKey, PanelCommand][] = [
+      ['menuRun', { type: 'refresh', open: true }],
+      ['menuRemoteConfigure', { type: 'open', view: 'archive' }],
+      ['menuRemoteSync', { type: 'sync' }],
+      ['menuExport', { type: 'export-archive' }],
+      ['menuImport', { type: 'import-archive' }],
+    ];
+    for (const [labelKey, command] of menu) {
+      registerMenuCommand(t(labelKey), () => {
+        void panel.dispatch(command);
+      });
+    }
   }
   void application.start();
   window.addEventListener('pagehide', (event) => {
