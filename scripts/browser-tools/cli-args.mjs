@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { Command } from 'commander';
 
 // Shared commander setup for the browser tools. Callers keep their own help text
@@ -16,6 +18,11 @@ export function requireValue(flagName) {
     if (!value) throw new Error(`${flagName} requires a value`);
     return value;
   };
+}
+
+export function resolvedPath(flagName) {
+  const check = requireValue(flagName);
+  return (value) => path.resolve(check(value));
 }
 
 export function appendValue(flagName) {

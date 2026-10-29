@@ -1,24 +1,15 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
 
-import { createCli, integerValue, parseCli, requireValue } from './cli-args.mjs';
+import { isMain } from '../lib/is-main.mjs';
+import { createCli, integerValue, parseCli, requireValue, resolvedPath } from './cli-args.mjs';
+import { DEFAULT_PROFILE_DIR, DEFAULT_ROOT_DIR, DEFAULT_TARGET_URL } from './login-qr-options.mjs';
 import { resolvePlaywrightImport } from './playwright-loader.mjs';
 import { readPreviewImage } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-extraction.lib.ts';
 import { extensionFromMime } from '../../src/userscripts/feishu-preview-image-export/feishu-preview-image-export-logic.lib.ts';
 
-const DEFAULT_URL = 'https://mi.feishu.cn/file/UxkDbtSZqo9Ya4xCGNZcWOmWnlf';
-const DEFAULT_PROFILE_DIR = path.join(
-  os.homedir(),
-  '.local',
-  'share',
-  'codex-browser',
-  'feishu-login',
-  'playwright-profile',
-);
-const DEFAULT_OUTPUT_DIR = path.join(os.homedir(), '.local', 'share', 'codex-browser', 'feishu-login', 'exports');
+const DEFAULT_OUTPUT_DIR = path.join(DEFAULT_ROOT_DIR, 'exports');
 const DEFAULT_WAIT_MS = 12_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DIRECT_PROXY_ARGS = ['--proxy-server=direct://', '--proxy-bypass-list=*'];
@@ -45,12 +36,8 @@ Notes:
 }
 
 function parseArgs(argv) {
-  const resolvedPath = (flagName) => {
-    const check = requireValue(flagName);
-    return (value) => path.resolve(check(value));
-  };
   const program = createCli()
-    .option('--url <url>', '', requireValue('--url'), DEFAULT_URL)
+    .option('--url <url>', '', requireValue('--url'), DEFAULT_TARGET_URL)
     .option('--profile-dir <dir>', '', resolvedPath('--profile-dir'), DEFAULT_PROFILE_DIR)
     .option('--output <file>', '', resolvedPath('--output'), '')
     .option('--wait-ms <ms>', '', integerValue('--wait-ms'), DEFAULT_WAIT_MS)
@@ -151,10 +138,6 @@ async function main(argv = process.argv.slice(2), dependencies) {
     return;
   }
   return runExportImage(options, dependencies);
-}
-
-function isMain(metaUrl, argvPath = process.argv[1]) {
-  return Boolean(argvPath) && path.resolve(argvPath) === fileURLToPath(metaUrl);
 }
 
 if (isMain(import.meta.url)) {

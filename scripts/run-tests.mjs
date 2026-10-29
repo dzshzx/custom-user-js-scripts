@@ -1,12 +1,12 @@
 import { run } from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { isMain } from './lib/is-main.mjs';
 import { loadTestPlaywright, projectPlaywrightVersion } from './test-playwright.mjs';
 
 // These existing names and owning files are stable acceptance identifiers.
-export const requiredTests = [
+const requiredTests = [
   [
     'codex-quota-compass-browser-acceptance.test.mjs',
     'real Chromium preserves the bundle sync draft and cancels file work on disposal',
@@ -28,7 +28,7 @@ export const requiredTests = [
 
 // Test files run in child processes; they inherit NODE_OPTIONS, so every file
 // can import .jsx sources the same way a focused `node --import` run does.
-export const JSX_LOADER_FLAG = `--import=${new URL('./jsx-loader.mjs', import.meta.url).href}`;
+const JSX_LOADER_FLAG = `--import=${new URL('./jsx-loader.mjs', import.meta.url).href}`;
 
 export async function runTests(options = {}) {
   if (!(process.env.NODE_OPTIONS || '').includes(JSX_LOADER_FLAG))
@@ -102,7 +102,7 @@ export async function writeReport(report) {
   );
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const report = {
     passed: false,
     status: 'tests-not-run',

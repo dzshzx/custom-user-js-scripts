@@ -1,28 +1,31 @@
 import os from 'node:os';
 import path from 'node:path';
 
-import { appendValue, createCli, integerValue, parseCli, parseInteger, requireValue } from './cli-args.mjs';
+import {
+  appendValue,
+  createCli,
+  integerValue,
+  parseCli,
+  parseInteger,
+  requireValue,
+  resolvedPath,
+} from './cli-args.mjs';
 
 export const DEFAULT_TARGET_URL = 'https://mi.feishu.cn/file/UxkDbtSZqo9Ya4xCGNZcWOmWnlf';
 export const DEFAULT_ROOT_DIR = path.join(os.homedir(), '.local', 'share', 'codex-browser', 'feishu-login');
 export const DEFAULT_PROFILE_DIR = path.join(DEFAULT_ROOT_DIR, 'playwright-profile');
-export const DEFAULT_QR_PATH = path.join(DEFAULT_ROOT_DIR, 'qr.png');
-export const DEFAULT_STATE_PATH = path.join(DEFAULT_ROOT_DIR, 'storage-state.json');
-export const DEFAULT_QR_SELECTOR = 'img[src*="/qr_img?qr="]';
-export const DEFAULT_TENANT_SWITCH_TEXT = '切换租户';
-export const DEFAULT_SUCCESS_HOSTS = ['mi.feishu.cn', 'mi-p.feishu.cn'];
-export const DEFAULT_PENDING_URL_PATTERNS = ['cas\\.mioffice\\.cn/login', 'accounts\\.feishu\\.cn'];
-export const DEFAULT_PENDING_TEXTS = ['Login by scanning with Mier App', '使用小米人App扫码登录'];
-export const DEFAULT_WAIT_AFTER_NAVIGATION_MS = 12_000;
-export const DEFAULT_LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
-export const DEFAULT_NAVIGATION_TIMEOUT_MS = 45_000;
+const DEFAULT_QR_PATH = path.join(DEFAULT_ROOT_DIR, 'qr.png');
+const DEFAULT_STATE_PATH = path.join(DEFAULT_ROOT_DIR, 'storage-state.json');
+const DEFAULT_QR_SELECTOR = 'img[src*="/qr_img?qr="]';
+const DEFAULT_TENANT_SWITCH_TEXT = '切换租户';
+const DEFAULT_SUCCESS_HOSTS = ['mi.feishu.cn', 'mi-p.feishu.cn'];
+const DEFAULT_PENDING_URL_PATTERNS = ['cas\\.mioffice\\.cn/login', 'accounts\\.feishu\\.cn'];
+const DEFAULT_PENDING_TEXTS = ['Login by scanning with Mier App', '使用小米人App扫码登录'];
+const DEFAULT_WAIT_AFTER_NAVIGATION_MS = 12_000;
+const DEFAULT_LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_NAVIGATION_TIMEOUT_MS = 45_000;
 
 export { parseInteger };
-
-const resolvedPath = (flagName) => {
-  const check = requireValue(flagName);
-  return (value) => path.resolve(check(value));
-};
 
 export function parseArgs(argv) {
   const program = createCli()

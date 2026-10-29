@@ -1,7 +1,7 @@
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import esbuild from 'esbuild';
+import { isMain } from './lib/is-main.mjs';
 import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource } from './lib/userscript-sources.mjs';
 import { TRANSFORM_OPTIONS } from './lib/jsx-build-options.mjs';
@@ -123,7 +123,7 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
   return results;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMain(import.meta.url)) {
   const results = await buildAll({});
   if (!results.length) {
     console.log('Nothing to build: no <script-id>.entry.ts modules found under src/userscripts/.');

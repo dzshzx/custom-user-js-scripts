@@ -1,6 +1,6 @@
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
 
+import { isMain } from '../lib/is-main.mjs';
 import { runLoginCapture } from './login-qr-flow.mjs';
 import {
   DEFAULT_ROOT_DIR,
@@ -162,16 +162,17 @@ export async function runCli(argv = process.argv.slice(2), dependencies = {}) {
 
   const abortController = new AbortController();
   let signalExitCode = null;
-  const onSigint = () => {
-    signalExitCode ??= 130;
-    abortController.abort(new Error('SIGINT'));
-  };
-  const onSigterm = () => {
-    signalExitCode ??= 143;
-    abortController.abort(new Error('SIGTERM'));
-  };
-  runtime.once('SIGINT', onSigint);
-  runtime.once('SIGTERM', onSigterm);
+  const signalHandlers = [
+    ['SIGINT', 130],
+    ['SIGTERM', 143],
+  ].map(([signal, exitCode]) => {
+    const handler = () => {
+      signalExitCode ??= exitCode;
+      abortController.abort(new Error(signal));
+    };
+    runtime.once(signal, handler);
+    return [signal, handler];
+  });
 
   try {
     const capture = dependencies.capture ?? runLoginCapture;
@@ -188,16 +189,11 @@ export async function runCli(argv = process.argv.slice(2), dependencies = {}) {
     if (signalExitCode !== null) return signalExitCode;
     return result.status === 'saved' || result.status === 'qr-only' ? 0 : 1;
   } finally {
-    runtime.removeListener('SIGINT', onSigint);
-    runtime.removeListener('SIGTERM', onSigterm);
+    for (const [signal, handler] of signalHandlers) runtime.removeListener(signal, handler);
   }
 }
 
-function isCliEntryPoint() {
-  return process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
-}
-
-if (isCliEntryPoint()) {
+if (isMain(import.meta.url)) {
   runCli()
     .then((exitCode) => {
       process.exitCode = exitCode;

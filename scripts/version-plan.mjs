@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
 
 import semver from 'semver';
 
+import { isMain } from './lib/is-main.mjs';
 import { firstMetadataValue } from './lib/userscript-metadata.mjs';
 import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource, refSource } from './lib/userscript-sources.mjs';
@@ -93,7 +92,7 @@ async function readVersions(source, label) {
   return { versions, issues };
 }
 
-export async function buildVersionPlan({
+async function buildVersionPlan({
   root = process.cwd(),
   baseRef = DEFAULT_BASE_REF,
   targetRef,
@@ -183,8 +182,7 @@ async function main() {
   if (result.issues.length > 0) fail('version plan is incomplete');
 }
 
-const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : '';
-if (invokedPath === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     console.error(`version-plan: ${error.message}`);
     process.exitCode = 1;
