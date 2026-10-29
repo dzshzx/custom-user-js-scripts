@@ -274,3 +274,22 @@ test('storage port updates the latest primary settings and keeps a failed read o
     JSON.stringify({ normalized: true, value: { next: 2 } }),
   ]);
 });
+
+test('widget position falls back to local storage when the shared position read fails', async () => {
+  const localStorageAdapter = createLocalStorage({
+    fallbackPosition: JSON.stringify({ left: 7, top: 8 }),
+  });
+  const port = createWebPageAssistantStoragePort(
+    baseAdapters({
+      localStorageAdapter,
+      widgetPositionKey: 'position:a.test',
+      sharedWidgetPositionKey: 'position',
+      gmGetValue(key) {
+        if (key === 'position') throw new Error('shared read failed');
+        return null;
+      },
+    }),
+  );
+
+  assert.deepEqual(await port.readWidgetPosition(), { left: 7, top: 8 });
+});
