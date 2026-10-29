@@ -3,6 +3,7 @@ import mime from 'mime/lite';
 
 import { readPreviewImage } from './feishu-preview-image-export-extraction.lib.ts';
 import type { PreviewImageCandidate } from './feishu-preview-image-export-extraction.lib.ts';
+import { errorMessage } from '../shared/shared-values.lib.ts';
 import type { GmDownload } from '../shared/shared-gm.lib.ts';
 
 export interface ImageExportRuntimeOptions {
@@ -46,28 +47,9 @@ function extensionFromMime(type: unknown): string {
   return mime.getExtension(String(type || '')) || 'bin';
 }
 
-// 取错误文案，绝不抛错：兼容 Error、字符串、null 原型对象和 Tampermonkey 的 {id, error, details}。
-function errorText(error: unknown): string {
-  try {
-    if (error instanceof Error) return error.message;
-    if (typeof error === 'string') return error;
-    if (error && typeof error === 'object') {
-      const record = error as Record<string, unknown>;
-      for (const key of ['error', 'message']) {
-        const value = record[key];
-        if (typeof value === 'string' && value) return value;
-      }
-      return JSON.stringify(error) ?? '';
-    }
-    return String(error);
-  } catch {
-    return 'unknown error';
-  }
-}
-
-// 内部错误保持英文进 console；给用户的是这里映射的中文文案。经 errorText 取文字，遇到怪对象也不抛错。
+// 内部错误保持英文进 console；给用户的是这里映射的中文文案。经 errorMessage 取文字，遇到怪对象也不抛错。
 function toUserMessage(error: unknown): string {
-  const text = errorText(error);
+  const text = errorMessage(error);
   const httpMatch = /^Failed to fetch image: (\d+)/.exec(text);
   if (httpMatch) {
     return `图片拉取失败（HTTP ${httpMatch[1]}），请确认已登录飞书或稍后重试。`;
@@ -142,7 +124,7 @@ function createImageExportRuntime(
       };
       const failed = (error: unknown) =>
         settle(() => {
-          console.warn(`${LIB_NAME}: GM_download failed (${errorText(error)}); falling back to anchor download.`);
+          console.warn(`${LIB_NAME}: GM_download failed (${errorMessage(error)}); falling back to anchor download.`);
           resolve('failed');
         });
       const timer = setTimeout(() => settle(() => reject(new Error('GM_download timed out'))), downloadTimeoutMs);

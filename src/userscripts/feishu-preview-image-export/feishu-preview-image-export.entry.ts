@@ -18,6 +18,7 @@
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
 import { createToaster } from '../shared/shared-toast.lib.tsx';
 import { resolveGmApi } from '../shared/shared-gm.lib.ts';
+import { ensureStyle } from '../shared/shared-dom.lib.ts';
 import type { Toaster } from '../shared/shared-toast.lib.tsx';
 import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-export-logic.lib.ts';
 
@@ -45,10 +46,10 @@ import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-
 
     toaster = createToaster({ root });
 
-    if (!document.getElementById(STYLE_ID)) {
-      const style = document.createElement('style');
-      style.id = STYLE_ID;
-      style.textContent = [
+    ensureStyle(
+      document,
+      STYLE_ID,
+      [
         buildTokenCss({
           rootSelector: `#${ROOT_ID}`,
           accent: 'oklch(55% 0.15 250)',
@@ -57,9 +58,9 @@ import { createImageExportRuntime, toUserMessage } from './feishu-preview-image-
         // 让 toast 叠在预览页之上，root 自身不拦截页面交互
         `#${ROOT_ID} { position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; }`,
         toaster.cssText,
-      ].join('\n\n');
-      document.head.append(style);
-    }
+      ].join('\n\n'),
+      document.head,
+    );
 
     return toaster;
   }
