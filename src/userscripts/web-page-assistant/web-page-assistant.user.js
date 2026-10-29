@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.23
+// @version      0.3.24
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -553,6 +553,9 @@
       download: typeof GM_download === "function" ? GM_download : null
     };
   }
+  function promised(fn) {
+    return fn ? async (...args) => fn(...args) : null;
+  }
   function modernGlobal() {
     return typeof GM !== "undefined" ? GM : null;
   }
@@ -573,8 +576,12 @@
       };
     }
     return {
-      getValue: pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue"),
-      setValue: pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue"),
+      getValue: promised(
+        pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue")
+      ),
+      setValue: promised(
+        pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue")
+      ),
       valueChange,
       registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
       xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),

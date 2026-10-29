@@ -5,11 +5,16 @@
 // and hosts inject fakes.
 
 // The adapter's own contract: what callers may rely on whichever manager family
-// answered. Results stay `unknown` where the families differ (sync vs promise).
+// answered. getValue/setValue always return a promise, whether the manager's
+// function is synchronous (`GM_*`) or promise-based (`GM.*`); other results stay
+// `unknown` where the families differ.
 export type GmValueChangeListener = (name: string, oldValue: unknown, newValue: unknown, remote: boolean) => void;
 export type GmListenerId = number | Promise<number>;
-export type GmGetValue = (key: string, defaultValue?: Tampermonkey.StorageValue) => unknown;
-export type GmSetValue = (key: string, value: Tampermonkey.StorageValue) => unknown;
+export type GmGetValue = (key: string, defaultValue?: Tampermonkey.StorageValue) => Promise<unknown>;
+export type GmSetValue = (key: string, value: Tampermonkey.StorageValue) => Promise<void>;
+// What a manager or a test override may supply: synchronous or promise-based.
+export type GmGetValueSource = (key: string, defaultValue?: Tampermonkey.StorageValue) => unknown;
+export type GmSetValueSource = (key: string, value: Tampermonkey.StorageValue) => unknown;
 export type GmAddValueChangeListener = (name: string, listener: GmValueChangeListener) => GmListenerId;
 export type GmRemoveValueChangeListener = (listenerId: number) => unknown;
 export type GmRegisterMenuCommand = (caption: string, onClick: () => void) => unknown;
@@ -34,8 +39,8 @@ export interface GmApi {
 
 export interface GmOverrides {
   gm?: GmModernApi | null;
-  gmGetValue?: GmGetValue | null;
-  gmSetValue?: GmSetValue | null;
+  gmGetValue?: GmGetValueSource | null;
+  gmSetValue?: GmSetValueSource | null;
   gmAddValueChangeListener?: GmAddValueChangeListener | null;
   gmRemoveValueChangeListener?: GmRemoveValueChangeListener | null;
   gmRegisterMenuCommand?: GmRegisterMenuCommand | null;
@@ -56,7 +61,9 @@ function bindModern<T>(gm: GmModernApi | null, ...names: string[]): T | null {
   return null;
 }
 
-function legacyGlobals(): Omit<GmApi, 'valueChange'> & {
+function legacyGlobals(): Omit<GmApi, 'valueChange' | 'getValue' | 'setValue'> & {
+  getValue: GmGetValueSource | null;
+  setValue: GmSetValueSource | null;
   addValueChangeListener: GmAddValueChangeListener | null;
   removeValueChangeListener: GmRemoveValueChangeListener | null;
 } {
@@ -71,6 +78,13 @@ function legacyGlobals(): Omit<GmApi, 'valueChange'> & {
   };
 }
 
+// One promise shape for both families; a synchronous throw becomes a rejection.
+function promised<A extends unknown[]>(
+  fn: ((...args: A) => unknown) | null,
+): ((...args: A) => Promise<unknown>) | null {
+  return fn ? async (...args: A) => fn(...args) : null;
+}
+
 function modernGlobal(): GmModernApi | null {
   return typeof GM !== 'undefined' ? GM : null;
 }
@@ -82,6 +96,8 @@ function modernGlobal(): GmModernApi | null {
  * Overrides: `gmGetValue`, `gmSetValue`, `gmAddValueChangeListener`,
  * `gmRemoveValueChangeListener`, `gmRegisterMenuCommand`, `gmXmlhttpRequest`,
  * `gmDownload`, and `gm` for the modern object.
+ *
+ * `getValue`/`setValue` are wrapped so they always return a promise.
  *
  * `valueChange` pairs add/remove from the same API family, because listener
  * ids are not interchangeable between them; the modern `add` may return a
@@ -106,8 +122,12 @@ function resolveGmApi(overrides: GmOverrides = {}): GmApi {
   }
 
   return {
-    getValue: pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, 'getValue'),
-    setValue: pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, 'setValue'),
+    getValue: promised(
+      pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern<GmGetValueSource>(gm, 'getValue'),
+    ),
+    setValue: promised(
+      pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern<GmSetValueSource>(gm, 'setValue'),
+    ) as GmSetValue | null,
     valueChange,
     registerMenuCommand:
       pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) ||

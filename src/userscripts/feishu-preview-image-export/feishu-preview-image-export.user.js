@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.25
+// @version      0.1.26
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -1133,6 +1133,9 @@ ${root} :focus-visible {
       download: typeof GM_download === "function" ? GM_download : null
     };
   }
+  function promised(fn) {
+    return fn ? async (...args) => fn(...args) : null;
+  }
   function modernGlobal() {
     return typeof GM !== "undefined" ? GM : null;
   }
@@ -1153,8 +1156,12 @@ ${root} :focus-visible {
       };
     }
     return {
-      getValue: pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue"),
-      setValue: pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue"),
+      getValue: promised(
+        pickFunction(overrides.gmGetValue, legacy.getValue) || bindModern(gm, "getValue")
+      ),
+      setValue: promised(
+        pickFunction(overrides.gmSetValue, legacy.setValue) || bindModern(gm, "setValue")
+      ),
       valueChange,
       registerMenuCommand: pickFunction(overrides.gmRegisterMenuCommand, legacy.registerMenuCommand) || bindModern(gm, "registerMenuCommand"),
       xmlHttpRequest: pickFunction(overrides.gmXmlhttpRequest, legacy.xmlHttpRequest) || bindModern(gm, "xmlHttpRequest", "xmlhttpRequest"),
