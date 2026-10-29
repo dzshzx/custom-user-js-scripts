@@ -141,6 +141,19 @@ test('buildAll rejects entries whose metadata still declares @require or wrong d
   await assert.rejects(() => buildAll({ rootDir, distDir }), /downloadURL|updateURL/i);
 });
 
+test('buildAll applies the lint install-URL rule: @downloadURL and @updateURL must match', async (t) => {
+  const { rootDir, scriptDir, distDir } = await createWorkspace();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+
+  const entryPath = path.join(scriptDir, 'demo-script.entry.js');
+  const original = await readFile(entryPath, 'utf8');
+  await writeFile(
+    entryPath,
+    original.replace(`// @updateURL    ${RAW_BASE}/`, '// @updateURL    https://mirror.example.invalid/'),
+  );
+  await assert.rejects(() => buildAll({ rootDir, distDir }), /@downloadURL and @updateURL differ/);
+});
+
 test('buildAll enforces SCRIPT_VERSION to match metadata @version when present', async (t) => {
   const { rootDir, scriptDir, distDir } = await createWorkspace();
   t.after(() => rm(rootDir, { recursive: true, force: true }));

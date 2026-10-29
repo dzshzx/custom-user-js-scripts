@@ -1,11 +1,12 @@
 import path from 'node:path';
 import { firstMetadataValue, installIdentity, parseMetadataBlock } from './userscript-metadata.mjs';
+import { isUserscriptFile } from './userscript-sources.mjs';
 
 // Facts only: consumers decide whether missing/stale generated outputs are legal
 // at their stage. No source module is imported or evaluated.
 export async function readUserscriptInventory({ files, readText }) {
   const paths = [...new Set(files.map((file) => path.posix.normalize(file.replaceAll('\\', '/'))))]
-    .filter((file) => /\.(entry\.[jt]s|user\.js)$/.test(file) && /^(src\/|dist\/)/.test(file))
+    .filter((file) => isUserscriptFile(file) && /^(src\/|dist\/)/.test(file))
     .sort();
   const facts = new Map();
   const issues = [];

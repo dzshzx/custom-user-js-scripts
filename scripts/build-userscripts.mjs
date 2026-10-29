@@ -7,10 +7,10 @@ import { worktreeSource } from './lib/userscript-sources.mjs';
 import { TRANSFORM_OPTIONS } from './lib/jsx-build-options.mjs';
 
 import {
-  REQUIRED_METADATA_FIELDS,
   extractMetadataBlockText,
   firstMetadataValue,
-  parseMetadataBlock,
+  installUrlIssues,
+  missingRequiredFields,
 } from './lib/userscript-metadata.mjs';
 
 const GENERATED_NOTE = (scriptId) =>
@@ -34,41 +34,31 @@ async function discoverEntries(rootDir) {
       entryPath: path.join(rootDir, entry.path),
       scriptDir: path.dirname(path.join(rootDir, entry.path)),
       entrySource: entry.content,
+      metadata: entry.metadata,
     }));
 }
 
-function validateEntryMetadata({ scriptId, entryPath, entrySource }) {
-  const metadataText = extractMetadataBlockText(entrySource);
-  const metadata = metadataText ? parseMetadataBlock(entrySource) : null;
-  if (!metadataText || !metadata) {
+// metadata comes from the inventory read; it is null when the entry has no block.
+function validateEntryMetadata({ scriptId, entryPath, entrySource, metadata }) {
+  if (!metadata) {
     throw new Error(`${entryPath}: missing userscript metadata block`);
   }
 
-  for (const field of REQUIRED_METADATA_FIELDS) {
-    if (!metadata.has(field)) {
-      throw new Error(`${entryPath}: missing ${field}`);
-    }
-  }
+  const [missingField] = missingRequiredFields(metadata);
+  if (missingField) throw new Error(`${entryPath}: ${missingField}`);
 
   if (metadata.has('@require')) {
     throw new Error(`${entryPath}: @require is not allowed in bundled entries — use ESM imports instead`);
   }
 
-  const expectedSuffix = `/dist/${scriptId}.user.js`;
-  for (const field of ['@downloadURL', '@updateURL']) {
-    const value = firstMetadataValue(metadata, field);
-    if (!value.endsWith(expectedSuffix)) {
-      throw new Error(`${entryPath}: ${field} must point at ${expectedSuffix} (got "${value}")`);
-    }
-  }
+  const [urlIssue] = installUrlIssues(metadata, `dist/${scriptId}.user.js`);
+  if (urlIssue) throw new Error(`${entryPath}: ${urlIssue}`);
 
   const version = firstMetadataValue(metadata, '@version');
   const scriptVersionMatch = entrySource.match(/const SCRIPT_VERSION = '([^']+)'/);
   if (scriptVersionMatch && scriptVersionMatch[1] !== version) {
     throw new Error(`${entryPath}: SCRIPT_VERSION "${scriptVersionMatch[1]}" does not match @version "${version}"`);
   }
-
-  return { metadataText, metadata };
 }
 
 async function assertNoOrphanLibs({ rootDir, scriptDir, entryPath, metafile }) {
@@ -86,8 +76,8 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
   const targets = await discoverEntries(rootDir);
   const results = [];
 
-  for (const { scriptId, entryPath, scriptDir, entrySource } of targets) {
-    const { metadataText } = validateEntryMetadata({ scriptId, entryPath, entrySource });
+  for (const { scriptId, entryPath, scriptDir, entrySource, metadata } of targets) {
+    validateEntryMetadata({ scriptId, entryPath, entrySource, metadata });
 
     const buildResult = await esbuild.build({
       entryPoints: [entryPath],
@@ -109,7 +99,7 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
     const bundledCode = buildResult.outputFiles[0].text;
     const distPath = path.join(distDir, `${scriptId}.user.js`);
     const bridgePath = path.join(scriptDir, `${scriptId}.user.js`);
-    const output = `${metadataText}\n${GENERATED_NOTE(scriptId)}\n${bundledCode}`;
+    const output = `${extractMetadataBlockText(entrySource)}\n${GENERATED_NOTE(scriptId)}\n${bundledCode}`;
 
     await mkdir(distDir, { recursive: true });
     await writeFile(distPath, output);

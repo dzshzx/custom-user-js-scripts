@@ -1,5 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
-import { REQUIRED_METADATA_FIELDS, firstMetadataValue } from './lib/userscript-metadata.mjs';
+import { installUrlIssues, missingRequiredFields } from './lib/userscript-metadata.mjs';
 import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource } from './lib/userscript-sources.mjs';
 
@@ -21,38 +20,28 @@ for (const issue of inventory.issues) {
 }
 for (const file of inventory.files) {
   if (!file.metadata) continue;
-  for (const field of REQUIRED_METADATA_FIELDS) {
-    if (!file.metadata.has(field)) report(file.path, `missing ${field}`);
-  }
+  for (const message of missingRequiredFields(file.metadata)) report(file.path, message);
 }
 for (const record of inventory.records) {
   for (const script of [record.metadataOwner, record.entry && record.bridge, record.entry && record.dist].filter(
     Boolean,
   )) {
     if (!script.metadata) continue;
-    const expected = record.dist?.path || script.path;
-    const download = firstMetadataValue(script.metadata, '@downloadURL');
-    const update = firstMetadataValue(script.metadata, '@updateURL');
-    if (!download || !update) {
-      report(
-        script.path,
-        `missing @downloadURL/@updateURL (must point both at their own raw path, ending with /${expected})`,
-      );
-      continue;
+    for (const message of installUrlIssues(script.metadata, record.dist?.path || script.path)) {
+      report(script.path, message);
     }
-    if (download !== update) report(script.path, '@downloadURL and @updateURL differ');
-    if (!download.endsWith(`/${expected}`))
-      report(script.path, `@downloadURL must end with /${expected} (the script's own path)`);
   }
 }
 // Only the shared adapter probes the userscript manager API; scripts go
 // through resolveGmApi so GM_* / GM.* precedence stays in one place.
 const GM_ADAPTER = 'src/userscripts/shared/shared-gm.lib.ts';
 const GM_PROBE = /typeof\s+GM(?:_\w+)?\b/;
-for (const name of await readdir('src', { recursive: true })) {
-  const file = `src/${name.replaceAll('\\', '/')}`;
-  if (!/\.(lib|entry)\.[jt]sx?$/.test(file) || file === GM_ADAPTER) continue;
-  if (GM_PROBE.test(await readFile(file, 'utf8'))) {
+const modules = await worktreeSource(process.cwd(), {
+  dirs: ['src'],
+  include: (file) => /\.(lib|entry)\.[jt]sx?$/.test(file) && file !== GM_ADAPTER,
+});
+for (const file of modules.files) {
+  if (GM_PROBE.test(await modules.readText(file))) {
     report(file, `probes the GM API directly; use resolveGmApi from ${GM_ADAPTER}`);
   }
 }
