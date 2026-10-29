@@ -11,13 +11,21 @@ export async function readUserscriptInventory({ files, readText }) {
   const facts = new Map();
   const issues = [];
   const issue = (type, file, message, related = []) => issues.push({ type, file, related, message });
-  for (const file of paths) {
-    try {
-      const content = await readText(file);
+  const reads = await Promise.all(
+    paths.map(async (file) => {
+      try {
+        return { file, read: true, content: await readText(file) };
+      } catch (error) {
+        return { file, read: false, error };
+      }
+    }),
+  );
+  for (const { file, read, content, error } of reads) {
+    if (read) {
       const metadata = parseMetadataBlock(content);
       facts.set(file, { path: file, exists: true, content, metadata });
       if (!metadata) issue('invalid-metadata', file, 'missing userscript metadata block');
-    } catch (error) {
+    } else {
       const missing = error?.code === 'ENOENT';
       facts.set(file, { path: file, exists: !missing, error: error.message, code: error.code });
       issue(missing ? 'missing-file' : 'read-failed', file, `cannot read ${file}: ${error.message}`);

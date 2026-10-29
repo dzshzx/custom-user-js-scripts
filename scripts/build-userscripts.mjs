@@ -72,45 +72,50 @@ async function assertNoOrphanLibs({ rootDir, scriptDir, entryPath, metafile }) {
   }
 }
 
+async function bundleEntry({ rootDir, scriptId, entryPath, scriptDir, entrySource, metadata }) {
+  validateEntryMetadata({ scriptId, entryPath, entrySource, metadata });
+
+  const buildResult = await esbuild.build({
+    entryPoints: [entryPath],
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: 'es2022',
+    ...TRANSFORM_OPTIONS,
+    minify: false,
+    charset: 'utf8',
+    sourcemap: false,
+    write: false,
+    metafile: true,
+    absWorkingDir: rootDir,
+    logLevel: 'silent',
+  });
+  await assertNoOrphanLibs({ rootDir, scriptDir, entryPath, metafile: buildResult.metafile });
+
+  const bundledCode = buildResult.outputFiles[0].text;
+  return `${extractMetadataBlockText(entrySource)}\n${GENERATED_NOTE(scriptId)}\n${bundledCode}`;
+}
+
 export async function buildAll({ rootDir = process.cwd(), distDir = path.join(rootDir, 'dist') } = {}) {
   const targets = await discoverEntries(rootDir);
-  const results = [];
+  // Scripts bundle independently and in parallel; the first failure in target
+  // order is reported, and nothing is written unless every bundle succeeded.
+  const settled = await Promise.allSettled(targets.map((target) => bundleEntry({ rootDir, ...target })));
+  const failure = settled.find((result) => result.status === 'rejected');
+  if (failure) throw failure.reason;
 
-  for (const { scriptId, entryPath, scriptDir, entrySource, metadata } of targets) {
-    validateEntryMetadata({ scriptId, entryPath, entrySource, metadata });
-
-    const buildResult = await esbuild.build({
-      entryPoints: [entryPath],
-      bundle: true,
-      format: 'iife',
-      platform: 'browser',
-      target: 'es2022',
-      ...TRANSFORM_OPTIONS,
-      minify: false,
-      charset: 'utf8',
-      sourcemap: false,
-      write: false,
-      metafile: true,
-      absWorkingDir: rootDir,
-      logLevel: 'silent',
-    });
-    await assertNoOrphanLibs({ rootDir, scriptDir, entryPath, metafile: buildResult.metafile });
-
-    const bundledCode = buildResult.outputFiles[0].text;
-    const distPath = path.join(distDir, `${scriptId}.user.js`);
-    const bridgePath = path.join(scriptDir, `${scriptId}.user.js`);
-    const output = `${extractMetadataBlockText(entrySource)}\n${GENERATED_NOTE(scriptId)}\n${bundledCode}`;
-
-    await mkdir(distDir, { recursive: true });
-    await writeFile(distPath, output);
-    // The legacy install path serves the identical full script: script managers
-    // may install whatever @downloadURL they hold, so both URLs must be real.
-    await writeFile(bridgePath, output);
-
-    results.push({ scriptId, distPath, bridgePath });
-  }
-
-  return results;
+  if (targets.length) await mkdir(distDir, { recursive: true });
+  return Promise.all(
+    targets.map(async ({ scriptId, scriptDir }, index) => {
+      const output = settled[index].value;
+      const distPath = path.join(distDir, `${scriptId}.user.js`);
+      const bridgePath = path.join(scriptDir, `${scriptId}.user.js`);
+      // The legacy install path serves the identical full script: script managers
+      // may install whatever @downloadURL they hold, so both URLs must be real.
+      await Promise.all([writeFile(distPath, output), writeFile(bridgePath, output)]);
+      return { scriptId, distPath, bridgePath };
+    }),
+  );
 }
 
 if (isMain(import.meta.url)) {
