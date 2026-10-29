@@ -2,16 +2,12 @@ import stableStringify from 'fast-json-stable-stringify';
 import pLimit from 'p-limit';
 import * as v from 'valibot';
 import { isMainSevenDayWindow, projectQuotaSnapshotForArchive } from './codex-quota-compass-contract.lib.ts';
+import { coerce, isRecord } from '../shared/shared-values.lib.ts';
 import {
+  aggregateLedgerViews,
   foldSnapshotsIntoLedger,
   mergeLedgers,
   normalizeLedger,
-  aggregateDaily,
-  aggregateCycle,
-  aggregateMonth,
-  aggregateWeekly,
-  aggregateMonthlyList,
-  aggregateAllTime,
 } from './codex-quota-compass-ledger.lib.ts';
 import type { LedgerTotals } from './codex-quota-compass-ledger.lib.ts';
 import type {
@@ -40,10 +36,6 @@ const EXPORT_VERSION = 2;
 const SUPPORTED_EXPORT_VERSIONS = new Set([1, 2]);
 const MAX_RETAINED_SNAPSHOTS = 5;
 const DEFAULT_USD_PER_CREDIT = 40 / 1000;
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
 
 // JSON-safe value: Dates become ISO strings, non-finite numbers become null,
 // undefined becomes null and any other primitive is stringified.
@@ -79,18 +71,12 @@ function sortSnapshotsByCaptureTime<T extends { capturedAt?: string | null }>(sn
     .sort((left, right) => String(left.capturedAt || '').localeCompare(String(right.capturedAt || '')));
 }
 
-// Missing keys still run through the transform, so defaults apply uniformly.
-const coerce = <T>(transform: (value: unknown) => T) =>
-  v.pipe(
-    v.optional(v.unknown(), () => undefined),
-    v.transform(transform),
-  );
-const plainObjectValue = coerce((value) => sanitizeValue(isPlainObject(value) ? value : {}) as JsonObject);
+const plainObjectValue = coerce((value) => sanitizeValue(isRecord(value) ? value : {}) as JsonObject);
 const nullableString: v.GenericSchema<unknown, string | null> = v.fallback(v.string(), null as never);
 
 // A snapshot without a usable capture time is dropped (silently when reading an archive).
 const SnapshotSchema = v.pipe(
-  v.custom<Record<string, unknown>>(isPlainObject),
+  v.custom<Record<string, unknown>>(isRecord),
   v.object({
     snapshotId: coerce((value) => (typeof value === 'string' && value.trim() ? value.trim() : null)),
     capturedAt: v.pipe(
@@ -149,7 +135,7 @@ export interface LedgerCostOptions {
   monthCount?: number;
 }
 export type LedgerCostViews = ReturnType<typeof buildLedgerCostViews>;
-export type SnapshotArchiveSummary = ReturnType<typeof summarizeSnapshotArchive>;
+export type SnapshotArchiveSummary = ReturnType<typeof summarizeNormalizedArchive>;
 export type SnapshotExportDocument = ReturnType<typeof buildSnapshotExportDocument>;
 export type ArchiveImportPreview = ReturnType<typeof previewImportArchiveDocument>;
 export interface ArchiveUsageRow {
@@ -211,11 +197,7 @@ function normalizeSnapshot(input: unknown): QuotaSnapshot | null {
 }
 
 function normalizeSnapshotArchive(rawArchive: unknown): SnapshotArchive {
-  const archiveObject = Array.isArray(rawArchive)
-    ? { snapshots: rawArchive }
-    : isPlainObject(rawArchive)
-      ? rawArchive
-      : {};
+  const archiveObject = Array.isArray(rawArchive) ? { snapshots: rawArchive } : isRecord(rawArchive) ? rawArchive : {};
   const archive = v.parse(SnapshotArchiveSchema, archiveObject);
 
   return {
@@ -249,7 +231,10 @@ function migrateArchive(rawArchive: unknown, nowMs: number = Date.now()): Snapsh
 }
 
 function cycleStartDateFromArchive(archive: unknown): string | null {
-  const snapshots = normalizeSnapshotArchive(archive).snapshots;
+  return cycleStartDateFromSnapshots(normalizeSnapshotArchive(archive).snapshots);
+}
+
+function cycleStartDateFromSnapshots(snapshots: readonly QuotaSnapshot[]): string | null {
   const latest = snapshots[snapshots.length - 1];
   const win = (
     Array.isArray(latest?.windowSnapshot) ? latest.windowSnapshot.find(isMainSevenDayWindow) : null
@@ -259,22 +244,21 @@ function cycleStartDateFromArchive(archive: unknown): string | null {
 }
 
 function buildLedgerCostViews(archive: unknown, options: LedgerCostOptions = {}) {
-  const migrated = migrateArchive(archive, options.nowMs);
+  return ledgerCostViewsFromMigrated(migrateArchive(archive, options.nowMs), options);
+}
+
+// `migrated` must already be the output of `migrateArchive` (at `options.nowMs`).
+function ledgerCostViewsFromMigrated(migrated: SnapshotArchive, options: LedgerCostOptions) {
   const nowMs = Number.isFinite(options.nowMs) ? options.nowMs! : Date.now();
-  const cycleStartDate = options.cycleStartDate || cycleStartDateFromArchive(migrated);
-  return {
-    cycleStartDate,
-    daily: aggregateDaily(migrated.ledger, { nowMs, limit: options.dailyLimit }),
-    cycle: aggregateCycle(migrated.ledger, cycleStartDate, { nowMs }),
-    month: aggregateMonth(migrated.ledger, options.month, { nowMs }),
-    weekly: aggregateWeekly(migrated.ledger, { nowMs, count: options.weekCount }),
-    monthly: aggregateMonthlyList(migrated.ledger, { nowMs, count: options.monthCount }),
-    allTime: aggregateAllTime(migrated.ledger, { nowMs }),
-  };
+  const cycleStartDate = options.cycleStartDate || cycleStartDateFromSnapshots(migrated.snapshots);
+  return { cycleStartDate, ...aggregateLedgerViews(migrated.ledger, { ...options, nowMs, cycleStartDate }) };
 }
 
 function summarizeSnapshotArchive(archive: unknown) {
-  const normalized = normalizeSnapshotArchive(archive);
+  return summarizeNormalizedArchive(normalizeSnapshotArchive(archive));
+}
+
+function summarizeNormalizedArchive(normalized: SnapshotArchive) {
   const first = normalized.snapshots[0] || null;
   const last = normalized.snapshots[normalized.snapshots.length - 1] || null;
 
@@ -314,7 +298,7 @@ function snapshotFallbackKey(snapshot: QuotaSnapshot): string {
 }
 
 function createQuotaSnapshot({ result, capturedAt, scriptVersion, snapshotId }: QuotaSnapshotInput) {
-  if (!isPlainObject(result)) {
+  if (!isRecord(result)) {
     throw new Error('Cannot create Quota Snapshot without a result object.');
   }
 
@@ -383,7 +367,7 @@ function mergeSnapshots(currentArchive: unknown, incomingSnapshots: readonly unk
 // (JSON semantics), so a local object and its JSON round-trip compare equal.
 function contentKey(ledger: unknown, snapshots: unknown): string {
   return stableStringify({
-    ledger: isPlainObject(ledger) ? ledger : {},
+    ledger: isRecord(ledger) ? ledger : {},
     snapshots: Array.isArray(snapshots) ? snapshots : [],
   });
 }
@@ -418,7 +402,9 @@ function mergeSnapshotArchives(primary: unknown, incoming: unknown, { nowMs = Da
     ledger,
     snapshots: merged.archive.snapshots.slice(-MAX_RETAINED_SNAPSHOTS),
   };
-  return { archive, report: merged.report, changed: archiveContentKey(current) !== archiveContentKey(archive) };
+  // Both sides are already normalized, so their content keys compare directly.
+  const changed = contentKey(current.ledger, current.snapshots) !== contentKey(archive.ledger, archive.snapshots);
+  return { archive, report: merged.report, changed };
 }
 
 function buildSnapshotExportDocument(archive: unknown, exportedAt: string) {
@@ -435,7 +421,7 @@ function buildSnapshotExportDocument(archive: unknown, exportedAt: string) {
 }
 
 function previewImportArchiveDocument(currentArchive: unknown, documentObject: unknown, nowMs: number = Date.now()) {
-  if (!isPlainObject(documentObject) || !v.is(SupportedExportDocumentSchema, documentObject)) {
+  if (!isRecord(documentObject) || !v.is(SupportedExportDocumentSchema, documentObject)) {
     throw new Error('Unsupported Snapshot Export document.');
   }
 
@@ -667,8 +653,8 @@ function createSnapshotArchiveStore({
       const timestamp = nowMs();
       const archive = migrateArchive(await read(), timestamp);
       return {
-        summary: summarizeSnapshotArchive(archive),
-        ledgerCost: buildLedgerCostViews(archive, { ...options, nowMs: timestamp }),
+        summary: summarizeNormalizedArchive(archive),
+        ledgerCost: ledgerCostViewsFromMigrated(archive, { ...options, nowMs: timestamp }),
       };
     },
 

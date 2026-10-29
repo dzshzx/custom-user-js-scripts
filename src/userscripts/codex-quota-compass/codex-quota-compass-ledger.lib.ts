@@ -252,8 +252,25 @@ function mergeLedgers(left: unknown, right: unknown, options: LedgerOptions = {}
   return out;
 }
 
-function sortedRecordsDesc(ledger: unknown): LedgerRecord[] {
-  return Object.values(normalizeLedger(ledger)).sort((a, b) => b.date.localeCompare(a.date));
+// A ledger normalized once for repeated aggregation. `records` keeps the
+// normalized insertion order (raw sums add in that order); `desc` is newest first.
+class PreparedLedger {
+  readonly records: LedgerRecord[];
+  readonly desc: LedgerRecord[];
+  constructor(ledger: unknown) {
+    this.records = Object.values(normalizeLedger(ledger));
+    this.desc = this.records.slice().sort((a, b) => b.date.localeCompare(a.date));
+  }
+}
+
+function prepareLedger(ledger: unknown): PreparedLedger {
+  return ledger instanceof PreparedLedger ? ledger : new PreparedLedger(ledger);
+}
+
+function inDateRange(record: LedgerRecord, from: string | null | undefined, to: string | null | undefined): boolean {
+  if (from && record.date < from) return false;
+  if (to && record.date > to) return false;
+  return true;
 }
 
 function sumRecords(records: readonly LedgerRecord[]): LedgerTotals {
@@ -304,12 +321,7 @@ function utcMonthRange(
 // in-progress estimate buckets (current rolling week / current month), which
 // are explicitly labelled estimates and must include today's unsettled usage.
 function sumRangeRaw(ledger: unknown, { from, to }: LedgerDateRange = {}): LedgerTotals {
-  const records = Object.values(normalizeLedger(ledger)).filter((record) => {
-    if (from && record.date < from) return false;
-    if (to && record.date > to) return false;
-    return true;
-  });
-  return sumRecords(records);
+  return sumRecords(prepareLedger(ledger).records.filter((record) => inDateRange(record, from, to)));
 }
 
 // Rolling 7-day non-overlapping blocks anchored to today, newest first.
@@ -320,6 +332,7 @@ function aggregateWeekly(
   ledger: unknown,
   { nowMs, count = 8, buffer = SETTLE_BUFFER_MS }: LedgerListOptions = {},
 ): LedgerWeeklyAggregate {
+  const prepared = prepareLedger(ledger);
   const today = currentUtcDate(nowMs);
   let current: LedgerWeekBlock | null = null;
   const blocks: LedgerWeekBlock[] = [];
@@ -327,10 +340,10 @@ function aggregateWeekly(
     const to = shiftDateKey(today, -7 * i);
     const from = shiftDateKey(today, -7 * i - 6);
     if (i === 0) {
-      const raw = sumRangeRaw(ledger, { from, to });
+      const raw = sumRangeRaw(prepared, { from, to });
       current = { from, to, totalCredits: round2(raw.totalCredits), totalUsd: round2(raw.totalUsd), settled: false };
     } else {
-      const agg = aggregateRange(ledger, { from, to, nowMs, buffer });
+      const agg = aggregateRange(prepared, { from, to, nowMs, buffer });
       blocks.push({ from, to, totalCredits: round2(agg.totalCredits), totalUsd: round2(agg.totalUsd), settled: true });
     }
   }
@@ -343,6 +356,7 @@ function aggregateMonthlyList(
   ledger: unknown,
   { nowMs, count = 6, buffer = SETTLE_BUFFER_MS }: LedgerListOptions = {},
 ): LedgerMonthlyAggregate {
+  const prepared = prepareLedger(ledger);
   const currentMonth = currentUtcDate(nowMs).slice(0, 7);
   let current: LedgerMonthBlock | null = null;
   const months: LedgerMonthBlock[] = [];
@@ -350,7 +364,7 @@ function aggregateMonthlyList(
     const month = shiftMonthKey(currentMonth, -i);
     const { from, to } = utcMonthRange(month, nowMs);
     if (i === 0) {
-      const raw = sumRangeRaw(ledger, { from, to });
+      const raw = sumRangeRaw(prepared, { from, to });
       current = {
         month,
         from,
@@ -360,7 +374,7 @@ function aggregateMonthlyList(
         settled: false,
       };
     } else {
-      const agg = aggregateMonth(ledger, month, { nowMs, buffer });
+      const agg = aggregateMonth(prepared, month, { nowMs, buffer });
       months.push({
         month,
         from,
@@ -418,11 +432,7 @@ function aggregateRange(
   ledger: unknown,
   { from, to, nowMs, buffer = SETTLE_BUFFER_MS }: LedgerRangeOptions = {},
 ): LedgerRangeAggregate {
-  const inRange = sortedRecordsDesc(ledger).filter((record) => {
-    if (from && record.date < from) return false;
-    if (to && record.date > to) return false;
-    return true;
-  });
+  const inRange = prepareLedger(ledger).desc.filter((record) => inDateRange(record, from, to));
   const { settled, inProgress } = splitSettled(inRange, nowMs, buffer);
   return { ...sumRecords(settled), days: settled, inProgress };
 }
@@ -454,6 +464,29 @@ function aggregateMonth(
   return aggregateRange(ledger, { from: range.from, to: range.to, nowMs, buffer });
 }
 
+export interface LedgerViewsOptions {
+  nowMs: number;
+  cycleStartDate: string | null | undefined;
+  dailyLimit?: number;
+  month?: string;
+  weekCount?: number;
+  monthCount?: number;
+}
+
+// Every Statistics projection of one ledger, normalized and sorted once.
+function aggregateLedgerViews(rawLedger: unknown, options: LedgerViewsOptions) {
+  const { nowMs, cycleStartDate } = options;
+  const ledger = prepareLedger(rawLedger);
+  return {
+    daily: aggregateDaily(ledger, { nowMs, limit: options.dailyLimit }),
+    cycle: aggregateCycle(ledger, cycleStartDate, { nowMs }),
+    month: aggregateMonth(ledger, options.month, { nowMs }),
+    weekly: aggregateWeekly(ledger, { nowMs, count: options.weekCount }),
+    monthly: aggregateMonthlyList(ledger, { nowMs, count: options.monthCount }),
+    allTime: aggregateAllTime(ledger, { nowMs }),
+  };
+}
+
 export {
   SETTLE_BUFFER_MS,
   DEFAULT_USD_PER_CREDIT,
@@ -479,4 +512,5 @@ export {
   aggregateWeekly,
   aggregateMonthlyList,
   aggregateAllTime,
+  aggregateLedgerViews,
 };

@@ -575,19 +575,19 @@ function createQuotaCalculator({
   }
 
   // 模型汇总是增强数据：失败不拖垮主报告，但错误必须显式写进结果。
+  // 请求先发出；区间 Credits 要等同区间 daily analytics 返回后才能换算，所以返回换算函数。
   async function collectModelSummaries(
     startDate: string,
     endExclusiveDate: string,
-    rangeCredits: number,
-  ): Promise<{ modelSummaries: QuotaModelSummary[] | null; modelSummaryError: string }> {
+  ): Promise<(rangeCredits: number) => { modelSummaries: QuotaModelSummary[] | null; modelSummaryError: string }> {
     if (typeof fetchDailyTokenBreakdown !== 'function') {
-      return { modelSummaries: null, modelSummaryError: '' };
+      return () => ({ modelSummaries: null, modelSummaryError: '' });
     }
     try {
       const json = await fetchDailyTokenBreakdown(startDate, endExclusiveDate);
-      return { modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: '' };
+      return (rangeCredits) => ({ modelSummaries: summarizeModels(json, rangeCredits), modelSummaryError: '' });
     } catch (error) {
-      return { modelSummaries: [], modelSummaryError: String((error as Error | null)?.message || error) };
+      return () => ({ modelSummaries: [], modelSummaryError: String((error as Error | null)?.message || error) });
     }
   }
 
@@ -724,7 +724,26 @@ function createQuotaCalculator({
     const monthStartDate = firstDayOfMonthForApi(apiNowMs);
     const rollingStartDate = ymdForApi(addDaysForApi(apiNowMs, -(config.ROLLING_DAYS - 1)));
 
-    const sinceReset = await collectDailyUsage(sinceResetStartDate, endExclusiveDate);
+    // 各区间请求互不依赖，一起发出。主数据（三段 daily analytics）任一失败仍让整次计算失败，
+    // 且按原先的先后顺序报第一个失败；增强数据各自吞掉错误。
+    const [sinceResetResult, monthToDateResult, rollingResult, rollingModelsResult, resetCreditsResult] =
+      await Promise.allSettled([
+        collectDailyUsage(sinceResetStartDate, endExclusiveDate),
+        collectDailyUsage(monthStartDate, endExclusiveDate),
+        collectDailyUsage(rollingStartDate, endExclusiveDate),
+        collectModelSummaries(rollingStartDate, endExclusiveDate),
+        collectResetCredits(usage),
+      ]);
+    const settledValue = <T>(result: PromiseSettledResult<T>): T => {
+      if (result.status === 'rejected') throw result.reason;
+      return result.value;
+    };
+    const sinceReset = settledValue(sinceResetResult);
+    const monthToDate = settledValue(monthToDateResult);
+    const rolling = settledValue(rollingResult);
+    const summarizeRollingModels = settledValue(rollingModelsResult);
+    const resetCredits = settledValue(resetCreditsResult);
+
     const sinceResetSummary = summarizeRows(
       `上次重置至今近似 ${sinceResetStartDate} ~ ${apiTodayDate}`,
       sinceReset.rows,
@@ -738,7 +757,6 @@ function createQuotaCalculator({
       sinceResetStartDate,
     });
 
-    const monthToDate = await collectDailyUsage(monthStartDate, endExclusiveDate);
     const monthToDateSummary = summarizeRows(
       `本月初至今 ${monthStartDate} ~ ${apiTodayDate}`,
       monthToDate.rows,
@@ -746,19 +764,13 @@ function createQuotaCalculator({
       endExclusiveDate,
     );
 
-    const rolling = await collectDailyUsage(rollingStartDate, endExclusiveDate);
     const rollingSummary = summarizeRows(
       `近${config.ROLLING_DAYS}天 ${rollingStartDate} ~ ${apiTodayDate}`,
       rolling.rows,
       rollingStartDate,
       endExclusiveDate,
     );
-    const rollingModels = await collectModelSummaries(
-      rollingStartDate,
-      endExclusiveDate,
-      rolling.rows.reduce((sum, row) => sum + toNumber(row.Credits), 0),
-    );
-    const resetCredits = await collectResetCredits(usage);
+    const rollingModels = summarizeRollingModels(rolling.rows.reduce((sum, row) => sum + toNumber(row.Credits), 0));
 
     return buildQuotaSnapshotResult({
       config,

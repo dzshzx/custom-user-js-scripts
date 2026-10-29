@@ -339,3 +339,34 @@ test('createQuotaCalculator omits the reset credit section without counts or ada
 
   assert.equal(Object.hasOwn(result, '重置券'), false);
 });
+
+test('createQuotaCalculator issues the period requests together and reports the first main failure in order', async () => {
+  const pending = [];
+  const calculator = createQuotaCalculator({
+    config: { DATE_BUCKET_MODE: 'utc', USD_PER_CREDIT: 0.04, ROLLING_DAYS: 30 },
+    formatLocalTime: (ms) => `local:${new Date(ms).toISOString()}`,
+    getBrowserTimeZone: () => 'Asia/Shanghai',
+    fetchUsage: async () => newShapeUsageFixture(),
+    fetchDailyUsage: (startDate) =>
+      new Promise((resolve, reject) => pending.push({ name: `daily:${startDate}`, resolve, reject })),
+    fetchDailyTokenBreakdown: () =>
+      new Promise((resolve, reject) => pending.push({ name: 'breakdown', resolve, reject })),
+    fetchRateLimitResetCredits: () =>
+      new Promise((resolve, reject) => pending.push({ name: 'resetCredits', resolve, reject })),
+  });
+
+  const running = calculator.run();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(
+    pending.map((entry) => entry.name),
+    ['daily:2026-05-24', 'daily:2026-05-01', 'daily:2026-05-01', 'breakdown', 'resetCredits'],
+  );
+
+  // The later main request fails first; the earlier one's error still wins.
+  pending[1].reject(new Error('month failed'));
+  pending[0].reject(new Error('since reset failed'));
+  pending[2].resolve(emptyDailyFixture('2026-05-01'));
+  pending[3].resolve({ data: [] });
+  pending[4].resolve({ credits: [] });
+  await assert.rejects(running, /since reset failed/);
+});
