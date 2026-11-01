@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.28
+// @version      0.5.29
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -4560,7 +4560,7 @@ ${text.slice(0, 800)}`);
       t3 = $.createElementNS(f4, j3, C3.is && C3), l3 && (n.__m && n.__m(r3, e3), l3 = false), e3 = null;
     }
     if (j3) {
-      if (a4 = "template" == j3 ? t3.content : t3, e3 = "textarea" == j3 && null != C3.defaultValue ? null : e3 && d.call(a4.childNodes), !l3 && e3) for (x2 = {}, s3 = 0; s3 < t3.attributes.length; s3++) x2[(k3 = t3.attributes[s3]).name] = k3.value;
+      if (a4 = "template" == j3 && t3.content || t3, e3 = "textarea" == j3 && null != C3.defaultValue ? null : e3 && d.call(a4.childNodes), !l3 && e3) for (x2 = {}, s3 = 0; s3 < t3.attributes.length; s3++) x2[(k3 = t3.attributes[s3]).name] = k3.value;
       for (s3 in x2) k3 = x2[s3], "dangerouslySetInnerHTML" == s3 ? v3 = k3 : "children" == s3 || s3 in C3 || "value" == s3 && "defaultValue" in C3 || "checked" == s3 && "defaultChecked" in C3 || T(t3, s3, null, k3, f4);
       for (s3 in M2 = 1 & i3.__u, C3) k3 = C3[s3], "children" == s3 ? _2 = k3 : "dangerouslySetInnerHTML" == s3 ? h3 = k3 : "value" == s3 ? b = k3 : "checked" == s3 ? m3 = k3 : l3 && "function" != typeof k3 || !(x2[s3] !== k3 || M2 && null != k3) || T(t3, s3, k3, x2[s3], f4);
       h3 ? (l3 || v3 && (h3.__html == v3.__html || h3.__html == t3.innerHTML) || (t3.innerHTML = h3.__html), r3.__k = []) : (v3 && (t3.textContent = ""), ("foreignObject" == j3 || "http://www.w3.org/1998/Math/MathML" == f4 && y.test(j3)) && (f4 = "http://www.w3.org/1999/xhtml"), H(a4, w(_2) ? _2 : [_2], r3, i3, u3, f4, e3, o3, e3 ? e3[0] : i3.__k && S(i3, 0), l3, c3), e3 && e3.some(g)), l3 && "textarea" != j3 || (s3 = "value", "progress" == j3 && null == b ? t3.removeAttribute(s3) : null == b || b === t3[s3] && ("progress" != j3 || b) || T(t3, s3, b, x2[s3], f4), s3 = "checked", null != m3 && m3 != t3[s3] && T(t3, s3, m3, x2[s3], f4));
@@ -9530,7 +9530,7 @@ ${root} :focus-visible {
     const DEBUG_KEY = "__codexQuotaCompassDebug";
     const LAST_RESULT_KEY = "__codexQuotaCompassLastResult";
     const RUNNING_KEY = "__codexQuotaCompassRunning";
-    const SCRIPT_VERSION = "0.5.28";
+    const SCRIPT_VERSION = "0.5.29";
     const { t: t3 } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,
@@ -9641,7 +9641,7 @@ lucide-preact/dist/esm/icons/triangle-alert.mjs:
 lucide-preact/dist/esm/icons/x.mjs:
 lucide-preact/dist/esm/lucide-preact.mjs:
   (**
-   * @license lucide-preact v1.65.0 - ISC
+   * @license lucide-preact v1.66.0 - ISC
    *
    * This source code is licensed under the ISC license.
    * See the LICENSE file in the root directory of this source tree.
