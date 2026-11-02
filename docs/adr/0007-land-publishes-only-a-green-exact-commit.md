@@ -1,6 +1,6 @@
 # land publishes only the exact commit whose ci-ok is green
 
-- Status: accepted (supersedes ADR-0002)
+- Status: accepted
 - Date: 2026-10-07
 - Related: PRODUCT.md "Version Policy" (the rule text), README.md "开发与验证", .github/workflows/ci.yml, scripts/version-plan.mjs, GLOSSARY.md (Release Gate), fleet-state ADR 0053 (dependency updates)
 
@@ -11,20 +11,6 @@ Every `@downloadURL` / `@updateURL` reads `master`, so whatever reaches
 and script managers treat a fetched version as immutable. Publication therefore
 has to be decided before `master` moves, on the exact commit that will become
 `master`, against the baseline that is current at that moment.
-
-Maintainer decisions this contract rests on:
-
-- 2026-08-17: a release is judged green on the same commit before it is
-  published (commit `e78c25d`; the Date line of ADR-0002).
-- 2026-09-05: an existing explicit request to release covers the version bump
-  and candidate preparation (commit `1fb7d6d`).
-- 2026-09-28: each target `@version` defaults to the next patch; a minor (a
-  capability the user can notice) or a major (including `0.x` → `1.0.0`)
-  needs the maintainer's confirmation first (commit `b6fc697`, following the
-  maintainer's workspace-wide version rule).
-- 2026-10-01: dependency updates move to the maintainer's local Renovate service and
-  land through the same gate; GitHub auto-merge stays off (commit `2d4d7c9`;
-  fleet-state ADR 0053).
 
 ## Decision
 
@@ -43,29 +29,21 @@ Maintainer decisions this contract rests on:
    branch together with the rebuilt dist and bridge files, then the global
    `land --no-recut` command pushes `candidate/<sha>`, waits for that sha's
    `ci-ok`, fast-forwards `master` to the same sha and deletes the candidate.
-   The published commit must carry its own green `ci-ok`, with the version plan
-   checked against the baseline current at that moment; if `master` advanced
-   meanwhile, `land --no-recut` stops so the branch can be rebased and checked
-   again. External pull requests run the same CI and reach `master` through a
-   candidate.
-4. **Versions.** Before changing versions, refresh `origin/master` and run
-   `version-plan.mjs plan` over every installable script. The task's release
-   authorization covers the exact next patch; minor and major need the maintainer's
-   confirmation first; when the release decision itself is missing, prepare and
-   validate on the task branch and ask before pushing the candidate. The script
-   stops on an unknown baseline, an incomplete or duplicate target set, a
-   missing script, invalid metadata, an orphan dist installable, mismatched
-   entry/bridge/dist versions, or a downgrade; every other forward transition
-   passes. A version that reached `master` is immutable; corrections ship as the
-   next patch. A change may keep its version only when the maintainer chose not to
-   release it yet.
+   If `master` advanced meanwhile, `land --no-recut` stops so the branch can be
+   rebased and checked again. External pull requests run the same CI and reach
+   `master` through a candidate.
+4. **Versions.** Bump levels, release authorization, the version-plan stop
+   conditions and immutability of published versions are owned by
+   `PRODUCT.md` "Version Policy": the next patch by default, minor and major
+   only after the maintainer's confirmation.
 5. **Dependency updates.** Local Renovate opens the update pull request; the
    userscripts adapter rebuilds, bumps the next patch of every userscript whose
    dist bundle changed (and only those), verifies the exact derived commit with
    `npm run verify`, and lands it with `land --no-recut --sha <commit>`, so it
    passes the same `ci-ok` gate. Only patch/minor updates eligible under
    fleet-state ADR 0053 land unattended; others are handled manually through the
-   same gate. Dependabot keeps alerts only (`open-pull-requests-limit: 0`).
+   same gate. GitHub auto-merge stays off; Dependabot keeps alerts only
+   (`open-pull-requests-limit: 0`).
 
 ## Considered Options
 
@@ -86,3 +64,10 @@ Maintainer decisions this contract rests on:
 - Non-releasing changes (including dependency updates that leave dist
   unchanged) land without a bump; installed copies stay on the prior version.
 - The agent entry files are local (ADR-0005) and must describe the same flow.
+
+## Amendments
+
+- 2026-08-17: a release is judged green on the same commit before it is published (commit `e78c25d`).
+- 2026-09-05: an existing explicit request to release covers the version bump and candidate preparation (commit `1fb7d6d`).
+- 2026-09-28: targets default to the next patch; minor and major need the maintainer's confirmation (commit `b6fc697`).
+- 2026-10-01: dependency updates move to local Renovate through the same gate; GitHub auto-merge stays off (commit `2d4d7c9`).

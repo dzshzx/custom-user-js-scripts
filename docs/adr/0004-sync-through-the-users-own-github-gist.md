@@ -1,7 +1,7 @@
 # Cross-device sync goes through the user's own GitHub Gist, not an author server
 
 - Status: accepted
-- Date: 2026-06-13 (commits 50bafbc, 9da79f2, 7fd4561); recorded 2026-08-23
+- Date: 2026-06-13 (commits 50bafbc, 9da79f2, 7fd4561)
 - Related: docs/scripts/codex-quota-gist-sync.md (setup and data format), GLOSSARY.md (Gist Sync, Snapshot Export), PRODUCT.md "Non-Goals"
 
 ## Context

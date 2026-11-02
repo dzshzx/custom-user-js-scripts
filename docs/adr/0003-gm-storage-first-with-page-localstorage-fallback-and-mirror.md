@@ -1,7 +1,7 @@
 # Userscript state lives in manager storage first, with page localStorage as fallback and (for the quota archive) as a mirror
 
 - Status: accepted
-- Date: 2026-05-30 (archive foundation 347e124) / 2026-06-08 (storage port f0e54a6); mirror semantics clarified 2026-08-05 (7f17395); recorded 2026-08-23
+- Date: 2026-05-30 (archive foundation 347e124) / 2026-06-08 (storage port f0e54a6)
 - Related: PRODUCT.md "Data Principles", README.md (Codex Quota Compass 注意事项), docs/scripts/codex-quota-gist-sync.md, GLOSSARY.md (Snapshot Archive, Gist Sync)
 
 ## Context
@@ -19,19 +19,18 @@ user history; its GitHub token is a credential.
    the installed-script contract and change only with an explicit migration.
 2. The Codex Quota Compass `Snapshot Archive` is written to manager storage and
    mirrored to page `localStorage`; reads merge both and migrate the mirror
-   into manager storage (the migration write refreshes the mirror too, so
-   both copies hold the merged archive). The mirror keeps history reachable when the manager
-   API is missing or changes, and lets the export/import path work everywhere.
+   into manager storage; the migration write refreshes the mirror too, so both
+   copies hold the merged archive. The mirror keeps history reachable when the
+   manager API is missing or changes, and lets export/import work everywhere.
 3. Gist Sync settings and the GitHub token are stored in manager storage only —
    never mirrored, never written to page storage. Without manager storage the
    sync feature fails closed with a visible error.
 4. JavDB Recommend Archive is `@grant none` by design (no privileged API) and
    keeps its caches in page-origin storage only — the fallback rule applied from
    the start, not an exception to it. Catalog and search indexes stay in page
-   `localStorage`; per-period detail entries live in page-origin IndexedDB
-   (revised 2026-09-29), which is equally visible to the host page, so the
-   reasoning above is unchanged. The old `localStorage` details document is
-   removed on startup.
+   `localStorage`; per-period detail entries live in page-origin IndexedDB,
+   which is equally visible to the host page. The old `localStorage` details
+   document is removed on startup.
 
 ## Consequences
 
@@ -39,3 +38,8 @@ user history; its GitHub token is a credential.
   construction (sanitized aggregates, no cookies/tokens/raw responses).
 - Tests pin the contract: prefer-GM, fallback read, merge, mirror write, and
   the token never appearing in page storage or in public status objects.
+
+## Amendments
+
+- 2026-08-05: the migration write refreshes the mirror, so both copies hold the merged archive (7f17395).
+- 2026-09-29: JavDB per-period details moved from page `localStorage` to page-origin IndexedDB.

@@ -1,7 +1,7 @@
 # Agent entry files stay local and gitignored in this public repository
 
 - Status: accepted
-- Date: 2026-06-17 (commit c321bd9 "Stop tracking developer tooling"; AGENTS.md briefly tracked on 2026-07-02 and ignored again); recorded 2026-08-23
+- Date: 2026-06-17 (commit c321bd9 "Stop tracking developer tooling"; AGENTS.md briefly tracked on 2026-07-02 and ignored again)
 - Related: .gitignore, docs/index.md, README.md "文档入口"
 
 ## Context
@@ -21,14 +21,11 @@ no use to installers.
    (vocabulary), `docs/scripts/` (per-script behaviour), `docs/adr/`
    (decisions). The local entry files hold pointers plus agent-only facts and
    must not be the sole owner of any project rule.
-3. Tracked documents must not point at a gitignored file as an authority (the
-   2026-08-23 audit found `docs/script-template.md` doing so for the version
-   rule; it now points at `PRODUCT.md`).
+3. Tracked documents must not point at a gitignored file as an authority.
 
 ## Consequences
 
 - The local entry files have no remote backup and no history; their contents
   are re-derivable from the tracked documents, which is the accepted trade-off.
 - A rule stated in an entry file and in a tracked document will drift unless
-  the tracked document is treated as the owner; the release-gate wording drifted
-  this way between 2026-08-17 and 2026-08-23.
+  the tracked document is treated as the owner.

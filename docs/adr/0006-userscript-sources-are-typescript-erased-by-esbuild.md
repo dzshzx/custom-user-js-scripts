@@ -6,11 +6,10 @@
 
 ## Context
 
-About 12.6k lines of hand-written userscript source had no type checking: only
-ESLint's recommended rules and valibot validation at the storage and sync
-boundaries. The maintainer chose a full move to TypeScript for long-term
-maintainability. Installed copies update by `@version`, so the migration must
-not change what users run.
+The hand-written userscript source had no type checking beyond ESLint and
+valibot validation at the storage and sync boundaries. The maintainer chose a
+full move to TypeScript for long-term maintainability. Installed copies update
+by `@version`, so the migration must not change what users run.
 
 ## Decision
 
@@ -52,7 +51,5 @@ not change what users run.
 
 ## Consequences
 
-- The migration commits rebuild dist and bridge files whose only change is the
-  esbuild module-path comments (`// src/.../*.lib.ts`); no `@version` moves.
 - New code must type-check under `strict`; `any` and `@ts-expect-error` need a
   reason at the use site.
