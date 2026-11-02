@@ -36,13 +36,12 @@ has to be decided before `master` moves, on the exact commit that will become
    conditions and immutability of published versions are owned by
    `PRODUCT.md` "Version Policy": the next patch by default, minor and major
    only after the maintainer's confirmation.
-5. **Dependency updates.** Local Renovate opens the update pull request; the
-   userscripts adapter rebuilds, bumps the next patch of every userscript whose
-   dist bundle changed (and only those), verifies the exact derived commit with
-   `npm run verify`, and lands it with `land --no-recut --sha <commit>`, so it
-   passes the same `ci-ok` gate. Only patch/minor updates eligible under
-   fleet-state ADR 0053 land unattended; others are handled manually through the
-   same gate. GitHub auto-merge stays off; Dependabot keeps alerts only
+5. **Dependency updates.** An agent runs dependency upgrades weekly in a batch
+   (fleet-state ADR 0053 decision 5). The userscripts adapter rebuilds, bumps
+   the next patch of every userscript whose dist bundle changed (and only
+   those), verifies the exact derived commit with `npm run verify`, and lands it
+   with `land --no-recut --sha <commit>`, so it passes the same `ci-ok` gate.
+   GitHub auto-merge stays off; Dependabot keeps alerts only
    (`open-pull-requests-limit: 0`).
 
 ## Considered Options
@@ -55,7 +54,7 @@ has to be decided before `master` moves, on the exact commit that will become
   gives the same guarantee with no write token in CI. Rejected.
 - **Platform auto-merge of dependency pull requests**: a rebase merge lands a
   commit other than the one CI verified, and dependency bumps that change dist
-  must also bump `@version`. Rejected in favour of the Renovate adapter above.
+  must also bump `@version`. Rejected in favour of the agent-run weekly batch above.
 
 ## Consequences
 
@@ -67,7 +66,6 @@ has to be decided before `master` moves, on the exact commit that will become
 
 ## Decision history
 
-- 2026-08-17: a release is judged green on the same commit before it is published (commit `e78c25d`).
-- 2026-09-05: an existing explicit request to release covers the version bump and candidate preparation (commit `1fb7d6d`).
 - 2026-09-28: targets default to the next patch; minor and major need the maintainer's confirmation (commit `b6fc697`).
 - 2026-10-01: dependency updates move to local Renovate through the same gate; GitHub auto-merge stays off (commit `2d4d7c9`).
+- 2026-11-02: Renovate retired; dependency updates become an agent-run weekly batch (fleet-state ADR 0053 decision 5).

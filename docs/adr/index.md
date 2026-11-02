@@ -7,4 +7,4 @@ ADR 只留现行决定：被取代的 ADR 直接删除（历史见 git），修�
 - [ADR-0004](./0004-sync-through-the-users-own-github-gist.md)：跨设备同步走用户自己的 secret gist，不建作者服务器、不用管理器 WebDAV。
 - [ADR-0005](./0005-agent-entry-files-stay-local-in-this-public-repo.md)：公开仓中 agent 入口文件不入库；项目规则的 owner 必须是受跟踪文档。
 - [ADR-0006](./0006-userscript-sources-are-typescript-erased-by-esbuild.md)：源码为 TypeScript（strict tsc 只做检查），esbuild 擦除类型、影响产出的选项单独固定，测试与工具保持 .mjs。
-- [ADR-0007](./0007-land-publishes-only-a-green-exact-commit.md)：`master` 只经 `land` 快进到 `ci-ok` 为绿的同一提交即发布；CI 含按最新基线的版本计划校验；版本档位见 `PRODUCT.md`；依赖更新经本机 Renovate 走同一门禁。
+- [ADR-0007](./0007-land-publishes-only-a-green-exact-commit.md)：`master` 只经 `land` 快进到 `ci-ok` 为绿的同一提交即发布；CI 含按最新基线的版本计划校验；版本档位见 `PRODUCT.md`；依赖更新由 agent 周批执行，走同一门禁。
