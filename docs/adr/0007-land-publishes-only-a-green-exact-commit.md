@@ -65,7 +65,7 @@ has to be decided before `master` moves, on the exact commit that will become
   unchanged) land without a bump; installed copies stay on the prior version.
 - The agent entry files are local (ADR-0005) and must describe the same flow.
 
-## Amendments
+## Decision history
 
 - 2026-08-17: a release is judged green on the same commit before it is published (commit `e78c25d`).
 - 2026-09-05: an existing explicit request to release covers the version bump and candidate preparation (commit `1fb7d6d`).
