@@ -50,12 +50,6 @@ required before `master` is fast-forwarded to the candidate. Bump levels and
 immutability are defined by `PRODUCT.md` "Version Policy".
 _Avoid_: push-to-publish, pull-request merge, tag release, hotfix in place
 
-**Maintainer**:
-The person who decides on and answers for this repository: makes technical trade-offs and
-ADRs, approves deletions and releases, and receives alerts — the person the
-agent works for. People who install and run the scripts are users.
-_Avoid_: user, owner (when meaning the maintainer)
-
 **Companion UI**:
 Floating controls, panels, and menu commands that live inside a host page: the
 user opens one while working in the page, checks state or performs one action,
@@ -93,9 +87,9 @@ browser page events only and never bypasses server-side limits.
 _Avoid_: bypass, crack, anti-anti-copy
 
 **Floating Widget**:
-The resident companion control at the page corner. With an active refresh rule
-it shows the countdown, pause/resume and delete actions. Without a rule it stays
-as a dimmed idle dot that opens the settings dialog.
+The resident companion control at the page corner: with an active refresh rule
+it shows the countdown and pause/resume/delete, otherwise a dimmed idle dot that
+opens the settings dialog.
 _Avoid_: toolbar
 
 ### Codex Quota Compass
@@ -119,15 +113,17 @@ The long-lived local collection of quota snapshots stored by the userscript. It 
 _Avoid_: database, cloud ledger, backup folder
 
 **Cost Ledger**:
-The per-UTC-day settled cost rollup derived from snapshots: one immutable record per date (credits and converted USD) once that UTC day has closed. It powers the Statistics tab's day / week (rolling 7-day blocks) / month / all-time views and drill-downs.
+The per-UTC-day settled cost rollup derived from snapshots: one immutable record (credits and converted USD) per closed UTC day, behind the Statistics tab's day / week / month / all-time views.
 _Avoid_: usage cache, daily table, running total, cloud ledger
 
 **Snapshot Export**:
-A versioned JSON document produced from the snapshot archive for backup, transfer, or manual multi-device sync. Reading one back is a merge: entries are validated, deduplicated by Snapshot ID, and reported as added / skipped / invalid — never a blind overwrite of the local archive.
+A versioned JSON document of the snapshot archive for backup, transfer, or manual multi-device sync. Reading one back merges it, deduplicated by Snapshot ID with an added / skipped / invalid report, never a blind overwrite.
 _Avoid_: dump, raw payload, script backup, restore overwrite
 
 **Gist Sync**:
-The GitHub Gist based sync path where each user stores their own snapshot archive in their own GitHub account. The userscript finds or creates a secret gist, imports the remote snapshot export, and writes the merged archive back. Manual export/import is the fallback path.
+Sync through a secret gist in the user's own GitHub account: the userscript
+finds or creates it, imports the remote snapshot export, and writes the merged
+archive back. Manual export/import is the fallback path.
 _Avoid_: author-hosted server, WebDAV script sync, public shared database, userscript-manager sync
 
 **Snapshot ID**:
