@@ -174,7 +174,9 @@ sans-serif`.
   dialog returning focus does not). Coarse pointers toggle expansion by
   clicking the widget button instead.
 - Drag, clamping, hover disclosure and compact-panel placement come from the
-  shared widget kit parts; the widget does not dock to screen edges.
+  shared widget kit parts; the widget does not dock to screen edges. Clamping
+  uses the round button itself, so it reaches every edge; on the left half of
+  the screen the pill and panel open to the right instead of to the left.
 - The dragged position is saved per hostname, so moving the widget off one
   site's corner controls leaves other sites alone; a site without its own
   position starts in the bottom-right corner of the viewport, measured

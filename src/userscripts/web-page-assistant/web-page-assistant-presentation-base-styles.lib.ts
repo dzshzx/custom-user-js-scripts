@@ -111,17 +111,19 @@ function installAssistantBaseStyles({ documentObject, rootId, styleId }: Assista
       opacity: 0.55;
     }
 
+    /* The box is the round button. Only the button, the expanded pill and the
+       open panel take the pointer, so host controls around them stay clickable. */
     #${rootId} .part-widget {
       position: fixed;
-      width: 154px;
-      height: 48px;
+      width: 40px;
+      height: 40px;
       pointer-events: none;
     }
 
-    /* Collapsed, only the visible button takes the pointer so host controls
-       around it stay clickable; expanded, the box bridges button and panel. */
-    #${rootId} .part-widget.is-expanded {
-      pointer-events: auto;
+    /* On the left half of the screen the pill grows to the right. */
+    #${rootId} .part-widget[data-part-side="left"] .part-widget-button {
+      right: auto;
+      left: 0;
     }
 
     #${rootId} .part-widget.is-dragging {

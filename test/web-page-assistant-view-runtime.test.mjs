@@ -243,8 +243,10 @@ test('the first widget mount uses the position prepared during session startup',
   const harness = createHarness({ preparedPosition: { left: 64, top: 72 } });
   await harness.session.start();
   const widget = harness.window.document.querySelector('.part-widget');
-  assert.equal(widget.style.left, '64px');
-  assert.equal(widget.style.top, '72px');
+  // Saved positions are the former 154x48 box corner; the button sat 114px
+  // right of and 8px below it.
+  assert.equal(widget.style.left, '178px');
+  assert.equal(widget.style.top, '80px');
   harness.view.dispose();
   harness.session.dispose();
 });

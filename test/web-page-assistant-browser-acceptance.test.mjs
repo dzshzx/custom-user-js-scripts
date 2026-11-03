@@ -97,14 +97,12 @@ test('real Chromium keeps the collapsed corner widget out of host controls', asy
     await page.evaluate((source) => window.eval(source), bundle);
     const button = page.locator('.part-widget-button');
     await button.waitFor();
-    const widgetBox = await page.locator('.part-widget').boundingBox();
     const buttonBox = await button.boundingBox();
     const isExpanded = () => page.locator('.part-widget').evaluate((node) => node.classList.contains('is-expanded'));
 
-    // Inside the widget box but left of the visible button: the host gets the
-    // pointer, and resting there never opens the panel.
-    const gapPoint = { x: widgetBox.x + 20, y: buttonBox.y + buttonBox.height / 2 };
-    assert.ok(gapPoint.x < buttonBox.x);
+    // Just left of the visible button, where the expanded pill will grow: the
+    // host gets the pointer, and resting there never opens the panel.
+    const gapPoint = { x: buttonBox.x - 20, y: buttonBox.y + buttonBox.height / 2 };
     assert.equal(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.id, gapPoint), 'host-corner');
     await page.mouse.move(gapPoint.x, gapPoint.y);
     await page.mouse.click(gapPoint.x, gapPoint.y);
@@ -220,6 +218,59 @@ test('real Chromium expands an active widget into a pill that hugs the countdown
     assert.equal(layout.right, collapsed.x + collapsed.width);
     assert.equal(layout.slack, 0);
     assert.ok(layout.width < 154);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('real Chromium lets the widget reach the left edge and opens it toward the page', async () => {
+  const playwright = await loadTestPlaywright();
+  const browser = await playwright.chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
+    await page.route('https://assistant.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>page</p>' }),
+    );
+    await page.goto('https://assistant.test/left');
+    await page.evaluate(() => {
+      window.__saved = [];
+      const values = {
+        pageAutoRefreshTimerSettings: {
+          version: 2,
+          refresh: { sites: { 'assistant.test': { intervalMs: 300000 } }, pages: {} },
+        },
+      };
+      window.GM_getValue = (key, fallbackValue) => values[key] ?? fallbackValue;
+      window.GM_setValue = async (key, value) => {
+        if (key.startsWith('pageAutoRefreshTimerWidgetPosition')) window.__saved.push(value);
+      };
+    });
+    await page.evaluate((source) => window.eval(source), bundle);
+    const button = page.locator('.part-widget-button');
+    await button.waitFor();
+    const start = await button.boundingBox();
+    await page.mouse.move(start.x + 20, start.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(2, 250, { steps: 10 });
+    await page.mouse.up();
+
+    const dropped = await button.boundingBox();
+    // Clamped to the 12px safe margin, like the right edge.
+    assert.equal(dropped.x, 12);
+    // Saved in the former box format: 114px left of the button.
+    await page.waitForFunction(() => window.__saved.length > 0);
+    assert.equal((await page.evaluate(() => window.__saved.at(-1))).left, 12 - 114);
+
+    await page.mouse.move(400, 100);
+    await page.mouse.move(dropped.x + 20, dropped.y + 20);
+    await page.waitForFunction(() => document.querySelector('.part-widget').classList.contains('is-expanded'));
+    await page.waitForTimeout(250);
+    const pill = await button.boundingBox();
+    const panel = await page.locator('.part-widget-panel').boundingBox();
+    // The pill grows to the right from the button and the panel starts at it.
+    assert.equal(pill.x, 12);
+    assert.ok(pill.width > 40);
+    assert.equal(panel.x, 12);
   } finally {
     await browser.close();
   }

@@ -1321,17 +1321,19 @@
       opacity: 0.55;
     }
 
+    /* The box is the round button. Only the button, the expanded pill and the
+       open panel take the pointer, so host controls around them stay clickable. */
     #${rootId} .part-widget {
       position: fixed;
-      width: 154px;
-      height: 48px;
+      width: 40px;
+      height: 40px;
       pointer-events: none;
     }
 
-    /* Collapsed, only the visible button takes the pointer so host controls
-       around it stay clickable; expanded, the box bridges button and panel. */
-    #${rootId} .part-widget.is-expanded {
-      pointer-events: auto;
+    /* On the left half of the screen the pill grows to the right. */
+    #${rootId} .part-widget[data-part-side="left"] .part-widget-button {
+      right: auto;
+      left: 0;
     }
 
     #${rootId} .part-widget.is-dragging {
@@ -4592,7 +4594,7 @@
     async function update() {
       const current = ++generation;
       const result = await computePosition2(reference, floating, {
-        placement,
+        placement: typeof placement === "function" ? placement() : placement,
         strategy,
         middleware: [
           offset2(gap),
@@ -4795,7 +4797,8 @@ ${root} :focus-visible {
   var STYLE_ID = `${ROOT_ID}-style`;
   var TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
   var DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
-  var WIDGET_SIZE = { width: 154, height: 48 };
+  var WIDGET_SIZE = { width: 40, height: 40 };
+  var SAVED_POSITION_OFFSET = { left: 154 - WIDGET_SIZE.width, top: 48 - WIDGET_SIZE.height };
   var WIDGET_HOVER_INTENT_MS = 350;
   var WIDGET_DEFAULT_OFFSET = 18;
   var PANEL_WIDTH = 248;
@@ -4890,6 +4893,16 @@ ${root} :focus-visible {
         top: height - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET
       };
     }
+    function buttonPositionFromSaved(saved) {
+      return { left: saved.left + SAVED_POSITION_OFFSET.left, top: saved.top + SAVED_POSITION_OFFSET.top };
+    }
+    function savedPositionFromButton(button) {
+      return { left: button.left - SAVED_POSITION_OFFSET.left, top: button.top - SAVED_POSITION_OFFSET.top };
+    }
+    function updateWidgetSide(buttonLeft) {
+      const onLeft = buttonLeft + WIDGET_SIZE.width / 2 < viewportSize(windowObject).width / 2;
+      widget.dataset.partSide = onLeft ? "left" : "right";
+    }
     function sizeWidgetPanel(panel) {
       const viewportWidth = viewportSize(windowObject).width;
       const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, viewportWidth - PANEL_SAFE_MARGIN * 2));
@@ -4910,12 +4923,14 @@ ${root} :focus-visible {
           expansion.setExpanded(false);
         },
         onMove(position) {
-          widgetPosition = { left: position.left, top: position.top };
+          widgetPosition = savedPositionFromButton(position);
+          updateWidgetSide(position.left);
           placement?.update().catch(() => {
           });
         },
         onDrop(position) {
-          positions.write({ left: Math.round(position.left), top: Math.round(position.top) }).catch((error) => {
+          const saved = savedPositionFromButton(position);
+          positions.write({ left: Math.round(saved.left), top: Math.round(saved.top) }).catch((error) => {
             console.warn(`${SCRIPT_NAME}: failed to persist widget position.`, error);
           });
         }
@@ -4931,13 +4946,17 @@ ${root} :focus-visible {
       const placement = panel ? createPanelPlacement({
         reference: widget,
         floating: panel,
-        placement: "top-end",
+        placement: () => widget.dataset.partSide === "left" ? "top-start" : "top-end",
         gap: PANEL_GAP,
         strategy: "absolute",
         apply({ x: x2, y: y3, placement: side }) {
+          const originX = side.endsWith("start") ? "left" : "right";
           panel.style.setProperty("--part-panel-left", `${Math.round(x2)}px`);
           panel.style.setProperty("--part-panel-top", `${Math.round(y3)}px`);
-          panel.style.setProperty("--part-panel-origin", side.startsWith("bottom") ? "top right" : "bottom right");
+          panel.style.setProperty(
+            "--part-panel-origin",
+            `${side.startsWith("bottom") ? "top" : "bottom"} ${originX}`
+          );
         }
       }) : null;
       widgetShell = { anchor, expansion, placement, panel };
@@ -4951,8 +4970,10 @@ ${root} :focus-visible {
     }
     function placeWidget() {
       if (!widgetShell) return;
-      const position = positions.normalize(widgetPosition) || defaultWidgetPosition();
-      widgetShell.anchor.applyPosition({ left: position.left, top: position.top });
+      const saved = positions.normalize(widgetPosition);
+      const position = saved ? buttonPositionFromSaved(saved) : defaultWidgetPosition();
+      const placed = widgetShell.anchor.applyPosition({ left: position.left, top: position.top });
+      updateWidgetSide(placed.left);
       if (widgetShell.panel) sizeWidgetPanel(widgetShell.panel);
       widgetShell.placement?.update().catch(() => {
       });

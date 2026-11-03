@@ -498,7 +498,8 @@ function createHoverExpansion(
 export interface PanelPlacementOptions {
   reference: ReferenceElement;
   floating: HTMLElement;
-  placement?: Placement;
+  /** A function is read on every update, for anchors that change side. */
+  placement?: Placement | (() => Placement);
   strategy?: Strategy;
   gap?: number;
   margin?: number;
@@ -528,7 +529,7 @@ function createPanelPlacement(
   async function update() {
     const current = ++generation;
     const result = await computePosition(reference, floating, {
-      placement,
+      placement: typeof placement === 'function' ? placement() : placement,
       strategy,
       middleware: [
         offset(gap),

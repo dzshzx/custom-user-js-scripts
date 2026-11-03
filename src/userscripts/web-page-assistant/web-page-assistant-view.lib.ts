@@ -122,8 +122,13 @@ const ROOT_ID = 'page-auto-refresh-timer-root';
 const STYLE_ID = `${ROOT_ID}-style`;
 const TOKEN_STYLE_ID = `${ROOT_ID}-token-style`;
 const DIALOG_STYLE_ID = `${ROOT_ID}-dialog-style`;
-// Widget footprint from the base styles (.part-widget) and the compact panel.
-const WIDGET_SIZE = { width: 154, height: 48 };
+// The widget box is the round button (.part-widget in the base styles); the
+// expanded pill and the panel grow out of it toward the middle of the screen.
+const WIDGET_SIZE = { width: 40, height: 40 };
+// Saved positions are the top-left corner of the former 154x48 widget box,
+// whose bottom-right corner held the button. The saved value is user data, so
+// it keeps that meaning and the button sits at this offset from it.
+const SAVED_POSITION_OFFSET = { left: 154 - WIDGET_SIZE.width, top: 48 - WIDGET_SIZE.height };
 // The widget sits in a corner where host pages keep their own buttons; a
 // cursor only passing over it on the way there must not open the panel.
 const WIDGET_HOVER_INTENT_MS = 350;
@@ -229,6 +234,21 @@ function createWebPageAssistantView({
     };
   }
 
+  function buttonPositionFromSaved(saved: WidgetPosition): WidgetPosition {
+    return { left: saved.left + SAVED_POSITION_OFFSET.left, top: saved.top + SAVED_POSITION_OFFSET.top };
+  }
+
+  function savedPositionFromButton(button: { left: number; top: number }): WidgetPosition {
+    return { left: button.left - SAVED_POSITION_OFFSET.left, top: button.top - SAVED_POSITION_OFFSET.top };
+  }
+
+  // On the left half of the screen the pill and panel open to the right, so
+  // the button can sit at the left edge without them leaving the screen.
+  function updateWidgetSide(buttonLeft: number) {
+    const onLeft = buttonLeft + WIDGET_SIZE.width / 2 < viewportSize(windowObject).width / 2;
+    widget!.dataset.partSide = onLeft ? 'left' : 'right';
+  }
+
   function sizeWidgetPanel(panel: HTMLElement) {
     const viewportWidth = viewportSize(windowObject).width;
     const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, viewportWidth - PANEL_SAFE_MARGIN * 2));
@@ -253,11 +273,13 @@ function createWebPageAssistantView({
         expansion.setExpanded(false);
       },
       onMove(position) {
-        widgetPosition = { left: position.left, top: position.top };
+        widgetPosition = savedPositionFromButton(position);
+        updateWidgetSide(position.left);
         placement?.update().catch(() => {});
       },
       onDrop(position) {
-        positions.write({ left: Math.round(position.left), top: Math.round(position.top) }).catch((error) => {
+        const saved = savedPositionFromButton(position);
+        positions.write({ left: Math.round(saved.left), top: Math.round(saved.top) }).catch((error) => {
           console.warn(`${SCRIPT_NAME}: failed to persist widget position.`, error);
         });
       },
@@ -274,13 +296,17 @@ function createWebPageAssistantView({
       ? createPanelPlacement({
           reference: widget!,
           floating: panel,
-          placement: 'top-end',
+          placement: () => (widget!.dataset.partSide === 'left' ? 'top-start' : 'top-end'),
           gap: PANEL_GAP,
           strategy: 'absolute',
           apply({ x, y, placement: side }) {
+            const originX = side.endsWith('start') ? 'left' : 'right';
             panel.style.setProperty('--part-panel-left', `${Math.round(x)}px`);
             panel.style.setProperty('--part-panel-top', `${Math.round(y)}px`);
-            panel.style.setProperty('--part-panel-origin', side.startsWith('bottom') ? 'top right' : 'bottom right');
+            panel.style.setProperty(
+              '--part-panel-origin',
+              `${side.startsWith('bottom') ? 'top' : 'bottom'} ${originX}`,
+            );
           },
         })
       : null;
@@ -297,8 +323,10 @@ function createWebPageAssistantView({
 
   function placeWidget() {
     if (!widgetShell) return;
-    const position = positions.normalize(widgetPosition) || defaultWidgetPosition();
-    widgetShell.anchor.applyPosition({ left: position.left, top: position.top });
+    const saved = positions.normalize(widgetPosition);
+    const position = saved ? buttonPositionFromSaved(saved) : defaultWidgetPosition();
+    const placed = widgetShell.anchor.applyPosition({ left: position.left, top: position.top });
+    updateWidgetSide(placed.left);
     if (widgetShell.panel) sizeWidgetPanel(widgetShell.panel);
     widgetShell.placement?.update().catch(() => {});
   }

@@ -8234,7 +8234,7 @@ ${root} :focus-visible {
     async function update() {
       const current = ++generation;
       const result = await computePosition2(reference, floating, {
-        placement,
+        placement: typeof placement === "function" ? placement() : placement,
         strategy,
         middleware: [
           offset2(gap),
