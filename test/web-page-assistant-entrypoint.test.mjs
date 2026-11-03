@@ -83,7 +83,7 @@ test('entrypoint registers the settings menu before async storage initialization
   );
 });
 
-test('entrypoint reads the widget position for this site before the shared one', async () => {
+test('entrypoint reads only the widget position for this site', async () => {
   const reads = [];
   await createEntrypointHarness({
     GM_getValue(key, fallbackValue) {
@@ -95,6 +95,6 @@ test('entrypoint reads the widget position for this site before the shared one',
 
   assert.deepEqual(
     reads.filter((key) => key.startsWith('pageAutoRefreshTimerWidgetPosition')),
-    ['pageAutoRefreshTimerWidgetPosition:example.com', 'pageAutoRefreshTimerWidgetPosition'],
+    ['pageAutoRefreshTimerWidgetPosition:example.com'],
   );
 });

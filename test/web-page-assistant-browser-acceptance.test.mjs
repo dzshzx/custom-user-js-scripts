@@ -134,3 +134,39 @@ test('real Chromium keeps the collapsed corner widget out of host controls', asy
     await browser.close();
   }
 });
+
+test('real Chromium starts an undragged widget in the corner beside the scrollbar', async () => {
+  const playwright = await loadTestPlaywright();
+  // Headless Chromium hides scrollbars by default; keep them so the default
+  // position is measured against the viewport the user actually sees.
+  const browser = await playwright.chromium.launch({ headless: true, ignoreDefaultArgs: ['--hide-scrollbars'] });
+  try {
+    const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+    await page.route('https://assistant.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html><div style="height:3000px"></div>' }),
+    );
+    await page.goto('https://assistant.test/tall');
+    await page.evaluate(() => {
+      // A position saved before positions were per site must not move this site.
+      const values = { pageAutoRefreshTimerWidgetPosition: { left: 40, top: 60 } };
+      window.GM_getValue = (key, fallbackValue) => values[key] ?? fallbackValue;
+      window.GM_setValue = async () => {};
+    });
+    await page.evaluate((source) => window.eval(source), bundle);
+    const button = page.locator('.part-widget-button');
+    await button.waitFor();
+    const box = await button.boundingBox();
+    const viewport = await page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      height: document.documentElement.clientHeight,
+      scrollbar: window.innerWidth - document.documentElement.clientWidth,
+    }));
+    assert.ok(viewport.scrollbar > 0);
+    assert.deepEqual(
+      { right: viewport.width - (box.x + box.width), bottom: viewport.height - (box.y + box.height) },
+      { right: 18, bottom: 18 },
+    );
+  } finally {
+    await browser.close();
+  }
+});

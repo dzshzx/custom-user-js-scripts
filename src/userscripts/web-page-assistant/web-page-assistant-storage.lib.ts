@@ -32,8 +32,6 @@ export interface WebPageAssistantStorageAdapters extends GmOverrides {
   storageKey: string;
   /** Per-site key the widget position is read from and written to. */
   widgetPositionKey: string;
-  /** Read-only position shared by every site before positions were per site. */
-  sharedWidgetPositionKey?: string | null;
   fallbackStorageKey: string;
   fallbackWidgetPositionKey: string;
   localStorageAdapter: Pick<Storage, 'getItem' | 'setItem'>;
@@ -66,13 +64,13 @@ function createWebPageAssistantStoragePort(adapters: WebPageAssistantStorageAdap
     normalize: normalizeSettings,
     eventTarget,
   });
-  // A site the widget was never dragged on keeps the shared position.
+  // A site the widget was never dragged on has no position and starts in the
+  // bottom-right corner; the pre-per-site shared key is no longer read.
   const positionStore = createGmFirstJsonStore({
     ...adapters,
     localStorage: localStorageAdapter,
     subject: 'widget position',
     key: adapters.widgetPositionKey,
-    inheritFrom: adapters.sharedWidgetPositionKey ? [adapters.sharedWidgetPositionKey] : [],
     fallbackKey: adapters.fallbackWidgetPositionKey,
     normalize: normalizeWidgetPosition,
   });

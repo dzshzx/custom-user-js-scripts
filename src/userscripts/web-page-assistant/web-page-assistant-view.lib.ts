@@ -220,10 +220,15 @@ function createWebPageAssistantView({
 
   let widgetShell: WidgetShellParts | null = null;
 
+  // Measured from the viewport without scrollbars: innerWidth/innerHeight
+  // include them, which would leave the button flush against the scrollbar.
   function defaultWidgetPosition(): WidgetPosition {
+    const viewport = documentObject.documentElement;
+    const width = viewport?.clientWidth || windowObject.innerWidth;
+    const height = viewport?.clientHeight || windowObject.innerHeight;
     return {
-      left: windowObject.innerWidth - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
-      top: windowObject.innerHeight - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET,
+      left: width - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
+      top: height - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET,
     };
   }
 

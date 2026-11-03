@@ -5,7 +5,7 @@
 // @name:zh-CN   网页助手
 // @name:zh-TW   網頁助手
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.3.28
+// @version      0.3.29
 // @description  Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:en Web page assistant for page refresh and optional copy, selection, context menu, drag, and unload limit unlocking.
 // @description:zh 网页助手：按页面或站点管理自动刷新，并可解除复制、选择、右键菜单、拖拽和离开确认限制。
@@ -773,7 +773,6 @@
       localStorage: localStorageAdapter,
       subject: "widget position",
       key: adapters.widgetPositionKey,
-      inheritFrom: adapters.sharedWidgetPositionKey ? [adapters.sharedWidgetPositionKey] : [],
       fallbackKey: adapters.fallbackWidgetPositionKey,
       normalize: normalizeWidgetPosition
     });
@@ -4874,9 +4873,12 @@ ${root} :focus-visible {
     });
     let widgetShell = null;
     function defaultWidgetPosition() {
+      const viewport = documentObject.documentElement;
+      const width = viewport?.clientWidth || windowObject.innerWidth;
+      const height = viewport?.clientHeight || windowObject.innerHeight;
       return {
-        left: windowObject.innerWidth - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
-        top: windowObject.innerHeight - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET
+        left: width - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
+        top: height - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET
       };
     }
     function sizeWidgetPanel(panel) {
@@ -5378,7 +5380,6 @@ ${root} :focus-visible {
       // Each site keeps its own widget position so it can be moved off one
       // site's corner controls without moving it everywhere else.
       widgetPositionKey: `${WIDGET_POSITION_KEY}:${keys.siteKey}`,
-      sharedWidgetPositionKey: WIDGET_POSITION_KEY,
       fallbackStorageKey: `__${STORAGE_KEY}`,
       fallbackWidgetPositionKey: `__${WIDGET_POSITION_KEY}`,
       localStorageAdapter: localStorage,
