@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  # Candidates finish so land can verify the exact SHA before publication.
+  # Candidates finish so the exact SHA is verified before it is pushed to master.
   group: ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -29,7 +29,7 @@ jobs:
       - run: npm ci
       - run: npm run test:prepare
       # A candidate or PR reaching master publishes its installable artifacts.
-      # land recuts and rechecks when master advances.
+      # If master advances, the candidate is rebased and pushed again for a fresh check.
       - name: Check the version plan against master
         run: node scripts/version-plan.mjs check --base-ref origin/master --target-ref HEAD
       - run: npm run verify

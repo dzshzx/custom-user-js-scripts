@@ -1,4 +1,4 @@
-# land publishes only the exact commit whose ci-ok is green
+# Publish only the exact commit whose ci-ok is green
 
 - Status: accepted
 - Date: 2026-10-07
@@ -25,13 +25,20 @@ has to be decided before `master` moves, on the exact commit that will become
    metadata lint, `tsc`, ESLint, all tests). `ci-ok` succeeds only when
    `verify` succeeded; failure, cancellation or a skipped verification cannot
    satisfy it.
-3. **The client is `land`.** A releasing change bumps `@version` on the task
-   branch together with the rebuilt dist and bridge files, then the global
-   `land --no-recut` command pushes `candidate/<sha>`, waits for that sha's
-   `ci-ok`, fast-forwards `master` to the same sha and deletes the candidate.
-   If `master` advanced meanwhile, `land --no-recut` stops so the branch can be
-   rebased and checked again. External pull requests run the same CI and reach
-   `master` through a candidate.
+3. **The client is a manual push sequence.** A releasing change bumps
+   `@version` on the task branch together with the rebuilt dist and bridge
+   files, then:
+   1. rebase the task branch onto `origin/master`;
+   2. `git push origin HEAD:refs/heads/candidate/<first 12 chars of sha>`;
+   3. wait until that sha's CI `verify` and `ci-ok` are green (`gh run watch`
+      or `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`);
+   4. `git push origin <sha>:refs/heads/master` (fast-forward only; if
+      `master` advanced meanwhile the push is refused, so go back to step 1);
+   5. `git push origin --delete candidate/<first 12 chars of sha>`.
+
+   External pull requests run the same CI and reach `master` through a
+   candidate.
+
 4. **Versions.** Bump levels, release authorization, the version-plan stop
    conditions and immutability of published versions are owned by
    `PRODUCT.md` "Version Policy": the next patch by default, minor and major
@@ -39,8 +46,9 @@ has to be decided before `master` moves, on the exact commit that will become
 5. **Dependency updates.** An agent runs dependency upgrades weekly in a batch
    (fleet-state ADR 0053 decision 5). The userscripts adapter rebuilds, bumps
    the next patch of every userscript whose dist bundle changed (and only
-   those), verifies the exact derived commit with `npm run verify`, and lands it
-   with `land --no-recut --sha <commit>`, so it passes the same `ci-ok` gate.
+   those), verifies the exact derived commit with `npm run verify`, and
+   publishes that commit with the same five manual pushes as decision 3, so it
+   passes the same `ci-ok` gate.
    GitHub auto-merge stays off; Dependabot keeps alerts only
    (`open-pull-requests-limit: 0`).
 
@@ -69,3 +77,4 @@ has to be decided before `master` moves, on the exact commit that will become
 - 2026-09-28: targets default to the next patch; minor and major need the maintainer's confirmation (commit `b6fc697`).
 - 2026-10-01: dependency updates move to local Renovate through the same gate; GitHub auto-merge stays off (commit `2d4d7c9`).
 - 2026-11-02: Renovate retired; dependency updates become an agent-run weekly batch (fleet-state ADR 0053 decision 5).
+- 2026-11-03: the global `land` command is retired; the client becomes the manual push sequence in decision 3. The gate itself is unchanged, and the file name keeps its original `land` slug so existing links stay valid.
