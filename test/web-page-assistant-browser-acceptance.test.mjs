@@ -116,6 +116,10 @@ test('real Chromium keeps the collapsed corner widget out of host controls', asy
     // panel without the widget collapsing on the way.
     await page.mouse.move(buttonBox.x + buttonBox.width / 2, buttonBox.y + buttonBox.height / 2);
     await page.waitForFunction(() => document.querySelector('.part-widget').classList.contains('is-expanded'));
+    // Idle has no countdown to show, so the expanded button stays the round dot.
+    await page.waitForTimeout(200);
+    const expandedBox = await button.boundingBox();
+    assert.deepEqual({ width: expandedBox.width, height: expandedBox.height }, { width: 40, height: 40 });
     const panelBox = await page.locator('.part-widget-panel').boundingBox();
     await page.mouse.move(panelBox.x + panelBox.width - 20, panelBox.y + panelBox.height / 2, { steps: 12 });
     assert.equal(await isExpanded(), true);

@@ -1276,6 +1276,11 @@
 	      opacity: 0.55;
 	    }
 
+	    #${rootId} .part-widget.is-idle.is-expanded .part-widget-button {
+	      justify-content: center;
+	      padding: 0;
+	    }
+
 	    #${rootId} .part-widget.is-idle .part-widget-button:hover,
 	    #${rootId} .part-widget.is-idle.is-expanded .part-widget-button {
 	      opacity: 1;
@@ -1384,11 +1389,14 @@
       cursor: grabbing;
     }
 
+    /* Expanded, the pill hugs the icon and countdown instead of a fixed
+       width; idle has no countdown, so it stays the round dot. */
     #${rootId} .part-widget.is-expanded .part-widget-button {
       justify-content: flex-start;
 	        gap: 8px;
-	        width: 154px;
-	        padding: 0 8px;
+	        width: auto;
+	        min-width: 40px;
+	        padding: 0 14px 0 7px;
 	        background: var(--part-surface);
 	        box-shadow: 0 14px 38px oklch(28% 0.03 242 / 0.2);
 	        opacity: 1;

@@ -158,7 +158,9 @@ sans-serif`.
   forcing the user into settings.
 - The widget is always rendered: with no active refresh rule it stays as a
   dimmed idle dot whose panel explains the idle state and offers the settings
-  entry; its collapsed button opens the dialog directly.
+  entry; its collapsed button opens the dialog directly. Expanded, an active
+  widget's button becomes a pill that hugs the icon and countdown, while the
+  idle dot keeps its round shape.
 - The per-second countdown is `aria-hidden`; a visually-hidden status node
   announces only lifecycle changes (enabled/paused/resumed/disabled) as full
   sentences.
@@ -172,7 +174,8 @@ sans-serif`.
   shared widget kit parts; the widget does not dock to screen edges.
 - The dragged position is saved per hostname, so moving the widget off one
   site's corner controls leaves other sites alone; a site without its own
-  position uses the position shared by every site before (read only).
+  position starts in the bottom-right corner of the viewport, measured
+  without scrollbars.
 - The settings dialog owns scope selection, refresh settings, unlocker
   capability toggles, status boxes, and destructive delete actions.
 - The dialog is a native modal `<dialog>` (`showModal()`): the platform
