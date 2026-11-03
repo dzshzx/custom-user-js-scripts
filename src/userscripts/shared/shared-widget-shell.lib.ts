@@ -41,9 +41,12 @@ const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:
 
 // The area fixed-position widgets lay out in. innerWidth/innerHeight include
 // classic scrollbars, so measuring from them puts a right- or bottom-aligned
-// widget under the scrollbar. Test DOMs without layout report 0 and fall back.
+// widget under the scrollbar. Quirks-mode pages (no doctype) report the
+// viewport on <body>; their <html> reports the whole page height. Test DOMs
+// without layout report 0 and fall back.
 function viewportSize(windowObject: Window): { width: number; height: number } {
-  const viewport = windowObject.document?.documentElement;
+  const documentObject = windowObject.document;
+  const viewport = documentObject?.compatMode === 'BackCompat' ? documentObject.body : documentObject?.documentElement;
   return {
     width: viewport?.clientWidth || windowObject.innerWidth,
     height: viewport?.clientHeight || windowObject.innerHeight,
@@ -575,9 +578,9 @@ export interface WidgetShellOptions {
   panelMaxHeight?: number;
   storage?: WidgetShellStorage | null;
   positionKey?: string;
-  // Non-finite values fall back to the defaults. The default is measured
-  // against the button as styled once the creating task finishes, so install
-  // the button styles and content right after createWidgetShell returns.
+  // Non-finite values fall back to the defaults. The button is measured for
+  // it during creation, so install WIDGET_SHELL_CSS and the caller's button
+  // styles first and pass the content as buttonContent.
   defaultPosition?: { top: number; right: number };
   dock?: boolean;
   onOpen?: () => void;
@@ -587,7 +590,6 @@ export interface WidgetShellOptions {
 }
 
 export interface WidgetShell {
-  cssText: string;
   buttonEl: HTMLButtonElement;
   panelEl: HTMLDivElement;
   open(): void;
@@ -829,18 +831,10 @@ function createWidgetShell(
   documentObject.addEventListener('keydown', onDocumentKeydown);
   windowObject.addEventListener?.('resize', onWindowResize);
 
-  // Callers style and fill the button synchronously after creation (see
-  // WidgetShellOptions), so the first placement waits a microtask to measure
-  // the finished button; it still runs before the first paint.
-  let destroyed = false;
-  void Promise.resolve().then(() => {
-    if (destroyed) return;
-    anchor.applyPosition(resolveDefaultPosition());
-    void restorePosition();
-  });
+  anchor.applyPosition(resolveDefaultPosition());
+  void restorePosition();
 
   function destroy() {
-    destroyed = true;
     cancelTimeout(closeTimer);
     isOpenState = false;
     placement.stop();
@@ -869,7 +863,6 @@ function createWidgetShell(
   }
 
   return {
-    cssText: WIDGET_SHELL_CSS,
     buttonEl,
     panelEl,
     open,
@@ -883,6 +876,7 @@ function createWidgetShell(
 }
 
 export {
+  WIDGET_SHELL_CSS,
   createWidgetShell,
   viewportSize,
   createDragAnchor,

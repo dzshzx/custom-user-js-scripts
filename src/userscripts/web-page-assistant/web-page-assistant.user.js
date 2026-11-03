@@ -4253,7 +4253,8 @@
   var PANEL_ANIMATION_MS = 200;
   var PANEL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
   function viewportSize(windowObject) {
-    const viewport = windowObject.document?.documentElement;
+    const documentObject = windowObject.document;
+    const viewport = documentObject?.compatMode === "BackCompat" ? documentObject.body : documentObject?.documentElement;
     return {
       width: viewport?.clientWidth || windowObject.innerWidth,
       height: viewport?.clientHeight || windowObject.innerHeight

@@ -7953,7 +7953,8 @@ ${root} :focus-visible {
   var PANEL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
   var FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
   function viewportSize(windowObject) {
-    const viewport = windowObject.document?.documentElement;
+    const documentObject = windowObject.document;
+    const viewport = documentObject?.compatMode === "BackCompat" ? documentObject.body : documentObject?.documentElement;
     return {
       width: viewport?.clientWidth || windowObject.innerWidth,
       height: viewport?.clientHeight || windowObject.innerHeight
@@ -8460,14 +8461,9 @@ ${root} :focus-visible {
     documentObject.addEventListener("pointerdown", onDocumentPointerDown, true);
     documentObject.addEventListener("keydown", onDocumentKeydown);
     windowObject.addEventListener?.("resize", onWindowResize);
-    let destroyed = false;
-    void Promise.resolve().then(() => {
-      if (destroyed) return;
-      anchor.applyPosition(resolveDefaultPosition());
-      void restorePosition();
-    });
+    anchor.applyPosition(resolveDefaultPosition());
+    void restorePosition();
     function destroy() {
-      destroyed = true;
       cancelTimeout(closeTimer);
       isOpenState = false;
       placement.stop();
@@ -8492,7 +8488,6 @@ ${root} :focus-visible {
       });
     }
     return {
-      cssText: WIDGET_SHELL_CSS,
       buttonEl,
       panelEl,
       open,
@@ -8794,8 +8789,15 @@ ${root} :focus-visible {
       statusNode.dataset.tone = tone;
     }
     function installShellStyles() {
-      const cssText = [tokenCss, shell.cssText, createShellStyles(rootId)].filter(Boolean).join("\n\n");
+      const cssText = [tokenCss, WIDGET_SHELL_CSS, createShellStyles(rootId)].filter(Boolean).join("\n\n");
       ensureStyle(documentObject, `${rootId}-shell-style`, cssText, documentObject.head);
+    }
+    function renderButtonContent() {
+      const container = documentObject.createElement("div");
+      K(/* @__PURE__ */ a2(ButtonContent, { labels }), container);
+      const fragment = documentObject.createDocumentFragment();
+      fragment.append(...container.childNodes);
+      return fragment;
     }
     function mount() {
       if (documentObject.getElementById(rootId)) return null;
@@ -8803,9 +8805,12 @@ ${root} :focus-visible {
       root.id = rootId;
       documentObject.documentElement.append(root);
       themeCleanup = applyTheme(root, { detectHost: () => detectHost(documentObject), observeHost: true });
+      installShellStyles();
       shell = createWidgetShell({
         root,
         buttonAriaLabel: labels.buttonAriaOpen,
+        // The status text is then updated in place by setStatus, outside preact.
+        buttonContent: renderButtonContent(),
         buttonClass: "cqc-button",
         panelClass: "cqc-panel",
         panelWidth: 560,
@@ -8827,8 +8832,6 @@ ${root} :focus-visible {
           bodyEl.classList.add("cqc-content");
         }
       });
-      installShellStyles();
-      K(/* @__PURE__ */ a2(ButtonContent, { labels }), shell.buttonEl);
       shell.buttonEl.dataset.action = "toggle";
       statusNode = shell.buttonEl.querySelector(".cqc-status");
       contentNode = shell.panelEl.querySelector(".cqc-content");

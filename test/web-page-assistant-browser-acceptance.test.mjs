@@ -139,37 +139,87 @@ test('real Chromium keeps the collapsed corner widget out of host controls', asy
   }
 });
 
-test('real Chromium starts an undragged widget in the corner beside the scrollbar', async () => {
+for (const [mode, body] of [
+  ['standards', '<!doctype html><div style="height:3000px"></div>'],
+  // Without a doctype <html> reports the whole page height, not the viewport.
+  ['quirks', '<div style="height:3000px"></div>'],
+]) {
+  test(`real Chromium starts an undragged widget in the corner beside the scrollbar (${mode} mode)`, async () => {
+    const playwright = await loadTestPlaywright();
+    // Headless Chromium hides scrollbars by default; keep them so the default
+    // position is measured against the viewport the user actually sees.
+    const browser = await playwright.chromium.launch({ headless: true, ignoreDefaultArgs: ['--hide-scrollbars'] });
+    try {
+      const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+      await page.route('https://assistant.test/**', (route) => route.fulfill({ contentType: 'text/html', body }));
+      await page.goto('https://assistant.test/tall');
+      await page.evaluate(() => {
+        // A position saved before positions were per site must not move this site.
+        const values = { pageAutoRefreshTimerWidgetPosition: { left: 40, top: 60 } };
+        window.GM_getValue = (key, fallbackValue) => values[key] ?? fallbackValue;
+        window.GM_setValue = async () => {};
+      });
+      await page.evaluate((source) => window.eval(source), bundle);
+      const button = page.locator('.part-widget-button');
+      await button.waitFor();
+      const box = await button.boundingBox();
+      // The page only scrolls vertically: the visible height is innerHeight
+      // and the width loses one scrollbar, measured on a scrolling probe.
+      const viewport = await page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.style.cssText = 'position:absolute;top:0;width:100px;height:100px;overflow:scroll';
+        document.body.append(probe);
+        const scrollbar = probe.offsetWidth - probe.clientWidth;
+        probe.remove();
+        return { width: window.innerWidth - scrollbar, height: window.innerHeight, scrollbar };
+      });
+      assert.ok(viewport.scrollbar > 0);
+      assert.deepEqual(
+        { right: viewport.width - (box.x + box.width), bottom: viewport.height - (box.y + box.height) },
+        { right: 18, bottom: 18 },
+      );
+    } finally {
+      await browser.close();
+    }
+  });
+}
+
+test('real Chromium expands an active widget into a pill that hugs the countdown', async () => {
   const playwright = await loadTestPlaywright();
-  // Headless Chromium hides scrollbars by default; keep them so the default
-  // position is measured against the viewport the user actually sees.
-  const browser = await playwright.chromium.launch({ headless: true, ignoreDefaultArgs: ['--hide-scrollbars'] });
+  const browser = await playwright.chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
     await page.route('https://assistant.test/**', (route) =>
-      route.fulfill({ contentType: 'text/html', body: '<!doctype html><div style="height:3000px"></div>' }),
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>page</p>' }),
     );
-    await page.goto('https://assistant.test/tall');
+    await page.goto('https://assistant.test/active');
     await page.evaluate(() => {
-      // A position saved before positions were per site must not move this site.
-      const values = { pageAutoRefreshTimerWidgetPosition: { left: 40, top: 60 } };
+      const values = {
+        pageAutoRefreshTimerSettings: {
+          version: 2,
+          refresh: { sites: { 'assistant.test': { intervalMs: 300000 } }, pages: {} },
+        },
+      };
       window.GM_getValue = (key, fallbackValue) => values[key] ?? fallbackValue;
       window.GM_setValue = async () => {};
     });
     await page.evaluate((source) => window.eval(source), bundle);
     const button = page.locator('.part-widget-button');
     await button.waitFor();
-    const box = await button.boundingBox();
-    const viewport = await page.evaluate(() => ({
-      width: document.documentElement.clientWidth,
-      height: document.documentElement.clientHeight,
-      scrollbar: window.innerWidth - document.documentElement.clientWidth,
-    }));
-    assert.ok(viewport.scrollbar > 0);
-    assert.deepEqual(
-      { right: viewport.width - (box.x + box.width), bottom: viewport.height - (box.y + box.height) },
-      { right: 18, bottom: 18 },
-    );
+    const collapsed = await button.boundingBox();
+    await page.mouse.move(collapsed.x + collapsed.width / 2, collapsed.y + collapsed.height / 2);
+    await page.waitForFunction(() => document.querySelector('.part-widget').classList.contains('is-expanded'));
+    await page.waitForTimeout(250);
+    const layout = await button.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const text = node.querySelector('[data-part-role="countdown"]').getBoundingClientRect();
+      // Space between the countdown and the pill edge beyond the 14px padding.
+      return { right: box.right, slack: Math.round(box.right - text.right - 14 - 1), width: box.width };
+    });
+    // The pill grows left from the round button, keeping its right edge.
+    assert.equal(layout.right, collapsed.x + collapsed.width);
+    assert.equal(layout.slack, 0);
+    assert.ok(layout.width < 154);
   } finally {
     await browser.close();
   }

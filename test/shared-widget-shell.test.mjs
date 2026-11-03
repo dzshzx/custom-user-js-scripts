@@ -152,8 +152,6 @@ test('dragging repositions, docks near the right edge and persists through stora
   const storage = createStorageAdapter();
   const { window, shell } = setup({ storage });
   const button = shell.buttonEl;
-  // The first placement waits for the caller to finish styling the button.
-  await flushTimers();
 
   // Default position against the 1024x768 happy-dom viewport (44px fallback size).
   assert.equal(button.style.top, '76px');
@@ -212,9 +210,8 @@ test('promise-based storage adapters are supported', { skip: domSkip }, async ()
   shell.destroy();
 });
 
-test('window resize re-clamps the button into the safe area', { skip: domSkip }, async () => {
+test('window resize re-clamps the button into the safe area', { skip: domSkip }, () => {
   const { window, shell } = setup();
-  await flushTimers();
   assert.equal(shell.buttonEl.style.left, '956px');
 
   window.happyDOM.setViewport({ width: 400, height: 300 });
@@ -224,10 +221,9 @@ test('window resize re-clamps the button into the safe area', { skip: domSkip },
   shell.destroy();
 });
 
-test('dock=false disables edge snapping', { skip: domSkip }, async () => {
+test('dock=false disables edge snapping', { skip: domSkip }, () => {
   const { window, shell } = setup({ dock: false, storage: createStorageAdapter() });
   const button = shell.buttonEl;
-  await flushTimers();
 
   button.dispatchEvent(pointerEvent(window, 'pointerdown', { clientX: 0, clientY: 0 }));
   button.dispatchEvent(pointerEvent(window, 'pointermove', { clientX: 30, clientY: 0 }));

@@ -2,7 +2,7 @@ import { render } from 'preact';
 import { Icon } from '../shared/shared-icons.lib.tsx';
 import { ensureStyle } from '../shared/shared-dom.lib.ts';
 import { applyTheme } from '../shared/shared-tokens.lib.ts';
-import { createWidgetShell } from '../shared/shared-widget-shell.lib.ts';
+import { WIDGET_SHELL_CSS, createWidgetShell } from '../shared/shared-widget-shell.lib.ts';
 import { createShellStyles } from './codex-quota-compass-panel-shell-styles.lib.ts';
 import type { Theme } from '../shared/shared-tokens.lib.ts';
 import type { WidgetShell, WidgetShellStorage } from '../shared/shared-widget-shell.lib.ts';
@@ -144,8 +144,18 @@ function createFloatingPanelShell(
   }
 
   function installShellStyles() {
-    const cssText = [tokenCss, shell!.cssText, createShellStyles(rootId)].filter(Boolean).join('\n\n');
+    const cssText = [tokenCss, WIDGET_SHELL_CSS, createShellStyles(rootId)].filter(Boolean).join('\n\n');
     ensureStyle(documentObject, `${rootId}-shell-style`, cssText, documentObject.head);
+  }
+
+  // The shell measures the button for its default position while it is
+  // created, so the content is rendered up front and handed over as nodes.
+  function renderButtonContent(): DocumentFragment {
+    const container = documentObject.createElement('div');
+    render(<ButtonContent labels={labels} />, container);
+    const fragment = documentObject.createDocumentFragment();
+    fragment.append(...container.childNodes);
+    return fragment;
   }
 
   function mount(): FloatingPanelShell | null {
@@ -156,10 +166,13 @@ function createFloatingPanelShell(
     documentObject.documentElement.append(root);
 
     themeCleanup = applyTheme(root, { detectHost: () => detectHost(documentObject), observeHost: true });
+    installShellStyles();
 
     shell = createWidgetShell({
       root,
       buttonAriaLabel: labels.buttonAriaOpen,
+      // The status text is then updated in place by setStatus, outside preact.
+      buttonContent: renderButtonContent(),
       buttonClass: 'cqc-button',
       panelClass: 'cqc-panel',
       panelWidth: 560,
@@ -184,10 +197,6 @@ function createFloatingPanelShell(
       },
     });
 
-    installShellStyles();
-
-    // The status text is then updated in place by setStatus, outside preact.
-    render(<ButtonContent labels={labels} />, shell.buttonEl);
     shell.buttonEl.dataset.action = 'toggle';
     statusNode = shell.buttonEl.querySelector<HTMLElement>('.cqc-status');
     contentNode = shell.panelEl.querySelector<HTMLElement>('.cqc-content');
