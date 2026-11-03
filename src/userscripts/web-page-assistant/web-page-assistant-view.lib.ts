@@ -301,6 +301,7 @@ function createWebPageAssistantView({
           strategy: 'absolute',
           apply({ x, y, placement: side }) {
             const originX = side.endsWith('start') ? 'left' : 'right';
+            panel.dataset.partPlacement = side;
             panel.style.setProperty('--part-panel-left', `${Math.round(x)}px`);
             panel.style.setProperty('--part-panel-top', `${Math.round(y)}px`);
             panel.style.setProperty(

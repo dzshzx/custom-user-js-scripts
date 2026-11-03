@@ -275,3 +275,84 @@ test('real Chromium lets the widget reach the left edge and opens it toward the 
     await browser.close();
   }
 });
+
+test('real Chromium keeps the widget open on any path from the button or pill to the panel', async () => {
+  const playwright = await loadTestPlaywright();
+  const browser = await playwright.chromium.launch({ headless: true });
+  try {
+    for (const { enabled, saved } of [
+      { enabled: false, saved: null },
+      // Left edge, saved in the former box format (button x = -102 + 114).
+      { enabled: true, saved: { left: -102, top: 400 } },
+    ]) {
+      const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+      await page.route('https://assistant.test/**', (route) =>
+        route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>page</p>' }),
+      );
+      await page.goto('https://assistant.test/paths');
+      await page.evaluate(
+        ({ enabled, saved }) => {
+          const values = {};
+          if (enabled) {
+            values.pageAutoRefreshTimerSettings = {
+              version: 2,
+              refresh: { sites: { 'assistant.test': { intervalMs: 300000 } }, pages: {} },
+            };
+          }
+          if (saved) values['pageAutoRefreshTimerWidgetPosition:assistant.test'] = saved;
+          window.GM_getValue = (key, fallbackValue) => values[key] ?? fallbackValue;
+          window.GM_setValue = async () => {};
+        },
+        { enabled, saved },
+      );
+      await page.evaluate((source) => window.eval(source), bundle);
+      const button = page.locator('.part-widget-button');
+      await button.waitFor();
+      const round = await button.boundingBox();
+      const center = { x: round.x + 20, y: round.y + 20 };
+      const isExpanded = () =>
+        page.evaluate(() => document.querySelector('.part-widget').classList.contains('is-expanded'));
+      const expand = async () => {
+        await page.mouse.move(2, 2);
+        await page.mouse.move(center.x, center.y);
+        await page.waitForFunction(() => document.querySelector('.part-widget').classList.contains('is-expanded'));
+        await page.waitForTimeout(250);
+      };
+      await expand();
+      const pill = await button.boundingBox();
+      const panel = await page.locator('.part-widget-panel').boundingBox();
+      // Expanded, the button still takes its own clicks over the hover strip.
+      assert.equal(
+        await page.evaluate(
+          ({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.part-widget-button')),
+          center,
+        ),
+        true,
+      );
+      // The far end of the pill and the button, toward panel points straight
+      // up and well off to either side, in 8px steps like coalesced moves.
+      const farEnd = { x: saved ? pill.x + pill.width - 6 : pill.x + 6, y: center.y };
+      for (const start of [center, farEnd]) {
+        for (const dx of [-120, -30, 30, 120]) {
+          const end = {
+            x: Math.min(Math.max(start.x + dx, panel.x + 5), panel.x + panel.width - 5),
+            y: panel.y + panel.height - 20,
+          };
+          await expand();
+          await page.mouse.move(start.x, start.y);
+          const steps = Math.ceil(Math.hypot(end.x - start.x, end.y - start.y) / 8);
+          for (let step = 1; step <= steps; step += 1) {
+            await page.mouse.move(
+              start.x + ((end.x - start.x) * step) / steps,
+              start.y + ((end.y - start.y) * step) / steps,
+            );
+            assert.equal(await isExpanded(), true, `collapsed on the way from ${JSON.stringify(start)} by ${dx}`);
+          }
+        }
+      }
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});

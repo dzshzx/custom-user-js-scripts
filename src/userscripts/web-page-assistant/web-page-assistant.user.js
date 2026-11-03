@@ -1355,6 +1355,7 @@
 
 	      #${rootId} .part-widget-button {
       position: absolute;
+      z-index: 1;
       right: 0;
       bottom: 0;
       display: inline-flex;
@@ -1465,13 +1466,23 @@
       transform: translateY(0) scale(1);
     }
 
-    /* Covers the placement gap so moving from the button to the panel does
-       not leave the widget and collapse it on the way. */
+    /* Expanded, this strip spans the gap and the whole row the button and
+       pill sit in (button height plus 1px for fractional panel heights), so a
+       cursor moving from either to the panel at any angle never leaves the
+       widget. The button paints above it and keeps its own clicks. */
     #${rootId} .part-widget-panel::before {
       content: "";
       position: absolute;
-      inset: calc(-1 * var(--part-panel-gap, 8px)) 0;
+      inset: 0;
       z-index: -1;
+    }
+
+    #${rootId} .part-widget-panel[data-part-placement^="top"]::before {
+      bottom: calc(-1 * (var(--part-panel-gap, 8px) + 41px));
+    }
+
+    #${rootId} .part-widget-panel[data-part-placement^="bottom"]::before {
+      top: calc(-1 * (var(--part-panel-gap, 8px) + 41px));
     }
 
 	      #${rootId} .part-title {
@@ -4951,6 +4962,7 @@ ${root} :focus-visible {
         strategy: "absolute",
         apply({ x: x2, y: y3, placement: side }) {
           const originX = side.endsWith("start") ? "left" : "right";
+          panel.dataset.partPlacement = side;
           panel.style.setProperty("--part-panel-left", `${Math.round(x2)}px`);
           panel.style.setProperty("--part-panel-top", `${Math.round(y3)}px`);
           panel.style.setProperty(
