@@ -74,18 +74,6 @@ test('GM available: passes null as the GM default and normalizes a missing value
   assert.deepEqual(defaults, [['gmKey', null]]);
 });
 
-test('inheritFrom: an empty primary key reads the inherited GM keys in order, never writes them', async () => {
-  const gm = createGm({ sharedKey: { from: 'shared' } });
-  const store = createGmFirstJsonStore(
-    baseOptions({ ...gm, inheritFrom: ['legacyKey', 'sharedKey'], localStorage: createMemoryStorage() }),
-  );
-
-  assert.deepEqual(await store.read(), { backend: 'gm', value: { from: 'shared', normalized: true } });
-  await store.write({ own: true });
-  assert.deepEqual(gm.writes, [['gmKey', { own: true }]]);
-  assert.deepEqual(await store.read(), { backend: 'gm', value: { own: true, normalized: true } });
-});
-
 test('GM available with mirror: a GM write is copied to localStorage', async () => {
   const gm = createGm();
   const localStorage = createMemoryStorage();

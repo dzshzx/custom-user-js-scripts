@@ -112,3 +112,47 @@ test('real Chromium preserves the bundle sync draft and cancels file work on dis
     await browser.close();
   }
 });
+
+test('real Chromium places the unsaved button fully on screen, hugging its text', async () => {
+  const playwright = await loadTestPlaywright();
+  // Headless Chromium hides scrollbars by default; keep them so the default
+  // position is measured against the viewport the user actually sees.
+  const browser = await playwright.chromium.launch({ headless: true, ignoreDefaultArgs: ['--hide-scrollbars'] });
+  try {
+    const page = await browser.newPage({ viewport: { width: 900, height: 500 }, locale: 'zh-CN' });
+    await page.addInitScript(() => {
+      const values = new Map();
+      window.GM_getValue = (key, fallback) => (values.has(key) ? values.get(key) : fallback);
+      window.GM_setValue = (key, value) => values.set(key, value);
+      window.GM_registerMenuCommand = () => {};
+    });
+    await page.route('https://chatgpt.com/**', (route) =>
+      route.request().resourceType() === 'document'
+        ? route.fulfill({ contentType: 'text/html', body: '<!doctype html><main style="height:3000px"></main>' })
+        : route.fulfill({ contentType: 'application/json', body: '{}' }),
+    );
+    await page.goto('https://chatgpt.com/codex/cloud/settings/analytics#usage');
+    await page.evaluate((source) => window.eval(source), bundle);
+    const button = page.locator('.cqc-button');
+    await button.waitFor();
+    const layout = await button.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const text = node.querySelector('.cqc-button-text').getBoundingClientRect();
+      const viewport = document.documentElement;
+      return {
+        scrollbar: window.innerWidth - viewport.clientWidth,
+        rightGap: viewport.clientWidth - box.right,
+        top: box.top,
+        // Space between the text and the pill edge beyond the 14px padding.
+        slack: Math.round(box.right - text.right - 14 - 1),
+      };
+    });
+    assert.ok(layout.scrollbar > 0);
+    assert.deepEqual(
+      { rightGap: layout.rightGap, top: layout.top, slack: layout.slack },
+      { rightGap: 24, top: 76, slack: 0 },
+    );
+  } finally {
+    await browser.close();
+  }
+});

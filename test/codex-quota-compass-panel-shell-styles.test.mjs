@@ -24,11 +24,12 @@ test('createShellStyles themes dark through data-wk-theme, never the media query
   assert.doesNotMatch(css, /prefers-color-scheme/);
 });
 
-test('createShellStyles keeps the 168x42 pill and docked shrink visuals', () => {
+test('createShellStyles keeps the content-hugging 42px pill and docked shrink visuals', () => {
   const css = createShellStyles('quota-root');
 
   assert.match(css, /#quota-root \.cqc-button \{/);
-  assert.match(css, /width: 168px/);
+  assert.match(css, /width: auto/);
+  assert.doesNotMatch(css, /width: 168px/);
   assert.match(css, /height: 42px/);
   assert.match(css, /#quota-root \.cqc-button\[data-wk-docked\] \{/);
   assert.match(css, /width: 42px/);

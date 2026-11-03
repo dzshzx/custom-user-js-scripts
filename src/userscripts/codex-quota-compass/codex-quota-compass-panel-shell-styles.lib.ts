@@ -1,5 +1,4 @@
 const LIB_NAME = 'CodexQuotaCompassPanelShellStylesLib';
-const BUTTON_FULL_WIDTH = 168;
 const BUTTON_HEIGHT = 42;
 
 // CQC-specific variables alias the shared widget kit tokens (--wk-*) that
@@ -49,10 +48,10 @@ function createShellStyles(rootId: string): string {
       --cqc-warning-border: rgba(245, 158, 11, 0.3);
     }
 
-    /* Widget kit overrides: keep the 168x42 pill that shrinks to a dot-only
-       button when docked at a screen edge. */
+    /* Widget kit overrides: a 42px-high pill that hugs the dot, title and
+       status, and shrinks to a dot-only button when docked at a screen edge. */
     #${rootId} .cqc-button {
-      width: ${BUTTON_FULL_WIDTH}px;
+      width: auto;
       min-width: ${BUTTON_HEIGHT}px;
       height: ${BUTTON_HEIGHT}px;
       min-height: ${BUTTON_HEIGHT}px;
@@ -98,7 +97,7 @@ function createShellStyles(rootId: string): string {
     #${rootId} .cqc-button[data-wk-docked]:focus-visible,
     #${rootId} .cqc-button[data-wk-docked].is-active,
     #${rootId} .cqc-button[data-wk-docked].is-dragging {
-      width: ${BUTTON_FULL_WIDTH}px;
+      width: auto;
       gap: 8px;
       padding: 0 14px;
       justify-content: flex-start;
@@ -127,6 +126,7 @@ function createShellStyles(rootId: string): string {
       gap: 1px;
       text-align: left;
       line-height: 1.1;
+      white-space: nowrap;
       max-width: 116px;
       overflow: hidden;
       transition:

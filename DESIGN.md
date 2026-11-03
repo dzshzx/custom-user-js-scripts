@@ -121,7 +121,10 @@ sans-serif`.
 
 ### Shell
 
-- The floating button is draggable and can dock near the screen edge.
+- The floating button is a pill that hugs its dot, title and status; it is
+  draggable and can dock near the screen edge, where it shrinks to the dot.
+- Without a saved position it starts 76px from the top and 24px from the
+  right edge of the viewport, measured without scrollbars.
 - The shell is a thin adapter over the shared widget kit
   (`src/userscripts/shared/`); drag/dock, position persistence, Esc close, and
   focus hand-off come from the kit.

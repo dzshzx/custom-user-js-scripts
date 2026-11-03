@@ -16,8 +16,6 @@ export interface GmFirstJsonStoreOptions<T> extends GmOverrides {
   subject: string;
   /** GM storage key. */
   key: string;
-  /** GM keys read in order when `key` holds nothing; never written. */
-  inheritFrom?: readonly string[];
   /** localStorage key; without one the store has no localStorage side. */
   fallbackKey?: string;
   /** Defaults to globalThis.localStorage. */
@@ -84,7 +82,6 @@ function createGmFirstJsonStore<T>(options: GmFirstJsonStoreOptions<T>): GmFirst
     scriptName,
     subject,
     key,
-    inheritFrom = [],
     fallbackKey,
     normalize = (raw: unknown) => raw as T,
     mirror = false,
@@ -121,14 +118,8 @@ function createGmFirstJsonStore<T>(options: GmFirstJsonStoreOptions<T>): GmFirst
     }
   }
 
-  // The first non-null GM value along `key` then `inheritFrom`.
   async function readGm(getValue: NonNullable<GmApi['getValue']>): Promise<T> {
-    let value: T = normalize(null);
-    for (const name of [key, ...inheritFrom]) {
-      value = normalize(await getValue(name, null));
-      if (value !== null && value !== undefined) break;
-    }
-    return value;
+    return normalize(await getValue(key, null));
   }
 
   // `gmFailed` separates "GM storage threw" from "GM storage is absent": only

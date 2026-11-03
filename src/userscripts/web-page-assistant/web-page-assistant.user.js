@@ -616,7 +616,6 @@
       scriptName,
       subject,
       key,
-      inheritFrom = [],
       fallbackKey,
       normalize = (raw) => raw,
       mirror = false,
@@ -648,12 +647,7 @@
       }
     }
     async function readGm(getValue) {
-      let value = normalize(null);
-      for (const name of [key, ...inheritFrom]) {
-        value = normalize(await getValue(name, null));
-        if (value !== null && value !== void 0) break;
-      }
-      return value;
+      return normalize(await getValue(key, null));
     }
     async function readWithSource() {
       let gmFailed = false;
@@ -4258,6 +4252,13 @@
   var FALLBACK_BUTTON_SIZE = 44;
   var PANEL_ANIMATION_MS = 200;
   var PANEL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+  function viewportSize(windowObject) {
+    const viewport = windowObject.document?.documentElement;
+    return {
+      width: viewport?.clientWidth || windowObject.innerWidth,
+      height: viewport?.clientHeight || windowObject.innerHeight
+    };
+  }
   function isDockSide(value) {
     return value === "left" || value === "right";
   }
@@ -4403,8 +4404,9 @@
     };
     function clampPosition(left, top) {
       const { width, height } = size2();
-      const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
-      const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
+      const viewport = viewportSize(windowObject);
+      const maxLeft = Math.max(BUTTON_SAFE_MARGIN, viewport.width - width - BUTTON_SAFE_MARGIN);
+      const maxTop = Math.max(BUTTON_SAFE_MARGIN, viewport.height - height - BUTTON_SAFE_MARGIN);
       return {
         left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
         top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop)
@@ -4413,14 +4415,14 @@
     function dockedPosition(dockSide, top) {
       const { width } = size2();
       return {
-        left: dockSide === "right" ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
+        left: dockSide === "right" ? viewportSize(windowObject).width - DOCK_OFFSET - width : DOCK_OFFSET,
         top: clampPosition(0, top).top
       };
     }
     function detectDockSide(left) {
       const { width } = size2();
       if (left <= DOCK_THRESHOLD) return "left";
-      if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return "right";
+      if (viewportSize(windowObject).width - (left + width) <= DOCK_THRESHOLD) return "right";
       return null;
     }
     function applyPosition(next = position) {
@@ -4881,16 +4883,15 @@ ${root} :focus-visible {
     });
     let widgetShell = null;
     function defaultWidgetPosition() {
-      const viewport = documentObject.documentElement;
-      const width = viewport?.clientWidth || windowObject.innerWidth;
-      const height = viewport?.clientHeight || windowObject.innerHeight;
+      const { width, height } = viewportSize(windowObject);
       return {
         left: width - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
         top: height - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET
       };
     }
     function sizeWidgetPanel(panel) {
-      const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN * 2));
+      const viewportWidth = viewportSize(windowObject).width;
+      const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, viewportWidth - PANEL_SAFE_MARGIN * 2));
       panel.style.setProperty("--part-panel-width", `${Math.round(width)}px`);
       panel.style.setProperty("--part-panel-gap", `${PANEL_GAP}px`);
     }

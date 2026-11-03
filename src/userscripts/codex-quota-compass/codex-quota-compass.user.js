@@ -3,7 +3,7 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.29
+// @version      0.5.30
 // @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
 // @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
 // @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
@@ -1977,7 +1977,6 @@ ${text.slice(0, 800)}`);
       scriptName,
       subject,
       key,
-      inheritFrom = [],
       fallbackKey,
       normalize = (raw) => raw,
       mirror = false,
@@ -2009,12 +2008,7 @@ ${text.slice(0, 800)}`);
       }
     }
     async function readGm(getValue) {
-      let value = normalize(null);
-      for (const name of [key, ...inheritFrom]) {
-        value = normalize(await getValue(name, null));
-        if (value !== null && value !== void 0) break;
-      }
-      return value;
+      return normalize(await getValue(key, null));
     }
     async function readWithSource() {
       let gmFailed = false;
@@ -7958,6 +7952,13 @@ ${root} :focus-visible {
   var PANEL_ANIMATION_MS = 200;
   var PANEL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
   var FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  function viewportSize(windowObject) {
+    const viewport = windowObject.document?.documentElement;
+    return {
+      width: viewport?.clientWidth || windowObject.innerWidth,
+      height: viewport?.clientHeight || windowObject.innerHeight
+    };
+  }
   function isDockSide(value) {
     return value === "left" || value === "right";
   }
@@ -8105,8 +8106,9 @@ ${root} :focus-visible {
     };
     function clampPosition(left, top) {
       const { width, height } = size2();
-      const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
-      const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
+      const viewport = viewportSize(windowObject);
+      const maxLeft = Math.max(BUTTON_SAFE_MARGIN, viewport.width - width - BUTTON_SAFE_MARGIN);
+      const maxTop = Math.max(BUTTON_SAFE_MARGIN, viewport.height - height - BUTTON_SAFE_MARGIN);
       return {
         left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
         top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop)
@@ -8115,14 +8117,14 @@ ${root} :focus-visible {
     function dockedPosition(dockSide, top) {
       const { width } = size2();
       return {
-        left: dockSide === "right" ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
+        left: dockSide === "right" ? viewportSize(windowObject).width - DOCK_OFFSET - width : DOCK_OFFSET,
         top: clampPosition(0, top).top
       };
     }
     function detectDockSide(left) {
       const { width } = size2();
       if (left <= DOCK_THRESHOLD) return "left";
-      if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return "right";
+      if (viewportSize(windowObject).width - (left + width) <= DOCK_THRESHOLD) return "right";
       return null;
     }
     function applyPosition(next = position) {
@@ -8361,7 +8363,7 @@ ${root} :focus-visible {
       const { width } = measureButton();
       const top = Number.isFinite(defaultPosition?.top) ? defaultPosition.top : 76;
       const right = Number.isFinite(defaultPosition?.right) ? defaultPosition.right : 24;
-      return { left: windowObject.innerWidth - right - width, top };
+      return { left: viewportSize(windowObject).width - right - width, top };
     }
     async function persistPosition() {
       if (!storage?.set || !positionKey) return;
@@ -8390,8 +8392,9 @@ ${root} :focus-visible {
     }
     function positionPanel() {
       const safe = PANEL_SAFE_MARGIN;
-      const width = Math.min(panelWidth, windowObject.innerWidth - safe * 2);
-      const maxHeight = Math.min(panelMaxHeight, windowObject.innerHeight - safe * 2);
+      const viewport = viewportSize(windowObject);
+      const width = Math.min(panelWidth, viewport.width - safe * 2);
+      const maxHeight = Math.min(panelMaxHeight, viewport.height - safe * 2);
       panelEl.style.width = `${Math.round(width)}px`;
       panelEl.style.maxHeight = `${Math.round(maxHeight)}px`;
       return placement.update().catch(() => null);
@@ -8457,9 +8460,14 @@ ${root} :focus-visible {
     documentObject.addEventListener("pointerdown", onDocumentPointerDown, true);
     documentObject.addEventListener("keydown", onDocumentKeydown);
     windowObject.addEventListener?.("resize", onWindowResize);
-    anchor.applyPosition(resolveDefaultPosition());
-    restorePosition();
+    let destroyed = false;
+    void Promise.resolve().then(() => {
+      if (destroyed) return;
+      anchor.applyPosition(resolveDefaultPosition());
+      void restorePosition();
+    });
     function destroy() {
+      destroyed = true;
       cancelTimeout(closeTimer);
       isOpenState = false;
       placement.stop();
@@ -8498,7 +8506,6 @@ ${root} :focus-visible {
   }
 
   // src/userscripts/codex-quota-compass/codex-quota-compass-panel-shell-styles.lib.ts
-  var BUTTON_FULL_WIDTH = 168;
   var BUTTON_HEIGHT = 42;
   function createShellStyles(rootId) {
     return `
@@ -8542,10 +8549,10 @@ ${root} :focus-visible {
       --cqc-warning-border: rgba(245, 158, 11, 0.3);
     }
 
-    /* Widget kit overrides: keep the 168x42 pill that shrinks to a dot-only
-       button when docked at a screen edge. */
+    /* Widget kit overrides: a 42px-high pill that hugs the dot, title and
+       status, and shrinks to a dot-only button when docked at a screen edge. */
     #${rootId} .cqc-button {
-      width: ${BUTTON_FULL_WIDTH}px;
+      width: auto;
       min-width: ${BUTTON_HEIGHT}px;
       height: ${BUTTON_HEIGHT}px;
       min-height: ${BUTTON_HEIGHT}px;
@@ -8591,7 +8598,7 @@ ${root} :focus-visible {
     #${rootId} .cqc-button[data-wk-docked]:focus-visible,
     #${rootId} .cqc-button[data-wk-docked].is-active,
     #${rootId} .cqc-button[data-wk-docked].is-dragging {
-      width: ${BUTTON_FULL_WIDTH}px;
+      width: auto;
       gap: 8px;
       padding: 0 14px;
       justify-content: flex-start;
@@ -8620,6 +8627,7 @@ ${root} :focus-visible {
       gap: 1px;
       text-align: left;
       line-height: 1.1;
+      white-space: nowrap;
       max-width: 116px;
       overflow: hidden;
       transition:
@@ -9530,7 +9538,7 @@ ${root} :focus-visible {
     const DEBUG_KEY = "__codexQuotaCompassDebug";
     const LAST_RESULT_KEY = "__codexQuotaCompassLastResult";
     const RUNNING_KEY = "__codexQuotaCompassRunning";
-    const SCRIPT_VERSION = "0.5.29";
+    const SCRIPT_VERSION = "0.5.30";
     const { t: t3 } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
     const archiveStoragePort = createSnapshotArchiveStoragePort({
       scriptName: SCRIPT_NAME,

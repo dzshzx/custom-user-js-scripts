@@ -39,6 +39,17 @@ const PANEL_ANIMATION_MS = 200;
 const PANEL_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+// The area fixed-position widgets lay out in. innerWidth/innerHeight include
+// classic scrollbars, so measuring from them puts a right- or bottom-aligned
+// widget under the scrollbar. Test DOMs without layout report 0 and fall back.
+function viewportSize(windowObject: Window): { width: number; height: number } {
+  const viewport = windowObject.document?.documentElement;
+  return {
+    width: viewport?.clientWidth || windowObject.innerWidth,
+    height: viewport?.clientHeight || windowObject.innerHeight,
+  };
+}
+
 function isDockSide(value: unknown): value is DockSide {
   return value === 'left' || value === 'right';
 }
@@ -248,8 +259,9 @@ function createDragAnchor(
 
   function clampPosition(left: number, top: number) {
     const { width, height } = size();
-    const maxLeft = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerWidth - width - BUTTON_SAFE_MARGIN);
-    const maxTop = Math.max(BUTTON_SAFE_MARGIN, windowObject.innerHeight - height - BUTTON_SAFE_MARGIN);
+    const viewport = viewportSize(windowObject);
+    const maxLeft = Math.max(BUTTON_SAFE_MARGIN, viewport.width - width - BUTTON_SAFE_MARGIN);
+    const maxTop = Math.max(BUTTON_SAFE_MARGIN, viewport.height - height - BUTTON_SAFE_MARGIN);
     return {
       left: Math.min(Math.max(BUTTON_SAFE_MARGIN, left), maxLeft),
       top: Math.min(Math.max(BUTTON_SAFE_MARGIN, top), maxTop),
@@ -259,7 +271,7 @@ function createDragAnchor(
   function dockedPosition(dockSide: DockSide, top: number) {
     const { width } = size();
     return {
-      left: dockSide === 'right' ? windowObject.innerWidth - DOCK_OFFSET - width : DOCK_OFFSET,
+      left: dockSide === 'right' ? viewportSize(windowObject).width - DOCK_OFFSET - width : DOCK_OFFSET,
       top: clampPosition(0, top).top,
     };
   }
@@ -267,7 +279,7 @@ function createDragAnchor(
   function detectDockSide(left: number): DockSide | null {
     const { width } = size();
     if (left <= DOCK_THRESHOLD) return 'left';
-    if (windowObject.innerWidth - (left + width) <= DOCK_THRESHOLD) return 'right';
+    if (viewportSize(windowObject).width - (left + width) <= DOCK_THRESHOLD) return 'right';
     return null;
   }
 
@@ -563,7 +575,9 @@ export interface WidgetShellOptions {
   panelMaxHeight?: number;
   storage?: WidgetShellStorage | null;
   positionKey?: string;
-  // Non-finite values fall back to the defaults.
+  // Non-finite values fall back to the defaults. The default is measured
+  // against the button as styled once the creating task finishes, so install
+  // the button styles and content right after createWidgetShell returns.
   defaultPosition?: { top: number; right: number };
   dock?: boolean;
   onOpen?: () => void;
@@ -702,7 +716,7 @@ function createWidgetShell(
     const { width } = measureButton();
     const top = Number.isFinite(defaultPosition?.top) ? defaultPosition.top : 76;
     const right = Number.isFinite(defaultPosition?.right) ? defaultPosition.right : 24;
-    return { left: windowObject.innerWidth - right - width, top };
+    return { left: viewportSize(windowObject).width - right - width, top };
   }
 
   async function persistPosition() {
@@ -738,8 +752,9 @@ function createWidgetShell(
   // shift inside the safe margin) and applies it asynchronously.
   function positionPanel() {
     const safe = PANEL_SAFE_MARGIN;
-    const width = Math.min(panelWidth, windowObject.innerWidth - safe * 2);
-    const maxHeight = Math.min(panelMaxHeight, windowObject.innerHeight - safe * 2);
+    const viewport = viewportSize(windowObject);
+    const width = Math.min(panelWidth, viewport.width - safe * 2);
+    const maxHeight = Math.min(panelMaxHeight, viewport.height - safe * 2);
     panelEl.style.width = `${Math.round(width)}px`;
     panelEl.style.maxHeight = `${Math.round(maxHeight)}px`;
     return placement.update().catch(() => null);
@@ -814,10 +829,18 @@ function createWidgetShell(
   documentObject.addEventListener('keydown', onDocumentKeydown);
   windowObject.addEventListener?.('resize', onWindowResize);
 
-  anchor.applyPosition(resolveDefaultPosition());
-  restorePosition();
+  // Callers style and fill the button synchronously after creation (see
+  // WidgetShellOptions), so the first placement waits a microtask to measure
+  // the finished button; it still runs before the first paint.
+  let destroyed = false;
+  void Promise.resolve().then(() => {
+    if (destroyed) return;
+    anchor.applyPosition(resolveDefaultPosition());
+    void restorePosition();
+  });
 
   function destroy() {
+    destroyed = true;
     cancelTimeout(closeTimer);
     isOpenState = false;
     placement.stop();
@@ -861,6 +884,7 @@ function createWidgetShell(
 
 export {
   createWidgetShell,
+  viewportSize,
   createDragAnchor,
   createHoverExpansion,
   createPanelPlacement,

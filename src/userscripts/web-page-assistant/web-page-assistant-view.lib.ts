@@ -13,6 +13,7 @@ import {
   createDragAnchor,
   createHoverExpansion,
   createPanelPlacement,
+  viewportSize,
 } from '../shared/shared-widget-shell.lib.ts';
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
 import { ensureStyle } from '../shared/shared-dom.lib.ts';
@@ -220,12 +221,8 @@ function createWebPageAssistantView({
 
   let widgetShell: WidgetShellParts | null = null;
 
-  // Measured from the viewport without scrollbars: innerWidth/innerHeight
-  // include them, which would leave the button flush against the scrollbar.
   function defaultWidgetPosition(): WidgetPosition {
-    const viewport = documentObject.documentElement;
-    const width = viewport?.clientWidth || windowObject.innerWidth;
-    const height = viewport?.clientHeight || windowObject.innerHeight;
+    const { width, height } = viewportSize(windowObject);
     return {
       left: width - WIDGET_SIZE.width - WIDGET_DEFAULT_OFFSET,
       top: height - WIDGET_SIZE.height - WIDGET_DEFAULT_OFFSET,
@@ -233,7 +230,8 @@ function createWebPageAssistantView({
   }
 
   function sizeWidgetPanel(panel: HTMLElement) {
-    const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, windowObject.innerWidth - PANEL_SAFE_MARGIN * 2));
+    const viewportWidth = viewportSize(windowObject).width;
+    const width = Math.min(PANEL_WIDTH, Math.max(PANEL_MIN_WIDTH, viewportWidth - PANEL_SAFE_MARGIN * 2));
     panel.style.setProperty('--part-panel-width', `${Math.round(width)}px`);
     panel.style.setProperty('--part-panel-gap', `${PANEL_GAP}px`);
   }
