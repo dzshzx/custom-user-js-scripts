@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 export function isUserscriptFile(file) {
-  return /\.(entry\.[jt]s|user\.js)$/.test(file);
+  return /\.(entry\.ts|user\.js)$/.test(file);
 }
 
 // Defaults list the userscript install surface; callers may walk other trees

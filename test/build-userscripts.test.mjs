@@ -44,7 +44,7 @@ async function createWorkspace() {
     ].join('\n'),
   );
   await writeFile(
-    path.join(scriptDir, 'demo-script.entry.js'),
+    path.join(scriptDir, 'demo-script.entry.ts'),
     [
       entryMetadata('demo-script'),
       '',
@@ -123,7 +123,7 @@ test('buildAll rejects entries whose metadata still declares @require or wrong d
   const { rootDir, scriptDir, distDir } = await createWorkspace();
   t.after(() => rm(rootDir, { recursive: true, force: true }));
 
-  const entryPath = path.join(scriptDir, 'demo-script.entry.js');
+  const entryPath = path.join(scriptDir, 'demo-script.entry.ts');
   const original = await readFile(entryPath, 'utf8');
 
   await writeFile(
@@ -143,7 +143,7 @@ test('buildAll applies the lint install-URL rule: @downloadURL and @updateURL mu
   const { rootDir, scriptDir, distDir } = await createWorkspace();
   t.after(() => rm(rootDir, { recursive: true, force: true }));
 
-  const entryPath = path.join(scriptDir, 'demo-script.entry.js');
+  const entryPath = path.join(scriptDir, 'demo-script.entry.ts');
   const original = await readFile(entryPath, 'utf8');
   await writeFile(
     entryPath,
@@ -156,7 +156,7 @@ test('buildAll enforces SCRIPT_VERSION to match metadata @version when present',
   const { rootDir, scriptDir, distDir } = await createWorkspace();
   t.after(() => rm(rootDir, { recursive: true, force: true }));
 
-  const entryPath = path.join(scriptDir, 'demo-script.entry.js');
+  const entryPath = path.join(scriptDir, 'demo-script.entry.ts');
   const original = await readFile(entryPath, 'utf8');
 
   await writeFile(entryPath, original.replace('(function () {', "const SCRIPT_VERSION = '9.9.9';\n(function () {"));
@@ -172,7 +172,7 @@ test('buildAll returns an empty list when no entry modules exist', async (t) => 
   assert.deepEqual(results, []);
 });
 
-test('buildAll leaves a leftover src copy beside an entry untouched and adds no identity', async (t) => {
+test('buildAll leaves another src file beside an entry untouched', async (t) => {
   const { rootDir, scriptDir, distDir } = await createWorkspace();
   t.after(() => rm(rootDir, { recursive: true, force: true }));
   await writeFile(path.join(scriptDir, 'demo-script.user.js'), 'old single-file installation');
@@ -183,8 +183,8 @@ test('buildAll leaves a leftover src copy beside an entry untouched and adds no 
 test('buildAll surfaces entry I/O errors instead of treating them as no entry', async (t) => {
   const { rootDir, scriptDir, distDir } = await createWorkspace();
   t.after(() => rm(rootDir, { recursive: true, force: true }));
-  const entry = path.join(scriptDir, 'demo-script.entry.js');
+  const entry = path.join(scriptDir, 'demo-script.entry.ts');
   await rm(entry);
   await mkdir(entry);
-  await assert.rejects(buildAll({ rootDir, distDir }), /cannot read .*entry\.js.*EISDIR/);
+  await assert.rejects(buildAll({ rootDir, distDir }), /cannot read .*entry\.ts.*EISDIR/);
 });

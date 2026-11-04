@@ -44,7 +44,7 @@ export async function readUserscriptInventory({ files, readText }) {
   }
   function add(owner, entry, dist) {
     const record = {
-      scriptId: path.posix.basename(owner.path).replace(/\.(entry\.[jt]s|user\.js)$/, ''),
+      scriptId: path.posix.basename(owner.path).replace(/\.(entry\.ts|user\.js)$/, ''),
       identity: owner.metadata ? installIdentity(owner.metadata) : '',
       metadataOwner: owner,
       entry,
@@ -67,23 +67,14 @@ export async function readUserscriptInventory({ files, readText }) {
     }
     return record;
   }
-  // Entries are TypeScript (<id>.entry.ts); .entry.js stays readable so Git refs
-  // from before the TypeScript migration still form a complete version baseline.
-  for (const file of paths.filter((file) => file.startsWith('src/') && /\.entry\.[jt]s$/.test(file))) {
+  for (const file of paths.filter((file) => file.startsWith('src/') && file.endsWith('.entry.ts'))) {
     const entry = fact(file);
     if (!entry.exists) continue;
-    const extension = file.slice(-'.entry.ts'.length);
-    const stem = file.slice(0, -extension.length);
-    if (file !== `src/userscripts/${path.posix.basename(stem)}/${path.posix.basename(stem)}${extension}`) {
+    const id = path.posix.basename(file, '.entry.ts');
+    if (file !== `src/userscripts/${id}/${id}.entry.ts`) {
       issue('invalid-entry-path', file, 'entry path must be src/userscripts/<script-id>/<script-id>.entry.ts');
     }
-    add(entry, entry, fact(`dist/${path.posix.basename(stem)}.user.js`));
-    // Refs before 2026-11 carry a generated src copy of the bundle beside the entry;
-    // it adds no identity, so those refs still form a version baseline.
-    if (facts.has(`${stem}.user.js`)) {
-      claimed.set(`${stem}.user.js`, file);
-      issue('legacy-src-copy', `${stem}.user.js`, 'bundled scripts install only from dist/; delete this copy');
-    }
+    add(entry, entry, fact(`dist/${id}.user.js`));
   }
   for (const file of paths.filter((file) => file.startsWith('src/') && file.endsWith('.user.js'))) {
     if (!claimed.has(file)) add(fact(file), null, null);

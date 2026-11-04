@@ -7,8 +7,8 @@ import path from 'node:path';
 import { readUserscriptInventory } from '../scripts/lib/userscript-inventory.mjs';
 import { worktreeSource, refSource } from '../scripts/lib/userscript-sources.mjs';
 
-const entry = 'src/userscripts/demo/demo.entry.js';
-const srcCopy = 'src/userscripts/demo/demo.user.js';
+const entry = 'src/userscripts/demo/demo.entry.ts';
+const srcScript = 'src/userscripts/demo/demo.user.js';
 const dist = 'dist/demo.user.js';
 const metadata = (name = 'Demo', url = 'dist/demo.user.js') => `// ==UserScript==
 // @name ${name}
@@ -56,18 +56,9 @@ test('entry owns its dist bundle, missing before the first build and stale after
   );
 });
 
-test('a src copy beside an entry adds no identity and is reported for deletion', async () => {
-  const result = await inventory({ [entry]: metadata(), [srcCopy]: metadata(), [dist]: metadata() });
-  assert.equal(result.records.length, 1);
-  assert.deepEqual(
-    result.issues.map((issue) => [issue.type, issue.file]),
-    [['legacy-src-copy', srcCopy]],
-  );
-});
-
 test('a src script pointing at dist owns only itself; the dist file stays an orphan', async () => {
   const result = await inventory({
-    [srcCopy]: metadata(),
+    [srcScript]: metadata(),
     [dist]: metadata(),
   });
   assert.equal(result.records.length, 1);
@@ -82,7 +73,7 @@ test('inventory identifies duplicates, path conflicts and invalid metadata', asy
   const result = await inventory({
     [entry]: metadata(),
     [dist]: metadata(),
-    'src/userscripts/other/demo.entry.js': metadata(),
+    'src/userscripts/other/demo.entry.ts': metadata(),
     'src/broken.user.js': 'not metadata',
   });
   const types = new Set(result.issues.map((issue) => issue.type));

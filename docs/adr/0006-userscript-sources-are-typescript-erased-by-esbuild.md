@@ -30,9 +30,7 @@ TypeScript for long-term maintainability; installed copies update by
    were deleted on 2026-11-04: each script last updated through its src URL
    between 2026-07 and 2026-09 (Codex Quota Compass and Web Page Assistant
    2026-07-25, Feishu Preview Image Export 2026-09-20, JavDB Recommend Archive
-   2026-09-21), and the repository has a single user. The inventory still
-   tolerates such a copy in Git refs from before that date so they form a
-   version baseline; lint rejects it in the worktree.
+   2026-09-21), and the repository has a single user.
 4. The build rejects `@require`, an entry whose `SCRIPT_VERSION` disagrees with
    `@version`, and orphan lib modules; lint requires every entry to have a dist
    file with matching install identity and `@version`, and every dist file to
@@ -51,8 +49,7 @@ TypeScript for long-term maintainability; installed copies update by
 7. Tests (`test/*.mjs`) and tooling (`scripts/*.mjs`) stay JavaScript; tests
    import TypeScript through `scripts/jsx-loader.mjs` with the build's options.
    `engines.node` is `>=22.18`, the first Node 22 with type stripping on by
-   default. The inventory and version plan accept both `.entry.ts` and
-   `.entry.js`, so a pre-migration Git ref still forms a complete baseline.
+   default.
 
 ## Rejected alternatives
 

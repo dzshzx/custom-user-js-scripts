@@ -23,7 +23,7 @@ async function discoverEntries(rootDir) {
   const inventory = await readUserscriptInventory(await worktreeSource(rootDir));
   const fatal = inventory.issues.filter(
     (issue) =>
-      (issue.type === 'read-failed' && /\.entry\.[jt]s$/.test(issue.file)) ||
+      (issue.type === 'read-failed' && issue.file.endsWith('.entry.ts')) ||
       ['ownership-conflict', 'invalid-entry-path'].includes(issue.type),
   );
   if (fatal.length) throw new Error(fatal.map((issue) => issue.message).join('\n'));

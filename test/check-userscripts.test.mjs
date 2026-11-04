@@ -128,19 +128,6 @@ test('check-userscripts rejects a dist file without a source entry', async () =>
   assert.match(result.stderr, /orphan installable without a source entry owner/);
 });
 
-test('check-userscripts rejects a src copy of the bundle beside its entry', async () => {
-  const { entry, dist } = bundled('copied');
-  const workspace = await createWorkspace(
-    { [entry.path]: entry.content, 'userscripts/copied/copied.user.js': dist },
-    { 'copied.user.js': dist },
-  );
-
-  const result = runLint(workspace);
-
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /copied\.user\.js: bundled scripts install only from dist\//);
-});
-
 test('check-userscripts rejects a single-file script without self-pointing install URLs', async () => {
   const workspace = await createWorkspace({
     'plain.user.js': userscriptMetadata({ name: 'Plain Script' }),
