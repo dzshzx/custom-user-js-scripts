@@ -8,7 +8,7 @@ import { readUserscriptInventory } from '../scripts/lib/userscript-inventory.mjs
 import { worktreeSource, refSource } from '../scripts/lib/userscript-sources.mjs';
 
 const entry = 'src/userscripts/demo/demo.entry.js';
-const bridge = 'src/userscripts/demo/demo.user.js';
+const srcCopy = 'src/userscripts/demo/demo.user.js';
 const dist = 'dist/demo.user.js';
 const metadata = (name = 'Demo', url = 'dist/demo.user.js') => `// ==UserScript==
 // @name ${name}
@@ -26,56 +26,62 @@ const inventory = (documents) =>
 test('inventory reads sorted normalized paths once and never executes checked text', async () => {
   const reads = [];
   const result = await readUserscriptInventory({
-    files: [dist, entry.replaceAll('/', '\\'), bridge, entry, 'src/userscripts/demo/util.lib.js'],
+    files: [dist, entry.replaceAll('/', '\\'), entry, 'src/userscripts/demo/util.lib.js'],
     readText(file) {
       reads.push(file);
       return `${metadata()}throw new Error('must not execute');\n`;
     },
   });
-  assert.deepEqual(reads, [dist, entry, bridge]);
+  assert.deepEqual(reads, [dist, entry]);
   assert.equal(result.records.length, 1);
   assert.equal(result.records[0].ownership, 'entry');
   assert.equal(result.records[0].identity, 'https://example.test :: Demo');
   assert.deepEqual(result.issues, []);
 });
 
-test('entry owns stale bridges and missing outputs before the first build', async () => {
+test('entry owns its dist bundle, missing before the first build and stale after an edit', async () => {
   const first = await inventory({ [entry]: metadata() });
   assert.equal(first.records.length, 1);
   assert.equal(first.records[0].dist.exists, false);
   assert.deepEqual(
     first.issues.map((issue) => issue.type),
-    ['missing-companion', 'missing-companion'],
+    ['missing-dist'],
   );
-  const stale = await inventory({
-    [entry]: metadata(),
-    [bridge]: metadata('Old', bridge),
-    [dist]: metadata('Old', bridge),
-  });
+  const stale = await inventory({ [entry]: metadata(), [dist]: metadata('Old') });
   assert.equal(stale.records.length, 1);
   assert.equal(stale.records[0].identity, 'https://example.test :: Demo');
-  assert.equal(stale.issues.filter((issue) => issue.type === 'metadata-mismatch').length, 2);
-});
-
-test('inventory reports historical URL pairing and orphan outputs without inventing entries', async () => {
-  const result = await inventory({
-    [bridge]: metadata(),
-    [dist]: metadata(),
-    'dist/orphan.user.js': metadata('Orphan'),
-  });
-  assert.equal(result.records[0].ownership, 'url');
-  assert.equal(result.records[0].entry, null);
   assert.deepEqual(
-    result.issues.map((issue) => issue.type),
-    ['orphan-dist', 'missing-entry'],
+    stale.issues.map((issue) => issue.type),
+    ['metadata-mismatch'],
   );
 });
 
-test('inventory identifies duplicates, path conflicts, invalid metadata and content mismatches', async () => {
+test('a src copy beside an entry adds no identity and is reported for deletion', async () => {
+  const result = await inventory({ [entry]: metadata(), [srcCopy]: metadata(), [dist]: metadata() });
+  assert.equal(result.records.length, 1);
+  assert.deepEqual(
+    result.issues.map((issue) => [issue.type, issue.file]),
+    [['legacy-src-copy', srcCopy]],
+  );
+});
+
+test('a src script pointing at dist owns only itself; the dist file stays an orphan', async () => {
+  const result = await inventory({
+    [srcCopy]: metadata(),
+    [dist]: metadata(),
+  });
+  assert.equal(result.records.length, 1);
+  assert.equal(result.records[0].ownership, 'single');
+  assert.deepEqual(
+    result.issues.map((issue) => issue.type),
+    ['orphan-dist'],
+  );
+});
+
+test('inventory identifies duplicates, path conflicts and invalid metadata', async () => {
   const result = await inventory({
     [entry]: metadata(),
-    [bridge]: metadata(),
-    [dist]: `${metadata()}// stale\n`,
+    [dist]: metadata(),
     'src/userscripts/other/demo.entry.js': metadata(),
     'src/broken.user.js': 'not metadata',
   });
@@ -86,7 +92,6 @@ test('inventory identifies duplicates, path conflicts, invalid metadata and cont
     'duplicate-identity',
     'duplicate-url',
     'invalid-metadata',
-    'content-mismatch',
   ]) {
     assert.ok(types.has(type), type);
   }
@@ -110,7 +115,6 @@ test('worktree and Git adapters preserve identical text and inventories includin
   t.after(() => rm(root, { recursive: true, force: true }));
   const files = {
     [entry]: metadata(),
-    [bridge]: `${metadata()}\n\n`,
     [dist]: `${metadata()}\n\n`,
     'src/userscripts/example/example.user.js': metadata('Example', 'src/userscripts/example/example.user.js'),
   };

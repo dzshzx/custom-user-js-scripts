@@ -1,16 +1,14 @@
-# Userscripts are TypeScript sources bundled by esbuild into a committed dist file with a byte-identical bridge
+# Userscripts are TypeScript sources bundled by esbuild into a committed dist file
 
 - Status: accepted
-- Date: 2026-07-24 (bundling, e6ea2ac / 59b7567 / 1cfcafd; bridge rule 303ff01, 2790026); 2026-10-02 (TypeScript)
-- Related: GLOSSARY.md (Entry, Lib Module, Dist Bundle, Bridge File), PRODUCT.md "Installability Principles", docs/script-template.md, tsconfig.json, scripts/lib/jsx-build-options.mjs, eslint.config.js, README.md "开发与验证"
+- Date: 2026-07-24 (bundling, e6ea2ac / 59b7567 / 1cfcafd); 2026-10-02 (TypeScript); 2026-11-04 (dist-only install)
+- Related: GLOSSARY.md (Entry, Lib Module, Dist Bundle), PRODUCT.md "Installability Principles", docs/script-template.md, tsconfig.json, scripts/lib/jsx-build-options.mjs, eslint.config.js, README.md "开发与验证"
 
 ## Context
 
 Multi-file scripts glued together with `@require` broke in practice: managers
 refresh `@require` targets only on a `@version` change, module boundaries were
-implicit globals, and missing dependencies surfaced only at runtime. A thin stub
-at the legacy `src/.../<id>.user.js` path stranded installs that still held that
-URL (0.5.1 / 0.3.1 shipped to heal them). Later the maintainer chose
+implicit globals, and missing dependencies surfaced only at runtime. Later the maintainer chose
 TypeScript for long-term maintainability; installed copies update by
 `@version`, so the language move must not change what users run.
 
@@ -27,13 +25,18 @@ TypeScript for long-term maintainability; installed copies update by
    `@updateURL` point at it. Runtime npm dependencies are allowed: lib modules
    import them and esbuild bundles them, so the installed script stays
    self-contained.
-3. The legacy `src/.../<id>.user.js` path is regenerated as a byte-identical
-   copy of the dist bundle — the full script, never a stub — so either URL a
-   manager holds installs a working script.
+3. `dist/<id>.user.js` is the only install path of a bundled script; the build
+   writes nothing back into `src/`. The old `src/.../<id>.user.js` install URLs
+   were deleted on 2026-11-04: each script last updated through its src URL
+   between 2026-07 and 2026-09 (Codex Quota Compass and Web Page Assistant
+   2026-07-25, Feishu Preview Image Export 2026-09-20, JavDB Recommend Archive
+   2026-09-21), and the repository has a single user. The inventory still
+   tolerates such a copy in Git refs from before that date so they form a
+   version baseline; lint rejects it in the worktree.
 4. The build rejects `@require`, an entry whose `SCRIPT_VERSION` disagrees with
-   `@version`, and orphan lib modules; lint pairs every bridge with its dist
-   file by full content; CI fails when the committed dist or bridge is not the
-   rebuilt output.
+   `@version`, and orphan lib modules; lint requires every entry to have a dist
+   file with matching install identity and `@version`, and every dist file to
+   have an entry; CI fails when the committed dist is not the rebuilt output.
 5. The TypeScript settings that change emitted code are pinned in
    `scripts/lib/jsx-build-options.mjs` (`tsconfigRaw`), shared by the build and
    the test loader; `tsconfig.json` drives type checking only, so tightening the
@@ -53,9 +56,10 @@ TypeScript for long-term maintainability; installed copies update by
 
 ## Rejected alternatives
 
-- Keeping `@require`: the cache and global-scope problems above. A stub bridge:
-  strands installs. Gitignoring dist: the install URL must resolve to a
-  committed file.
+- Keeping `@require`: the cache and global-scope problems above. Gitignoring
+  dist: the install URL must resolve to a committed file. Keeping a generated
+  src copy for installs that still hold the old URL: every change committed the
+  bundle twice for a single user whose installs had already moved to dist.
 - JSDoc types with `checkJs`: verbose, second-class types. Migrating tests and
   tooling too: about 15k more lines with no shipped-behaviour benefit.
 - TypeScript 7: typescript-eslint 8.x supports TypeScript `<6.1`, so the checker
@@ -64,11 +68,12 @@ TypeScript for long-term maintainability; installed copies update by
 
 ## Consequences
 
-- Every source change to a bundled script commits three files (entry/lib, dist,
-  bridge); the diff is noisy but auditable because the bundle is not minified.
+- Every source change to a bundled script commits the source and the rebuilt
+  dist file; the diff is noisy but auditable because the bundle is not minified.
 
 ## Amendments
 
 - 2026-09-08: runtime npm dependencies are welcome when esbuild bundles them into dist.
 - 2026-10-02: sources became TypeScript.
-- 2026-11-03: ADR-0001 (bundle and bridge) folded in and deleted.
+- 2026-11-03: ADR-0001 (bundling) folded in and deleted.
+- 2026-11-04: src install copies deleted; dist is the only install path.

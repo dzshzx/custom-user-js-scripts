@@ -70,7 +70,7 @@ Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜�
 
 ## JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数
 
-安装入口为 `dist/javdb-recommend.user.js`；旧 src 安装地址保留逐字节相同的完整 Bridge File。源码由 Entry、数据、请求、Period Section、Site Chrome 及展示 Lib Module 组成。
+安装入口为 `dist/javdb-recommend.user.js`。源码由 Entry、数据、请求、Period Section、Site Chrome 及展示 Lib Module 组成。
 
 JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、javdb.today 等镜像域名），在顶部导航栏加入「佳片推荐」入口，点击打开独立页面 `/recommend-archive` 浏览「佳片推荐」栏目的全部历史期数。归档页从官网首页动态发现样式表与导航；资源在 12 秒内全部加载并通过基础计算样式检查后才启用官网外观，否则使用完整内置样式：
 
@@ -116,7 +116,7 @@ npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类�
 
 提交前运行 `scripts/format.sh`：prettier（版本锁在 `package.json` devDependencies）重排
 JS/TS、Markdown、YAML 与 JSON，shfmt（脚本内固定版本与 sha256）重排 Shell；
-`scripts/format.sh --check` 只检查，`npm run verify` 的检查阶段会运行它，格式不一致即失败。`dist/`、`src/` 下与 dist 逐字节相同的桥接文件、
+`scripts/format.sh --check` 只检查，`npm run verify` 的检查阶段会运行它，格式不一致即失败。`dist/`、
 `package-lock.json` 是生成物或锁文件，不参与重排。
 纯格式重排提交登记在 `.git-blame-ignore-revs`，本地可用
 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 让 blame 跳过它们。
@@ -156,7 +156,7 @@ CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 
 - [PRODUCT.md](PRODUCT.md)：产品上下文、用户、边界、数据原则和版本策略。
 - [DESIGN.md](DESIGN.md)：注入式 userscript UI 的设计上下文和组件规则。
 - [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
-- [docs/adr/index.md](docs/adr/index.md)：架构决策记录（打包与桥接、存储策略、Gist 同步、入口文件不入库、TypeScript 源码、发布门）。
+- [docs/adr/index.md](docs/adr/index.md)：架构决策记录（打包、存储策略、Gist 同步、入口文件不入库、TypeScript 源码、发布门）。
 - [GLOSSARY.md](GLOSSARY.md)：四个脚本与构建/发布机制的领域术语表。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
 - [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)：Codex Quota Compass GitHub Gist 同步说明。

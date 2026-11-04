@@ -32,7 +32,10 @@ async function createWorkspace(files, distFiles = {}) {
   await mkdir(srcDir);
 
   await Promise.all(
-    Object.entries(files).map(([name, content]) => writeFile(path.join(srcDir, name), content, 'utf8')),
+    Object.entries(files).map(async ([name, content]) => {
+      await mkdir(path.dirname(path.join(srcDir, name)), { recursive: true });
+      await writeFile(path.join(srcDir, name), content, 'utf8');
+    }),
   );
 
   if (Object.keys(distFiles).length) {
@@ -55,10 +58,13 @@ function selfHosted(name, extra = {}) {
   return userscriptMetadata({ name, downloadURL: url, updateURL: url, ...extra });
 }
 
-function bridgePair(name) {
+function bundled(name) {
   const downloadURL = `https://raw.githubusercontent.com/example/repo/master/dist/${name}.user.js`;
-  const content = `${userscriptMetadata({ name, downloadURL, updateURL: downloadURL })}\n// bundled body sentinel\n`;
-  return { bridge: content, dist: content };
+  const metadata = userscriptMetadata({ name, downloadURL, updateURL: downloadURL });
+  return {
+    entry: { path: `userscripts/${name}/${name}.entry.ts`, content: metadata },
+    dist: `${metadata}\n// bundled body sentinel\n`,
+  };
 }
 
 test('check-userscripts rejects duplicate userscript install identities', async () => {
@@ -92,9 +98,9 @@ test('check-userscripts rejects duplicate update URLs', async () => {
   assert.match(result.stderr, /duplicate @updateURL value/);
 });
 
-test('check-userscripts accepts a bridge/dist pair sharing identity and URLs', async () => {
-  const { bridge, dist } = bridgePair('paired');
-  const workspace = await createWorkspace({ 'paired.user.js': bridge }, { 'paired.user.js': dist });
+test('check-userscripts accepts an entry with its dist bundle', async () => {
+  const { entry, dist } = bundled('paired');
+  const workspace = await createWorkspace({ [entry.path]: entry.content }, { 'paired.user.js': dist });
 
   const result = runLint(workspace);
 
@@ -102,37 +108,37 @@ test('check-userscripts accepts a bridge/dist pair sharing identity and URLs', a
   assert.match(result.stdout, /Checked/);
 });
 
-test('check-userscripts rejects a bridge whose content differs from its dist file', async () => {
-  const { bridge, dist } = bridgePair('paired');
-  const workspace = await createWorkspace(
-    { 'paired.user.js': bridge.replace('0.1.0', '0.1.1') },
-    { 'paired.user.js': dist },
-  );
+test('check-userscripts rejects an entry whose dist bundle is missing', async () => {
+  const { entry } = bundled('lonely');
+  const workspace = await createWorkspace({ [entry.path]: entry.content });
 
   const result = runLint(workspace);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /bridge content does not match/);
+  assert.match(result.stderr, /missing dist bundle dist\/lonely\.user\.js/);
 });
 
-test('check-userscripts rejects a dist file without a bridge file', async () => {
-  const { dist } = bridgePair('orphan-dist');
+test('check-userscripts rejects a dist file without a source entry', async () => {
+  const { dist } = bundled('orphan-dist');
   const workspace = await createWorkspace({}, { 'orphan-dist.user.js': dist });
 
   const result = runLint(workspace);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /missing bridge/);
+  assert.match(result.stderr, /orphan installable without a source entry owner/);
 });
 
-test('check-userscripts rejects a bridge whose dist counterpart is missing', async () => {
-  const { bridge } = bridgePair('lonely-bridge');
-  const workspace = await createWorkspace({ 'lonely-bridge.user.js': bridge });
+test('check-userscripts rejects a src copy of the bundle beside its entry', async () => {
+  const { entry, dist } = bundled('copied');
+  const workspace = await createWorkspace(
+    { [entry.path]: entry.content, 'userscripts/copied/copied.user.js': dist },
+    { 'copied.user.js': dist },
+  );
 
   const result = runLint(workspace);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /dist counterpart .* is missing/);
+  assert.match(result.stderr, /copied\.user\.js: bundled scripts install only from dist\//);
 });
 
 test('check-userscripts rejects a single-file script without self-pointing install URLs', async () => {

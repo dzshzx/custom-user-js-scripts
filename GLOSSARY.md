@@ -27,12 +27,6 @@ an entry — the only thing a script manager installs for a bundled script and t
 target of its `@downloadURL` / `@updateURL`.
 _Avoid_: build artifact, output, minified bundle
 
-**Bridge File**:
-The generated `src/userscripts/<script-id>/<script-id>.user.js`, a byte-identical
-copy of the dist bundle kept because a script manager may install from whichever
-URL it already holds. It is always the full script, never a stub.
-_Avoid_: shim, stub, legacy copy
-
 **Single-file Script**:
 A userscript with no lib modules, installed straight from its `src/` path; its
 `@downloadURL` / `@updateURL` point at that same raw path so installed copies

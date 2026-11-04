@@ -26,8 +26,8 @@ has to be decided before `master` moves, on the exact commit that will become
    `verify` succeeded; failure, cancellation or a skipped verification cannot
    satisfy it.
 3. **The client is a manual push sequence.** A releasing change bumps
-   `@version` on the task branch together with the rebuilt dist and bridge
-   files, then:
+   `@version` on the task branch together with the rebuilt dist file,
+   then:
    1. rebase the task branch onto `origin/master`;
    2. `git push origin HEAD:refs/heads/candidate/<first 12 chars of sha>`;
    3. wait until that sha's CI `verify` and `ci-ok` are green (`gh run watch`

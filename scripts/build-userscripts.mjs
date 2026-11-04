@@ -106,14 +106,11 @@ export async function buildAll({ rootDir = process.cwd(), distDir = path.join(ro
 
   if (targets.length) await mkdir(distDir, { recursive: true });
   return Promise.all(
-    targets.map(async ({ scriptId, scriptDir }, index) => {
+    targets.map(async ({ scriptId }, index) => {
       const output = settled[index].value;
       const distPath = path.join(distDir, `${scriptId}.user.js`);
-      const bridgePath = path.join(scriptDir, `${scriptId}.user.js`);
-      // The legacy install path serves the identical full script: script managers
-      // may install whatever @downloadURL they hold, so both URLs must be real.
-      await Promise.all([writeFile(distPath, output), writeFile(bridgePath, output)]);
-      return { scriptId, distPath, bridgePath };
+      await writeFile(distPath, output);
+      return { scriptId, distPath };
     }),
   );
 }

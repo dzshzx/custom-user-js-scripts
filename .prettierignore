@@ -2,12 +2,8 @@
 # 锁文件与依赖目录。
 package-lock.json
 node_modules/
-# 生成物：dist 安装文件及 src 下与之逐字节相同的桥接文件（有 *.entry.ts 的脚本目录里的 <id>.user.js）。
+# 生成物：dist 安装文件。
 dist/
-src/userscripts/codex-quota-compass/codex-quota-compass.user.js
-src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js
-src/userscripts/javdb-recommend/javdb-recommend.user.js
-src/userscripts/web-page-assistant/web-page-assistant.user.js
 # 运行产物。
 .scratch/
 coverage/

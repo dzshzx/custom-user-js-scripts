@@ -42,45 +42,27 @@ export async function readUserscriptInventory({ files, readText }) {
       ]);
     claimed.set(file, record.metadataOwner.path);
   }
-  function add(owner, entry, bridge, dist, single) {
+  function add(owner, entry, dist) {
     const record = {
       scriptId: path.posix.basename(owner.path).replace(/\.(entry\.[jt]s|user\.js)$/, ''),
       identity: owner.metadata ? installIdentity(owner.metadata) : '',
       metadataOwner: owner,
       entry,
-      bridge,
       dist,
-      single,
-      ownership: entry ? 'entry' : bridge ? 'url' : 'single',
+      ownership: entry ? 'entry' : 'single',
     };
     records.push(record);
-    for (const file of [entry, bridge, dist, single].filter(Boolean)) claim(record, file.path);
-    if (bridge && dist) {
-      for (const file of [bridge, dist]) {
-        if (!file.exists)
-          issue('missing-companion', owner.path, `missing installable companion ${file.path}`, [file.path]);
-      }
-      if (bridge.content !== undefined && dist.content !== undefined && bridge.content !== dist.content) {
-        issue(
-          'content-mismatch',
-          bridge.path,
-          `bridge content does not match ${dist.path} (rebuild with npm run build)`,
-          [dist.path],
-        );
-      }
-    }
-    if (entry) {
-      for (const companion of [bridge, dist].filter((file) => file.exists && file.content !== undefined)) {
-        if (
-          !companion.metadata ||
-          installIdentity(companion.metadata) !== record.identity ||
-          firstMetadataValue(companion.metadata, '@version') !==
-            firstMetadataValue(entry.metadata || new Map(), '@version')
-        ) {
-          issue('metadata-mismatch', companion.path, `does not match ${entry.path} install identity and @version`, [
-            entry.path,
-          ]);
-        }
+    for (const file of [owner, dist].filter(Boolean)) claim(record, file.path);
+    if (entry && !dist.exists) issue('missing-dist', owner.path, `missing dist bundle ${dist.path}`, [dist.path]);
+    if (entry && dist.content !== undefined) {
+      if (
+        !dist.metadata ||
+        installIdentity(dist.metadata) !== record.identity ||
+        firstMetadataValue(dist.metadata, '@version') !== firstMetadataValue(entry.metadata || new Map(), '@version')
+      ) {
+        issue('metadata-mismatch', dist.path, `does not match ${entry.path} install identity and @version`, [
+          entry.path,
+        ]);
       }
     }
     return record;
@@ -95,16 +77,16 @@ export async function readUserscriptInventory({ files, readText }) {
     if (file !== `src/userscripts/${path.posix.basename(stem)}/${path.posix.basename(stem)}${extension}`) {
       issue('invalid-entry-path', file, 'entry path must be src/userscripts/<script-id>/<script-id>.entry.ts');
     }
-    add(entry, entry, fact(`${stem}.user.js`), fact(`dist/${path.posix.basename(stem)}.user.js`), null);
+    add(entry, entry, fact(`dist/${path.posix.basename(stem)}.user.js`));
+    // Refs before 2026-11 carry a generated src copy of the bundle beside the entry;
+    // it adds no identity, so those refs still form a version baseline.
+    if (facts.has(`${stem}.user.js`)) {
+      claimed.set(`${stem}.user.js`, file);
+      issue('legacy-src-copy', `${stem}.user.js`, 'bundled scripts install only from dist/; delete this copy');
+    }
   }
   for (const file of paths.filter((file) => file.startsWith('src/') && file.endsWith('.user.js'))) {
-    if (claimed.has(file)) continue;
-    const owner = fact(file);
-    const id = path.posix.basename(file, '.user.js');
-    if (owner.metadata && firstMetadataValue(owner.metadata, '@downloadURL').endsWith(`/dist/${id}.user.js`)) {
-      add(owner, null, owner, fact(`dist/${id}.user.js`), null);
-      issue('missing-entry', file, 'URL-inferred bridge has no source entry owner');
-    } else add(owner, null, null, null, owner);
+    if (!claimed.has(file)) add(fact(file), null, null);
   }
   for (const file of paths.filter((file) => file.startsWith('dist/') && !claimed.has(file))) {
     issue('orphan-dist', file, 'orphan installable without a source entry owner');

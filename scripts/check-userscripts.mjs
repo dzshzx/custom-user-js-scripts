@@ -8,24 +8,13 @@ function report(file, message) {
   console.error(`${file}: ${message}`);
   hasError = true;
 }
-for (const issue of inventory.issues) {
-  // Historical URL-inferred pairs remain valid at lint time.
-  if (issue.type === 'missing-entry') continue;
-  let message = issue.message;
-  if (issue.type === 'orphan-dist') message = 'missing bridge file under src/ (expected matching metadata)';
-  if (issue.type === 'missing-companion' && issue.related[0].startsWith('dist/')) {
-    message = `bridge file's dist counterpart ${issue.related[0]} is missing`;
-  }
-  report(issue.file, message);
-}
+for (const issue of inventory.issues) report(issue.file, issue.message);
 for (const file of inventory.files) {
   if (!file.metadata) continue;
   for (const message of missingRequiredFields(file.metadata)) report(file.path, message);
 }
 for (const record of inventory.records) {
-  for (const script of [record.metadataOwner, record.entry && record.bridge, record.entry && record.dist].filter(
-    Boolean,
-  )) {
+  for (const script of [record.metadataOwner, record.entry && record.dist].filter(Boolean)) {
     if (!script.metadata) continue;
     for (const message of installUrlIssues(script.metadata, record.dist?.path || script.path)) {
       report(script.path, message);

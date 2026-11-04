@@ -56,27 +56,21 @@ function transitionKind(baseline, target, namespace, issues) {
 async function readVersions(source, label) {
   const inventory = await readUserscriptInventory(source);
   const versions = new Map();
-  // Release requires complete owners and identity/version parity. Byte equality
+  // Release requires complete owners and identity/version parity. Dist freshness
   // remains the build/lint gate; URL policy does not alter the version plan.
   const releaseIssues = new Set([
     'read-failed',
     'missing-file',
     'invalid-metadata',
-    'missing-companion',
+    'missing-dist',
     'metadata-mismatch',
     'ownership-conflict',
     'orphan-dist',
-    'missing-entry',
     'invalid-entry-path',
   ]);
   const issues = inventory.issues
     .filter((issue) => releaseIssues.has(issue.type))
-    .map(
-      (issue) =>
-        `${label} ${issue.file} ${
-          issue.type === 'missing-entry' ? 'is an orphan installable without a source entry owner' : issue.message
-        }`,
-    );
+    .map((issue) => `${label} ${issue.file} ${issue.message}`);
   for (const { metadataOwner: owner, identity } of inventory.records) {
     if (!owner.metadata) continue;
     if (!identity) {

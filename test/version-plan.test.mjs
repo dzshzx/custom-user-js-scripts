@@ -165,22 +165,21 @@ test('first release, removal, and downgrade are rejected', async () => {
   assert.match(downgradeResult.stderr, /older than immutable published baseline/);
 });
 
-test('a bundled entry requires matching bridge and dist metadata', async () => {
+test('a bundled entry requires matching dist metadata', async () => {
   const fixture = await fixtureRepository();
-  const standalone = path.join(fixture.root, 'src/userscripts/fixture/fixture.user.js');
   const entry = path.join(fixture.root, 'src/userscripts/fixture/fixture.entry.js');
   const dist = path.join(fixture.root, 'dist/fixture.user.js');
   await mkdir(path.dirname(dist), { recursive: true });
+  await rm(fixture.script);
   await writeFile(entry, metadata('1.2.3'));
-  await writeFile(standalone, metadata('1.2.3'));
   await writeFile(dist, metadata('1.2.3'));
-  git(fixture.root, 'add', '.');
+  git(fixture.root, 'add', '-A');
   git(fixture.root, 'commit', '-m', 'publish bundled shape');
   git(fixture.root, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
 
   await writeFile(entry, metadata('1.2.4'));
   git(fixture.root, 'add', '.');
-  git(fixture.root, 'commit', '-m', 'forget generated companions');
+  git(fixture.root, 'commit', '-m', 'forget the rebuild');
   const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD');
   assert.equal(result.status, 1);
   assert.match(result.stderr, /does not match .* install identity and @version/);
@@ -198,6 +197,25 @@ test('a .entry.js baseline and a .entry.ts target form one unchanged plan', asyn
 
   git(fixture.root, 'mv', `${stem}.entry.js`, `${stem}.entry.ts`);
   git(fixture.root, 'commit', '-m', 'migrate entry to TypeScript');
+  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD', '--json');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).transitions, [
+    { baseline: '1.2.3', namespace: 'https://example.test/userscripts :: Fixture', target: '1.2.3', kind: 'unchanged' },
+  ]);
+});
+
+test('a baseline with a src copy beside its entry and a dist-only target form one unchanged plan', async () => {
+  const fixture = await fixtureRepository();
+  const stem = path.join(fixture.root, 'src/userscripts/fixture/fixture');
+  const dist = path.join(fixture.root, 'dist/fixture.user.js');
+  await mkdir(path.dirname(dist), { recursive: true });
+  for (const file of [`${stem}.entry.ts`, dist]) await writeFile(file, metadata('1.2.3'));
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-m', 'publish entry with src copy');
+  git(fixture.root, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
+
+  git(fixture.root, 'rm', '-q', `${stem}.user.js`);
+  git(fixture.root, 'commit', '-m', 'install only from dist');
   const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD', '--json');
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout).transitions, [
@@ -245,6 +263,7 @@ test('five-identity fixed plan survives single-file to entry migration unchanged
   const stem = path.join(fixture.root, 'src/userscripts/javdb-recommend/javdb-recommend');
   const content = await readFile(`${stem}.user.js`, 'utf8');
   await writeFile(`${stem}.entry.js`, content);
+  await rm(`${stem}.user.js`);
   await mkdir(path.join(fixture.root, 'dist'));
   await writeFile(path.join(fixture.root, 'dist/javdb-recommend.user.js'), content);
   const result = runPlan(fixture.root, 'plan', '--json');
@@ -262,7 +281,7 @@ test('five-identity fixed plan survives single-file to entry migration unchanged
   );
 });
 
-test('version plan requires a real entry even when lint can accept a historical URL pair', async () => {
+test('a dist file is an orphan without an entry even when a src script points its URL there', async () => {
   const fixture = await fixtureRepository();
   const content = metadata('1.2.3').replace(
     '// ==/UserScript==',

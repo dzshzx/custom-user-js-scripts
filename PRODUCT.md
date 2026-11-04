@@ -169,7 +169,7 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
   and labels each transition without editing metadata. Any forward transition
   passes. An unknown or duplicate override, a new script without a published
   baseline, a missing script, invalid metadata, a downgrade, an orphan dist
-  installable, or mismatched entry/bridge/dist versions stops the release.
+  installable, or mismatched entry/dist versions stops the release.
 - A releasing version bump belongs on the task branch before it is pushed as a
   `candidate/**` branch (manual pushes; the steps are in README.md "开发与验证").
   CI runs on the candidate, and once its `ci-ok` is green `master` is
@@ -186,7 +186,7 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
   Once a bumped version reaches `master`, treat it as immutable and publish any
   correction under the next patch version.
 - The version lives in the entry metadata block; `npm run build` propagates it
-  to the dist bundle and the byte-identical bridge file, and fails if an internal
+  to the dist bundle, and fails if an internal
   `SCRIPT_VERSION` constant disagrees with `@version`.
 - Do not use repository `package.json` version as a substitute for installable
   userscript versions.

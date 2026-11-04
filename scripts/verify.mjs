@@ -58,7 +58,7 @@ try {
   }
   report.stages.build = 'passed';
   report.stages.checks = 'running';
-  command('git', ['diff', '--exit-code', '--', 'dist', 'src']);
+  command('git', ['diff', '--exit-code', '--', 'dist']);
   command('sh', ['-c', 'test -z "$(git status --porcelain dist)"']);
   await commands([
     [process.execPath, ['scripts/check-userscripts.mjs']],

@@ -14,10 +14,7 @@ function indexedDBFor(storage) {
   return originDatabases.get(storage);
 }
 
-export const srcPath = path.resolve(
-  import.meta.dirname,
-  '../../src/userscripts/javdb-recommend/javdb-recommend.user.js',
-);
+export const srcPath = path.resolve(import.meta.dirname, '../../dist/javdb-recommend.user.js');
 
 export const PERIODS = {
   success: 1,

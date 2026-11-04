@@ -7,7 +7,7 @@ OS dependencies. No npx package download or user-cache search participates in
 browser tests. Playwright's standard `PLAYWRIGHT_BROWSERS_PATH` can select an
 isolated cache; it must contain this package's matching browser revision.
 
-Verify builds once, checks committed dist/bridge freshness, metadata, the strict
+Verify builds once, checks committed dist freshness, metadata, the strict
 `tsc` type check (`tsconfig.json`, no emit), ESLint (`eslint.config.js`, zero errors) and formatting (`scripts/format.sh --check`), then
 runs the complete node:test suite. Independent lint/test commands build
 first. The complete entries accept no filters. For focused debugging use
