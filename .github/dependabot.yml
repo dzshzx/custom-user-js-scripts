@@ -15,7 +15,6 @@ updates:
     open-pull-requests-limit: 0 # Dependency upgrades run in the weekly agent batch (fleet-state ADR 0053, decision 5); alerts stay enabled.
     directories:
       - '/'
-      - '/.github/actions/*'
     ignore:
       # Own actions are pinned by the repos' pin-bump flow; Dependabot cannot read private repos.
       - dependency-name: 'dzshzx/*'
