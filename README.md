@@ -129,7 +129,7 @@ CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 
 - [PRODUCT.md](PRODUCT.md)：产品上下文、用户、边界、数据原则和版本策略。
 - [DESIGN.md](DESIGN.md)：注入式 userscript UI 的设计上下文和组件规则。
 - [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
-- [docs/adr/index.md](docs/adr/index.md)：架构决策记录（打包、存储策略、Gist 同步、入口文件不入库、TypeScript 源码、发布门）。
+- [docs/adr/index.md](docs/adr/index.md)：架构决策记录（打包、存储策略、入口文件不入库、TypeScript 源码、发布门）。
 - [GLOSSARY.md](GLOSSARY.md)：四个脚本与构建/发布机制的领域术语表。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
 - [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。

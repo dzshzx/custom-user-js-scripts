@@ -1,7 +1,7 @@
 # Browser Userscript Workspace
 
 This repository contains standalone browser userscripts and small local tools
-that support them. This glossary is the shared language for all four
+that support them. This glossary is the shared language for all three
 installable scripts and for the build/release machinery. Product boundaries
 live in `PRODUCT.md`, UI rules in `DESIGN.md`, per-script behaviour in
 `docs/scripts/`, and decisions with their rationale in `docs/adr/`.
@@ -85,44 +85,6 @@ The resident companion control at the page corner: with an active refresh rule
 it shows the countdown and pause/resume/delete, otherwise a dimmed idle dot that
 opens the settings dialog.
 _Avoid_: toolbar
-
-### Codex Quota Compass
-
-**Limit Window**:
-One Codex rate-limit window, identified by its duration, shown in the panel as
-限制窗口 with its usage and reset time.
-_Avoid_: quota bucket, plan tier, quota window
-
-**Reset Credit**:
-A credit the service grants for resetting a limit window early; the panel lists
-the ones currently available.
-_Avoid_: coupon, refund, voucher
-
-**Quota Snapshot**:
-A durable record captured from one successful Codex Quota Compass run. It stores the sanitized quota state and usage aggregates needed for later review, export, import, and sync.
-_Avoid_: run result, report cache, monthly report
-
-**Snapshot Archive**:
-The long-lived local collection of quota snapshots stored by the userscript. It is the user's personal history for period review and data exchange.
-_Avoid_: database, cloud ledger, backup folder
-
-**Cost Ledger**:
-The per-UTC-day settled cost rollup derived from snapshots: one immutable record (credits and converted USD) per closed UTC day, behind the Statistics tab's day / week / month / all-time views.
-_Avoid_: usage cache, daily table, running total, cloud ledger
-
-**Snapshot Export**:
-A versioned JSON document of the snapshot archive for backup, transfer, or manual multi-device sync. Reading one back merges it, deduplicated by Snapshot ID with an added / skipped / invalid report, never a blind overwrite.
-_Avoid_: dump, raw payload, script backup, restore overwrite
-
-**Gist Sync**:
-Sync through a secret gist in the user's own GitHub account: the userscript
-finds or creates it, imports the remote snapshot export, and writes the merged
-archive back. Manual export/import is the fallback path.
-_Avoid_: author-hosted server, WebDAV script sync, public shared database, userscript-manager sync
-
-**Snapshot ID**:
-The stable identifier attached to one quota snapshot and used as the primary deduplication key during import or sync.
-_Avoid_: timestamp key, period key, row hash
 
 ### JavDB Recommend Archive
 
