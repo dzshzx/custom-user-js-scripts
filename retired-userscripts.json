@@ -1,3 +1,9 @@
 {
-  "retired": []
+  "retired": [
+    {
+      "namespace": "https://github.com/dzshzx/custom-user-js-scripts",
+      "name": "Codex Quota Compass",
+      "lastVersion": "0.5.31"
+    }
+  ]
 }

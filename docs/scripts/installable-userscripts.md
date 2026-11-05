@@ -34,14 +34,6 @@
 - 更早：`src/web-page-assistant.user.js` → `src/userscripts/web-page-assistant/web-page-assistant.user.js`。
 - 当前：多文件 `@require` 入口 → `dist/web-page-assistant.user.js` 单文件。
 
-## Codex Quota Compass（已停止维护）
-
-安装入口：
-
-- [../../dist/codex-quota-compass.user.js](../../dist/codex-quota-compass.user.js)
-
-最后一版 0.5.31 只在 `https://chatgpt.com/*` 页面上显示一条可关闭的提示：「Codex Quota Compass 已停止维护，请在脚本管理器里卸载」，不再读取用量、保存快照或同步。下一次发布将删除入口与 dist，并登记进 `retired-userscripts.json`。
-
 ## Feishu Preview Image Export
 
 安装入口：
