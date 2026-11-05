@@ -168,8 +168,16 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
   with the refreshed versions on `origin/master`, includes unchanged scripts,
   and labels each transition without editing metadata. Any forward transition
   passes. An unknown or duplicate override, a new script without a published
-  baseline, a missing script, invalid metadata, a downgrade, an orphan dist
-  installable, or mismatched entry/dist versions stops the release.
+  baseline, a missing script, an empty target set, invalid metadata, a
+  downgrade, an orphan dist installable, or mismatched entry/dist versions
+  stops the release.
+- Retiring a script takes two releases. First publish a final patch whose
+  dist only tells installed users the script is no longer maintained. Then
+  delete the entry and dist together and add `{namespace, name, lastVersion}`
+  to `retired-userscripts.json`, where `lastVersion` is that published final
+  version; version-plan reports it as `removed`. A script missing without a
+  matching entry, a listed script that is still present, or a listed
+  `lastVersion` that differs from the baseline stops the release.
 - A releasing version bump belongs on the task branch before it is pushed as a
   `candidate/**` branch (manual pushes; the steps are in README.md "开发与验证").
   CI runs on the candidate, and once its `ci-ok` is green `master` is

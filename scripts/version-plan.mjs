@@ -10,6 +10,9 @@ import { readUserscriptInventory } from './lib/userscript-inventory.mjs';
 import { worktreeSource, refSource } from './lib/userscript-sources.mjs';
 
 const DEFAULT_BASE_REF = 'origin/master';
+// Install identities retired on purpose, read from the target. Only a listed
+// script may disappear, and only after its final version is the baseline.
+const RETIRED_LIST = 'retired-userscripts.json';
 
 function usage() {
   return `Usage:
@@ -20,8 +23,11 @@ function usage() {
 
 Without --target-ref, plan reads the current worktree. check requires a Git
 target ref. The default authoritative baseline is origin/master. Any forward
-version transition passes; unknown baselines, missing targets, invalid
-metadata, and downgrades of an immutable published version stop the release.`;
+version transition passes. A script listed in retired-userscripts.json whose
+entry and dist are both gone is a removed transition, provided the baseline is
+its listed lastVersion; unknown baselines, unlisted missing targets, an empty
+target set, invalid metadata, and downgrades of an immutable published version
+stop the release.`;
 }
 
 function fail(message) {
@@ -86,6 +92,37 @@ async function readVersions(source, label) {
   return { versions, issues };
 }
 
+// Missing list = nothing retired; anything present must be well-formed.
+async function readRetired(source, label, issues) {
+  let text;
+  try {
+    text = await source.readText(RETIRED_LIST);
+  } catch {
+    return new Map();
+  }
+  const retired = new Map();
+  let entries;
+  try {
+    entries = JSON.parse(text).retired;
+  } catch (error) {
+    issues.push(`${label} ${RETIRED_LIST} is not valid JSON: ${error.message}`);
+    return retired;
+  }
+  if (!Array.isArray(entries)) {
+    issues.push(`${label} ${RETIRED_LIST} must hold a "retired" array`);
+    return retired;
+  }
+  for (const entry of entries) {
+    const fields = [entry?.namespace, entry?.name, entry?.lastVersion];
+    if (!fields.every((value) => typeof value === 'string' && value !== '')) {
+      issues.push(`${label} ${RETIRED_LIST} entries need namespace, name and lastVersion strings`);
+      continue;
+    }
+    retired.set(`${entry.namespace} :: ${entry.name}`, entry.lastVersion);
+  }
+  return retired;
+}
+
 async function buildVersionPlan({
   root = process.cwd(),
   baseRef = DEFAULT_BASE_REF,
@@ -93,11 +130,10 @@ async function buildVersionPlan({
   targetOverrides = new Map(),
 } = {}) {
   const baselineState = await readVersions(refSource(root, baseRef), baseRef);
-  const targetState = await readVersions(
-    targetRef ? refSource(root, targetRef) : await worktreeSource(root),
-    targetRef || 'worktree',
-  );
+  const targetSource = targetRef ? refSource(root, targetRef) : await worktreeSource(root);
+  const targetState = await readVersions(targetSource, targetRef || 'worktree');
   const issues = [...baselineState.issues, ...targetState.issues];
+  const retired = await readRetired(targetSource, targetRef || 'worktree', issues);
   for (const [namespace, version] of targetOverrides) {
     const existing = targetState.versions.get(namespace);
     if (!existing) {
@@ -111,17 +147,25 @@ async function buildVersionPlan({
   for (const namespace of [...identities].sort()) {
     const baseline = baselineState.versions.get(namespace)?.version;
     const target = targetState.versions.get(namespace)?.version;
+    if (target !== undefined && retired.has(namespace)) {
+      issues.push(`${namespace} is listed as retired but still present`);
+      continue;
+    }
     if (baseline === undefined) {
       issues.push(`${namespace} has no published baseline in ${baseRef}`);
       continue;
     }
     if (target === undefined) {
-      issues.push(`${namespace} is missing from the complete target version set`);
+      const lastVersion = retired.get(namespace);
+      if (lastVersion === undefined) issues.push(`${namespace} is missing from the complete target version set`);
+      else if (lastVersion !== baseline)
+        issues.push(`${namespace} is retired at ${lastVersion} but the published baseline is ${baseline}`);
+      else transitions.push({ baseline, namespace, target: null, kind: 'removed' });
       continue;
     }
     transitions.push({ baseline, namespace, target, kind: transitionKind(baseline, target, namespace, issues) });
   }
-  if (transitions.length === 0) issues.push('complete target version set is empty');
+  if (targetState.versions.size === 0) issues.push('complete target version set is empty');
   return { issues, transitions };
 }
 
@@ -160,7 +204,8 @@ function printResult(result, json) {
   }
   console.log('Version plan:');
   for (const transition of result.transitions) {
-    console.log(`  ${transition.namespace}: ${transition.baseline} -> ${transition.target} (${transition.kind})`);
+    const target = transition.kind === 'removed' ? '(removed)' : `${transition.target} (${transition.kind})`;
+    console.log(`  ${transition.namespace}: ${transition.baseline} -> ${target}`);
   }
   for (const issue of result.issues) console.error(`version-plan: ${issue}`);
 }

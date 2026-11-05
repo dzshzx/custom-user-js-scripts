@@ -50,6 +50,44 @@ function runPlan(root, ...args) {
   });
 }
 
+const fixtureNamespace = 'https://example.test/userscripts';
+
+async function retire(root, entries) {
+  await writeFile(path.join(root, 'retired-userscripts.json'), JSON.stringify({ retired: entries }, null, 2) + '\n');
+}
+
+// Baseline with two published single-file scripts: Fixture 1.2.3 and Kept 0.0.1.
+async function twoScriptRepository() {
+  const fixture = await fixtureRepository();
+  const keptDir = path.join(fixture.root, 'src/userscripts/kept');
+  await mkdir(keptDir, { recursive: true });
+  await writeFile(path.join(keptDir, 'kept.user.js'), metadata('0.0.1', 'Kept'));
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-m', 'publish a second script');
+  git(fixture.root, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
+  return fixture;
+}
+
+// Baseline with Kept (single file) and Fixture as an entry + dist bundle at 1.2.3.
+async function bundledRepository() {
+  const fixture = await twoScriptRepository();
+  const entry = path.join(fixture.root, 'src/userscripts/fixture/fixture.entry.ts');
+  const dist = path.join(fixture.root, 'dist/fixture.user.js');
+  await mkdir(path.dirname(dist), { recursive: true });
+  await rm(fixture.script);
+  await writeFile(entry, metadata('1.2.3'));
+  await writeFile(dist, metadata('1.2.3'));
+  git(fixture.root, 'add', '-A');
+  git(fixture.root, 'commit', '-m', 'publish bundled shape');
+  git(fixture.root, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
+  return { ...fixture, entry, dist };
+}
+
+function commitAll(root, message) {
+  git(root, 'add', '-A');
+  git(root, 'commit', '-m', message);
+}
+
 async function commitVersion(fixture, version, ...messageArgs) {
   await writeFile(fixture.script, metadata(version));
   git(fixture.root, 'add', '.');
@@ -139,7 +177,7 @@ test('a legacy Version-Approval trailer is ignored', async () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('first release, removal, and downgrade are rejected', async () => {
+test('first release, unregistered removal, and downgrade are rejected', async () => {
   const firstRelease = await fixtureRepository();
   const newDir = path.join(firstRelease.root, 'src/userscripts/new-script');
   await mkdir(newDir, { recursive: true });
@@ -163,6 +201,87 @@ test('first release, removal, and downgrade are rejected', async () => {
   const downgradeResult = runPlan(downgrade.root, 'check', '--target-ref', 'HEAD');
   assert.equal(downgradeResult.status, 1);
   assert.match(downgradeResult.stderr, /older than immutable published baseline/);
+});
+
+test('removing every script is rejected even when each one is registered', async () => {
+  const fixture = await twoScriptRepository();
+  await rm(path.join(fixture.root, 'src'), { recursive: true });
+  await retire(fixture.root, [
+    { namespace: fixtureNamespace, name: 'Fixture', lastVersion: '1.2.3' },
+    { namespace: fixtureNamespace, name: 'Kept', lastVersion: '0.0.1' },
+  ]);
+  commitAll(fixture.root, 'remove everything');
+  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /complete target version set is empty/);
+});
+
+test('removing an unregistered script is rejected', async () => {
+  const fixture = await twoScriptRepository();
+  await rm(fixture.script);
+  await retire(fixture.root, [{ namespace: fixtureNamespace, name: 'Kept', lastVersion: '0.0.1' }]);
+  commitAll(fixture.root, 'remove without registering');
+  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Fixture is missing from the complete target version set/);
+});
+
+test('removing a registered script at its published final version is a removed transition', async () => {
+  const fixture = await bundledRepository();
+  await rm(fixture.entry);
+  await rm(fixture.dist);
+  await retire(fixture.root, [{ namespace: fixtureNamespace, name: 'Fixture', lastVersion: '1.2.3' }]);
+  commitAll(fixture.root, 'retire the bundled script');
+  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /:: Fixture: 1\.2\.3 -> \(removed\)/);
+  assert.match(result.stdout, /:: Kept: 0\.0\.1 -> 0\.0\.1 \(unchanged\)/);
+});
+
+test('a registered removal must remove the published final version', async () => {
+  const fixture = await twoScriptRepository();
+  await rm(fixture.script);
+  await retire(fixture.root, [{ namespace: fixtureNamespace, name: 'Fixture', lastVersion: '1.2.4' }]);
+  commitAll(fixture.root, 'remove before publishing the final version');
+  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Fixture is retired at 1\.2\.4 but the published baseline is 1\.2\.3/);
+});
+
+test('a registered script that is still present is rejected', async () => {
+  const fixture = await twoScriptRepository();
+  await retire(fixture.root, [{ namespace: fixtureNamespace, name: 'Fixture', lastVersion: '1.2.3' }]);
+  commitAll(fixture.root, 'register without removing');
+  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Fixture is listed as retired but still present/);
+});
+
+test('half-removed registered scripts are rejected by check', async () => {
+  const entryOnly = await bundledRepository();
+  await rm(entryOnly.dist);
+  await retire(entryOnly.root, [{ namespace: fixtureNamespace, name: 'Fixture', lastVersion: '1.2.3' }]);
+  commitAll(entryOnly.root, 'remove dist, keep entry');
+  const entryResult = runPlan(entryOnly.root, 'check', '--target-ref', 'HEAD');
+  assert.equal(entryResult.status, 1);
+  assert.match(entryResult.stderr, /missing dist bundle dist\/fixture\.user\.js/);
+
+  const distOnly = await bundledRepository();
+  await rm(distOnly.entry);
+  await retire(distOnly.root, [{ namespace: fixtureNamespace, name: 'Fixture', lastVersion: '1.2.3' }]);
+  commitAll(distOnly.root, 'remove entry, keep dist');
+  const distResult = runPlan(distOnly.root, 'check', '--target-ref', 'HEAD');
+  assert.equal(distResult.status, 1);
+  assert.match(distResult.stderr, /orphan installable without a source entry owner/);
+});
+
+test('a malformed retired list stops the plan', async () => {
+  const fixture = await twoScriptRepository();
+  await writeFile(path.join(fixture.root, 'retired-userscripts.json'), '{"retired": [{"name": "Fixture"}]}\n');
+  commitAll(fixture.root, 'bad list');
+  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /retired-userscripts\.json/);
 });
 
 test('a bundled entry requires matching dist metadata', async () => {
