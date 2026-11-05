@@ -86,7 +86,7 @@ npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类�
 原生 JSON 报告、准备时间和人工验收边界见 [测试说明](docs/testing.md)。
 
 提交前运行 `scripts/format.sh`：prettier（版本锁在 `package.json` devDependencies）重排
-JS/TS、Markdown、YAML 与 JSON，shfmt（脚本内固定版本与 sha256）重排 Shell；
+JS/TS、Markdown、YAML 与 JSON；
 `scripts/format.sh --check` 只检查，`npm run verify` 的检查阶段会运行它，格式不一致即失败。`dist/`、
 `package-lock.json` 是生成物或锁文件，不参与重排。
 纯格式重排提交登记在 `.git-blame-ignore-revs`，本地可用

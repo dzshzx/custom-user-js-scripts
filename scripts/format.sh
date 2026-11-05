@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-# 统一格式化入口：Python 用 ruff format，JS/TS 与 Markdown/YAML/JSON 用 prettier，Shell 用 shfmt。
+# 统一格式化入口：JS/TS 与 Markdown/YAML/JSON 用 prettier（本仓没有 Python，Shell 只有本脚本）。
 # 用法：scripts/format.sh [--check]
 #   无参数：就地格式化本仓跟踪的文件与未被忽略的新文件；--check：只检查，不一致时列出文件并非零退出（CI 用）。
-# ruff、shfmt 版本在下方常量固定；prettier 固定在 package.json devDependencies（npm ci 安装）。
-# 各工具配置：ruff.toml、.prettierrc.json/.prettierignore、.editorconfig（shfmt）。
+# prettier 固定在 package.json devDependencies（npm ci 安装）；配置：.prettierrc.json/.prettierignore、.editorconfig。
 set -euo pipefail
 
-RUFF_VERSION=0.17.3
-SHFMT_VERSION=3.14.1
-# shfmt 经 PyPI 包 shfmt-py 分发，该版本内置上面的 shfmt。
-SHFMT_PY_VERSION=4.2.0
-# 字节必须保持不变的文件（git pathspec），三种语言共用；与 .prettierignore 保持一致。
+# 字节必须保持不变的文件（git pathspec）；与 .prettierignore 保持一致。
 EXCLUDE=(':(exclude)package-lock.json' ':(exclude)**/node_modules/**' ':(exclude)dist/**')
 
 CHECK=0
@@ -42,49 +37,17 @@ files() {
   done
 }
 
-ruff() {
-  if command -v uvx >/dev/null 2>&1; then
-    uvx -q "ruff==$RUFF_VERSION" "$@"
-  else
-    pipx run --spec "ruff==$RUFF_VERSION" ruff "$@"
-  fi
-}
-
 prettier() {
   [ -x node_modules/.bin/prettier ] || npm_config_loglevel=warn npm ci >&2
   node_modules/.bin/prettier "$@"
 }
 
-shfmt() {
-  # 本机已装同版本（Homebrew 输出 3.x.y，官方二进制输出 v3.x.y）则直接用；否则与 ruff 同样经 uvx/pipx 取 shfmt-py。
-  local have
-  have=$(command shfmt --version 2>/dev/null || true)
-  if [ -n "$have" ] && [ "${have#v}" = "$SHFMT_VERSION" ]; then
-    command shfmt "$@"
-  elif command -v uvx >/dev/null 2>&1; then
-    uvx -q --from "shfmt-py==$SHFMT_PY_VERSION" shfmt "$@"
-  else
-    pipx run --spec "shfmt-py==$SHFMT_PY_VERSION" shfmt "$@"
-  fi
-}
-
-mapfile -d '' PY < <(files '*.py' '*.pyi')
-# 进程替换的退出码不会自动传出：每个 < <(...) 之后 wait "$!" 取回，git ls-files 失败时随 set -e 退出。
-wait "$!"
+# 进程替换的退出码不会自动传出：< <(...) 之后 wait "$!" 取回，git ls-files 失败时随 set -e 退出。
 mapfile -d '' PRETTIER < <(files '*.js' '*.mjs' '*.cjs' '*.jsx' '*.ts' '*.mts' '*.cts' '*.tsx' \
   '*.md' '*.yml' '*.yaml' '*.json')
 wait "$!"
-mapfile -d '' SH < <(files '*.sh' '*.bash')
-wait "$!"
 
 FAIL=0
-if [ ${#PY[@]} -gt 0 ]; then
-  if [ "$CHECK" -eq 1 ]; then
-    ruff format --check --output-format concise -- "${PY[@]}" || FAIL=1
-  else
-    ruff format -- "${PY[@]}"
-  fi
-fi
 if [ ${#PRETTIER[@]} -gt 0 ]; then
   if [ "$CHECK" -eq 1 ]; then
     prettier --check -- "${PRETTIER[@]}" || FAIL=1
@@ -92,20 +55,6 @@ if [ ${#PRETTIER[@]} -gt 0 ]; then
     prettier --write --log-level warn -- "${PRETTIER[@]}"
   fi
 fi
-if [ ${#SH[@]} -gt 0 ]; then
-  if [ "$CHECK" -eq 1 ]; then
-    # -l 在有不一致文件或解析失败时都非零退出，两种都算失败。
-    rc=0
-    bad=$(shfmt -l -- "${SH[@]}") || rc=$?
-    if [ -n "$bad" ] || [ "$rc" -ne 0 ]; then
-      printf 'shfmt: 需要重排：\n%s\n' "$bad"
-      FAIL=1
-    fi
-  else
-    shfmt -w -- "${SH[@]}"
-  fi
-fi
-
 if [ "$CHECK" -eq 1 ]; then
   if [ "$FAIL" -eq 0 ]; then
     echo "format: ok"
