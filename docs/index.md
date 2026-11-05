@@ -17,7 +17,6 @@
 ## Script Docs
 
 - [Installable userscripts](scripts/installable-userscripts.md)
-- [Feishu tools and userscript](scripts/feishu-tools.md)
 
 ## Project Conventions
 

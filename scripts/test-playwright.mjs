@@ -1,4 +1,4 @@
-// Test-only dependency boundary: never use the daily browser-tools cache fallback.
+// Test-only dependency boundary: load only the Playwright pinned in package.json, never a cached copy.
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 

@@ -1,6 +1,6 @@
 # Custom User JS Scripts
 
-这个仓库存放可直接安装到 Tampermonkey、Violentmonkey、Greasemonkey 等脚本管理器的浏览器 userscript，也包含少量本地辅助工具。
+这个仓库存放可直接安装到 Tampermonkey、Violentmonkey、Greasemonkey 等脚本管理器的浏览器 userscript，以及构建、检查与发布用的仓库脚本。
 
 ## 可安装脚本
 
@@ -40,13 +40,6 @@
 
 Feishu Preview Image Export 运行在飞书文件预览页，用 userscript 菜单命令从当前页面找最大的可见图片并下载。它适合处理飞书文件页里“预览图可见但原图入口不好找”的场景。
 
-本仓库还提供两个本地浏览器工具：
-
-- `scripts/browser-tools/login-qr.mjs`：默认适配小米飞书，也可配置其他网站；导出登录二维码并保存浏览器登录态。
-- `scripts/browser-tools/export-image.mjs`：使用已有登录态打开飞书文件页并导出当前最大可见图片。
-
-使用说明见 [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)。
-
 ## JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数
 
 安装入口为 `dist/javdb-recommend.user.js`。源码由 Entry、数据、请求、Period Section、Site Chrome 及展示 Lib Module 组成。
@@ -69,15 +62,14 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 .
 ├── dist/                 # 打包产物：多模块脚本的单文件安装入口（构建生成并提交）
 ├── docs/                 # 脚本说明、运行手册和项目约定
-├── scripts/              # 本地辅助脚本与构建脚本
+├── scripts/              # 构建、检查与发布脚本
 ├── src/userscripts/      # userscript 源码（ESM entry + lib 模块，或单文件脚本）
 └── test/                 # Node 测试
 ```
 
 ## 开发与验证
 
-日常开发与 CI 使用 `.node-version` 指定的 Node.js 24 LTS。最低兼容版本为 Node.js 22.18
-（`scripts/browser-tools/export-image.mjs` 直接导入 `src/` 下的 `.ts` 模块，依赖 Node 默认开启的类型擦除）。
+日常开发与 CI 使用 `.node-version` 指定的 Node.js 24 LTS。最低兼容版本为 Node.js 22.18。
 
 ```bash
 npm ci
@@ -87,9 +79,9 @@ npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类�
 
 `npm run lint` 与 `npm test` 可独立运行，会先自动构建；`npm run lint` 依次跑 metadata 检查、`tsc`（strict，只做类型检查）与 ESLint，单独类型检查用 `npm run typecheck`。
 `src/` 源码是 TypeScript：类型由 esbuild 擦除，影响产出的编译选项固定在 `scripts/lib/jsx-build-options.mjs`，`tsconfig.json` 只管类型检查，收紧类型不会改变安装产物。完整入口要求所有测试通过，
-并核对四项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
+并核对三项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
 项目在 `package.json` devDependencies 精确锁定 Playwright，测试脚本从那里读取版本；测试只加载本项目依赖和该版本的默认 Chromium，
-缺依赖或浏览器直接报错。日常 browser-tools 的兼容加载器优先使用项目依赖，其次读取本机 npm 缓存。
+缺依赖或浏览器直接报错。
 聚焦调试使用 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs`（加载器让测试直接导入 `.ts`/`.tsx` 源码）；它不代表完整验收。
 原生 JSON 报告、准备时间和人工验收边界见 [测试说明](docs/testing.md)。
 
@@ -140,6 +132,5 @@ CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 
 - [docs/adr/index.md](docs/adr/index.md)：架构决策记录（打包、存储策略、Gist 同步、入口文件不入库、TypeScript 源码、发布门）。
 - [GLOSSARY.md](GLOSSARY.md)：四个脚本与构建/发布机制的领域术语表。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
-- [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：二维码登录态捕获、飞书工具和飞书主图 userscript 说明。
 - [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。
 - [GLOSSARY.md](GLOSSARY.md)：稳定领域词汇表。

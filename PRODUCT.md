@@ -55,9 +55,6 @@ visible but the original image entry is awkward to access. Feedback (progress,
 exported filename, or a concrete failure reason) is shown as in-page toasts on a
 script-owned root rather than browser alerts.
 
-Local browser helpers support QR login-state capture and scripted Feishu image
-export, but the installable userscript remains browser-side.
-
 ### JavDB Recommend Archive
 
 Runs on `https://javdb.com/*` and the three mirror hosts listed in its

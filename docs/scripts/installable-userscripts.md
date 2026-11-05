@@ -50,7 +50,7 @@
 - `GM_download` 120 秒内既不成功也不报错时按超时报失败，toast 转为失败提示。
 - 下载文件名默认取当前飞书文档标题，去掉零宽字符等 Unicode 格式类字符（`\p{Cf}`，飞书标题水印会带上），清理后为空时用 `feishu-image`。
 - 用户反馈经页面内 toast 展示导出进度、成功文件名和中文失败原因。
-- 图片选择与读取由 `readPreviewImage` 持有；userscript 使用固定 `userscript-v1` profile，本地 Playwright 导出工具使用 `cli-v1` profile。两者共享实现，各 profile 定义 currentSrc/src、面积边界、fetch 凭据、MIME 与编码方式。
+- 图片选择与读取由 `readPreviewImage` 持有；userscript 使用固定 `userscript-v1` profile；`cli-v1` profile 原供已删除的本地 Playwright 导出工具，现在只有测试调用。两者共享实现，各 profile 定义 currentSrc/src、面积边界、fetch 凭据、MIME 与编码方式。
 
 迁移说明：
 

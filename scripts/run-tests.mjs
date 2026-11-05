@@ -15,10 +15,6 @@ const requiredTests = [
     'javdb-recommend-browser-acceptance.test.mjs',
     'real Chromium validates native CSS, fallback, mobile layout, and observable JAV老司机 compatibility',
   ],
-  [
-    'browser-tools-login-qr-playwright.test.mjs',
-    'real Playwright fixture observes one document and commits private state',
-  ],
   ['feishu-preview-image-extraction.test.mjs', 'real Playwright page.evaluate matches the direct result'],
 ];
 
