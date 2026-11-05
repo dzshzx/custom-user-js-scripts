@@ -8,10 +8,6 @@ import { loadTestPlaywright, projectPlaywrightVersion } from './test-playwright.
 // These existing names and owning files are stable acceptance identifiers.
 const requiredTests = [
   [
-    'codex-quota-compass-browser-acceptance.test.mjs',
-    'real Chromium preserves the bundle sync draft and cancels file work on disposal',
-  ],
-  [
     'web-page-assistant-browser-acceptance.test.mjs',
     'real Chromium runs the bundle without inert or stale-save lifecycle leaks',
   ],

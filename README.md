@@ -7,7 +7,7 @@
 | 脚本                                                | 适用页面                      | 用途                                                                                                                 | 安装入口                                                                        |
 | --------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | Web Page Assistant / 网页助手                       | `*://*/*`                     | 管理网页自动刷新，并可按需解除复制、选择、右键菜单、拖拽和离开确认限制。                                             | [dist/web-page-assistant.user.js](dist/web-page-assistant.user.js)              |
-| Codex Quota Compass                                 | `https://chatgpt.com/*`       | 查看 Codex 用量、保存本地快照、远程同步、导出 / 导入用量归档。                                                       | [dist/codex-quota-compass.user.js](dist/codex-quota-compass.user.js)            |
+| Codex Quota Compass                                 | `https://chatgpt.com/*`       | 已停止维护：安装后只在页面上提示卸载，请在脚本管理器里卸载。                                                         | [dist/codex-quota-compass.user.js](dist/codex-quota-compass.user.js)            |
 | JavDB Recommend Archive / JavDB 佳片推荐 · 历史期数 | `https://javdb.com/*` 等      | 在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索与全期关键词搜索。 | [javdb-recommend.user.js](dist/javdb-recommend.user.js)                         |
 | Feishu Preview Image Export                         | `https://mi.feishu.cn/file/*` | 从飞书文件预览页导出当前最大可见图片。                                                                               | [feishu-preview-image-export.user.js](dist/feishu-preview-image-export.user.js) |
 
@@ -37,25 +37,9 @@
 - “限制解除”只影响浏览器页面事件，不绕过登录、权限、付费墙或服务端限制。
 - 安装入口是 `dist/` 下打包好的单文件；`src/` 目录下的 `*.entry.ts` 与 `*.lib.ts(x)` 是 TypeScript 模块源码，不能直接安装。
 
-## Codex Quota Compass
+## Codex Quota Compass（已停止维护）
 
-Codex Quota Compass 运行在 `chatgpt.com`，通过悬浮按钮或 userscript 菜单命令读取当前 Codex 用量并保存历史。
-
-它会把每次成功运行的结果保存为一条 `Quota Snapshot`，并维护本地 `Snapshot Archive`。面板还会展示按模型汇总、可用重置券，以及由 `Cost Ledger` 派生的日 / 周 / 月 / 全量已结算消耗视图。脚本管理器的 WebDAV 同步只能保证脚本代码和管理器设置同步，不作为 Codex 用量历史的可靠跨设备通道。
-
-跨设备自动同步走 GitHub Gist：用户配置自己的 GitHub token 后，脚本会在用户自己的 GitHub 账号里查找或创建一个 secret gist，并把 `Snapshot Archive` 保存为 JSON 文件。不同设备使用同一个 GitHub 账号和 token 后，会按 `Snapshot ID` 合并归档。你也可以从面板导出完整归档，或通过 userscript 菜单导出 / 导入 JSON，作为手动备份或迁移路径。
-
-注意事项：
-
-- 归档里保存的是经过整理的用量信息，不保存 Cookie、Token 或原始私有接口响应。
-- 导入是 merge 语义，会跳过重复快照，不会覆盖整个本地归档。
-- GitHub token 保存在脚本管理器存储中，不写入仓库；建议使用 fine-grained token，并只授予 Gists read/write 权限。
-- Gist 使用 `public: false` 创建，是 unlisted secret gist，不应保存 Cookie、Token 或其他真正敏感信息。
-- 本地归档优先保存在 GM storage，同时在当前页面的 `localStorage` 保留一份非敏感镜像；读取时会合并两端，GM storage 不可用时则直接使用该镜像。Gist 同步设置和 token 只保存在 GM storage 中，不会写入页面存储；仅有 `localStorage` 时不能启用 Gist 同步。
-
-Gist 同步设置说明见 [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)。
-
-领域词汇见 [GLOSSARY.md](GLOSSARY.md)。
+Codex Quota Compass 已停止维护。最后一版 0.5.31 去掉了全部功能，只在 `chatgpt.com` 页面上提示「Codex Quota Compass 已停止维护，请在脚本管理器里卸载」；之后它会从仓库删除，已安装的副本停在这一版。脚本管理器存储与页面 `localStorage` 里的旧归档不会被清除，卸载前如需保留请先自行处理。
 
 ## Feishu Preview Image Export
 
@@ -108,7 +92,7 @@ npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类�
 
 `npm run lint` 与 `npm test` 可独立运行，会先自动构建；`npm run lint` 依次跑 metadata 检查、`tsc`（strict，只做类型检查）与 ESLint，单独类型检查用 `npm run typecheck`。
 `src/` 源码是 TypeScript：类型由 esbuild 擦除，影响产出的编译选项固定在 `scripts/lib/jsx-build-options.mjs`，`tsconfig.json` 只管类型检查，收紧类型不会改变安装产物。完整入口要求所有测试通过，
-并核对五项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
+并核对四项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
 项目在 `package.json` devDependencies 精确锁定 Playwright，测试脚本从那里读取版本；测试只加载本项目依赖和该版本的默认 Chromium，
 缺依赖或浏览器直接报错。日常 browser-tools 的兼容加载器优先使用项目依赖，其次读取本机 npm 缓存。
 聚焦调试使用 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs`（加载器让测试直接导入 `.ts`/`.tsx` 源码）；它不代表完整验收。
@@ -161,7 +145,6 @@ CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 
 - [docs/adr/index.md](docs/adr/index.md)：架构决策记录（打包、存储策略、Gist 同步、入口文件不入库、TypeScript 源码、发布门）。
 - [GLOSSARY.md](GLOSSARY.md)：四个脚本与构建/发布机制的领域术语表。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
-- [docs/scripts/codex-quota-gist-sync.md](docs/scripts/codex-quota-gist-sync.md)：Codex Quota Compass GitHub Gist 同步说明。
 - [docs/scripts/feishu-tools.md](docs/scripts/feishu-tools.md)：二维码登录态捕获、飞书工具和飞书主图 userscript 说明。
 - [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。
 - [GLOSSARY.md](GLOSSARY.md)：稳定领域词汇表。

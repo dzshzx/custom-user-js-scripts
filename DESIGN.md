@@ -57,12 +57,8 @@ sans-serif`.
   primary actions.
 - Use a separate low-saturation danger color for destructive actions.
 - New UI color values should prefer `oklch()` when practical.
-- Codex Quota Compass bridges its `--cqc-*` variables onto the shared widget
-  kit tokens (`--wk-*` from `src/userscripts/shared/`, themed via
-  `[data-wk-theme]`); extend the kit tokens or the per-theme overrides in its
-  shell styles instead of adding new one-off colors.
 - Web Page Assistant bridges its `--part-*` variables onto the shared widget
-  kit tokens (`--wk-*`, themed via `[data-wk-theme]` resolved from
+  kit tokens (`--wk-*` from `src/userscripts/shared/`, themed via `[data-wk-theme]` resolved from
   `prefers-color-scheme`); extend the kit tokens instead of adding new one-off
   colors.
 
@@ -84,9 +80,6 @@ sans-serif`.
 
 - Responsive rules for floating panels should respond to the panel content
   width, not only the browser viewport.
-- For Codex Quota Compass data views, compact list rendering is required when
-  the panel is narrow, including desktop browsers where the viewport is wide
-  but the floating panel is about 560px wide.
 - Keep the viewport media query as a mobile fallback, but do not rely on it as
   the only narrow-layout trigger.
 - Mobile and narrow-panel layouts must avoid horizontal table dependency for
@@ -116,44 +109,6 @@ sans-serif`.
 - In-page feedback goes through `shared-toast.lib.tsx`.
 - Extend the kit when a script needs a capability it lacks; keep per-script
   styles limited to domain presentation.
-
-## Codex Quota Compass UI
-
-### Shell
-
-- The floating button is a pill that hugs its dot, title and status; it is
-  draggable and can dock near the screen edge, where it shrinks to the dot.
-- Without a saved position it starts 76px from the top and 24px from the
-  right edge of the viewport, measured without scrollbars.
-- The shell is a thin adapter over the shared widget kit
-  (`src/userscripts/shared/`); drag/dock, position persistence, Esc close, and
-  focus hand-off come from the kit.
-- The shell owns the floating button, panel header, refresh action, close
-  action, status text, and content container.
-- The content container is a CSS query container; renderer layout may use
-  container queries to adapt to actual panel width.
-- Panel open/close motion should communicate state and respect
-  `prefers-reduced-motion`.
-
-### Renderer
-
-- The renderer owns metrics, tabs, section bodies, data views, loading state,
-  error state, sync banners, archive actions, and compact rows.
-- `createQuotaPanelRenderer` is the stable external renderer interface.
-- `installStyles(document, rootId)` should remain the caller-facing style
-  installer even if styles live in deeper support modules.
-- Dynamic values rendered into HTML strings must be escaped.
-
-### Data Views
-
-- The default desktop table is acceptable only when the panel has enough width
-  for its headers and values.
-- When `data-compact="true"` and the content container is narrow, hide the
-  table and show compact rows.
-- Long columns should opt into truncation or wrapping through view-model column
-  metadata.
-- Empty states should explain absence of data without creating a large blank
-  reading area.
 
 ## Web Page Assistant UI
 

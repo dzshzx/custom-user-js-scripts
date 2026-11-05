@@ -3,20 +3,13 @@
 // @name:zh-CN   Codex 配额统计
 // @name:en      Codex Quota Compass
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.5.30
-// @description  Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
-// @description:zh-CN  在 chatgpt.com 展示 Codex 限制窗口、每日用量、模型汇总、重置券和已结算消耗统计。
-// @description:en     Show Codex limit windows, daily usage, model summaries, reset credits, and a settled cost ledger on chatgpt.com.
+// @version      0.5.31
+// @description  No longer maintained: shows a notice asking you to uninstall this script.
+// @description:zh-CN  已停止维护：只在页面上提示在脚本管理器里卸载本脚本。
+// @description:en     No longer maintained: shows a notice asking you to uninstall this script.
 // @author       BlueSkyXN, dzshzx
 // @match        https://chatgpt.com/*
-// @connect      api.github.com
-// @connect      gist.githubusercontent.com
-// @grant        GM_getValue
-// @grant        GM_setValue
-// @grant        GM_xmlhttpRequest
-// @grant        GM_addValueChangeListener
-// @grant        GM_removeValueChangeListener
-// @grant        GM_registerMenuCommand
+// @grant        none
 // @run-at       document-idle
 // @homepageURL  https://github.com/dzshzx/custom-user-js-scripts
 // @supportURL   https://github.com/dzshzx/custom-user-js-scripts/issues
@@ -25,130 +18,46 @@
 // @license      MIT
 // ==/UserScript==
 
-import { createQuotaCompassTranslator } from './codex-quota-compass-i18n.lib.ts';
-import * as CoreLib from './codex-quota-compass-core.lib.ts';
-import { createQuotaRuntime, createDefaultQuotaRuntimeConfig } from './codex-quota-compass-runtime.lib.ts';
-import { createSnapshotArchiveStoragePort } from './codex-quota-compass-storage.lib.ts';
-import { resolveGmApi } from '../shared/shared-gm.lib.ts';
-import {
-  normalizeSnapshotArchive,
-  mergeSnapshotArchives,
-  createSnapshotArchiveStore,
-} from './codex-quota-compass-archive.lib.ts';
-import { createRemoteSyncClient } from './codex-quota-compass-remote-sync.lib.ts';
-import { createQuotaApplication } from './codex-quota-compass-application.lib.ts';
-import { createQuotaPanelController, createBrowserQuotaFiles } from './codex-quota-compass-panel-controller.lib.tsx';
-import type { PanelCommand, QuotaPanelController } from './codex-quota-compass-panel-controller.lib.tsx';
-import type { QuotaMessageKey } from './codex-quota-compass-i18n.lib.ts';
-import type { QuotaSnapshotResult } from './codex-quota-compass-core.lib.ts';
+// Final release before retirement: every former feature is gone; the page only
+// shows one dismissible notice. Saved data in GM storage and localStorage is
+// left untouched for the user to export or clear.
 
-declare global {
-  interface Window {
-    __codexQuotaCompassDebug?: boolean;
-    __codexQuotaCompassLastResult?: QuotaSnapshotResult;
-    __codexQuotaCompassRunning?: boolean;
-  }
+export const RETIRED_NOTICE_ID = 'codex-quota-compass-retired-notice';
+export const RETIRED_MESSAGE = 'Codex Quota Compass 已停止维护，请在脚本管理器里卸载。';
+
+export function showRetiredNotice(doc: Document): HTMLElement {
+  const existing = doc.getElementById(RETIRED_NOTICE_ID);
+  if (existing) return existing;
+  const notice = doc.createElement('div');
+  notice.id = RETIRED_NOTICE_ID;
+  notice.setAttribute('role', 'status');
+  notice.style.cssText = [
+    'position:fixed',
+    'right:16px',
+    'bottom:16px',
+    'z-index:2147483647',
+    'max-width:320px',
+    'display:flex',
+    'gap:12px',
+    'align-items:flex-start',
+    'padding:12px 14px',
+    'border-radius:8px',
+    'background:oklch(0.98 0.01 250)',
+    'color:oklch(0.25 0.02 250)',
+    'box-shadow:0 4px 16px oklch(0 0 0 / 0.18)',
+    'font:14px/1.5 system-ui,sans-serif',
+  ].join(';');
+  const text = doc.createElement('span');
+  text.textContent = RETIRED_MESSAGE;
+  const close = doc.createElement('button');
+  close.type = 'button';
+  close.textContent = '关闭';
+  close.setAttribute('aria-label', '关闭提示');
+  close.style.cssText = 'flex:none;border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:0';
+  close.addEventListener('click', () => notice.remove());
+  notice.append(text, close);
+  (doc.body || doc.documentElement).append(notice);
+  return notice;
 }
 
-(function () {
-  'use strict';
-
-  const SCRIPT_NAME = 'Codex Quota Compass';
-  const DEBUG_KEY = '__codexQuotaCompassDebug';
-  const LAST_RESULT_KEY = '__codexQuotaCompassLastResult';
-  const RUNNING_KEY = '__codexQuotaCompassRunning';
-  const SCRIPT_VERSION = '0.5.30';
-  const { t } = createQuotaCompassTranslator({ navigator: globalThis.navigator });
-  const archiveStoragePort = createSnapshotArchiveStoragePort({
-    scriptName: SCRIPT_NAME,
-    normalizeArchive: normalizeSnapshotArchive,
-    mergeArchives: mergeSnapshotArchives,
-  });
-  const archiveStore = createSnapshotArchiveStore({
-    read: archiveStoragePort.read,
-    write: archiveStoragePort.write,
-    scriptVersion: SCRIPT_VERSION,
-  });
-  const remoteSyncClient = createRemoteSyncClient({ archiveStore });
-  let panel: QuotaPanelController | undefined;
-  const application = createQuotaApplication({
-    runtime: {
-      run: () =>
-        createQuotaRuntime({
-          config: createDefaultQuotaRuntimeConfig({ DEBUG: window[DEBUG_KEY] === true }),
-          coreLib: CoreLib,
-        }).run(),
-    },
-    archiveStore,
-    remoteSync: remoteSyncClient,
-    archiveChanges: archiveStoragePort,
-    runGuard: {
-      acquire() {
-        if (window[RUNNING_KEY]) return false;
-        window[RUNNING_KEY] = true;
-        return true;
-      },
-      release() {
-        window[RUNNING_KEY] = false;
-      },
-    },
-    onChange: (snapshot) => panel?.update(snapshot),
-  });
-  panel = createQuotaPanelController({
-    application,
-    document,
-    window,
-    storage: localStorage,
-    t,
-    files: createBrowserQuotaFiles({ document, window, t }),
-    onRefreshSettled(outcome) {
-      if (outcome.status === 'error' || outcome.status === 'skipped') {
-        console.error(`[${SCRIPT_NAME}] Failed.`, outcome.error || outcome.reason);
-      } else if (window[DEBUG_KEY] === true) {
-        window[LAST_RESULT_KEY] = outcome.result;
-        console.log(
-          `[${SCRIPT_NAME}] Finished. Latest result is available at window.${LAST_RESULT_KEY}.`,
-          outcome.result,
-        );
-      } else {
-        console.info(`[${SCRIPT_NAME}] Finished.`);
-      }
-    },
-  });
-  panel.update(application.getState());
-
-  const { registerMenuCommand } = resolveGmApi();
-  if (registerMenuCommand) {
-    const menu: [QuotaMessageKey, PanelCommand][] = [
-      ['menuRun', { type: 'refresh', open: true }],
-      ['menuRemoteConfigure', { type: 'open', view: 'archive' }],
-      ['menuRemoteSync', { type: 'sync' }],
-      ['menuExport', { type: 'export-archive' }],
-      ['menuImport', { type: 'import-archive' }],
-    ];
-    for (const [labelKey, command] of menu) {
-      registerMenuCommand(t(labelKey), () => {
-        void panel.dispatch(command);
-      });
-    }
-  }
-  void application.start();
-  window.addEventListener('pagehide', (event) => {
-    if (!event.persisted) {
-      panel.dispose();
-      application.dispose();
-    }
-  });
-
-  if (
-    location.hostname === 'chatgpt.com' &&
-    location.pathname === '/codex/cloud/settings/analytics' &&
-    location.hash === '#usage'
-  ) {
-    console.info(`[${SCRIPT_NAME}] Ready. Click the floating button to calculate usage.`);
-  } else {
-    console.info(
-      `[${SCRIPT_NAME}] Open https://chatgpt.com/codex/cloud/settings/analytics#usage or use the floating button / Tampermonkey menu to run.`,
-    );
-  }
-})();
+showRetiredNotice(document);

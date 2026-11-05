@@ -34,34 +34,13 @@
 - 更早：`src/web-page-assistant.user.js` → `src/userscripts/web-page-assistant/web-page-assistant.user.js`。
 - 当前：多文件 `@require` 入口 → `dist/web-page-assistant.user.js` 单文件。
 
-## Codex Quota Compass
+## Codex Quota Compass（已停止维护）
 
 安装入口：
 
 - [../../dist/codex-quota-compass.user.js](../../dist/codex-quota-compass.user.js)
 
-用途：
-
-- 在 `https://chatgpt.com/*` 页面运行，通过悬浮按钮或菜单命令计算当前 Codex 用量。
-- 每次成功运行后保存一条本地 `Quota Snapshot`。
-- 面板里显示 `Snapshot Archive` 概况和最近快照。
-- 展示近 30 天按模型汇总（Credits、折算 USD 与占比；Credits 由相对用量按同期每日 Credits 换算）和当前可用的重置券明细。
-- 通过 `Cost Ledger` 展示日 / 周（滚动 7 天）/ 月 / 全量已结算消耗，并支持区间下钻。
-- 支持从面板导出整个归档。
-- 支持从 userscript 菜单导出 / 导入版本化 JSON 归档，用于手动同步。
-- 支持通过用户自己的 GitHub secret gist 自动合并和同步归档。
-
-说明：
-
-- 长期归档优先使用 userscript manager 存储，同时镜像到页面 `localStorage`；读取时会合并两端，GM storage 不可用时则使用该镜像。
-- Gist 同步设置和 token 只保存在 GM storage，不会镜像到页面存储；仅有 `localStorage` 时仍可保留本地归档，但不能启用 Gist 同步。
-- 导入是 `merge` 语义，不会覆盖本地已有归档。
-- 当前只支持完整 JSON 归档导出 / 导入，不支持 CSV 和按范围导出。
-
-迁移说明：
-
-- 更早：`src/codex-quota-compass.user.js` → `src/userscripts/codex-quota-compass/codex-quota-compass.user.js`。
-- 当前：多文件 `@require` 入口 → `dist/codex-quota-compass.user.js` 单文件。
+最后一版 0.5.31 只在 `https://chatgpt.com/*` 页面上显示一条可关闭的提示：「Codex Quota Compass 已停止维护，请在脚本管理器里卸载」，不再读取用量、保存快照或同步。下一次发布将删除入口与 dist，并登记进 `retired-userscripts.json`。
 
 ## Feishu Preview Image Export
 

@@ -13,9 +13,8 @@ runs the complete node:test suite. Independent lint/test commands build
 first. The complete entries accept no filters. For focused debugging use
 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs` after building (the loader lets tests import `.ts`/`.tsx` sources through the same esbuild transform options as the bundle; `npm test` sets it for every file).
 
-The five required browser tests retain their existing exact name plus owning
-file as the identifier (listed in scripts/run-tests.mjs). Quota disposal and
-sync drafts, Assistant lifecycle, JavDB compatibility, QR state capture and
+The four required browser tests retain their existing exact name plus owning
+file as the identifier (listed in scripts/run-tests.mjs). Assistant lifecycle, JavDB compatibility, QR state capture and
 Feishu page.evaluate equivalence must each emit exactly one passing result.
 Missing, duplicate, skipped, todo or failed results fail verification; any
 other suite failure, skip or todo also prevents a green complete report.
@@ -44,7 +43,7 @@ a launched browser; the report's commit identifies HEAD and the dirty flag
 explicitly marks a run over uncommitted edits.
 
 These tests do not establish userscript-manager installation, human interaction
-or live-site compatibility. Real ChatGPT/JavDB/Feishu pages, actual QR login,
+or live-site compatibility. Real JavDB/Feishu pages, actual QR login,
 third-party userscripts and manual browser acceptance remain separate pending
 checks. Daily browser-tools keep their compatibility loader; its fallback test
 copies the real module outside the checkout so the pinned project dependency

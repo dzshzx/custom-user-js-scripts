@@ -45,25 +45,6 @@ beforeunload suppression.
 Persistent settings prefer userscript manager storage and fall back to page
 `localStorage` when manager storage is unavailable.
 
-### Codex Quota Compass
-
-Runs on `https://chatgpt.com/*`.
-
-It shows Codex limit windows, daily usage, weekly estimates, model summaries,
-available rate-limit reset credits, and local history. Each
-successful run creates a sanitized `Quota Snapshot`. Settled daily costs are
-stored in the `Cost Ledger` and drive the day, rolling-week, month, and
-all-time statistics views. Snapshots are stored in a local `Snapshot Archive`,
-which can be exported and imported as versioned JSON for backup or manual
-cross-device transfer, or synchronized through a user-owned GitHub Gist.
-
-The archive stores organized quota data, not cookies, tokens, authorization
-headers, or raw private API responses.
-
-It is currently designed for a single ChatGPT account. Switching accounts in the
-same browser mixes their data into one `Snapshot Archive` and `Cost Ledger`;
-telling accounts and workspaces apart is a TODO.
-
 ### Feishu Preview Image Export
 
 Runs on `https://mi.feishu.cn/file/*`.
@@ -123,11 +104,7 @@ sizes are listed in `docs/scripts/installable-userscripts.md`).
   migration.
 - Prefer userscript manager storage for long-lived userscript data, then fall
   back to page `localStorage` when manager storage is unavailable.
-- Codex Quota Compass mirrors its sanitized `Snapshot Archive` to page
-  `localStorage` and merges that mirror back on read. Gist settings and tokens
-  remain GM-storage-only and are never mirrored to page storage.
-- Export only versioned, sanitized documents. Codex Quota Compass exports
-  `Snapshot Export` JSON, not raw private payloads.
+- Export only versioned, sanitized documents, not raw private payloads.
 - Imports use validation, deduplication, and merge semantics. They should not
   blindly overwrite a complete local archive.
 - Debug output must be opt-in and sanitized.
