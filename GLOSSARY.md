@@ -3,8 +3,8 @@
 This repository contains standalone browser userscripts and small local tools
 that support them. This glossary is the shared language for all three
 installable scripts and for the build/release machinery. Product boundaries
-live in `PRODUCT.md`, UI rules in `DESIGN.md`, per-script behaviour in
-`docs/scripts/`, and decisions with their rationale in `docs/adr/`.
+live in `PRODUCT.md`, UI rules in `DESIGN.md`, and per-script behaviour
+in `docs/scripts/`.
 
 ## Language
 

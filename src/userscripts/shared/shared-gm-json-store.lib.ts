@@ -1,5 +1,5 @@
 // One JSON value kept in userscript manager storage first, with page
-// localStorage as fallback (and optionally as a mirror), per ADR-0003. The
+// localStorage as fallback (and optionally as a mirror). The
 // store owns the "which backend answered" bookkeeping, and `update` owns the
 // read-modify-write rule that a value derived from the fallback never
 // overwrites the GM copy. It never throws on reads; a write throws only when

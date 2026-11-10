@@ -12,7 +12,6 @@
 | `GLOSSARY.md`   | 稳定领域词汇表；不要放实现计划、运行手册或任务记录。 |
 | `docs/`         | 人类可读说明、脚本 runbook、项目约定。               |
 | `docs/scripts/` | 具体脚本或本地工具的使用说明。                       |
-| `docs/adr/`     | 架构决策记录（先读 `index.md`）。                    |
 
 ## Script Docs
 
@@ -23,4 +22,3 @@
 - [Product context](../PRODUCT.md)
 - [Design context](../DESIGN.md)
 - [Script template notes](script-template.md)
-- [ADR index](adr/index.md)
