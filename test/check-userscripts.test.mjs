@@ -147,6 +147,17 @@ test('check-userscripts rejects a single-file script whose install URLs do not p
   assert.match(result.stderr + result.stdout, /must end with \/src\/plain\.user\.js/);
 });
 
+test('check-userscripts rejects a single-file script whose @downloadURL and @updateURL differ', async () => {
+  const workspace = await createWorkspace({
+    'plain.user.js': selfHosted('plain', {
+      updateURL: 'https://mirror.example.invalid/example/repo/master/src/plain.user.js',
+    }),
+  });
+  const result = runLint(workspace);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr + result.stdout, /@downloadURL and @updateURL differ/);
+});
+
 test('check-userscripts accepts a single-file script with self-pointing install URLs', async () => {
   const workspace = await createWorkspace({
     'plain.user.js': selfHosted('plain'),

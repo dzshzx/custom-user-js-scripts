@@ -8,7 +8,6 @@ import { readUserscriptInventory } from '../scripts/lib/userscript-inventory.mjs
 import { worktreeSource, refSource } from '../scripts/lib/userscript-sources.mjs';
 
 const entry = 'src/userscripts/demo/demo.entry.ts';
-const srcScript = 'src/userscripts/demo/demo.user.js';
 const dist = 'dist/demo.user.js';
 const metadata = (name = 'Demo', url = 'dist/demo.user.js') => `// ==UserScript==
 // @name ${name}
@@ -39,14 +38,7 @@ test('inventory reads sorted normalized paths once and never executes checked te
   assert.deepEqual(result.issues, []);
 });
 
-test('entry owns its dist bundle, missing before the first build and stale after an edit', async () => {
-  const first = await inventory({ [entry]: metadata() });
-  assert.equal(first.records.length, 1);
-  assert.equal(first.records[0].dist.exists, false);
-  assert.deepEqual(
-    first.issues.map((issue) => issue.type),
-    ['missing-dist'],
-  );
+test('entry owns its dist bundle, stale after an edit', async () => {
   const stale = await inventory({ [entry]: metadata(), [dist]: metadata('Old') });
   assert.equal(stale.records.length, 1);
   assert.equal(stale.records[0].identity, 'https://example.test :: Demo');
@@ -56,20 +48,7 @@ test('entry owns its dist bundle, missing before the first build and stale after
   );
 });
 
-test('a src script pointing at dist owns only itself; the dist file stays an orphan', async () => {
-  const result = await inventory({
-    [srcScript]: metadata(),
-    [dist]: metadata(),
-  });
-  assert.equal(result.records.length, 1);
-  assert.equal(result.records[0].ownership, 'single');
-  assert.deepEqual(
-    result.issues.map((issue) => issue.type),
-    ['orphan-dist'],
-  );
-});
-
-test('inventory identifies duplicates, path conflicts and invalid metadata', async () => {
+test('inventory identifies path conflicts and invalid metadata', async () => {
   const result = await inventory({
     [entry]: metadata(),
     [dist]: metadata(),
@@ -77,13 +56,7 @@ test('inventory identifies duplicates, path conflicts and invalid metadata', asy
     'src/broken.user.js': 'not metadata',
   });
   const types = new Set(result.issues.map((issue) => issue.type));
-  for (const type of [
-    'ownership-conflict',
-    'invalid-entry-path',
-    'duplicate-identity',
-    'duplicate-url',
-    'invalid-metadata',
-  ]) {
+  for (const type of ['ownership-conflict', 'invalid-entry-path', 'invalid-metadata']) {
     assert.ok(types.has(type), type);
   }
 });

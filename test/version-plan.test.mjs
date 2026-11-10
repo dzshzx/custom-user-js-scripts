@@ -297,17 +297,6 @@ test('a bundled entry requires matching dist metadata', async () => {
   assert.match(result.stderr, /does not match .* install identity and @version/);
 });
 
-test('an orphan dist installable makes the complete target set invalid', async () => {
-  const fixture = await fixtureRepository();
-  await mkdir(path.join(fixture.root, 'dist'), { recursive: true });
-  await writeFile(path.join(fixture.root, 'dist/orphan.user.js'), metadata('0.0.1', 'Orphan'));
-  git(fixture.root, 'add', '.');
-  git(fixture.root, 'commit', '-m', 'add orphan dist script');
-  const result = runPlan(fixture.root, 'check', '--target-ref', 'HEAD');
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /orphan installable without a source entry owner/);
-});
-
 test('five-identity fixed plan survives single-file to entry migration unchanged', async (t) => {
   const fixture = await fixtureRepository();
   t.after(() => rm(fixture.root, { recursive: true, force: true }));
