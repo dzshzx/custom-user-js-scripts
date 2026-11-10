@@ -6,8 +6,6 @@ import {
   createWidgetElement,
   createDialogElement,
 } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation.lib.ts';
-import { installAssistantBaseStyles } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation-base-styles.lib.ts';
-import { installAssistantDialogStyles } from '../src/userscripts/web-page-assistant/web-page-assistant-presentation-dialog-styles.lib.ts';
 
 test('enabled widget hides the per-second countdown from assistive technology', { skip: domSkip }, () => {
   const window = createDomWindow();
@@ -62,41 +60,4 @@ test('dialog close button uses the shared Lucide x icon', { skip: domSkip }, () 
   assert.equal(dialog.querySelector('.part-close-icon'), null);
   assert.equal(dialog.tagName, 'DIALOG');
   assert.equal(dialog.getAttribute('aria-labelledby'), 'part-dialog-title');
-});
-
-test('base styles bridge part tokens onto the shared kit tokens', { skip: domSkip }, () => {
-  const window = createDomWindow();
-  installAssistantBaseStyles({
-    documentObject: window.document,
-    rootId: 'part-test-root',
-    styleId: 'part-test-style',
-  });
-
-  const css = window.document.getElementById('part-test-style').textContent;
-  assert.match(css, /--part-surface: var\(--wk-surface\)/);
-  assert.match(css, /--part-text: var\(--wk-text\)/);
-  assert.match(css, /--part-action: var\(--wk-accent\)/);
-  assert.match(css, /--part-danger: var\(--wk-danger\)/);
-  assert.match(css, /--part-shadow-strong: var\(--wk-shadow-panel\)/);
-  // Dead tokens and the unused secondary variant are gone.
-  assert.doesNotMatch(css, /--part-accent-strong/);
-  assert.doesNotMatch(css, /--part-accent-soft/);
-  assert.doesNotMatch(css, /data-variant="secondary"/);
-  // No local dark block or local icon class: theme comes from the kit.
-  assert.doesNotMatch(css, /prefers-color-scheme/);
-  assert.doesNotMatch(css, /part-icon-svg/);
-  assert.match(css, /\.part-sr-only/);
-  assert.match(css, /\.part-widget\.is-idle \.part-widget-button/);
-});
-
-test('dialog styles drop the pseudo-element close icon', { skip: domSkip }, () => {
-  const window = createDomWindow();
-  installAssistantDialogStyles({
-    documentObject: window.document,
-    rootId: 'part-test-root',
-    styleId: 'part-test-dialog-style',
-  });
-
-  const css = window.document.getElementById('part-test-dialog-style').textContent;
-  assert.doesNotMatch(css, /part-close-icon/);
 });

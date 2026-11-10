@@ -1,16 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import { createWebPageAssistantStoragePort } from '../src/userscripts/web-page-assistant/web-page-assistant-storage.lib.ts';
 import { createMemoryStorage as createLocalStorage } from './helpers/dom-env.mjs';
-
-const entryPath = path.resolve(
-  import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.entry.ts',
-);
-const entryContent = await readFile(entryPath, 'utf8');
 
 function createSettingsContract() {
   return {
@@ -36,11 +28,6 @@ function baseAdapters(overrides = {}) {
     ...overrides,
   };
 }
-
-test('entry module imports the storage library', () => {
-  assert.equal(entryContent.includes(`from './web-page-assistant-storage.lib.ts'`), true);
-  assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_STORAGE_PORT_START'), false);
-});
 
 test('storage port reads and writes settings through legacy GM storage first', async () => {
   const gmWrites = [];

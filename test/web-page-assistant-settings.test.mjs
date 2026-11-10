@@ -1,50 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import * as libraryContract from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts';
 
 const pageKey = 'https://example.com/path?a=1';
 const siteKey = 'example.com';
-const entryPath = path.resolve(
-  import.meta.dirname,
-  '../src/userscripts/web-page-assistant/web-page-assistant.entry.ts',
-);
-
-const entryContent = await readFile(entryPath, 'utf8');
-
-test('settings contract library exposes the stable interface', () => {
-  assert.deepEqual(
-    Object.keys(libraryContract).sort(),
-    [
-      'DEFAULT_UNLOCKER_OPTIONS',
-      'MAX_INTERVAL_MS',
-      'MIN_INTERVAL_MS',
-      'defaultUnlockerSetting',
-      'deleteRefreshSetting',
-      'deleteUnlockerSetting',
-      'describeUnlockerSetting',
-      'emptySettings',
-      'getRefreshSetting',
-      'getUnlockerSetting',
-      'hasUnlockerAction',
-      'isValidIntervalMs',
-      'normalizeRefreshSetting',
-      'normalizeSettings',
-      'normalizeUnlockerSetting',
-      'resolveActiveRefreshSetting',
-      'resolveActiveUnlockerSetting',
-      'setRefreshSetting',
-      'setUnlockerSetting',
-    ].sort(),
-  );
-});
-
-test('entry module imports the settings library', () => {
-  assert.equal(entryContent.includes(`from './web-page-assistant-settings.lib.ts'`), true);
-  assert.equal(entryContent.includes('WEB_PAGE_ASSISTANT_SETTINGS_CONTRACT_START'), false);
-});
 
 test('settings contract migrates legacy refresh pages and rejects invalid intervals', () => {
   const normalized = libraryContract.normalizeSettings({

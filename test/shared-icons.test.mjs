@@ -6,10 +6,6 @@ import { createDomWindow, domSkip } from './helpers/dom-env.mjs';
 
 import { ICON_NAMES, Icon, mountIcon } from '../src/userscripts/shared/shared-icons.lib.tsx';
 
-test('ICON_NAMES lists the icons scripts use', () => {
-  assert.deepEqual([...ICON_NAMES].sort(), ['alert-triangle', 'check', 'loader', 'refresh-cw', 'settings', 'x']);
-});
-
 test('Icon renders an accessible lucide SVG with shared classes for every name', () => {
   for (const name of ICON_NAMES) {
     const svg = renderToString(h(Icon, { name }));

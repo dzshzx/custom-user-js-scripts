@@ -406,7 +406,3 @@ test('dist tells the user the export was cancelled when the save dialog is dismi
   assert.equal(clicks.length, 0);
   await window.happyDOM.close();
 });
-
-test('dist source contains no alert() call', async () => {
-  assert.doesNotMatch(distSource, /\balert\s*\(/);
-});

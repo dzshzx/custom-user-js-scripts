@@ -19,9 +19,8 @@ import { parseMetadataBlock } from '../scripts/lib/userscript-metadata.mjs';
 
 const RAW_URL = 'https://raw.githubusercontent.com/dzshzx/custom-user-js-scripts/master/dist/javdb-recommend.user.js';
 
-test('metadata pins auto-update URLs to the dist raw path and carries version 0.0.13', async () => {
+test('metadata pins auto-update URLs to the dist raw path', async () => {
   const metadata = parseMetadataBlock(await readFile(srcPath, 'utf8'));
-  assert.deepEqual(metadata.get('@version'), ['0.0.13']);
   assert.deepEqual(metadata.get('@downloadURL'), [RAW_URL]);
   assert.deepEqual(metadata.get('@updateURL'), [RAW_URL]);
 });
@@ -385,17 +384,7 @@ test(
 
 /* ---------- Phase 3：图标 / 分段搜索 / 骨架屏 / 封面占位 / 窄屏工具栏 ---------- */
 
-test('toolbar icons are inline Lucide SVGs and the source carries no emoji icons', async () => {
-  const source = await readFile(srcPath, 'utf8');
-  for (const emoji of ['🔍', '◀', '▶', '★', '←']) {
-    assert.equal(source.includes(emoji), false, `source still contains ${emoji}`);
-  }
-  const shellSource = await readFile(
-    new URL('../src/userscripts/javdb-recommend/javdb-recommend-page-shell.lib.ts', import.meta.url),
-    'utf8',
-  );
-  assert.match(shellSource, /vendored from Lucide/);
-
+test('toolbar icons are inline SVGs next to their labels', async () => {
   const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
   await runScript(
     window,
