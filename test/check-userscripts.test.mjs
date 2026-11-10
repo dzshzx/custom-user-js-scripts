@@ -108,6 +108,20 @@ test('check-userscripts accepts an entry with its dist bundle', async () => {
   assert.match(result.stdout, /Checked/);
 });
 
+test('check-userscripts rejects an entry whose install URLs do not point at its own dist bundle', async () => {
+  const { entry, dist } = bundled('paired');
+  const elsewhere = (content) => content.replaceAll('/dist/paired.user.js', '/dist/other.user.js');
+  const workspace = await createWorkspace(
+    { [entry.path]: elsewhere(entry.content) },
+    { 'paired.user.js': elsewhere(dist) },
+  );
+
+  const result = runLint(workspace);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /must end with \/dist\/paired\.user\.js/);
+});
+
 test('check-userscripts rejects an entry whose dist bundle is missing', async () => {
   const { entry } = bundled('lonely');
   const workspace = await createWorkspace({ [entry.path]: entry.content });
