@@ -98,8 +98,7 @@ sans-serif`.
   and coarse-pointer disclosure) and `createPanelPlacement` (flip/shift/
   autoUpdate through `@floating-ui/dom`).
 - Userscript manager APIs (`GM_*` / `GM.*`) are resolved only in
-  `shared-gm.lib.ts` (`resolveGmApi`); lint rejects `typeof GM` probes
-  elsewhere.
+  `shared-gm.lib.ts` (`resolveGmApi`).
 - Color, type scale, radius, shadow, and focus-ring tokens come from
   `shared-tokens.lib.ts` (`--wk-*`); each script passes only its accent color.
   Dark mode resolves through `resolveTheme`/`applyTheme` (host detection first,

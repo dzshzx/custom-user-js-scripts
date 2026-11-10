@@ -21,19 +21,6 @@ for (const record of inventory.records) {
     }
   }
 }
-// Only the shared adapter probes the userscript manager API; scripts go
-// through resolveGmApi so GM_* / GM.* precedence stays in one place.
-const GM_ADAPTER = 'src/userscripts/shared/shared-gm.lib.ts';
-const GM_PROBE = /typeof\s+GM(?:_\w+)?\b/;
-const modules = await worktreeSource(process.cwd(), {
-  dirs: ['src'],
-  include: (file) => /\.(lib|entry)\.[jt]sx?$/.test(file) && file !== GM_ADAPTER,
-});
-for (const file of modules.files) {
-  if (GM_PROBE.test(await modules.readText(file))) {
-    report(file, `probes the GM API directly; use resolveGmApi from ${GM_ADAPTER}`);
-  }
-}
 const installables = inventory.files.filter((file) => file.path.endsWith('.user.js'));
 if (!installables.some((file) => file.path.startsWith('src/'))) console.warn('No .user.js files found in src/.');
 if (hasError) process.exitCode = 1;

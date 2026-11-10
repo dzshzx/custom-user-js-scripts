@@ -6,9 +6,8 @@ export function isUserscriptFile(file) {
   return /\.(entry\.ts|user\.js)$/.test(file);
 }
 
-// Defaults list the userscript install surface; callers may walk other trees
-// or file kinds (e.g. every module under src/) through the same reader.
-export async function worktreeSource(root, { dirs = ['src', 'dist'], include = isUserscriptFile } = {}) {
+// Lists the userscript install surface under src/ and dist/.
+export async function worktreeSource(root) {
   async function walk(relative) {
     let entries;
     try {
@@ -20,13 +19,13 @@ export async function worktreeSource(root, { dirs = ['src', 'dist'], include = i
     const files = [];
     for (const entry of entries) {
       const file = `${relative}/${entry.name}`;
-      if (include(file)) files.push(file);
+      if (isUserscriptFile(file)) files.push(file);
       else if (entry.isDirectory()) files.push(...(await walk(file)));
     }
     return files;
   }
   return {
-    files: (await Promise.all(dirs.map(walk))).flat().sort(),
+    files: (await Promise.all(['src', 'dist'].map(walk))).flat().sort(),
     readText: (file) => readFile(path.join(root, file), 'utf8'),
   };
 }
