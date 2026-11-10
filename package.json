@@ -16,7 +16,7 @@
     "lint": "node scripts/check-userscripts.mjs && tsc -p . && eslint .",
     "pretest": "npm run build",
     "test": "node scripts/run-tests.mjs",
-    "test:prepare": "node scripts/prepare-tests.mjs",
+    "test:prepare": "node node_modules/playwright/cli.js install --with-deps chromium",
     "typecheck": "tsc -p .",
     "verify": "node scripts/verify.mjs"
   },

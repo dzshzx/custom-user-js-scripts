@@ -33,12 +33,6 @@ jobs:
       - name: Check the version plan against master
         run: node scripts/version-plan.mjs check --base-ref origin/master --target-ref HEAD
       - run: npm run verify
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: test-report
-          path: .scratch/test-report/
-          include-hidden-files: true
 
   # The required check is produced before master advances. Failure, cancellation
   # or a skipped verification cannot satisfy it.

@@ -13,34 +13,10 @@ runs the complete node:test suite. Independent lint/test commands build
 first. The complete entries accept no filters. For focused debugging use
 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs` after building (the loader lets tests import `.ts`/`.tsx` sources through the same esbuild transform options as the bundle; `npm test` sets it for every file).
 
-The three required browser tests retain their existing exact name plus owning
-file as the identifier (listed in scripts/run-tests.mjs). Assistant lifecycle, JavDB compatibility and
-Feishu page.evaluate equivalence must each emit exactly one passing result.
-Missing, duplicate, skipped, todo or failed results fail verification; any
-other suite failure, skip or todo also prevents a green complete report.
-This uses Node's native
+Any failed, skipped or todo result fails verification. The runner uses Node's native
 [TestsStream pass/fail events](https://nodejs.org/download/release/v22.23.2/docs/api/test.html#class-testsstream),
-including skip/todo metadata, and never parses console TAP.
-
-Reports live under `.scratch/test-report/`:
-
-- preparation.json: commit, preparation scope, Node/Playwright versions,
-  browser/OS setup duration, exit and environment-ready/environment-unavailable.
-- results.json: tested HEAD and dirty flag, Node/Playwright/launched browser
-  versions, scope, environment preflight/build/test timings, per-test results
-  and failure/skip reasons, and each mandatory acceptance result.
-
-Reports explicitly mark preparation, preflight, build/checks and tests as
-passed, failed or not-run as applicable. Counts are null when tests did not
-execute, so an unavailable environment cannot look like a zero-test success.
-The independent test runner marks build as not-in-this-entry: npm test owns
-its separate pretest build, while verify records its own build stage.
-
-CI uploads this directory through GitHub Actions artifacts even on failure.
-No full environment, credentials, browser state or real account data is added
-to reports. Browser fixtures use synthetic content. Browser version comes from
-a launched browser; the report's commit identifies HEAD and the dirty flag
-explicitly marks a run over uncommitted edits.
+including skip/todo metadata, and never parses console TAP; it prints each
+non-passing result and the final counts. Browser fixtures use synthetic content.
 
 These tests do not establish userscript-manager installation, human interaction
 or live-site compatibility. Real JavDB/Feishu pages,
