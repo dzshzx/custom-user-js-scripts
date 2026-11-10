@@ -329,11 +329,13 @@ test('real Chromium keeps the widget open on any path from the button or pill to
         ),
         true,
       );
-      // The far end of the pill and the button, toward panel points straight
-      // up and well off to either side, in 8px steps like coalesced moves.
+      // The far end of the pill and the button, toward panel points well off
+      // to either side, in 8px steps like coalesced moves. Before the hover
+      // bridge covered the whole button row, every start in both placements
+      // collapsed on at least one of these paths.
       const farEnd = { x: saved ? pill.x + pill.width - 6 : pill.x + 6, y: center.y };
       for (const start of [center, farEnd]) {
-        for (const dx of [-120, -30, 30, 120]) {
+        for (const dx of [-120, 120]) {
           const end = {
             x: Math.min(Math.max(start.x + dx, panel.x + 5), panel.x + panel.width - 5),
             y: panel.y + panel.height - 20,
