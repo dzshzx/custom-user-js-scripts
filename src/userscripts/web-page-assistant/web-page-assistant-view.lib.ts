@@ -570,12 +570,9 @@ function createWebPageAssistantView({
     return `${reasons[result.code as SessionResultCode] || '操作失败。'}${result.message || result.state.applicationError || ''}`;
   }
 
-  async function dispatchAction(action: string, node: HTMLElement) {
-    if (action === 'open-settings') return openSettings({ tab: 'refresh' });
-    if (action === 'switch-tab')
-      return renderDialog({ scope: dialogContract.readSelectedScope(dialog), tab: node.dataset.partTab });
-    if (action === 'close-dialog') return closeDialog();
-    if (initializationError) throw new Error(initializationError);
+  // The session command, dialog tab and success message a dialog action stands for;
+  // throws when the custom interval is invalid.
+  function describeAction(action: string, node: HTMLElement) {
     let scope = dialogContract.readSelectedScope(dialog);
     let command: ViewCommand = { type: action, scope };
     let tab = 'refresh';
@@ -600,6 +597,35 @@ function createWebPageAssistantView({
       tab = 'unlocker';
       message = `已删除${scopeLabel(scope)}限制解除设置。`;
     }
+    return { scope, command, tab, message };
+  }
+
+  // A failed dispatch rebuilds an unedited dialog when the change was persisted, otherwise
+  // reports into the same dialog; the action then fails with the error text.
+  function reportFailedDispatch(
+    result: SessionResult,
+    sameDraft: boolean,
+    sameDialog: boolean,
+    scope: Scope,
+    tab: string,
+  ): never {
+    const error = operationError(result);
+    if (sameDraft && result.persisted)
+      renderDialog({ message: error, tone: 'error', scope: result.scope || scope, tab });
+    else if (sameDialog) {
+      updateDialogStatus();
+      setMessage(`操作失败：${error}`, 'error');
+    }
+    throw new Error(error);
+  }
+
+  async function dispatchAction(action: string, node: HTMLElement) {
+    if (action === 'open-settings') return openSettings({ tab: 'refresh' });
+    if (action === 'switch-tab')
+      return renderDialog({ scope: dialogContract.readSelectedScope(dialog), tab: node.dataset.partTab });
+    if (action === 'close-dialog') return closeDialog();
+    if (initializationError) throw new Error(initializationError);
+    let { scope, command, tab, message } = describeAction(action, node);
     const submission = { generation: dialogGeneration, revision: editRevision, dialog };
     if (WRITE_ACTIONS.has(action)) pendingSubmissions.add(submission);
     let result: SessionResult;
@@ -612,14 +638,7 @@ function createWebPageAssistantView({
     const sameDialog = dialog === submission.dialog && dialogGeneration === submission.generation;
     const sameDraft = sameDialog && editRevision === submission.revision;
     if (!result.ok) {
-      const error = operationError(result);
-      if (sameDraft && result.persisted)
-        renderDialog({ message: error, tone: 'error', scope: result.scope || scope, tab });
-      else if (sameDialog) {
-        updateDialogStatus();
-        setMessage(`操作失败：${error}`, 'error');
-      }
-      throw new Error(error);
+      reportFailedDispatch(result, sameDraft, sameDialog, scope, tab);
     }
     if (action === 'toggle-pause') return result;
     if (action === 'disable-active') {
