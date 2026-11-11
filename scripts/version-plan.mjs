@@ -142,6 +142,13 @@ async function buildVersionPlan({
     }
     targetState.versions.set(namespace, { ...existing, version });
   }
+  const transitions = collectTransitions(baselineState, targetState, retired, baseRef, issues);
+  if (targetState.versions.size === 0) issues.push('complete target version set is empty');
+  return { issues, transitions };
+}
+
+// One transition per install identity in either set, sorted by identity; problems go to issues.
+function collectTransitions(baselineState, targetState, retired, baseRef, issues) {
   const identities = new Set([...baselineState.versions.keys(), ...targetState.versions.keys()]);
   const transitions = [];
   for (const namespace of [...identities].sort()) {
@@ -165,8 +172,26 @@ async function buildVersionPlan({
     }
     transitions.push({ baseline, namespace, target, kind: transitionKind(baseline, target, namespace, issues) });
   }
-  if (targetState.versions.size === 0) issues.push('complete target version set is empty');
-  return { issues, transitions };
+  return transitions;
+}
+
+// Consumes the value after --target and records it as one INSTALL_IDENTITY=VERSION override.
+function readTargetOverride(args, options) {
+  const value = args.shift() || fail('--target requires INSTALL_IDENTITY=VERSION');
+  const separator = value.lastIndexOf('=');
+  if (separator <= 0 || separator === value.length - 1) fail('--target requires INSTALL_IDENTITY=VERSION');
+  const namespace = value.slice(0, separator);
+  const version = value.slice(separator + 1);
+  if (options.targetOverrides.has(namespace)) fail(`duplicate --target install identity: ${namespace}`);
+  options.targetOverrides.set(namespace, version);
+}
+
+// Rejects an unknown command and option combinations the command does not accept.
+function validateCommandOptions(command, options) {
+  if (!['plan', 'check'].includes(command)) fail(`unknown command: ${command}`);
+  if (command === 'check' && !options.targetRef) fail('check requires --target-ref');
+  if (command === 'check' && options.targetOverrides.size > 0)
+    fail('check reads actual target metadata and does not accept --target overrides');
 }
 
 function parseArgs(argv) {
@@ -177,23 +202,13 @@ function parseArgs(argv) {
     const arg = args.shift();
     if (arg === '--base-ref') options.baseRef = args.shift() || fail('--base-ref requires a value');
     else if (arg === '--target-ref') options.targetRef = args.shift() || fail('--target-ref requires a value');
-    else if (arg === '--target') {
-      const value = args.shift() || fail('--target requires INSTALL_IDENTITY=VERSION');
-      const separator = value.lastIndexOf('=');
-      if (separator <= 0 || separator === value.length - 1) fail('--target requires INSTALL_IDENTITY=VERSION');
-      const namespace = value.slice(0, separator);
-      const version = value.slice(separator + 1);
-      if (options.targetOverrides.has(namespace)) fail(`duplicate --target install identity: ${namespace}`);
-      options.targetOverrides.set(namespace, version);
-    } else if (arg === '--json') options.json = true;
+    else if (arg === '--target') readTargetOverride(args, options);
+    else if (arg === '--json') options.json = true;
     else if (arg === '-h' || arg === '--help') options.help = true;
     else fail(`unknown argument: ${arg}`);
   }
   if (options.help) return options;
-  if (!['plan', 'check'].includes(command)) fail(`unknown command: ${command}`);
-  if (command === 'check' && !options.targetRef) fail('check requires --target-ref');
-  if (command === 'check' && options.targetOverrides.size > 0)
-    fail('check reads actual target metadata and does not accept --target overrides');
+  validateCommandOptions(command, options);
   return options;
 }
 
