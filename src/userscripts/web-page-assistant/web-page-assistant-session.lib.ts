@@ -235,6 +235,29 @@ function createWebPageAssistantSession({
     startPromise = Promise.race([initialize(), disposed.then(() => result('disposed'))]);
     return startPromise;
   }
+  // The settings update a write command asks for; null when its payload is invalid or its type is not a write.
+  function settingsChangeFor(
+    command: SessionCommand,
+    scope: Settings.Scope,
+    key: string,
+  ): ((latest: Settings.Settings) => Settings.Settings) | null {
+    const { type } = command;
+    let change: (latest: Settings.Settings) => Settings.Settings;
+    if (type === 'save-refresh') {
+      if (!Settings.isValidIntervalMs(command.intervalMs)) return null;
+      const updatedAt = clock.now();
+      change = (latest) => Settings.setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
+    } else if (type === 'save-unlocker') {
+      if (!Settings.normalizeUnlockerSetting(command.setting)) return null;
+      const updatedAt = clock.now();
+      change = (latest) => Settings.setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
+    } else if (type === 'delete-unlocker') {
+      change = (latest) => Settings.deleteUnlockerSetting(latest, scope, key);
+    } else if (type === 'delete-refresh' || type === 'disable-active') {
+      change = (latest) => Settings.deleteRefreshSetting(latest, scope, key);
+    } else return null;
+    return change;
+  }
   async function write(command: SessionCommand): Promise<SessionResult> {
     if (lifecycle !== 'ready') return result(lifecycle === 'disposed' ? 'disposed' : 'not-ready');
     const { type } = command;
@@ -246,20 +269,8 @@ function createWebPageAssistantSession({
     if (!['page', 'site'].includes(scope)) return result('invalid-input');
     const key = scope === 'page' ? keys.pageKey : keys.siteKey;
     const area: SessionArea = type.includes('unlocker') ? 'unlocker' : 'refresh';
-    let change: (latest: Settings.Settings) => Settings.Settings;
-    if (type === 'save-refresh') {
-      if (!Settings.isValidIntervalMs(command.intervalMs)) return result('invalid-input');
-      const updatedAt = clock.now();
-      change = (latest) => Settings.setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
-    } else if (type === 'save-unlocker') {
-      if (!Settings.normalizeUnlockerSetting(command.setting)) return result('invalid-input');
-      const updatedAt = clock.now();
-      change = (latest) => Settings.setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
-    } else if (type === 'delete-unlocker') {
-      change = (latest) => Settings.deleteUnlockerSetting(latest, scope, key);
-    } else if (type === 'delete-refresh' || type === 'disable-active') {
-      change = (latest) => Settings.deleteRefreshSetting(latest, scope, key);
-    } else return result('invalid-input');
+    const change = settingsChangeFor(command, scope, key);
+    if (!change) return result('invalid-input');
     let next: Settings.Settings;
     try {
       next = Settings.normalizeSettings(await storage.updateSettings(change));

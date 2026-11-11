@@ -1075,6 +1075,24 @@
       startPromise = Promise.race([initialize(), disposed.then(() => result("disposed"))]);
       return startPromise;
     }
+    function settingsChangeFor(command, scope, key) {
+      const { type } = command;
+      let change;
+      if (type === "save-refresh") {
+        if (!isValidIntervalMs(command.intervalMs)) return null;
+        const updatedAt = clock.now();
+        change = (latest) => setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
+      } else if (type === "save-unlocker") {
+        if (!normalizeUnlockerSetting(command.setting)) return null;
+        const updatedAt = clock.now();
+        change = (latest) => setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
+      } else if (type === "delete-unlocker") {
+        change = (latest) => deleteUnlockerSetting(latest, scope, key);
+      } else if (type === "delete-refresh" || type === "disable-active") {
+        change = (latest) => deleteRefreshSetting(latest, scope, key);
+      } else return null;
+      return change;
+    }
     async function write(command) {
       if (lifecycle !== "ready") return result(lifecycle === "disposed" ? "disposed" : "not-ready");
       const { type } = command;
@@ -1083,20 +1101,8 @@
       if (!["page", "site"].includes(scope)) return result("invalid-input");
       const key = scope === "page" ? keys.pageKey : keys.siteKey;
       const area = type.includes("unlocker") ? "unlocker" : "refresh";
-      let change;
-      if (type === "save-refresh") {
-        if (!isValidIntervalMs(command.intervalMs)) return result("invalid-input");
-        const updatedAt = clock.now();
-        change = (latest) => setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
-      } else if (type === "save-unlocker") {
-        if (!normalizeUnlockerSetting(command.setting)) return result("invalid-input");
-        const updatedAt = clock.now();
-        change = (latest) => setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
-      } else if (type === "delete-unlocker") {
-        change = (latest) => deleteUnlockerSetting(latest, scope, key);
-      } else if (type === "delete-refresh" || type === "disable-active") {
-        change = (latest) => deleteRefreshSetting(latest, scope, key);
-      } else return result("invalid-input");
+      const change = settingsChangeFor(command, scope, key);
+      if (!change) return result("invalid-input");
       let next;
       try {
         next = normalizeSettings(await storage.updateSettings(change));
