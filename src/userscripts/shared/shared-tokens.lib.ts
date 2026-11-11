@@ -135,6 +135,25 @@ export interface ApplyThemeOptions {
   observeHost?: boolean;
 }
 
+// Watches class and style changes on the root's <html>; null when there is no
+// MutationObserver or no <html> separate from the root.
+function observeHostThemeAttributes(root: HTMLElement, onChange: () => void): MutationObserver | null {
+  let observer: MutationObserver | null = null;
+  try {
+    const documentObject = root.ownerDocument ?? globalThis.document;
+    const windowObject = documentObject?.defaultView ?? globalThis.window;
+    const MutationObserverImpl = windowObject?.MutationObserver ?? globalThis.MutationObserver;
+    const hostElement = documentObject?.documentElement;
+    if (typeof MutationObserverImpl === 'function' && hostElement && hostElement !== root) {
+      observer = new MutationObserverImpl(onChange);
+      observer.observe(hostElement, { attributes: true, attributeFilter: ['class', 'style'] });
+    }
+  } catch {
+    observer = null;
+  }
+  return observer;
+}
+
 function applyTheme(root: HTMLElement, { detectHost, observeHost = false }: ApplyThemeOptions = {}): () => void {
   if (!root) {
     throw new Error('shared-tokens: applyTheme requires a root element.');
@@ -168,18 +187,7 @@ function applyTheme(root: HTMLElement, { detectHost, observeHost = false }: Appl
   // attributes when asked.
   let observer: MutationObserver | null = null;
   if (observeHost) {
-    try {
-      const documentObject = root.ownerDocument ?? globalThis.document;
-      const windowObject = documentObject?.defaultView ?? globalThis.window;
-      const MutationObserverImpl = windowObject?.MutationObserver ?? globalThis.MutationObserver;
-      const hostElement = documentObject?.documentElement;
-      if (typeof MutationObserverImpl === 'function' && hostElement && hostElement !== root) {
-        observer = new MutationObserverImpl(onChange);
-        observer.observe(hostElement, { attributes: true, attributeFilter: ['class', 'style'] });
-      }
-    } catch {
-      observer = null;
-    }
+    observer = observeHostThemeAttributes(root, onChange);
   }
 
   return () => {

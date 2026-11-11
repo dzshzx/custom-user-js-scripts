@@ -129,6 +129,22 @@ ${root} :focus-visible {
     }
     return systemPrefersDark() ? "dark" : "light";
   }
+  function observeHostThemeAttributes(root, onChange) {
+    let observer = null;
+    try {
+      const documentObject = root.ownerDocument ?? globalThis.document;
+      const windowObject = documentObject?.defaultView ?? globalThis.window;
+      const MutationObserverImpl = windowObject?.MutationObserver ?? globalThis.MutationObserver;
+      const hostElement = documentObject?.documentElement;
+      if (typeof MutationObserverImpl === "function" && hostElement && hostElement !== root) {
+        observer = new MutationObserverImpl(onChange);
+        observer.observe(hostElement, { attributes: true, attributeFilter: ["class", "style"] });
+      }
+    } catch {
+      observer = null;
+    }
+    return observer;
+  }
   function applyTheme(root, { detectHost, observeHost = false } = {}) {
     if (!root) {
       throw new Error("shared-tokens: applyTheme requires a root element.");
@@ -156,18 +172,7 @@ ${root} :focus-visible {
     }
     let observer = null;
     if (observeHost) {
-      try {
-        const documentObject = root.ownerDocument ?? globalThis.document;
-        const windowObject = documentObject?.defaultView ?? globalThis.window;
-        const MutationObserverImpl = windowObject?.MutationObserver ?? globalThis.MutationObserver;
-        const hostElement = documentObject?.documentElement;
-        if (typeof MutationObserverImpl === "function" && hostElement && hostElement !== root) {
-          observer = new MutationObserverImpl(onChange);
-          observer.observe(hostElement, { attributes: true, attributeFilter: ["class", "style"] });
-        }
-      } catch {
-        observer = null;
-      }
+      observer = observeHostThemeAttributes(root, onChange);
     }
     return () => {
       if (observer) {
