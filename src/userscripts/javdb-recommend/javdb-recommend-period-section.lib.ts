@@ -127,6 +127,14 @@ function appendCard({ document, grid, baseUrl, movie }: CardOptions) {
   titleElement.appendChild(document.createTextNode(title ? ` ${title}` : ''));
   anchor.appendChild(titleElement);
 
+  appendCardMeta(document, anchor, movie);
+
+  item.appendChild(anchor);
+  grid.appendChild(item);
+}
+
+// Appends the score and release-date line when the movie has either.
+function appendCardMeta(document: Document, anchor: HTMLAnchorElement, movie: MaybeMovie) {
   const metaParts: { kind: 'score' | 'date'; value: string }[] = [];
   if (movie && movie.score) metaParts.push({ kind: 'score', value: String(movie.score) });
   const releaseDate = normalizedReleaseDate(movie && movie.release_date);
@@ -148,9 +156,6 @@ function appendCard({ document, grid, baseUrl, movie }: CardOptions) {
     });
     anchor.appendChild(meta);
   }
-
-  item.appendChild(anchor);
-  grid.appendChild(item);
 }
 
 function appendSkeletons(document: Document, grid: Element, count: number) {

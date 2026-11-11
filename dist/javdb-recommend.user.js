@@ -1399,6 +1399,11 @@
     titleElement.appendChild(strong);
     titleElement.appendChild(document2.createTextNode(title ? ` ${title}` : ""));
     anchor.appendChild(titleElement);
+    appendCardMeta(document2, anchor, movie);
+    item.appendChild(anchor);
+    grid.appendChild(item);
+  }
+  function appendCardMeta(document2, anchor, movie) {
     const metaParts = [];
     if (movie && movie.score) metaParts.push({ kind: "score", value: String(movie.score) });
     const releaseDate = normalizedReleaseDate(movie && movie.release_date);
@@ -1420,8 +1425,6 @@
       });
       anchor.appendChild(meta);
     }
-    item.appendChild(anchor);
-    grid.appendChild(item);
   }
   function appendSkeletons(document2, grid, count) {
     for (let index = 0; index < count; index += 1) {
