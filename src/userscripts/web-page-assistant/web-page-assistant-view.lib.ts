@@ -653,23 +653,44 @@ function createWebPageAssistantView({
     return result;
   }
 
-  async function handleRootClick(event: Event) {
-    const actionNode = (event.target as Element | null)?.closest?.<HTMLElement>('[data-part-action]');
-    if (!actionNode || !root?.contains(actionNode)) return;
-    const action = actionNode.dataset.partAction!;
+  // Whether a click on this action node goes on to dispatch: not for unknown actions, not for a
+  // click inside the dialog backdrop, and not for the click that ends a widget drag.
+  function shouldDispatchClick(event: Event, actionNode: HTMLElement, action: string): boolean {
     if (!WRITE_ACTIONS.has(action) && !['open-settings', 'switch-tab', 'close-dialog', 'toggle-pause'].includes(action))
-      return;
+      return false;
     // The backdrop carries close-dialog: only a click on the backdrop itself closes.
     if (action === 'close-dialog' && dialog && actionNode === dialog) {
       if (event.target === dialog) closeDialog();
-      return;
+      return false;
     }
     if (
       action === 'open-settings' &&
       actionNode.classList.contains('part-widget-button') &&
       widgetShell?.anchor.isDragSuppressed()
     )
-      return;
+      return false;
+    return true;
+  }
+
+  // A failed action is logged; it reports into the dialog it started from unless that dialog
+  // was replaced or already shows a message.
+  function reportFailedAction(error: unknown, actionDialog: HTMLDialogElement | null, actionGeneration: number) {
+    if (disposed) return;
+    console.warn(`${SCRIPT_NAME}: action failed.`, error);
+    if (
+      dialog === actionDialog &&
+      dialogGeneration === actionGeneration &&
+      !dialog?.querySelector('[data-part-role="message"]')?.textContent
+    ) {
+      setMessage(`操作失败：${errorMessage(error)}`, 'error');
+    }
+  }
+
+  async function handleRootClick(event: Event) {
+    const actionNode = (event.target as Element | null)?.closest?.<HTMLElement>('[data-part-action]');
+    if (!actionNode || !root?.contains(actionNode)) return;
+    const action = actionNode.dataset.partAction!;
+    if (!shouldDispatchClick(event, actionNode, action)) return;
     event.preventDefault();
     event.stopPropagation();
     const isWrite = WRITE_ACTIONS.has(action);
@@ -684,15 +705,7 @@ function createWebPageAssistantView({
     try {
       await dispatchAction(action, actionNode);
     } catch (error) {
-      if (disposed) return;
-      console.warn(`${SCRIPT_NAME}: action failed.`, error);
-      if (
-        dialog === actionDialog &&
-        dialogGeneration === actionGeneration &&
-        !dialog?.querySelector('[data-part-role="message"]')?.textContent
-      ) {
-        setMessage(`操作失败：${errorMessage(error)}`, 'error');
-      }
+      reportFailedAction(error, actionDialog, actionGeneration);
     } finally {
       if (isWrite && !disposed && actionNode.isConnected !== false) {
         (actionNode as HTMLButtonElement).disabled = false;

@@ -5288,18 +5288,29 @@ ${root} :focus-visible {
       }
       return result;
     }
+    function shouldDispatchClick(event, actionNode, action) {
+      if (!WRITE_ACTIONS.has(action) && !["open-settings", "switch-tab", "close-dialog", "toggle-pause"].includes(action))
+        return false;
+      if (action === "close-dialog" && dialog && actionNode === dialog) {
+        if (event.target === dialog) closeDialog();
+        return false;
+      }
+      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && widgetShell?.anchor.isDragSuppressed())
+        return false;
+      return true;
+    }
+    function reportFailedAction(error, actionDialog, actionGeneration) {
+      if (disposed) return;
+      console.warn(`${SCRIPT_NAME}: action failed.`, error);
+      if (dialog === actionDialog && dialogGeneration === actionGeneration && !dialog?.querySelector('[data-part-role="message"]')?.textContent) {
+        setMessage(`操作失败：${errorMessage(error)}`, "error");
+      }
+    }
     async function handleRootClick(event) {
       const actionNode = event.target?.closest?.("[data-part-action]");
       if (!actionNode || !root?.contains(actionNode)) return;
       const action = actionNode.dataset.partAction;
-      if (!WRITE_ACTIONS.has(action) && !["open-settings", "switch-tab", "close-dialog", "toggle-pause"].includes(action))
-        return;
-      if (action === "close-dialog" && dialog && actionNode === dialog) {
-        if (event.target === dialog) closeDialog();
-        return;
-      }
-      if (action === "open-settings" && actionNode.classList.contains("part-widget-button") && widgetShell?.anchor.isDragSuppressed())
-        return;
+      if (!shouldDispatchClick(event, actionNode, action)) return;
       event.preventDefault();
       event.stopPropagation();
       const isWrite = WRITE_ACTIONS.has(action);
@@ -5313,11 +5324,7 @@ ${root} :focus-visible {
       try {
         await dispatchAction(action, actionNode);
       } catch (error) {
-        if (disposed) return;
-        console.warn(`${SCRIPT_NAME}: action failed.`, error);
-        if (dialog === actionDialog && dialogGeneration === actionGeneration && !dialog?.querySelector('[data-part-role="message"]')?.textContent) {
-          setMessage(`操作失败：${errorMessage(error)}`, "error");
-        }
+        reportFailedAction(error, actionDialog, actionGeneration);
       } finally {
         if (isWrite && !disposed && actionNode.isConnected !== false) {
           actionNode.disabled = false;
