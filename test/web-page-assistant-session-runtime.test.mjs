@@ -244,6 +244,10 @@ test('invalid/not-ready commands and observer errors do not mutate or block sett
   await h.session.start();
   assert.equal((await h.session.dispatch(save('bad'))).code, 'invalid-input');
   assert.equal((await h.session.dispatch(save('page', 1))).code, 'invalid-input');
+  const unlocker = { type: 'save-unlocker', scope: 'page', setting: null };
+  assert.equal((await h.session.dispatch(unlocker)).code, 'invalid-input');
+  assert.equal((await h.session.dispatch({ type: 'rename', scope: 'page' })).code, 'invalid-input');
+  assert.equal(h.writes.length, 0);
   assert.equal((await h.session.dispatch(save())).ok, true);
   const before = h.events.length;
   h.tick();
