@@ -48,4 +48,11 @@ export default [
       globals: { ...globals.browser, ...globals.greasemonkey },
     },
   },
+  // Every linted file, tests included: a function's cyclomatic complexity stays at 15
+  // or below, and inline `eslint-disable` (or any other inline config) comments are
+  // ignored, so the limit cannot be waived per line.
+  {
+    linterOptions: { noInlineConfig: true },
+    rules: { complexity: ['error', 15] },
+  },
 ];
