@@ -5374,6 +5374,12 @@ ${root} :focus-visible {
         scope: next.scope ?? pendingOpenIntent?.scope ?? null
       };
     }
+    function adoptStartupOutcome(startup) {
+      if (startup?.state) latestSnapshot = startup.state;
+      if (!startup?.ok && latestSnapshot.lifecycle !== "ready") {
+        initializationError = `初始化失败：${startup?.message || latestSnapshot.applicationError || "设置读取失败。"}`;
+      }
+    }
     function openSettings(options = {}) {
       if (disposed) return Promise.resolve({ ok: false, code: "disposed" });
       mergeIntent(options);
@@ -5391,10 +5397,7 @@ ${root} :focus-visible {
           };
         }
         if (disposed || startup?.code === "disposed") return { ok: false, code: "disposed" };
-        if (startup?.state) latestSnapshot = startup.state;
-        if (!startup?.ok && latestSnapshot.lifecycle !== "ready") {
-          initializationError = `初始化失败：${startup?.message || latestSnapshot.applicationError || "设置读取失败。"}`;
-        }
+        adoptStartupOutcome(startup);
         const intent = pendingOpenIntent || {};
         pendingOpenIntent = null;
         renderDialog({ scope: intent.scope, tab: intent.tab });

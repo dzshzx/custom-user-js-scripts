@@ -764,6 +764,15 @@ function createWebPageAssistantView({
     };
   }
 
+  // Takes the startup state as the latest snapshot and records an initialization error
+  // unless the session ended up ready.
+  function adoptStartupOutcome(startup: StartupOutcome) {
+    if (startup?.state) latestSnapshot = startup.state;
+    if (!startup?.ok && latestSnapshot.lifecycle !== 'ready') {
+      initializationError = `初始化失败：${startup?.message || latestSnapshot.applicationError || '设置读取失败。'}`;
+    }
+  }
+
   function openSettings(options: OpenSettingsOptions = {}): Promise<OpenSettingsResult> {
     if (disposed) return Promise.resolve({ ok: false, code: 'disposed' });
     mergeIntent(options);
@@ -781,10 +790,7 @@ function createWebPageAssistantView({
         };
       }
       if (disposed || startup?.code === 'disposed') return { ok: false, code: 'disposed' };
-      if (startup?.state) latestSnapshot = startup.state;
-      if (!startup?.ok && latestSnapshot.lifecycle !== 'ready') {
-        initializationError = `初始化失败：${startup?.message || latestSnapshot.applicationError || '设置读取失败。'}`;
-      }
+      adoptStartupOutcome(startup);
       const intent: Partial<OpenIntent> = pendingOpenIntent || {};
       pendingOpenIntent = null;
       renderDialog({ scope: intent.scope, tab: intent.tab });
