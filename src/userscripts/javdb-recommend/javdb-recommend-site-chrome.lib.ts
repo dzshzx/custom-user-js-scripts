@@ -258,6 +258,40 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     }
   }
 
+  // Marks the page as natively styled, reserves room for the fixed navbar and copies the homepage theme,
+  // remembering each change this script made.
+  function applyNativeDocumentState(homeDocument: Document) {
+    if (!document.documentElement.classList.contains('jdb-ra-native')) {
+      document.documentElement.classList.add('jdb-ra-native');
+      ownedNativeClass = true;
+    }
+    if (
+      document.body.querySelector('nav.main-nav') &&
+      !document.documentElement.classList.contains('has-navbar-fixed-top')
+    ) {
+      document.documentElement.classList.add('has-navbar-fixed-top');
+      ownedNavbarClass = true;
+    }
+    const theme = homeDocument.documentElement.dataset.theme;
+    if (theme && !document.documentElement.dataset.theme) {
+      document.documentElement.dataset.theme = theme;
+      ownedTheme = theme;
+    }
+  }
+
+  // A failed start reports disposal if disposed; otherwise it removes owned resources and publishes the reason.
+  function publishFailure(error: unknown) {
+    if (disposed) return notifyDisposed();
+    const reason =
+      error && (error as SiteChromeError).code === 'timeout'
+        ? 'timeout'
+        : /^stylesheet failed:/.test(String(error && (error as SiteChromeError).message))
+          ? 'stylesheet-error'
+          : 'homepage-fetch';
+    cleanupResources();
+    return publish(diagnostic(reason));
+  }
+
   async function run() {
     deadline = timer.now() + CHROME_TIMEOUT_MS;
     try {
@@ -290,33 +324,10 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
       }
       if (disposed) return notifyDisposed();
       installNavigation(homeDocument, homepageBase);
-      if (!document.documentElement.classList.contains('jdb-ra-native')) {
-        document.documentElement.classList.add('jdb-ra-native');
-        ownedNativeClass = true;
-      }
-      if (
-        document.body.querySelector('nav.main-nav') &&
-        !document.documentElement.classList.contains('has-navbar-fixed-top')
-      ) {
-        document.documentElement.classList.add('has-navbar-fixed-top');
-        ownedNavbarClass = true;
-      }
-      const theme = homeDocument.documentElement.dataset.theme;
-      if (theme && !document.documentElement.dataset.theme) {
-        document.documentElement.dataset.theme = theme;
-        ownedTheme = theme;
-      }
+      applyNativeDocumentState(homeDocument);
       return publish({ status: 'native', reason: 'ready', stylesheets: prepared.length });
     } catch (error) {
-      if (disposed) return notifyDisposed();
-      const reason =
-        error && (error as SiteChromeError).code === 'timeout'
-          ? 'timeout'
-          : /^stylesheet failed:/.test(String(error && (error as SiteChromeError).message))
-            ? 'stylesheet-error'
-            : 'homepage-fetch';
-      cleanupResources();
-      return publish(diagnostic(reason));
+      return publishFailure(error);
     }
   }
 
