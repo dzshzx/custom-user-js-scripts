@@ -6,6 +6,18 @@ import { isMain } from './lib/is-main.mjs';
 // can import .jsx sources the same way a focused `node --import` run does.
 const JSX_LOADER_FLAG = `--import=${new URL('./jsx-loader.mjs', import.meta.url).href}`;
 
+// Prints one failed, skipped or todo result as a JSON line on stderr.
+function reportNonPassingResult(data, status) {
+  console.error(
+    JSON.stringify({
+      file: data.file ? path.relative(process.cwd(), data.file) : null,
+      name: data.name,
+      status,
+      reason: data.skip || data.todo || data.details?.error?.message || null,
+    }),
+  );
+}
+
 // Runs the complete node:test suite. Any failed, skipped or todo result fails it.
 export async function runTests() {
   if (!(process.env.NODE_OPTIONS || '').includes(JSX_LOADER_FLAG))
@@ -17,15 +29,7 @@ export async function runTests() {
     if (type !== 'test:pass' && type !== 'test:fail') continue;
     const status = data.skip ? 'skip' : data.todo ? 'todo' : type === 'test:pass' ? 'pass' : 'fail';
     counts[status] += 1;
-    if (status !== 'pass')
-      console.error(
-        JSON.stringify({
-          file: data.file ? path.relative(process.cwd(), data.file) : null,
-          name: data.name,
-          status,
-          reason: data.skip || data.todo || data.details?.error?.message || null,
-        }),
-      );
+    if (status !== 'pass') reportNonPassingResult(data, status);
   }
   console.log(JSON.stringify(counts));
   return counts.fail === 0 && counts.skip === 0 && counts.todo === 0;
