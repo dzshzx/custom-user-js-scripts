@@ -426,6 +426,28 @@ test('detail writes below the bound count keys without scanning entries', async 
   data.dispose();
 });
 
+test('a navigation cache hit rewrites its access stamp only once it is an hour old', async () => {
+  const { data, details, time } = await setup();
+  putDetails(details, {
+    2: { fetchedAt: time - H, accessedAt: time - H, movies: [movie] },
+    1: { fetchedAt: time - H, accessedAt: time - H + 1, movies: [movie] },
+  });
+  const writes = [];
+  const set = details.set;
+  details.set = async (key, value) => {
+    writes.push([key, value.accessedAt]);
+    return set(key, value);
+  };
+  for (const period of [2, 1]) {
+    const lease = data.acquirePeriod(period);
+    await lease.promise;
+    lease.release();
+  }
+  await tick();
+  assert.deepEqual(writes, [['2', time]]);
+  data.dispose();
+});
+
 test('last browsed period round-trips through the injected storage under its legacy key', async () => {
   const { data, store } = await setup();
   assert.equal(data.getLastPeriod(), null);
