@@ -293,6 +293,24 @@ export function createArchiveData({
     const epoch = generation,
       aborter = createAborter();
     const work = { aborter } as CatalogWork;
+    // Keeps the fetched list, plus the cached tail after an overlap, and reports how the catalog was refreshed.
+    const storeCatalog = (list: Period[], overlap: number): CatalogResult => {
+      periods = overlap >= 0 ? unique(list.concat(cached!.periods.slice(overlap + 1))) : list;
+      write(CATALOG, {
+        fetchedAt: now(),
+        fullFetchedAt: overlap >= 0 ? cached!.fullFetchedAt || cached!.fetchedAt : now(),
+        periods,
+      });
+      return { periods: periods.slice(), degraded: false, source: overlap >= 0 ? '已增量更新' : '已完整更新' };
+    };
+    // A failed refresh falls back to a usable cached catalog unless the work was cancelled.
+    const fallBackToCachedCatalog = (error: unknown): CatalogResult => {
+      check(epoch);
+      if (aborter.signal?.aborted) throw error;
+      if (!usable) throw error;
+      periods = unique(cached!.periods);
+      return { periods: periods.slice(), degraded: true, source: '本地缓存', error };
+    };
     work.promise = (async (): Promise<CatalogResult> => {
       try {
         const incremental = usable && now() - (cached!.fullFetchedAt || cached!.fetchedAt) < MONTH;
@@ -315,21 +333,11 @@ export function createArchiveData({
             }
           }
           if (overlap >= 0 || batch.length !== 48) {
-            periods = overlap >= 0 ? unique(list.concat(cached!.periods.slice(overlap + 1))) : list;
-            write(CATALOG, {
-              fetchedAt: now(),
-              fullFetchedAt: overlap >= 0 ? cached!.fullFetchedAt || cached!.fetchedAt : now(),
-              periods,
-            });
-            return { periods: periods.slice(), degraded: false, source: overlap >= 0 ? '已增量更新' : '已完整更新' };
+            return storeCatalog(list, overlap);
           }
         }
       } catch (error) {
-        check(epoch);
-        if (aborter.signal?.aborted) throw error;
-        if (!usable) throw error;
-        periods = unique(cached!.periods);
-        return { periods: periods.slice(), degraded: true, source: '本地缓存', error };
+        return fallBackToCachedCatalog(error);
       } finally {
         if (catalogWork === work) catalogWork = null;
       }
@@ -349,6 +357,15 @@ export function createArchiveData({
       check(epoch);
       if (released) throw cancelled();
     };
+    // Browsing keeps a cache hit in memory, rewrites its access stamp at most hourly and refreshes its index.
+    const keepNavigationHit = (cached: DetailEntry) => {
+      memory.set(period, cached);
+      if (now() - (cached.accessedAt || 0) >= HOUR) {
+        cached.accessedAt = now();
+        saveDetail(period, cached);
+      }
+      saveIndex(period, cached);
+    };
     let local: DetailEntry | null | undefined = null;
     const work = (async (): Promise<PeriodResult> => {
       assertActive();
@@ -357,12 +374,7 @@ export function createArchiveData({
       const cached = purpose === 'search' ? searchable(period, local) : fresh(local, period) ? local : null;
       if (cached) {
         if (purpose === 'navigation') {
-          memory.set(period, cached);
-          if (now() - (cached.accessedAt || 0) >= HOUR) {
-            cached.accessedAt = now();
-            saveDetail(period, cached);
-          }
-          saveIndex(period, cached);
+          keepNavigationHit(cached);
         }
         return { movies: cached.movies, fetchedAt: cached.fetchedAt, degraded: false, source: 'cache' };
       }
