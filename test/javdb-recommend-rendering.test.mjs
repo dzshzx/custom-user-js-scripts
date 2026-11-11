@@ -331,6 +331,7 @@ test(
     const second = window.document.querySelectorAll('.movie-list')[1];
     assert.equal(second.style.getPropertyValue('grid-template-columns'), 'repeat(6, minmax(0, 1fr))');
     assert.equal(second.querySelector('img').style.getPropertyValue('object-fit'), 'cover');
+    assert.equal(second.querySelector('.cover').style.getPropertyValue('aspect-ratio'), '380 / 538');
 
     const secondImage = second.querySelector('img');
     const secondCover = secondImage.closest('.cover');
