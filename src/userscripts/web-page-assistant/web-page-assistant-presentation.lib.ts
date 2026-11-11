@@ -163,6 +163,17 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
     return dialogNode?.querySelector<HTMLInputElement>(roleSelector(role))?.checked === true;
   }
 
+  // The custom interval field starts from the active rule's interval, or the default,
+  // shown in whole minutes when it divides evenly and in seconds otherwise.
+  function initialCustomInterval(input: DialogViewModelInput): DialogViewModel['customInterval'] {
+    const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
+    const customInterval: DialogViewModel['customInterval'] =
+      defaultInterval % (60 * 1000) === 0
+        ? { value: String(defaultInterval / (60 * 1000)), unit: 'minutes' }
+        : { value: String(Math.round(defaultInterval / 1000)), unit: 'seconds' };
+    return customInterval;
+  }
+
   function createViewModel(input: DialogViewModelInput): DialogViewModel {
     const nextTab = normalizeTab(input.preferredTab, input.activeTab);
     const selectedScope: Scope =
@@ -172,11 +183,7 @@ function createPageAssistantDialogContract(adapters: DialogContractAdapters) {
     const pageUnlockerSetting = getUnlockerSetting(input.settings, 'page', input.pageKey);
     const siteUnlockerSetting = getUnlockerSetting(input.settings, 'site', input.siteKey);
     const scopedUnlockerSetting = selectedScope === 'site' ? siteUnlockerSetting : pageUnlockerSetting;
-    const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
-    const customInterval: DialogViewModel['customInterval'] =
-      defaultInterval % (60 * 1000) === 0
-        ? { value: String(defaultInterval / (60 * 1000)), unit: 'minutes' }
-        : { value: String(Math.round(defaultInterval / 1000)), unit: 'seconds' };
+    const customInterval = initialCustomInterval(input);
 
     return {
       message: input.message || '',

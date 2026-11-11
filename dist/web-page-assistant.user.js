@@ -2670,6 +2670,11 @@
     function isChecked(dialogNode, role) {
       return dialogNode?.querySelector(roleSelector(role))?.checked === true;
     }
+    function initialCustomInterval(input) {
+      const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
+      const customInterval = defaultInterval % (60 * 1e3) === 0 ? { value: String(defaultInterval / (60 * 1e3)), unit: "minutes" } : { value: String(Math.round(defaultInterval / 1e3)), unit: "seconds" };
+      return customInterval;
+    }
     function createViewModel(input) {
       const nextTab = normalizeTab(input.preferredTab, input.activeTab);
       const selectedScope = input.preferredScope || input.activeRefreshMatch?.scope || input.activeUnlockerMatch?.scope || "page";
@@ -2678,8 +2683,7 @@
       const pageUnlockerSetting = getUnlockerSetting(input.settings, "page", input.pageKey);
       const siteUnlockerSetting = getUnlockerSetting(input.settings, "site", input.siteKey);
       const scopedUnlockerSetting = selectedScope === "site" ? siteUnlockerSetting : pageUnlockerSetting;
-      const defaultInterval = input.activeRefreshMatch?.setting.intervalMs || defaultIntervalMs;
-      const customInterval = defaultInterval % (60 * 1e3) === 0 ? { value: String(defaultInterval / (60 * 1e3)), unit: "minutes" } : { value: String(Math.round(defaultInterval / 1e3)), unit: "seconds" };
+      const customInterval = initialCustomInterval(input);
       return {
         message: input.message || "",
         activeTab: nextTab,
