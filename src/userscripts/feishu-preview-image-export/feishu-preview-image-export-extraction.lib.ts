@@ -126,6 +126,52 @@ function readPreviewImage(
     return { kind: 'candidates', items } satisfies PreviewImageCandidates;
   }
 
+  // Helpers stay inside readPreviewImage: callers serialize this function, so it cannot reach module scope.
+  // Fetches the target source with the profile's credentials; a missing fetch or non-ok status throws.
+  const fetchImageResponse = async (source: string): Promise<Response> => {
+    const fetcher = environment.fetchImpl || host.fetch?.bind(host);
+    if (typeof fetcher !== 'function') {
+      throw attachDiagnostic(new Error('fetch unavailable'), 'FEISHU_IMAGE_FETCH_FAILED', 'fetch');
+    }
+    let response: Response;
+    try {
+      response =
+        profile === 'userscript-v1' ? await fetcher(source, { credentials: 'include' }) : await fetcher(source);
+    } catch (error) {
+      throw attachDiagnostic(error, 'FEISHU_IMAGE_FETCH_FAILED', 'fetch');
+    }
+    if (!response.ok) {
+      throw attachDiagnostic(
+        new Error(`Failed to fetch image: ${response.status} ${response.statusText}`),
+        'FEISHU_IMAGE_FETCH_FAILED',
+        'fetch',
+      );
+    }
+    return response;
+  };
+
+  // Reads the response bytes and encodes them as base64.
+  const encodeResponseBase64 = async (response: Response): Promise<string> => {
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      throw attachDiagnostic(error, 'FEISHU_IMAGE_BLOB_READ_FAILED', 'blob-read');
+    }
+    let binary = '';
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    const encode = environment.btoaImpl || host.btoa?.bind(host);
+    let data: string;
+    try {
+      data = encode!(binary);
+    } catch (error) {
+      throw attachDiagnostic(error, 'FEISHU_IMAGE_ENCODE_FAILED', 'encode');
+    }
+    return data;
+  };
+
   return (async (): Promise<PreviewImageReadResult> => {
     if (!items.length) {
       return { kind: 'empty', reason: 'no-candidate' };
@@ -156,24 +202,7 @@ function readPreviewImage(
       };
     }
 
-    const fetcher = environment.fetchImpl || host.fetch?.bind(host);
-    if (typeof fetcher !== 'function') {
-      throw attachDiagnostic(new Error('fetch unavailable'), 'FEISHU_IMAGE_FETCH_FAILED', 'fetch');
-    }
-    let response: Response;
-    try {
-      response =
-        profile === 'userscript-v1' ? await fetcher(source, { credentials: 'include' }) : await fetcher(source);
-    } catch (error) {
-      throw attachDiagnostic(error, 'FEISHU_IMAGE_FETCH_FAILED', 'fetch');
-    }
-    if (!response.ok) {
-      throw attachDiagnostic(
-        new Error(`Failed to fetch image: ${response.status} ${response.statusText}`),
-        'FEISHU_IMAGE_FETCH_FAILED',
-        'fetch',
-      );
-    }
+    const response = await fetchImageResponse(source);
 
     if (profile === 'userscript-v1') {
       let blob: Blob;
@@ -204,23 +233,7 @@ function readPreviewImage(
       };
     }
 
-    let bytes: Uint8Array;
-    try {
-      bytes = new Uint8Array(await response.arrayBuffer());
-    } catch (error) {
-      throw attachDiagnostic(error, 'FEISHU_IMAGE_BLOB_READ_FAILED', 'blob-read');
-    }
-    let binary = '';
-    for (const byte of bytes) {
-      binary += String.fromCharCode(byte);
-    }
-    const encode = environment.btoaImpl || host.btoa?.bind(host);
-    let data: string;
-    try {
-      data = encode!(binary);
-    } catch (error) {
-      throw attachDiagnostic(error, 'FEISHU_IMAGE_ENCODE_FAILED', 'encode');
-    }
+    const data = await encodeResponseBase64(response);
     return {
       kind: 'image',
       mime: response.headers.get('content-type') || 'application/octet-stream',
