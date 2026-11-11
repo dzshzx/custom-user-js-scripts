@@ -255,6 +255,23 @@ test('buttonClass and panelClass append host classes alongside the kit classes',
   shell.destroy();
 });
 
+test('buttonId, buttonAriaLabel and buttonContent shape the button and name the panel', { skip: domSkip }, () => {
+  const { window, root, shell } = setup();
+  assert.equal(shell.buttonEl.id, 'wk-test-button');
+  assert.equal(shell.buttonEl.getAttribute('aria-label'), 'Test widget');
+  assert.equal(shell.buttonEl.querySelector('.label')?.textContent, 'T');
+  assert.equal(shell.panelEl.id, 'wk-test-button-panel');
+  shell.destroy();
+
+  const icon = window.document.createElement('span');
+  const plain = createWidgetShell({ root, buttonContent: icon });
+  assert.equal(plain.buttonEl.firstChild, icon);
+  assert.equal(plain.buttonEl.hasAttribute('id'), false);
+  assert.equal(plain.buttonEl.hasAttribute('aria-label'), false);
+  assert.equal(plain.panelEl.hasAttribute('id'), false);
+  plain.destroy();
+});
+
 test('reposition re-places an open panel and is a no-op when closed', { skip: domSkip }, async () => {
   const { shell } = setup();
 
