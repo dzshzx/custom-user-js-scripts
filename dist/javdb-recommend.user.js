@@ -533,6 +533,27 @@
     });
   }
   function createRequest({ base, fetch: fetcher = globalThis.fetch, timers = globalThis }) {
+    async function fetchData(path, params, signal, controller) {
+      const response = await fetcher(base + path + "?" + new URLSearchParams(params), {
+        headers: { jdsignature: signature(), connection: "keep-alive" },
+        signal: controller.signal || signal
+      });
+      if (signal?.aborted) throw cancelled();
+      if (!response.ok)
+        throw Object.assign(new Error("HTTP " + response.status), {
+          retryable: response.status === 408 || response.status === 429 || response.status >= 500
+        });
+      const body = await response.json();
+      if (signal?.aborted) throw cancelled();
+      if (body.success !== 1) throw new Error(body.message || "接口返回错误");
+      return body.data;
+    }
+    async function backOffOrThrow(attempt, failure, signal) {
+      if (signal?.aborted) throw cancelled();
+      if (attempt === 3 || !(failure.retryable || failure.name === "TypeError" || failure.name === "AbortError"))
+        throw failure;
+      await delay(500 * 2 ** (attempt - 1), signal, timers);
+    }
     return async function api(path, params, { signal } = {}) {
       for (let attempt = 1; attempt <= 3; attempt++) {
         if (signal?.aborted) throw cancelled();
@@ -542,29 +563,14 @@
         const timer = controller.signal ? timers.setTimeout(abort, 12e3) : null;
         let failure;
         try {
-          const response = await fetcher(base + path + "?" + new URLSearchParams(params), {
-            headers: { jdsignature: signature(), connection: "keep-alive" },
-            signal: controller.signal || signal
-          });
-          if (signal?.aborted) throw cancelled();
-          if (!response.ok)
-            throw Object.assign(new Error("HTTP " + response.status), {
-              retryable: response.status === 408 || response.status === 429 || response.status >= 500
-            });
-          const body = await response.json();
-          if (signal?.aborted) throw cancelled();
-          if (body.success !== 1) throw new Error(body.message || "接口返回错误");
-          return body.data;
+          return await fetchData(path, params, signal, controller);
         } catch (error) {
           failure = error;
         } finally {
           if (timer !== null) timers.clearTimeout(timer);
           signal?.removeEventListener("abort", abort);
         }
-        if (signal?.aborted) throw cancelled();
-        if (attempt === 3 || !(failure.retryable || failure.name === "TypeError" || failure.name === "AbortError"))
-          throw failure;
-        await delay(500 * 2 ** (attempt - 1), signal, timers);
+        await backOffOrThrow(attempt, failure, signal);
       }
     };
   }

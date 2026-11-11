@@ -80,6 +80,35 @@ export function delay(ms: number, signal?: AbortSignal, timers: RequestTimers = 
   });
 }
 export function createRequest({ base, fetch: fetcher = globalThis.fetch, timers = globalThis }: RequestOpts) {
+  // One attempt: the signed request must succeed over HTTP and report success in its JSON envelope.
+  async function fetchData(
+    path: string,
+    params: RequestParams,
+    signal: AbortSignal | undefined,
+    controller: Aborter,
+  ): Promise<unknown> {
+    const response = await fetcher(base + path + '?' + new URLSearchParams(params as Record<string, string>), {
+      headers: { jdsignature: signature(), connection: 'keep-alive' },
+      signal: controller.signal || signal,
+    });
+    if (signal?.aborted) throw cancelled();
+    if (!response.ok)
+      throw Object.assign(new Error('HTTP ' + response.status), {
+        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
+      });
+    const body: { success?: number; message?: string; data?: unknown } = await response.json();
+    if (signal?.aborted) throw cancelled();
+    if (body.success !== 1) throw new Error(body.message || '接口返回错误');
+    return body.data;
+  }
+  // After a failed attempt: rethrows when cancelled, after the last attempt or for a non-transient failure;
+  // otherwise waits out the exponential backoff.
+  async function backOffOrThrow(attempt: number, failure: RequestError | undefined, signal: AbortSignal | undefined) {
+    if (signal?.aborted) throw cancelled();
+    if (attempt === 3 || !(failure!.retryable || failure!.name === 'TypeError' || failure!.name === 'AbortError'))
+      throw failure;
+    await delay(500 * 2 ** (attempt - 1), signal, timers);
+  }
   return async function api(
     path: string,
     params: RequestParams,
@@ -93,29 +122,14 @@ export function createRequest({ base, fetch: fetcher = globalThis.fetch, timers 
       const timer = controller.signal ? timers.setTimeout(abort, 12000) : null;
       let failure: RequestError | undefined;
       try {
-        const response = await fetcher(base + path + '?' + new URLSearchParams(params as Record<string, string>), {
-          headers: { jdsignature: signature(), connection: 'keep-alive' },
-          signal: controller.signal || signal,
-        });
-        if (signal?.aborted) throw cancelled();
-        if (!response.ok)
-          throw Object.assign(new Error('HTTP ' + response.status), {
-            retryable: response.status === 408 || response.status === 429 || response.status >= 500,
-          });
-        const body: { success?: number; message?: string; data?: unknown } = await response.json();
-        if (signal?.aborted) throw cancelled();
-        if (body.success !== 1) throw new Error(body.message || '接口返回错误');
-        return body.data;
+        return await fetchData(path, params, signal, controller);
       } catch (error) {
         failure = error as RequestError;
       } finally {
         if (timer !== null) timers.clearTimeout(timer);
         signal?.removeEventListener('abort', abort);
       }
-      if (signal?.aborted) throw cancelled();
-      if (attempt === 3 || !(failure!.retryable || failure!.name === 'TypeError' || failure!.name === 'AbortError'))
-        throw failure;
-      await delay(500 * 2 ** (attempt - 1), signal, timers);
+      await backOffOrThrow(attempt, failure, signal);
     }
   };
 }
