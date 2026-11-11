@@ -7,7 +7,7 @@ import { createWebPageAssistantView } from '../src/userscripts/web-page-assistan
 import * as Settings from '../src/userscripts/web-page-assistant/web-page-assistant-settings.lib.ts';
 import { deferred, flush } from './helpers/async.mjs';
 
-function createHarness({ readSettings, writeSettings, initialPosition = null, preparedPosition } = {}) {
+function createHarness({ readSettings, writeSettings, initialPosition = null, preparedPosition, ready } = {}) {
   const window = createDomWindow({ url: 'https://example.com/article?id=1' });
   const host = window.document.createElement('main');
   host.id = 'host';
@@ -61,7 +61,7 @@ function createHarness({ readSettings, writeSettings, initialPosition = null, pr
     document: window.document,
     window,
     positions,
-    ready: () => session.start(),
+    ready: ready ? () => ready(session) : () => session.start(),
     clock: {
       setTimeout: window.setTimeout.bind(window),
       clearTimeout: window.clearTimeout.bind(window),
@@ -280,3 +280,127 @@ test('the view removes only the styles it installed when disposed', { skip: domS
   for (const id of ownedIds) assert.equal(document.getElementById(id), null);
   assert.equal(document.getElementById('page-auto-refresh-timer-root-dialog-style'), hostDialogStyle);
 });
+
+test('delete and unlocker actions write the change for the scope they name', { skip: domSkip }, async (t) => {
+  const pageKey = 'https://example.com/article?id=1';
+  const siteKey = 'example.com';
+  let seeded = Settings.emptySettings();
+  for (const [scope, key] of [
+    ['page', pageKey],
+    ['site', siteKey],
+  ]) {
+    seeded = Settings.setRefreshSetting(seeded, scope, key, 30_000, 1);
+    seeded = Settings.setUnlockerSetting(seeded, scope, key, Settings.defaultUnlockerSetting({ allowCopy: true }), 1);
+  }
+  // Every write starts from the seeded settings, so each action's change is checked on its own.
+  const harness = createHarness({ readSettings: async () => JSON.parse(JSON.stringify(seeded)) });
+  // The seeded refresh rule starts an interval; dispose even when an assertion fails.
+  t.after(() => {
+    harness.view.dispose();
+    harness.session.dispose();
+  });
+  const rules = (settings) =>
+    [
+      ['refresh:page', Settings.getRefreshSetting(settings, 'page', pageKey)],
+      ['refresh:site', Settings.getRefreshSetting(settings, 'site', siteKey)],
+      ['unlocker:page', Settings.getUnlockerSetting(settings, 'page', pageKey)],
+      ['unlocker:site', Settings.getUnlockerSetting(settings, 'site', siteKey)],
+    ]
+      .filter(([, setting]) => setting)
+      .map(([rule]) => rule);
+  const click = async (action) => {
+    dialogOf(harness.window).querySelector(`[data-part-action="${action}"]`).click();
+    await flush();
+    await flush();
+  };
+  await harness.view.openSettings();
+  const all = rules(seeded);
+  for (const [action, removed] of [
+    ['delete-page', 'refresh:page'],
+    ['delete-site', 'refresh:site'],
+    ['delete-unlocker-page', 'unlocker:page'],
+    ['delete-unlocker-site', 'unlocker:site'],
+  ]) {
+    const before = harness.writes.length;
+    await click(action);
+    assert.equal(harness.writes.length, before + 1, action);
+    assert.deepEqual(
+      rules(harness.writes.at(-1)),
+      all.filter((rule) => rule !== removed),
+      action,
+    );
+  }
+
+  // The last delete left the site scope selected; save-unlocker writes the form's options there.
+  const dialog = dialogOf(harness.window);
+  assert.equal(dialog.querySelector('input[name="part-scope"][value="site"]').checked, true);
+  dialog.querySelector('[data-part-role="unlocker-drag"]').checked = true;
+  const before = harness.writes.length;
+  await click('save-unlocker');
+  assert.equal(harness.writes.length, before + 1);
+  assert.equal(Settings.getUnlockerSetting(harness.writes.at(-1), 'site', siteKey).allowDrag, true);
+  assert.equal(Settings.getUnlockerSetting(harness.writes.at(-1), 'page', pageKey).allowDrag, false);
+});
+
+test('only a click that lands on the backdrop itself closes the dialog', { skip: domSkip }, async () => {
+  const harness = createHarness();
+  await harness.view.openSettings();
+  const dialog = dialogOf(harness.window);
+  // Identity checks compare booleans: a failing assert on DOM nodes would render the whole happy-dom graph.
+  dialog.querySelector('[data-part-role="status"]').click();
+  assert.equal(dialogOf(harness.window) === dialog, true, 'a click inside the dialog keeps it open');
+  dialog.click();
+  assert.equal(dialogOf(harness.window) === null, true, 'a click on the backdrop closes the dialog');
+  harness.view.dispose();
+  harness.session.dispose();
+});
+
+test('a rejected dispatch reports its error in the dialog it came from', { skip: domSkip }, async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const harness = createHarness();
+  await harness.view.openSettings();
+  harness.session.dispatch = async () => {
+    throw new Error('transport rejected');
+  };
+  const dialog = dialogOf(harness.window);
+  dialog.querySelector('[data-part-action="save-preset"]').click();
+  await flush();
+  await flush();
+  assert.equal(dialogOf(harness.window) === dialog, true, 'the dialog stays open');
+  const message = dialog.querySelector('[data-part-role="message"]');
+  assert.equal(message.textContent, '操作失败：transport rejected');
+  assert.equal(message.dataset.tone, 'error');
+  harness.view.dispose();
+  harness.session.dispose();
+});
+
+test(
+  'opening settings adopts the startup state and fails only while the session is not ready',
+  { skip: domSkip },
+  async () => {
+    const broken = createHarness({
+      ready: async () => {
+        throw new Error('ready broke');
+      },
+    });
+    assert.deepEqual(await broken.view.openSettings(), { ok: false, code: 'storage-failed' });
+    const brokenDialog = dialogOf(broken.window);
+    assert.equal(brokenDialog.querySelector('[data-part-role="message"]').textContent, '初始化失败：ready broke');
+    assert.equal(brokenDialog.querySelector('[data-part-action="save-custom"]').disabled, true);
+    broken.view.dispose();
+    broken.session.dispose();
+
+    // A failed outcome whose session state is already ready opens the dialog normally.
+    const applied = createHarness({
+      ready: async (session) => ({
+        ok: false,
+        code: 'application-failed',
+        state: { ...session.getState(), lifecycle: 'ready' },
+      }),
+    });
+    assert.deepEqual(await applied.view.openSettings(), { ok: true });
+    assert.equal(dialogOf(applied.window).querySelector('[data-part-action="save-custom"]').disabled, false);
+    applied.view.dispose();
+    applied.session.dispose();
+  },
+);
