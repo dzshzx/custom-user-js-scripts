@@ -604,6 +604,59 @@ export interface WidgetShell {
   destroy(): void;
 }
 
+// The collapsed toggle button: optional id, host classes, accessible name and content (HTML string or node).
+function createWidgetButton(
+  documentObject: Document,
+  {
+    buttonId,
+    buttonAriaLabel,
+    buttonContent,
+    buttonClass,
+  }: Pick<WidgetShellOptions, 'buttonId' | 'buttonAriaLabel' | 'buttonContent' | 'buttonClass'>,
+): HTMLButtonElement {
+  const buttonEl = documentObject.createElement('button');
+  buttonEl.type = 'button';
+  if (buttonId) buttonEl.id = buttonId;
+  buttonEl.className = 'wk-widget-button';
+  appendClasses(buttonEl, buttonClass);
+  if (buttonAriaLabel) buttonEl.setAttribute('aria-label', buttonAriaLabel);
+  buttonEl.setAttribute('aria-expanded', 'false');
+  if (buttonContent != null) {
+    if (typeof buttonContent === 'string') {
+      buttonEl.innerHTML = buttonContent;
+    } else {
+      buttonEl.append(buttonContent);
+    }
+  }
+  return buttonEl;
+}
+
+// The hidden panel with its header and body, filled by the caller's render callbacks.
+function createWidgetPanel(
+  documentObject: Document,
+  {
+    buttonId,
+    panelClass,
+    renderPanelHeader,
+    renderPanelBody,
+  }: Pick<WidgetShellOptions, 'buttonId' | 'panelClass' | 'renderPanelHeader' | 'renderPanelBody'>,
+): HTMLDivElement {
+  const panelEl = documentObject.createElement('div');
+  panelEl.className = 'wk-widget-panel';
+  appendClasses(panelEl, panelClass);
+  if (buttonId) panelEl.id = `${buttonId}-panel`;
+  panelEl.hidden = true;
+
+  const headerEl = documentObject.createElement('div');
+  headerEl.className = 'wk-widget-header';
+  const bodyEl = documentObject.createElement('div');
+  bodyEl.className = 'wk-widget-body';
+  panelEl.append(headerEl, bodyEl);
+  renderPanelHeader?.(headerEl);
+  renderPanelBody?.(bodyEl);
+  return panelEl;
+}
+
 function createWidgetShell(
   {
     root,
@@ -640,34 +693,8 @@ function createWidgetShell(
       ? windowObject.requestAnimationFrame.bind(windowObject)
       : (callback: () => void) => scheduleTimeout(callback, 16);
 
-  const buttonEl = documentObject.createElement('button');
-  buttonEl.type = 'button';
-  if (buttonId) buttonEl.id = buttonId;
-  buttonEl.className = 'wk-widget-button';
-  appendClasses(buttonEl, buttonClass);
-  if (buttonAriaLabel) buttonEl.setAttribute('aria-label', buttonAriaLabel);
-  buttonEl.setAttribute('aria-expanded', 'false');
-  if (buttonContent != null) {
-    if (typeof buttonContent === 'string') {
-      buttonEl.innerHTML = buttonContent;
-    } else {
-      buttonEl.append(buttonContent);
-    }
-  }
-
-  const panelEl = documentObject.createElement('div');
-  panelEl.className = 'wk-widget-panel';
-  appendClasses(panelEl, panelClass);
-  if (buttonId) panelEl.id = `${buttonId}-panel`;
-  panelEl.hidden = true;
-
-  const headerEl = documentObject.createElement('div');
-  headerEl.className = 'wk-widget-header';
-  const bodyEl = documentObject.createElement('div');
-  bodyEl.className = 'wk-widget-body';
-  panelEl.append(headerEl, bodyEl);
-  renderPanelHeader?.(headerEl);
-  renderPanelBody?.(bodyEl);
+  const buttonEl = createWidgetButton(documentObject, { buttonId, buttonAriaLabel, buttonContent, buttonClass });
+  const panelEl = createWidgetPanel(documentObject, { buttonId, panelClass, renderPanelHeader, renderPanelBody });
 
   root.append(buttonEl, panelEl);
 
