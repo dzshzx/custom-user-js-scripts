@@ -2,6 +2,31 @@ import path from 'node:path';
 import { firstMetadataValue, installIdentity, parseMetadataBlock } from './userscript-metadata.mjs';
 import { isUserscriptFile } from './userscript-sources.mjs';
 
+// Reports a later metadata owner that repeats an install identity, @downloadURL or @updateURL.
+function reportDuplicateInstallValues(records, issue) {
+  const seen = new Map();
+  for (const record of records) {
+    const owner = record.metadataOwner;
+    if (!owner.metadata) continue;
+    for (const [field, values] of [
+      ['identity', [record.identity]],
+      ...['@downloadURL', '@updateURL'].map((key) => [key, owner.metadata.get(key) || []]),
+    ]) {
+      for (const value of values.filter(Boolean)) {
+        const key = `${field}:${value}`;
+        if (seen.has(key))
+          issue(
+            field === 'identity' ? 'duplicate-identity' : 'duplicate-url',
+            owner.path,
+            `duplicate ${field === 'identity' ? 'userscript install identity' : `${field} value`} with ${seen.get(key)}`,
+            [seen.get(key)],
+          );
+        else seen.set(key, owner.path);
+      }
+    }
+  }
+}
+
 // Facts only: consumers decide whether missing/stale generated outputs are legal
 // at their stage. No source module is imported or evaluated.
 export async function readUserscriptInventory({ files, readText }) {
@@ -82,27 +107,7 @@ export async function readUserscriptInventory({ files, readText }) {
   for (const file of paths.filter((file) => file.startsWith('dist/') && !claimed.has(file))) {
     issue('orphan-dist', file, 'orphan installable without a source entry owner');
   }
-  const seen = new Map();
-  for (const record of records) {
-    const owner = record.metadataOwner;
-    if (!owner.metadata) continue;
-    for (const [field, values] of [
-      ['identity', [record.identity]],
-      ...['@downloadURL', '@updateURL'].map((key) => [key, owner.metadata.get(key) || []]),
-    ]) {
-      for (const value of values.filter(Boolean)) {
-        const key = `${field}:${value}`;
-        if (seen.has(key))
-          issue(
-            field === 'identity' ? 'duplicate-identity' : 'duplicate-url',
-            owner.path,
-            `duplicate ${field === 'identity' ? 'userscript install identity' : `${field} value`} with ${seen.get(key)}`,
-            [seen.get(key)],
-          );
-        else seen.set(key, owner.path);
-      }
-    }
-  }
+  reportDuplicateInstallValues(records, issue);
   const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
   records.sort((a, b) => compare(a.metadataOwner.path, b.metadataOwner.path));
   issues.sort((a, b) => compare(a.file, b.file) || compare(a.type, b.type));
