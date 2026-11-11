@@ -159,32 +159,37 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
     }
   }
 
+  // 其他脚本接管的列表能读出有效列数时，记下其列数、间距与封面样式，并监听该列表后续的尺寸变化
+  function readCompatibleGridLayout(source: Element) {
+    var computed = window.getComputedStyle(source);
+    var columns = countGridTracks(computed.gridTemplateColumns);
+    if (!columns) columns = parseInt(computed.getPropertyValue('--jav-card-columns'), 10);
+    if (Number.isFinite(columns) && columns > 0) {
+      observeGridSource(source);
+      lastCompatibleGridLayout = {
+        template: 'repeat(' + columns + ', minmax(0, 1fr))',
+        columnGap: computed.columnGap || '.4rem',
+        rowGap: computed.rowGap || '1rem',
+        columns: String(columns),
+      };
+      var image = source.querySelector('.jav-card-image,.cover img');
+      var cover = image && image.closest('.jav-card-cover,.cover');
+      if (image) {
+        var imageStyle = window.getComputedStyle(image);
+        lastCompatibleGridLayout.objectFit = imageStyle.objectFit;
+        lastCompatibleGridLayout.objectPosition = imageStyle.objectPosition;
+      }
+      if (cover) lastCompatibleGridLayout.aspectRatio = window.getComputedStyle(cover).aspectRatio;
+    }
+  }
+
   function syncArchiveGridLayout() {
     gridSyncScheduled = false;
     if (disposed) return;
     var source = streamEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
     if (!source) source = resultsEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
     if (source) {
-      var computed = window.getComputedStyle(source);
-      var columns = countGridTracks(computed.gridTemplateColumns);
-      if (!columns) columns = parseInt(computed.getPropertyValue('--jav-card-columns'), 10);
-      if (Number.isFinite(columns) && columns > 0) {
-        observeGridSource(source);
-        lastCompatibleGridLayout = {
-          template: 'repeat(' + columns + ', minmax(0, 1fr))',
-          columnGap: computed.columnGap || '.4rem',
-          rowGap: computed.rowGap || '1rem',
-          columns: String(columns),
-        };
-        var image = source.querySelector('.jav-card-image,.cover img');
-        var cover = image && image.closest('.jav-card-cover,.cover');
-        if (image) {
-          var imageStyle = window.getComputedStyle(image);
-          lastCompatibleGridLayout.objectFit = imageStyle.objectFit;
-          lastCompatibleGridLayout.objectPosition = imageStyle.objectPosition;
-        }
-        if (cover) lastCompatibleGridLayout.aspectRatio = window.getComputedStyle(cover).aspectRatio;
-      }
+      readCompatibleGridLayout(source);
     } else if (observedGridSource && !observedGridSource.isConnected) {
       if (gridResizeObserver) gridResizeObserver.disconnect();
       observedGridSource = null;

@@ -2025,32 +2025,35 @@
         gridResizeObserver.observe(source);
       }
     }
+    function readCompatibleGridLayout(source) {
+      var computed = window.getComputedStyle(source);
+      var columns = countGridTracks(computed.gridTemplateColumns);
+      if (!columns) columns = parseInt(computed.getPropertyValue("--jav-card-columns"), 10);
+      if (Number.isFinite(columns) && columns > 0) {
+        observeGridSource(source);
+        lastCompatibleGridLayout = {
+          template: "repeat(" + columns + ", minmax(0, 1fr))",
+          columnGap: computed.columnGap || ".4rem",
+          rowGap: computed.rowGap || "1rem",
+          columns: String(columns)
+        };
+        var image = source.querySelector(".jav-card-image,.cover img");
+        var cover = image && image.closest(".jav-card-cover,.cover");
+        if (image) {
+          var imageStyle = window.getComputedStyle(image);
+          lastCompatibleGridLayout.objectFit = imageStyle.objectFit;
+          lastCompatibleGridLayout.objectPosition = imageStyle.objectPosition;
+        }
+        if (cover) lastCompatibleGridLayout.aspectRatio = window.getComputedStyle(cover).aspectRatio;
+      }
+    }
     function syncArchiveGridLayout() {
       gridSyncScheduled = false;
       if (disposed) return;
       var source = streamEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
       if (!source) source = resultsEl.querySelector('.movie-list.javdb-card-grid,.movie-list[data-laosiji-grid="1"]');
       if (source) {
-        var computed = window.getComputedStyle(source);
-        var columns = countGridTracks(computed.gridTemplateColumns);
-        if (!columns) columns = parseInt(computed.getPropertyValue("--jav-card-columns"), 10);
-        if (Number.isFinite(columns) && columns > 0) {
-          observeGridSource(source);
-          lastCompatibleGridLayout = {
-            template: "repeat(" + columns + ", minmax(0, 1fr))",
-            columnGap: computed.columnGap || ".4rem",
-            rowGap: computed.rowGap || "1rem",
-            columns: String(columns)
-          };
-          var image = source.querySelector(".jav-card-image,.cover img");
-          var cover = image && image.closest(".jav-card-cover,.cover");
-          if (image) {
-            var imageStyle = window.getComputedStyle(image);
-            lastCompatibleGridLayout.objectFit = imageStyle.objectFit;
-            lastCompatibleGridLayout.objectPosition = imageStyle.objectPosition;
-          }
-          if (cover) lastCompatibleGridLayout.aspectRatio = window.getComputedStyle(cover).aspectRatio;
-        }
+        readCompatibleGridLayout(source);
       } else if (observedGridSource && !observedGridSource.isConnected) {
         if (gridResizeObserver) gridResizeObserver.disconnect();
         observedGridSource = null;
@@ -2066,13 +2069,13 @@
         setCopiedStyle(list, "--jav-card-columns", lastCompatibleGridLayout.columns);
         setCopiedStyle(list, "column-gap", lastCompatibleGridLayout.columnGap);
         setCopiedStyle(list, "row-gap", lastCompatibleGridLayout.rowGap);
-        list.querySelectorAll('.item:not([data-laosiji-grid-card="1"]) .cover img').forEach(function(image2) {
-          if (lastCompatibleGridLayout.objectFit) setCopiedStyle(image2, "object-fit", lastCompatibleGridLayout.objectFit);
+        list.querySelectorAll('.item:not([data-laosiji-grid-card="1"]) .cover img').forEach(function(image) {
+          if (lastCompatibleGridLayout.objectFit) setCopiedStyle(image, "object-fit", lastCompatibleGridLayout.objectFit);
           if (lastCompatibleGridLayout.objectPosition)
-            setCopiedStyle(image2, "object-position", lastCompatibleGridLayout.objectPosition);
-          var cover2 = image2.closest(".cover");
-          if (cover2 && lastCompatibleGridLayout.aspectRatio && lastCompatibleGridLayout.aspectRatio !== "auto") {
-            setCopiedStyle(cover2, "aspect-ratio", lastCompatibleGridLayout.aspectRatio);
+            setCopiedStyle(image, "object-position", lastCompatibleGridLayout.objectPosition);
+          var cover = image.closest(".cover");
+          if (cover && lastCompatibleGridLayout.aspectRatio && lastCompatibleGridLayout.aspectRatio !== "auto") {
+            setCopiedStyle(cover, "aspect-ratio", lastCompatibleGridLayout.aspectRatio);
           }
         });
       });
