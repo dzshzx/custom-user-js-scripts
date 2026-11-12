@@ -26,7 +26,7 @@ test('metadata pins auto-update URLs to the dist raw path', async () => {
 });
 
 // md5 是签名链的根：S 表错位曾导致摘要全错、decrypt 产出非法 base64，
-// 浏览器严格 atob 直接抛错让整个脚本不运行。用已知向量钉死它。
+// 浏览器严格 atob 直接抛错让整个脚本不运行。用已知向量固定它的行为。
 test('md5 matches known vectors', async () => {
   assert.equal(md5(''), 'd41d8cd98f00b204e9800998ecf8427e');
   assert.equal(md5('abc'), '900150983cd24fb0d6963f7d28e17f72');
