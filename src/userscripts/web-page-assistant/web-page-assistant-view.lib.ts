@@ -104,6 +104,14 @@ interface ViewCommand {
   setting?: UnlockerSetting | null;
 }
 
+/** What a dialog action sends to the session and how the dialog reports it. */
+interface ActionDescription {
+  scope: Scope;
+  command: ViewCommand;
+  tab: string;
+  message: string;
+}
+
 interface Submission {
   generation: number;
   revision: number;
@@ -138,6 +146,8 @@ const PANEL_MIN_WIDTH = 52;
 const PRESET_INTERVALS_MS = [30, 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 30 * 60, 60 * 60].map(
   (seconds) => seconds * 1000,
 );
+// Dialog navigation actions: handled by the view without a session command.
+const DIALOG_ACTIONS = new Set(['open-settings', 'switch-tab', 'close-dialog']);
 const WRITE_ACTIONS = new Set([
   'save-preset',
   'save-custom',
@@ -164,6 +174,11 @@ function formatCountdown(ms: number): string {
   const seconds = totalSeconds % 60;
   if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+// The scope a delete action names by its suffix: ...-page or ...-site.
+function actionScope(action: string): Scope {
+  return action.endsWith('page') ? 'page' : 'site';
 }
 
 function scopeLabel(scope: Scope | null | undefined): string {
@@ -428,27 +443,34 @@ function createWebPageAssistantView({
     });
   }
 
+  // An action button is found again by its action plus the tab or interval it carries.
+  function actionFocusSelector(actionNode: HTMLElement) {
+    let selector = dialogContract.actionSelector(actionNode.dataset.partAction!);
+    for (const [datasetKey, attribute] of [
+      ['partTab', 'data-part-tab'],
+      ['intervalMs', 'data-interval-ms'],
+    ]) {
+      if (actionNode.dataset[datasetKey]) selector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
+    }
+    return selector;
+  }
+
+  // Selector that finds the focused dialog control again after the dialog is rebuilt; null when none fits.
+  function focusSelectorFor(active: Element): string | null {
+    const roleNode = active.closest?.<HTMLElement>('[data-part-role]');
+    if (roleNode) return dialogContract.roleSelector(roleNode.dataset.partRole!);
+    if (active.matches?.('input[name="part-scope"]')) {
+      return `input[name="part-scope"][value="${(active as HTMLInputElement).value}"]`;
+    }
+    const actionNode = active.closest?.<HTMLElement>('[data-part-action]');
+    return actionNode ? actionFocusSelector(actionNode) : null;
+  }
+
   function captureDialogState(): PreservedDialogState | null {
     if (!dialog) return null;
     const panel = dialog.querySelector('.part-dialog');
-    let focusSelector: string | null = null;
     const active = documentObject.activeElement;
-    if (active && dialog.contains(active)) {
-      const roleNode = active.closest?.<HTMLElement>('[data-part-role]');
-      const actionNode = active.closest?.<HTMLElement>('[data-part-action]');
-      if (roleNode) focusSelector = dialogContract.roleSelector(roleNode.dataset.partRole!);
-      else if (active.matches?.('input[name="part-scope"]')) {
-        focusSelector = `input[name="part-scope"][value="${(active as HTMLInputElement).value}"]`;
-      } else if (actionNode) {
-        focusSelector = dialogContract.actionSelector(actionNode.dataset.partAction!);
-        for (const [datasetKey, attribute] of [
-          ['partTab', 'data-part-tab'],
-          ['intervalMs', 'data-interval-ms'],
-        ]) {
-          if (actionNode.dataset[datasetKey]) focusSelector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
-        }
-      }
-    }
+    const focusSelector = active && dialog.contains(active) ? focusSelectorFor(active) : null;
     return { scrollTop: panel?.scrollTop || 0, focusSelector };
   }
 
@@ -572,32 +594,37 @@ function createWebPageAssistantView({
 
   // The session command, dialog tab and success message a dialog action stands for;
   // throws when the custom interval is invalid.
-  function describeAction(action: string, node: HTMLElement) {
-    let scope = dialogContract.readSelectedScope(dialog);
-    let command: ViewCommand = { type: action, scope };
-    let tab = 'refresh';
-    let message = '';
-    if (action === 'save-preset' || action === 'save-custom') {
-      const parsed: CustomIntervalResult =
-        action === 'save-custom' ? parseCustomInterval() : { intervalMs: Number(node.dataset.intervalMs) };
-      if (parsed.error) throw new Error(parsed.error);
-      command = { type: 'save-refresh', scope, intervalMs: parsed.intervalMs };
-      message = `已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs!)} 刷新一次。`;
-    } else if (action === 'delete-page' || action === 'delete-site') {
-      scope = action === 'delete-page' ? 'page' : 'site';
-      command = { type: 'delete-refresh', scope };
-      message = `已删除${scopeLabel(scope)}设置。`;
-    } else if (action === 'save-unlocker') {
-      command.setting = dialogContract.readUnlockerFormSetting(dialog);
-      tab = 'unlocker';
-      message = `已保存到${scopeLabel(scope)}。`;
-    } else if (action.startsWith('delete-unlocker-')) {
-      scope = action.endsWith('page') ? 'page' : 'site';
-      command = { type: 'delete-unlocker', scope };
-      tab = 'unlocker';
-      message = `已删除${scopeLabel(scope)}限制解除设置。`;
+  // save-preset takes the interval from its button, save-custom from the custom field.
+  function describeSaveInterval(action: string, node: HTMLElement, scope: Scope): ActionDescription {
+    const parsed: CustomIntervalResult =
+      action === 'save-custom' ? parseCustomInterval() : { intervalMs: Number(node.dataset.intervalMs) };
+    if (parsed.error) throw new Error(parsed.error);
+    return {
+      scope,
+      command: { type: 'save-refresh', scope, intervalMs: parsed.intervalMs },
+      tab: 'refresh',
+      message: `已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs!)} 刷新一次。`,
+    };
+  }
+
+  function describeAction(action: string, node: HTMLElement): ActionDescription {
+    const scope = dialogContract.readSelectedScope(dialog);
+    if (action === 'save-preset' || action === 'save-custom') return describeSaveInterval(action, node, scope);
+    if (action === 'delete-page' || action === 'delete-site') {
+      const target = actionScope(action);
+      const command: ViewCommand = { type: 'delete-refresh', scope: target };
+      return { scope: target, command, tab: 'refresh', message: `已删除${scopeLabel(target)}设置。` };
     }
-    return { scope, command, tab, message };
+    if (action === 'save-unlocker') {
+      const command: ViewCommand = { type: action, scope, setting: dialogContract.readUnlockerFormSetting(dialog) };
+      return { scope, command, tab: 'unlocker', message: `已保存到${scopeLabel(scope)}。` };
+    }
+    if (action.startsWith('delete-unlocker-')) {
+      const target = actionScope(action);
+      const command: ViewCommand = { type: 'delete-unlocker', scope: target };
+      return { scope: target, command, tab: 'unlocker', message: `已删除${scopeLabel(target)}限制解除设置。` };
+    }
+    return { scope, command: { type: action, scope }, tab: 'refresh', message: '' };
   }
 
   // A failed dispatch rebuilds an unedited dialog when the change was persisted, otherwise
@@ -619,14 +646,34 @@ function createWebPageAssistantView({
     throw new Error(error);
   }
 
-  async function dispatchAction(action: string, node: HTMLElement) {
+  // Actions that only open, switch or close the dialog; they send nothing to the session.
+  function dispatchDialogAction(action: string, node: HTMLElement) {
     if (action === 'open-settings') return openSettings({ tab: 'refresh' });
     if (action === 'switch-tab')
       return renderDialog({ scope: dialogContract.readSelectedScope(dialog), tab: node.dataset.partTab });
-    if (action === 'close-dialog') return closeDialog();
+    return closeDialog();
+  }
+
+  // A successful dispatch rebuilds an unedited dialog, or reports into the same dialog while it is being edited.
+  function reportDispatched(sameDraft: boolean, sameDialog: boolean, message: string, scope: Scope, tab: string) {
+    if (sameDraft) renderDialog({ message, scope, tab });
+    else if (sameDialog) {
+      updateDialogStatus();
+      setMessage(message);
+    }
+  }
+
+  // Whether the dialog a submission came from is still open, and still holds the submitted draft.
+  function submissionStanding(submission: Submission) {
+    const sameDialog = dialog === submission.dialog && dialogGeneration === submission.generation;
+    return { sameDialog, sameDraft: sameDialog && editRevision === submission.revision };
+  }
+
+  async function dispatchAction(action: string, node: HTMLElement) {
+    if (DIALOG_ACTIONS.has(action)) return dispatchDialogAction(action, node);
     if (initializationError) throw new Error(initializationError);
     let { scope, command, tab, message } = describeAction(action, node);
-    const submission = { generation: dialogGeneration, revision: editRevision, dialog };
+    const submission: Submission = { generation: dialogGeneration, revision: editRevision, dialog };
     if (WRITE_ACTIONS.has(action)) pendingSubmissions.add(submission);
     let result: SessionResult;
     try {
@@ -635,8 +682,7 @@ function createWebPageAssistantView({
       pendingSubmissions.delete(submission);
     }
     latestSnapshot = result.state;
-    const sameDialog = dialog === submission.dialog && dialogGeneration === submission.generation;
-    const sameDraft = sameDialog && editRevision === submission.revision;
+    const { sameDialog, sameDraft } = submissionStanding(submission);
     if (!result.ok) {
       reportFailedDispatch(result, sameDraft, sameDialog, scope, tab);
     }
@@ -645,11 +691,7 @@ function createWebPageAssistantView({
       scope = result.scope || scope;
       message = `已停用${scopeLabel(scope)}自动刷新。`;
     }
-    if (sameDraft) renderDialog({ message, scope, tab });
-    else if (sameDialog) {
-      updateDialogStatus();
-      setMessage(message);
-    }
+    reportDispatched(sameDraft, sameDialog, message, scope, tab);
     return result;
   }
 
@@ -729,24 +771,31 @@ function createWebPageAssistantView({
     if (!disposed) placeWidget();
   }
 
+  // A failed start blocks writes: an open dialog shows the error and disables its write actions.
+  function showInitializationError(snapshot: SessionState) {
+    initializationError = `初始化失败：${snapshot.applicationError || '设置读取失败。'}`;
+    if (!dialog) return;
+    setMessage(initializationError, 'error');
+    disableDialogWrites();
+  }
+
+  // The widget is rebuilt on a lifecycle change and on a settings change that touches refresh.
+  function changeAffectsWidget(change: Partial<SessionChange>) {
+    return (
+      change.kind === 'lifecycle' || (change.kind === 'settings' && ['refresh', 'all'].includes(change.area as string))
+    );
+  }
+
   function update(snapshot: SessionState, change: Partial<SessionChange> = {}) {
     latestSnapshot = snapshot;
     if (disposed) return;
     if (snapshot.lifecycle === 'error') {
-      initializationError = `初始化失败：${snapshot.applicationError || '设置读取失败。'}`;
-      if (dialog) {
-        setMessage(initializationError, 'error');
-        disableDialogWrites();
-      }
+      showInitializationError(snapshot);
       return;
     }
     if (snapshot.lifecycle !== 'ready') return;
     initializationError = null;
-    if (
-      change.kind === 'lifecycle' ||
-      (change.kind === 'settings' && ['refresh', 'all'].includes(change.area as string))
-    )
-      renderWidget();
+    if (changeAffectsWidget(change)) renderWidget();
     updatePauseButton();
     updateCountdownText();
     updateWidgetStatusText();

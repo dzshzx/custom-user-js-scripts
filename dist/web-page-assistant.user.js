@@ -985,29 +985,37 @@
     function result(code = null, persisted = false, scope = null) {
       return { ok: !code, code, persisted, scope, state: getState() };
     }
+    function applyCapability(capability) {
+      if (capability === "refresh") {
+        runtime.restart(resolveActiveRefreshSetting(settings, keys));
+        return;
+      }
+      appliedUnlocker = null;
+      const match = resolveActiveUnlockerSetting(settings, keys);
+      unlocker.install(match?.setting);
+      appliedUnlocker = match;
+    }
+    function failCapability(capability, error) {
+      applicationErrors[capability] = errorMessage(error);
+      if (capability === "refresh") {
+        runtime.stop();
+        return;
+      }
+      appliedUnlocker = null;
+      try {
+        unlocker.uninstall();
+      } catch {
+      }
+    }
     function apply(area) {
       let failed = false;
       for (const capability of area === "all" ? ["refresh", "unlocker"] : [area]) {
         applicationErrors[capability] = null;
         try {
-          if (capability === "refresh") runtime.restart(resolveActiveRefreshSetting(settings, keys));
-          else {
-            appliedUnlocker = null;
-            const match = resolveActiveUnlockerSetting(settings, keys);
-            unlocker.install(match?.setting);
-            appliedUnlocker = match;
-          }
+          applyCapability(capability);
         } catch (error) {
           failed = true;
-          applicationErrors[capability] = errorMessage(error);
-          if (capability === "refresh") runtime.stop();
-          else {
-            appliedUnlocker = null;
-            try {
-              unlocker.uninstall();
-            } catch {
-            }
-          }
+          failCapability(capability, error);
         }
       }
       return failed ? "application-failed" : null;
@@ -1075,34 +1083,32 @@
       startPromise = Promise.race([initialize(), disposed.then(() => result("disposed"))]);
       return startPromise;
     }
-    function settingsChangeFor(command, scope, key) {
-      const { type } = command;
-      let change;
-      if (type === "save-refresh") {
-        if (!isValidIntervalMs(command.intervalMs)) return null;
-        const updatedAt = clock.now();
-        change = (latest) => setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
-      } else if (type === "save-unlocker") {
-        if (!normalizeUnlockerSetting(command.setting)) return null;
-        const updatedAt = clock.now();
-        change = (latest) => setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
-      } else if (type === "delete-unlocker") {
-        change = (latest) => deleteUnlockerSetting(latest, scope, key);
-      } else if (type === "delete-refresh" || type === "disable-active") {
-        change = (latest) => deleteRefreshSetting(latest, scope, key);
-      } else return null;
-      return change;
-    }
-    async function write(command) {
-      if (lifecycle !== "ready") return result(lifecycle === "disposed" ? "disposed" : "not-ready");
-      const { type } = command;
-      const scope = type === "disable-active" ? runtime.getState().activeMatch?.scope : command.scope;
-      if (type === "disable-active" && !scope) return result();
-      if (!["page", "site"].includes(scope)) return result("invalid-input");
+    function settingsChangeFor(command, scope) {
       const key = scope === "page" ? keys.pageKey : keys.siteKey;
-      const area = type.includes("unlocker") ? "unlocker" : "refresh";
-      const change = settingsChangeFor(command, scope, key);
-      if (!change) return result("invalid-input");
+      switch (command.type) {
+        case "save-refresh": {
+          if (!isValidIntervalMs(command.intervalMs)) return null;
+          const updatedAt = clock.now();
+          return (latest) => setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
+        }
+        case "save-unlocker": {
+          if (!normalizeUnlockerSetting(command.setting)) return null;
+          const updatedAt = clock.now();
+          return (latest) => setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
+        }
+        case "delete-unlocker":
+          return (latest) => deleteUnlockerSetting(latest, scope, key);
+        case "delete-refresh":
+        case "disable-active":
+          return (latest) => deleteRefreshSetting(latest, scope, key);
+        default:
+          return null;
+      }
+    }
+    function commandScope(command) {
+      return command.type === "disable-active" ? runtime.getState().activeMatch?.scope : command.scope;
+    }
+    async function persistChange(change, area, scope) {
       let next;
       try {
         next = normalizeSettings(await storage.updateSettings(change));
@@ -1116,6 +1122,17 @@
       const code = apply(applied);
       emit("settings", applied);
       return result(code, true, scope);
+    }
+    async function write(command) {
+      if (lifecycle !== "ready") return result(lifecycle === "disposed" ? "disposed" : "not-ready");
+      const { type } = command;
+      const scope = commandScope(command);
+      if (type === "disable-active" && !scope) return result();
+      if (!["page", "site"].includes(scope)) return result("invalid-input");
+      const area = type.includes("unlocker") ? "unlocker" : "refresh";
+      const change = settingsChangeFor(command, scope);
+      if (!change) return result("invalid-input");
+      return persistChange(change, area, scope);
     }
     function dispatch(command) {
       if (lifecycle !== "ready") return Promise.resolve(result(lifecycle === "disposed" ? "disposed" : "not-ready"));
@@ -4835,6 +4852,7 @@ ${root} :focus-visible {
   var PRESET_INTERVALS_MS = [30, 60, 3 * 60, 5 * 60, 10 * 60, 15 * 60, 30 * 60, 60 * 60].map(
     (seconds) => seconds * 1e3
   );
+  var DIALOG_ACTIONS = /* @__PURE__ */ new Set(["open-settings", "switch-tab", "close-dialog"]);
   var WRITE_ACTIONS = /* @__PURE__ */ new Set([
     "save-preset",
     "save-custom",
@@ -4859,6 +4877,9 @@ ${root} :focus-visible {
     const seconds = totalSeconds % 60;
     if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+  function actionScope(action) {
+    return action.endsWith("page") ? "page" : "site";
   }
   function scopeLabel(scope) {
     return scope === "page" ? "当前页面" : "整个站点";
@@ -5092,27 +5113,30 @@ ${root} :focus-visible {
         )
       });
     }
+    function actionFocusSelector(actionNode) {
+      let selector = dialogContract.actionSelector(actionNode.dataset.partAction);
+      for (const [datasetKey, attribute] of [
+        ["partTab", "data-part-tab"],
+        ["intervalMs", "data-interval-ms"]
+      ]) {
+        if (actionNode.dataset[datasetKey]) selector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
+      }
+      return selector;
+    }
+    function focusSelectorFor(active) {
+      const roleNode = active.closest?.("[data-part-role]");
+      if (roleNode) return dialogContract.roleSelector(roleNode.dataset.partRole);
+      if (active.matches?.('input[name="part-scope"]')) {
+        return `input[name="part-scope"][value="${active.value}"]`;
+      }
+      const actionNode = active.closest?.("[data-part-action]");
+      return actionNode ? actionFocusSelector(actionNode) : null;
+    }
     function captureDialogState() {
       if (!dialog) return null;
       const panel = dialog.querySelector(".part-dialog");
-      let focusSelector = null;
       const active = documentObject.activeElement;
-      if (active && dialog.contains(active)) {
-        const roleNode = active.closest?.("[data-part-role]");
-        const actionNode = active.closest?.("[data-part-action]");
-        if (roleNode) focusSelector = dialogContract.roleSelector(roleNode.dataset.partRole);
-        else if (active.matches?.('input[name="part-scope"]')) {
-          focusSelector = `input[name="part-scope"][value="${active.value}"]`;
-        } else if (actionNode) {
-          focusSelector = dialogContract.actionSelector(actionNode.dataset.partAction);
-          for (const [datasetKey, attribute] of [
-            ["partTab", "data-part-tab"],
-            ["intervalMs", "data-interval-ms"]
-          ]) {
-            if (actionNode.dataset[datasetKey]) focusSelector += `[${attribute}="${actionNode.dataset[datasetKey]}"]`;
-          }
-        }
-      }
+      const focusSelector = active && dialog.contains(active) ? focusSelectorFor(active) : null;
       return { scrollTop: panel?.scrollTop || 0, focusSelector };
     }
     function restoreDialogState(preserved) {
@@ -5219,31 +5243,34 @@ ${root} :focus-visible {
       };
       return `${reasons[result.code] || "操作失败。"}${result.message || result.state.applicationError || ""}`;
     }
+    function describeSaveInterval(action, node, scope) {
+      const parsed = action === "save-custom" ? parseCustomInterval() : { intervalMs: Number(node.dataset.intervalMs) };
+      if (parsed.error) throw new Error(parsed.error);
+      return {
+        scope,
+        command: { type: "save-refresh", scope, intervalMs: parsed.intervalMs },
+        tab: "refresh",
+        message: `已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`
+      };
+    }
     function describeAction(action, node) {
-      let scope = dialogContract.readSelectedScope(dialog);
-      let command = { type: action, scope };
-      let tab = "refresh";
-      let message = "";
-      if (action === "save-preset" || action === "save-custom") {
-        const parsed = action === "save-custom" ? parseCustomInterval() : { intervalMs: Number(node.dataset.intervalMs) };
-        if (parsed.error) throw new Error(parsed.error);
-        command = { type: "save-refresh", scope, intervalMs: parsed.intervalMs };
-        message = `已保存到${scopeLabel(scope)}：每 ${formatInterval(parsed.intervalMs)} 刷新一次。`;
-      } else if (action === "delete-page" || action === "delete-site") {
-        scope = action === "delete-page" ? "page" : "site";
-        command = { type: "delete-refresh", scope };
-        message = `已删除${scopeLabel(scope)}设置。`;
-      } else if (action === "save-unlocker") {
-        command.setting = dialogContract.readUnlockerFormSetting(dialog);
-        tab = "unlocker";
-        message = `已保存到${scopeLabel(scope)}。`;
-      } else if (action.startsWith("delete-unlocker-")) {
-        scope = action.endsWith("page") ? "page" : "site";
-        command = { type: "delete-unlocker", scope };
-        tab = "unlocker";
-        message = `已删除${scopeLabel(scope)}限制解除设置。`;
+      const scope = dialogContract.readSelectedScope(dialog);
+      if (action === "save-preset" || action === "save-custom") return describeSaveInterval(action, node, scope);
+      if (action === "delete-page" || action === "delete-site") {
+        const target = actionScope(action);
+        const command = { type: "delete-refresh", scope: target };
+        return { scope: target, command, tab: "refresh", message: `已删除${scopeLabel(target)}设置。` };
       }
-      return { scope, command, tab, message };
+      if (action === "save-unlocker") {
+        const command = { type: action, scope, setting: dialogContract.readUnlockerFormSetting(dialog) };
+        return { scope, command, tab: "unlocker", message: `已保存到${scopeLabel(scope)}。` };
+      }
+      if (action.startsWith("delete-unlocker-")) {
+        const target = actionScope(action);
+        const command = { type: "delete-unlocker", scope: target };
+        return { scope: target, command, tab: "unlocker", message: `已删除${scopeLabel(target)}限制解除设置。` };
+      }
+      return { scope, command: { type: action, scope }, tab: "refresh", message: "" };
     }
     function reportFailedDispatch(result, sameDraft, sameDialog, scope, tab) {
       const error = operationError(result);
@@ -5255,11 +5282,25 @@ ${root} :focus-visible {
       }
       throw new Error(error);
     }
-    async function dispatchAction(action, node) {
+    function dispatchDialogAction(action, node) {
       if (action === "open-settings") return openSettings({ tab: "refresh" });
       if (action === "switch-tab")
         return renderDialog({ scope: dialogContract.readSelectedScope(dialog), tab: node.dataset.partTab });
-      if (action === "close-dialog") return closeDialog();
+      return closeDialog();
+    }
+    function reportDispatched(sameDraft, sameDialog, message, scope, tab) {
+      if (sameDraft) renderDialog({ message, scope, tab });
+      else if (sameDialog) {
+        updateDialogStatus();
+        setMessage(message);
+      }
+    }
+    function submissionStanding(submission) {
+      const sameDialog = dialog === submission.dialog && dialogGeneration === submission.generation;
+      return { sameDialog, sameDraft: sameDialog && editRevision === submission.revision };
+    }
+    async function dispatchAction(action, node) {
+      if (DIALOG_ACTIONS.has(action)) return dispatchDialogAction(action, node);
       if (initializationError) throw new Error(initializationError);
       let { scope, command, tab, message } = describeAction(action, node);
       const submission = { generation: dialogGeneration, revision: editRevision, dialog };
@@ -5271,8 +5312,7 @@ ${root} :focus-visible {
         pendingSubmissions.delete(submission);
       }
       latestSnapshot = result.state;
-      const sameDialog = dialog === submission.dialog && dialogGeneration === submission.generation;
-      const sameDraft = sameDialog && editRevision === submission.revision;
+      const { sameDialog, sameDraft } = submissionStanding(submission);
       if (!result.ok) {
         reportFailedDispatch(result, sameDraft, sameDialog, scope, tab);
       }
@@ -5281,11 +5321,7 @@ ${root} :focus-visible {
         scope = result.scope || scope;
         message = `已停用${scopeLabel(scope)}自动刷新。`;
       }
-      if (sameDraft) renderDialog({ message, scope, tab });
-      else if (sameDialog) {
-        updateDialogStatus();
-        setMessage(message);
-      }
+      reportDispatched(sameDraft, sameDialog, message, scope, tab);
       return result;
     }
     function shouldDispatchClick(event, actionNode, action) {
@@ -5344,21 +5380,25 @@ ${root} :focus-visible {
     function handleResize() {
       if (!disposed) placeWidget();
     }
+    function showInitializationError(snapshot) {
+      initializationError = `初始化失败：${snapshot.applicationError || "设置读取失败。"}`;
+      if (!dialog) return;
+      setMessage(initializationError, "error");
+      disableDialogWrites();
+    }
+    function changeAffectsWidget(change) {
+      return change.kind === "lifecycle" || change.kind === "settings" && ["refresh", "all"].includes(change.area);
+    }
     function update(snapshot, change = {}) {
       latestSnapshot = snapshot;
       if (disposed) return;
       if (snapshot.lifecycle === "error") {
-        initializationError = `初始化失败：${snapshot.applicationError || "设置读取失败。"}`;
-        if (dialog) {
-          setMessage(initializationError, "error");
-          disableDialogWrites();
-        }
+        showInitializationError(snapshot);
         return;
       }
       if (snapshot.lifecycle !== "ready") return;
       initializationError = null;
-      if (change.kind === "lifecycle" || change.kind === "settings" && ["refresh", "all"].includes(change.area))
-        renderWidget();
+      if (changeAffectsWidget(change)) renderWidget();
       updatePauseButton();
       updateCountdownText();
       updateWidgetStatusText();

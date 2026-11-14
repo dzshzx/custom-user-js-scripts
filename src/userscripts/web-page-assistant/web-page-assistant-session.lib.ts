@@ -139,30 +139,40 @@ function createWebPageAssistantSession({
   ): SessionResult {
     return { ok: !code, code, persisted, scope, state: getState() };
   }
+  // Applies the current settings to one capability; throws when the capability rejects them.
+  function applyCapability(capability: SessionArea) {
+    if (capability === 'refresh') {
+      runtime.restart(Settings.resolveActiveRefreshSetting(settings, keys));
+      return;
+    }
+    appliedUnlocker = null;
+    const match = Settings.resolveActiveUnlockerSetting(settings, keys);
+    unlocker.install(match?.setting);
+    appliedUnlocker = match;
+  }
+  // Records why a capability failed to apply and switches that capability off.
+  function failCapability(capability: SessionArea, error: unknown) {
+    applicationErrors[capability] = errorMessage(error);
+    if (capability === 'refresh') {
+      runtime.stop();
+      return;
+    }
+    appliedUnlocker = null;
+    try {
+      unlocker.uninstall();
+    } catch {
+      /* preserve the original application error */
+    }
+  }
   function apply(area: SessionChangeArea): 'application-failed' | null {
     let failed = false;
     for (const capability of area === 'all' ? (['refresh', 'unlocker'] as const) : [area]) {
       applicationErrors[capability] = null;
       try {
-        if (capability === 'refresh') runtime.restart(Settings.resolveActiveRefreshSetting(settings, keys));
-        else {
-          appliedUnlocker = null;
-          const match = Settings.resolveActiveUnlockerSetting(settings, keys);
-          unlocker.install(match?.setting);
-          appliedUnlocker = match;
-        }
+        applyCapability(capability);
       } catch (error) {
         failed = true;
-        applicationErrors[capability] = errorMessage(error);
-        if (capability === 'refresh') runtime.stop();
-        else {
-          appliedUnlocker = null;
-          try {
-            unlocker.uninstall();
-          } catch {
-            /* preserve the original application error */
-          }
-        }
+        failCapability(capability, error);
       }
     }
     return failed ? 'application-failed' : null;
@@ -239,38 +249,41 @@ function createWebPageAssistantSession({
   function settingsChangeFor(
     command: SessionCommand,
     scope: Settings.Scope,
-    key: string,
   ): ((latest: Settings.Settings) => Settings.Settings) | null {
-    const { type } = command;
-    let change: (latest: Settings.Settings) => Settings.Settings;
-    if (type === 'save-refresh') {
-      if (!Settings.isValidIntervalMs(command.intervalMs)) return null;
-      const updatedAt = clock.now();
-      change = (latest) => Settings.setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
-    } else if (type === 'save-unlocker') {
-      if (!Settings.normalizeUnlockerSetting(command.setting)) return null;
-      const updatedAt = clock.now();
-      change = (latest) => Settings.setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
-    } else if (type === 'delete-unlocker') {
-      change = (latest) => Settings.deleteUnlockerSetting(latest, scope, key);
-    } else if (type === 'delete-refresh' || type === 'disable-active') {
-      change = (latest) => Settings.deleteRefreshSetting(latest, scope, key);
-    } else return null;
-    return change;
-  }
-  async function write(command: SessionCommand): Promise<SessionResult> {
-    if (lifecycle !== 'ready') return result(lifecycle === 'disposed' ? 'disposed' : 'not-ready');
-    const { type } = command;
-    // Cast only names the expected shape; the includes check below validates it.
-    const scope = (
-      type === 'disable-active' ? runtime.getState().activeMatch?.scope : (command as { scope?: unknown }).scope
-    ) as Settings.Scope;
-    if (type === 'disable-active' && !scope) return result();
-    if (!['page', 'site'].includes(scope)) return result('invalid-input');
     const key = scope === 'page' ? keys.pageKey : keys.siteKey;
-    const area: SessionArea = type.includes('unlocker') ? 'unlocker' : 'refresh';
-    const change = settingsChangeFor(command, scope, key);
-    if (!change) return result('invalid-input');
+    switch (command.type) {
+      case 'save-refresh': {
+        if (!Settings.isValidIntervalMs(command.intervalMs)) return null;
+        const updatedAt = clock.now();
+        return (latest) => Settings.setRefreshSetting(latest, scope, key, command.intervalMs, updatedAt);
+      }
+      case 'save-unlocker': {
+        if (!Settings.normalizeUnlockerSetting(command.setting)) return null;
+        const updatedAt = clock.now();
+        return (latest) => Settings.setUnlockerSetting(latest, scope, key, command.setting, updatedAt);
+      }
+      case 'delete-unlocker':
+        return (latest) => Settings.deleteUnlockerSetting(latest, scope, key);
+      case 'delete-refresh':
+      case 'disable-active':
+        return (latest) => Settings.deleteRefreshSetting(latest, scope, key);
+      default:
+        return null;
+    }
+  }
+  // The scope a write command targets; disable-active targets the scope of the active refresh match.
+  function commandScope(command: SessionCommand): Settings.Scope {
+    // Cast only names the expected shape; write validates it before use.
+    return (
+      command.type === 'disable-active' ? runtime.getState().activeMatch?.scope : (command as { scope?: unknown }).scope
+    ) as Settings.Scope;
+  }
+  // Stores a validated change, then applies every area whose match changed and always the commanded one.
+  async function persistChange(
+    change: (latest: Settings.Settings) => Settings.Settings,
+    area: SessionArea,
+    scope: Settings.Scope,
+  ): Promise<SessionResult> {
     let next: Settings.Settings;
     try {
       next = Settings.normalizeSettings(await storage.updateSettings(change));
@@ -278,14 +291,24 @@ function createWebPageAssistantSession({
       if ((lifecycle as SessionLifecycle) === 'disposed') return result('disposed');
       return { ...result('storage-failed'), message: errorMessage(error) };
     }
-    // Other tabs' changes arrive with this write; apply every area whose
-    // match changed, and always the commanded one.
+    // Other tabs' changes arrive with this write.
     const applied = combinedArea([...new Set([area, ...changedAreas(settings, next)])]);
     commitSettings(next);
     if ((lifecycle as SessionLifecycle) === 'disposed') return result('disposed', true, scope);
     const code = apply(applied!);
     emit('settings', applied);
     return result(code, true, scope);
+  }
+  async function write(command: SessionCommand): Promise<SessionResult> {
+    if (lifecycle !== 'ready') return result(lifecycle === 'disposed' ? 'disposed' : 'not-ready');
+    const { type } = command;
+    const scope = commandScope(command);
+    if (type === 'disable-active' && !scope) return result();
+    if (!['page', 'site'].includes(scope)) return result('invalid-input');
+    const area: SessionArea = type.includes('unlocker') ? 'unlocker' : 'refresh';
+    const change = settingsChangeFor(command, scope);
+    if (!change) return result('invalid-input');
+    return persistChange(change, area, scope);
   }
   function dispatch(command: SessionCommand | null | undefined): Promise<SessionResult> {
     if (lifecycle !== 'ready') return Promise.resolve(result(lifecycle === 'disposed' ? 'disposed' : 'not-ready'));
