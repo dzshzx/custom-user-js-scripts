@@ -172,6 +172,56 @@ function readPreviewImage(
     return data;
   };
 
+  // Reads an inline data: URL source. cli-v1 reports a malformed one as empty; userscript-v1 throws.
+  const readDataUrlImage = (target: PreviewImageCandidate, source: string): PreviewImageReadResult => {
+    const match = source.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      if (profile === 'cli-v1') {
+        return { kind: 'empty', reason: 'invalid-data-url' };
+      }
+      throw attachDiagnostic(new Error('Unsupported data URL format'), 'FEISHU_IMAGE_INVALID_DATA_URL', 'data-url');
+    }
+    return {
+      kind: 'image',
+      mime: match[1],
+      width: target.width,
+      height: target.height,
+      mode: 'data-url',
+      payload:
+        profile === 'userscript-v1' ? { encoding: 'data-url', data: source } : { encoding: 'base64', data: match[2] },
+    };
+  };
+
+  // userscript-v1 result for a fetched image: the response blob read back as a data URL.
+  const readBlobDataUrlImage = async (response: Response, target: PreviewImageCandidate): Promise<PreviewImageRead> => {
+    let blob: Blob;
+    try {
+      blob = await response.blob();
+    } catch (error) {
+      throw attachDiagnostic(error, 'FEISHU_IMAGE_BLOB_READ_FAILED', 'blob-read');
+    }
+    const FileReaderCtor = (environment.FileReaderCtor || host.FileReader)!;
+    let data: string;
+    try {
+      data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReaderCtor();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('Failed to read blob'));
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      throw attachDiagnostic(error, 'FEISHU_IMAGE_BLOB_READ_FAILED', 'blob-read');
+    }
+    return {
+      kind: 'image',
+      mime: blob.type || 'application/octet-stream',
+      width: target.width,
+      height: target.height,
+      mode: 'fetched',
+      payload: { encoding: 'data-url', data },
+    };
+  };
+
   return (async (): Promise<PreviewImageReadResult> => {
     if (!items.length) {
       return { kind: 'empty', reason: 'no-candidate' };
@@ -184,53 +234,13 @@ function readPreviewImage(
     }
 
     if (source.startsWith('data:')) {
-      const match = source.match(/^data:([^;]+);base64,(.+)$/);
-      if (!match) {
-        if (profile === 'cli-v1') {
-          return { kind: 'empty', reason: 'invalid-data-url' };
-        }
-        throw attachDiagnostic(new Error('Unsupported data URL format'), 'FEISHU_IMAGE_INVALID_DATA_URL', 'data-url');
-      }
-      return {
-        kind: 'image',
-        mime: match[1],
-        width: target.width,
-        height: target.height,
-        mode: 'data-url',
-        payload:
-          profile === 'userscript-v1' ? { encoding: 'data-url', data: source } : { encoding: 'base64', data: match[2] },
-      };
+      return readDataUrlImage(target, source);
     }
 
     const response = await fetchImageResponse(source);
 
     if (profile === 'userscript-v1') {
-      let blob: Blob;
-      try {
-        blob = await response.blob();
-      } catch (error) {
-        throw attachDiagnostic(error, 'FEISHU_IMAGE_BLOB_READ_FAILED', 'blob-read');
-      }
-      const FileReaderCtor = (environment.FileReaderCtor || host.FileReader)!;
-      let data: string;
-      try {
-        data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReaderCtor();
-          reader.onload = () => resolve(String(reader.result || ''));
-          reader.onerror = () => reject(reader.error || new Error('Failed to read blob'));
-          reader.readAsDataURL(blob);
-        });
-      } catch (error) {
-        throw attachDiagnostic(error, 'FEISHU_IMAGE_BLOB_READ_FAILED', 'blob-read');
-      }
-      return {
-        kind: 'image',
-        mime: blob.type || 'application/octet-stream',
-        width: target.width,
-        height: target.height,
-        mode: 'fetched',
-        payload: { encoding: 'data-url', data },
-      };
+      return readBlobDataUrlImage(response, target);
     }
 
     const data = await encodeResponseBase64(response);

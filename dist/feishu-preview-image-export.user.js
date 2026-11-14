@@ -1852,6 +1852,51 @@ ${root} :focus-visible {
       }
       return data;
     };
+    const readDataUrlImage = (target, source) => {
+      const match = source.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) {
+        if (profile === "cli-v1") {
+          return { kind: "empty", reason: "invalid-data-url" };
+        }
+        throw attachDiagnostic(new Error("Unsupported data URL format"), "FEISHU_IMAGE_INVALID_DATA_URL", "data-url");
+      }
+      return {
+        kind: "image",
+        mime: match[1],
+        width: target.width,
+        height: target.height,
+        mode: "data-url",
+        payload: profile === "userscript-v1" ? { encoding: "data-url", data: source } : { encoding: "base64", data: match[2] }
+      };
+    };
+    const readBlobDataUrlImage = async (response, target) => {
+      let blob;
+      try {
+        blob = await response.blob();
+      } catch (error) {
+        throw attachDiagnostic(error, "FEISHU_IMAGE_BLOB_READ_FAILED", "blob-read");
+      }
+      const FileReaderCtor = environment.FileReaderCtor || host.FileReader;
+      let data;
+      try {
+        data = await new Promise((resolve, reject) => {
+          const reader = new FileReaderCtor();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(reader.error || new Error("Failed to read blob"));
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        throw attachDiagnostic(error, "FEISHU_IMAGE_BLOB_READ_FAILED", "blob-read");
+      }
+      return {
+        kind: "image",
+        mime: blob.type || "application/octet-stream",
+        width: target.width,
+        height: target.height,
+        mode: "fetched",
+        payload: { encoding: "data-url", data }
+      };
+    };
     return (async () => {
       if (!items.length) {
         return { kind: "empty", reason: "no-candidate" };
@@ -1862,50 +1907,11 @@ ${root} :focus-visible {
         throw attachDiagnostic(new Error("Image source is empty"), "FEISHU_IMAGE_SOURCE_EMPTY", "source");
       }
       if (source.startsWith("data:")) {
-        const match = source.match(/^data:([^;]+);base64,(.+)$/);
-        if (!match) {
-          if (profile === "cli-v1") {
-            return { kind: "empty", reason: "invalid-data-url" };
-          }
-          throw attachDiagnostic(new Error("Unsupported data URL format"), "FEISHU_IMAGE_INVALID_DATA_URL", "data-url");
-        }
-        return {
-          kind: "image",
-          mime: match[1],
-          width: target.width,
-          height: target.height,
-          mode: "data-url",
-          payload: profile === "userscript-v1" ? { encoding: "data-url", data: source } : { encoding: "base64", data: match[2] }
-        };
+        return readDataUrlImage(target, source);
       }
       const response = await fetchImageResponse(source);
       if (profile === "userscript-v1") {
-        let blob;
-        try {
-          blob = await response.blob();
-        } catch (error) {
-          throw attachDiagnostic(error, "FEISHU_IMAGE_BLOB_READ_FAILED", "blob-read");
-        }
-        const FileReaderCtor = environment.FileReaderCtor || host.FileReader;
-        let data2;
-        try {
-          data2 = await new Promise((resolve, reject) => {
-            const reader = new FileReaderCtor();
-            reader.onload = () => resolve(String(reader.result || ""));
-            reader.onerror = () => reject(reader.error || new Error("Failed to read blob"));
-            reader.readAsDataURL(blob);
-          });
-        } catch (error) {
-          throw attachDiagnostic(error, "FEISHU_IMAGE_BLOB_READ_FAILED", "blob-read");
-        }
-        return {
-          kind: "image",
-          mime: blob.type || "application/octet-stream",
-          width: target.width,
-          height: target.height,
-          mode: "fetched",
-          payload: { encoding: "data-url", data: data2 }
-        };
+        return readBlobDataUrlImage(response, target);
       }
       const data = await encodeResponseBase64(response);
       return {
