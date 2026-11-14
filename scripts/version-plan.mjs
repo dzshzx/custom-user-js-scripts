@@ -194,19 +194,21 @@ function validateCommandOptions(command, options) {
     fail('check reads actual target metadata and does not accept --target overrides');
 }
 
+// Applies one option to options, consuming its value from args when it takes one.
+function readOption(arg, args, options) {
+  if (arg === '--base-ref') options.baseRef = args.shift() || fail('--base-ref requires a value');
+  else if (arg === '--target-ref') options.targetRef = args.shift() || fail('--target-ref requires a value');
+  else if (arg === '--target') readTargetOverride(args, options);
+  else if (arg === '--json') options.json = true;
+  else if (arg === '-h' || arg === '--help') options.help = true;
+  else fail(`unknown argument: ${arg}`);
+}
+
 function parseArgs(argv) {
   const args = [...argv];
   const command = args[0] && !args[0].startsWith('-') ? args.shift() : 'plan';
   const options = { baseRef: DEFAULT_BASE_REF, command, json: false, targetOverrides: new Map() };
-  while (args.length > 0) {
-    const arg = args.shift();
-    if (arg === '--base-ref') options.baseRef = args.shift() || fail('--base-ref requires a value');
-    else if (arg === '--target-ref') options.targetRef = args.shift() || fail('--target-ref requires a value');
-    else if (arg === '--target') readTargetOverride(args, options);
-    else if (arg === '--json') options.json = true;
-    else if (arg === '-h' || arg === '--help') options.help = true;
-    else fail(`unknown argument: ${arg}`);
-  }
+  while (args.length > 0) readOption(args.shift(), args, options);
   if (options.help) return options;
   validateCommandOptions(command, options);
   return options;
