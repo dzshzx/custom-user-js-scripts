@@ -74,10 +74,10 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 ```bash
 npm ci
 npm run test:prepare # 项目锁定的 Playwright CLI 安装对应 Chromium 和系统依赖
-npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类型检查、ESLint、全部测试
+npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类型检查、ESLint、Biome 认知复杂度、全部测试
 ```
 
-`npm run lint` 与 `npm test` 可独立运行，会先自动构建；`npm run lint` 依次跑 metadata 检查、`tsc`（strict，只做类型检查）与 ESLint，单独类型检查用 `npm run typecheck`。
+`npm run lint` 与 `npm test` 可独立运行，会先自动构建；`npm run lint` 依次跑 metadata 检查、`tsc`（strict，只做类型检查）、ESLint 与 Biome（每个函数的认知复杂度不超过 15，上限写在 `biome.json`），单独类型检查用 `npm run typecheck`。
 `src/` 源码是 TypeScript：类型由 esbuild 擦除，影响产出的编译选项固定在 `scripts/lib/jsx-build-options.mjs`，`tsconfig.json` 只管类型检查，收紧类型不会改变安装产物。完整入口要求所有测试通过，
 并核对三项浏览器验收的稳定名称和文件；缺失、跳过或过滤掉必需用例都会失败。
 项目在 `package.json` devDependencies 精确锁定 Playwright，测试脚本从那里读取版本；测试只加载本项目依赖和该版本的默认 Chromium，

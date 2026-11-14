@@ -40,6 +40,18 @@ try {
     // tsconfig.json sets noEmit: a type check only, the bundle comes from esbuild.
     [process.execPath, ['node_modules/typescript/bin/tsc', '-p', '.']],
     [process.execPath, ['node_modules/eslint/bin/eslint.js', '.']],
+    // Cognitive complexity of each function, limit 15 in biome.json. Biome cannot be told to
+    // disregard its suppression comments, so any such comment in a linted file fails here.
+    [process.execPath, ['node_modules/@biomejs/biome/bin/biome', 'lint', '.']],
+    [
+      'sh',
+      [
+        '-c',
+        "if git grep -n 'biome[-]ignore' -- '*.js' '*.mjs' '*.cjs' '*.jsx' '*.ts' '*.mts' '*.cts' '*.tsx' " +
+          "':(exclude)dist/**' ':(exclude)src/userscripts/*/*.user.js'; then " +
+          "echo 'verify: Biome suppression comments are not accepted; the complexity limit lives in biome.json' >&2; exit 1; fi",
+      ],
+    ],
     ['bash', ['scripts/format.sh', '--check']],
   ]);
   if (!(await runTests())) throw new Error('tests failed');
