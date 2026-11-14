@@ -52,6 +52,17 @@ try {
           "echo 'verify: Biome suppression comments are not accepted; the complexity limit lives in biome.json' >&2; exit 1; fi",
       ],
     ],
+    // A nested biome.json (root: false) can switch the complexity rule off or exclude files,
+    // so the root biome.json must be the only Biome configuration in the repository.
+    [
+      'sh',
+      [
+        '-c',
+        'configs=$(git ls-files -co --exclude-standard -- "*biome.json" "*biome.jsonc"); ' +
+          'if [ "$configs" != biome.json ]; then ' +
+          'echo "verify: the root biome.json is the only Biome configuration accepted, found: $configs" >&2; exit 1; fi',
+      ],
+    ],
     ['bash', ['scripts/format.sh', '--check']],
   ]);
   if (!(await runTests())) throw new Error('tests failed');
