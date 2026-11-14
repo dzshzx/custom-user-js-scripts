@@ -954,6 +954,24 @@
     ).values()
   ].reverse();
   var project = (movie) => Object.fromEntries(MOVIE_FIELDS.map((key) => [key, movie[key] || ""]));
+  var CATALOG_PAGE_SIZE = 48;
+  function cachedOverlap(list, cached) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const overlap = cached.findIndex((item) => item.period === list[i].period);
+      if (overlap >= 0) return overlap;
+    }
+    return -1;
+  }
+  async function fetchCatalogPages(fetchPage, onPage, cached) {
+    let list = [];
+    for (let page = 1; ; page++) {
+      const batch = (await fetchPage(page)).periods || [];
+      list = unique(list.concat(batch));
+      onPage(list);
+      const overlap = cached ? cachedOverlap(list, cached) : -1;
+      if (overlap >= 0 || batch.length !== CATALOG_PAGE_SIZE) return { list, overlap };
+    }
+  }
   function createDetailStore(dbName = "javdb-recommend-archive", storeName = "details") {
     const store = createStore(dbName, storeName);
     return {
@@ -1073,31 +1091,24 @@
         periods = unique(cached.periods);
         return { periods: periods.slice(), degraded: true, source: "本地缓存", error };
       };
+      const fetchCatalogPage = (page) => request(
+        "/api/v1/movies/recommend_periods",
+        { page, limit: CATALOG_PAGE_SIZE },
+        { signal: aborter.signal }
+      );
+      const reportCatalogPage = (list) => {
+        check(epoch);
+        notify(onProgress, list.length);
+      };
       work.promise = (async () => {
         try {
           const incremental = usable && now() - (cached.fullFetchedAt || cached.fetchedAt) < MONTH;
-          let list = [];
-          for (let page = 1; ; page++) {
-            const response = await request(
-              "/api/v1/movies/recommend_periods",
-              { page, limit: 48 },
-              { signal: aborter.signal }
-            );
-            check(epoch);
-            const batch = response.periods || [];
-            list = unique(list.concat(batch));
-            notify(onProgress, list.length);
-            let overlap = -1;
-            if (incremental) {
-              for (let i = list.length - 1; i >= 0; i--) {
-                overlap = cached.periods.findIndex((item) => item.period === list[i].period);
-                if (overlap >= 0) break;
-              }
-            }
-            if (overlap >= 0 || batch.length !== 48) {
-              return storeCatalog(list, overlap);
-            }
-          }
+          const { list, overlap } = await fetchCatalogPages(
+            fetchCatalogPage,
+            reportCatalogPage,
+            incremental ? cached.periods : null
+          );
+          return storeCatalog(list, overlap);
         } catch (error) {
           return fallBackToCachedCatalog(error);
         } finally {
@@ -1106,6 +1117,50 @@
       })();
       catalogWork = work;
       return work.promise;
+    }
+    function keepNavigationHit(period, cached) {
+      memory.set(period, cached);
+      if (now() - (cached.accessedAt || 0) >= HOUR) {
+        cached.accessedAt = now();
+        saveDetail(period, cached);
+      }
+      saveIndex(period, cached);
+    }
+    function cacheHit(period, purpose, local) {
+      if (purpose === "search") return searchable(period, local);
+      return fresh(local, period) ? local : null;
+    }
+    function cacheResult(period, purpose, cached) {
+      if (purpose === "navigation") keepNavigationHit(period, cached);
+      return { movies: cached.movies, fetchedAt: cached.fetchedAt, degraded: false, source: "cache" };
+    }
+    function periodRequest(period, epoch) {
+      const existing = requests.get(period);
+      if (existing) return existing;
+      const aborter = createAborter();
+      const item = { aborter, consumers: /* @__PURE__ */ new Set() };
+      item.promise = (async () => request("/api/v1/movies/recommend", { period }, { signal: aborter.signal }))().then((response) => {
+        check(epoch);
+        if (aborter.signal?.aborted || !item.consumers.size) throw cancelled();
+        return { movies: response.movies || [], fetchedAt: now() };
+      }).finally(() => {
+        if (requests.get(period) === item) requests.delete(period);
+      });
+      requests.set(period, item);
+      return item;
+    }
+    function networkResult(period, purpose, entry) {
+      saveIndex(period, entry);
+      if (purpose === "navigation") {
+        memory.set(period, entry);
+        saveDetail(period, entry);
+      }
+      return { ...entry, degraded: false, source: "network" };
+    }
+    function localFallback(period, purpose, network, local, error) {
+      if (network.aborter.signal?.aborted || !valid(local)) throw error;
+      if (purpose === "navigation") memory.set(period, local);
+      return { movies: local.movies, fetchedAt: local.fetchedAt, degraded: true, source: "cache", error };
     }
     function acquire(period, { purpose = "navigation", diskEntries } = {}) {
       const epoch = generation;
@@ -1117,55 +1172,23 @@
         check(epoch);
         if (released) throw cancelled();
       };
-      const keepNavigationHit = (cached) => {
-        memory.set(period, cached);
-        if (now() - (cached.accessedAt || 0) >= HOUR) {
-          cached.accessedAt = now();
-          saveDetail(period, cached);
-        }
-        saveIndex(period, cached);
-      };
       let local = null;
       const work = (async () => {
         assertActive();
         local = memory.get(period) || (diskEntries ? diskEntries[period] : await readDetail(period));
         assertActive();
-        const cached = purpose === "search" ? searchable(period, local) : fresh(local, period) ? local : null;
-        if (cached) {
-          if (purpose === "navigation") {
-            keepNavigationHit(cached);
-          }
-          return { movies: cached.movies, fetchedAt: cached.fetchedAt, degraded: false, source: "cache" };
-        }
-        network = requests.get(period);
-        if (!network) {
-          const aborter = createAborter();
-          network = { aborter, consumers: /* @__PURE__ */ new Set() };
-          const item = network;
-          item.promise = (async () => request("/api/v1/movies/recommend", { period }, { signal: aborter.signal }))().then((response) => {
-            check(epoch);
-            if (aborter.signal?.aborted || !item.consumers.size) throw cancelled();
-            return { movies: response.movies || [], fetchedAt: now() };
-          }).finally(() => {
-            if (requests.get(period) === item) requests.delete(period);
-          });
-          requests.set(period, item);
-        }
-        network.consumers.add(cancellation);
+        const cached = cacheHit(period, purpose, local);
+        if (cached) return cacheResult(period, purpose, cached);
+        const shared = periodRequest(period, epoch);
+        network = shared;
+        shared.consumers.add(cancellation);
         try {
-          const entry = await network.promise;
+          const entry = await shared.promise;
           assertActive();
-          saveIndex(period, entry);
-          if (purpose === "navigation") {
-            memory.set(period, entry);
-            saveDetail(period, entry);
-          }
-          return { ...entry, degraded: false, source: "network" };
+          return networkResult(period, purpose, entry);
         } catch (error) {
           assertActive();
-          if (network.aborter.signal?.aborted || !valid(local)) throw error;
-          if (purpose === "navigation") memory.set(period, local);
-          return { movies: local.movies, fetchedAt: local.fetchedAt, degraded: true, source: "cache", error };
+          return localFallback(period, purpose, shared, local, error);
         }
       })();
       const lease = {
@@ -1223,7 +1246,41 @@
         }
         emitUpdate(group);
       };
+      const reportFailure = () => {
+        if (cancelledSearch()) return;
+        result.completed++;
+        result.failed++;
+        emitUpdate(void 0);
+      };
       let diskEntries = {};
+      const searchMissing = async (item) => {
+        const lease = acquire(item.period, { purpose: "search", diskEntries });
+        leases.add(lease);
+        try {
+          const entry = await lease.promise;
+          if (!cancelledSearch()) report(item.period, item.index, entry);
+        } catch {
+          reportFailure();
+        } finally {
+          lease.release();
+          leases.delete(lease);
+        }
+      };
+      const pauseBetweenRequests = async () => {
+        try {
+          await delay(100, aborter.signal, timers);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      const worker = async () => {
+        while (!cancelledSearch() && cursor < missing.length) {
+          await searchMissing(missing[cursor++]);
+          const more = !cancelledSearch() && cursor < missing.length;
+          if (more && !await pauseBetweenRequests()) break;
+        }
+      };
       const job = {
         cancel() {
           if (stopped) return;
@@ -1241,32 +1298,6 @@
             if (entry) report(item.period, i, entry);
             else missing.push({ period: item.period, index: i });
           });
-        async function worker() {
-          while (!cancelledSearch() && cursor < missing.length) {
-            const item = missing[cursor++], lease = acquire(item.period, { purpose: "search", diskEntries });
-            leases.add(lease);
-            try {
-              const entry = await lease.promise;
-              if (!cancelledSearch()) report(item.period, item.index, entry);
-            } catch {
-              if (!cancelledSearch()) {
-                result.completed++;
-                result.failed++;
-                emitUpdate(void 0);
-              }
-            } finally {
-              lease.release();
-              leases.delete(lease);
-            }
-            if (!cancelledSearch() && cursor < missing.length) {
-              try {
-                await delay(100, aborter.signal, timers);
-              } catch {
-                break;
-              }
-            }
-          }
-        }
         await Promise.all([worker(), worker()]);
         result.status = cancelledSearch() ? "cancelled" : result.failed ? "partial" : "complete";
         result.groups.sort((a, b) => a.index - b.index);
@@ -1776,40 +1807,46 @@
       cleanupResources();
       return publish(diagnostic(reason));
     }
+    function fetchHomepage(homepageUrl) {
+      if (window2.AbortController) fetchController = new window2.AbortController();
+      return byDeadline(fetch2(homepageUrl, fetchController ? { signal: fetchController.signal } : void 0));
+    }
+    function restoreIntendedMedia(prepared) {
+      prepared.forEach(({ link, intendedMedia }) => {
+        if (intendedMedia) link.media = intendedMedia;
+        else link.removeAttribute("media");
+      });
+    }
+    async function adoptHomepage(html, responseUrl) {
+      const homeDocument = new window2.DOMParser().parseFromString(html, "text/html");
+      const homepageBase = resolveHomepageBase(homeDocument, responseUrl);
+      const styles = applicableStyles(homeDocument);
+      if (!styles.length) return publish(diagnostic("no-stylesheets"));
+      const prepared = prepareStyles(styles, homepageBase);
+      await byDeadline(Promise.all(prepared.map((item) => item.loaded)));
+      if (disposed) return notifyDisposed();
+      restoreIntendedMedia(prepared);
+      await Promise.resolve();
+      if (!nativeStylesApply()) {
+        cleanupResources();
+        return publish(diagnostic("style-check"));
+      }
+      if (disposed) return notifyDisposed();
+      installNavigation(homeDocument, homepageBase);
+      applyNativeDocumentState(homeDocument);
+      return publish({ status: "native", reason: "ready", stylesheets: prepared.length });
+    }
     async function run() {
       deadline = timer.now() + CHROME_TIMEOUT_MS;
       try {
         const homepageUrl = new window2.URL("/", baseUrl).href;
-        if (window2.AbortController) fetchController = new window2.AbortController();
-        const response = await byDeadline(
-          fetch2(homepageUrl, fetchController ? { signal: fetchController.signal } : void 0)
-        );
+        const response = await fetchHomepage(homepageUrl);
         if (disposed) return notifyDisposed();
         if (!response || !response.ok)
           return publish(diagnostic("homepage-fetch", { httpStatus: response && response.status }));
         const html = await byDeadline(response.text());
         if (disposed) return notifyDisposed();
-        const homeDocument = new window2.DOMParser().parseFromString(html, "text/html");
-        const responseUrl = response.url || homepageUrl;
-        const homepageBase = resolveHomepageBase(homeDocument, responseUrl);
-        const styles = applicableStyles(homeDocument);
-        if (!styles.length) return publish(diagnostic("no-stylesheets"));
-        const prepared = prepareStyles(styles, homepageBase);
-        await byDeadline(Promise.all(prepared.map((item) => item.loaded)));
-        if (disposed) return notifyDisposed();
-        prepared.forEach(({ link, intendedMedia }) => {
-          if (intendedMedia) link.media = intendedMedia;
-          else link.removeAttribute("media");
-        });
-        await Promise.resolve();
-        if (!nativeStylesApply()) {
-          cleanupResources();
-          return publish(diagnostic("style-check"));
-        }
-        if (disposed) return notifyDisposed();
-        installNavigation(homeDocument, homepageBase);
-        applyNativeDocumentState(homeDocument);
-        return publish({ status: "native", reason: "ready", stylesheets: prepared.length });
+        return await adoptHomepage(html, response.url || homepageUrl);
       } catch (error) {
         return publishFailure(error);
       }
@@ -1922,6 +1959,34 @@
 
   // src/userscripts/javdb-recommend/javdb-recommend-view.lib.ts
   var BASE = location.origin;
+  function countTemplateTracks(value) {
+    var depth = 0;
+    var count = 0;
+    var inTrack = false;
+    for (var i = 0; i < value.length; i++) {
+      var char = value[i];
+      if (char === "(" || char === "[") depth += 1;
+      else if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
+      if (/\s/.test(char) && depth === 0) {
+        if (inTrack) count += 1;
+        inTrack = false;
+      } else {
+        inTrack = true;
+      }
+    }
+    return count + (inTrack ? 1 : 0);
+  }
+  function countGridTracks(template) {
+    var value = String(template || "").trim();
+    if (!value || value === "none") return 0;
+    var repeated = /^repeat\(\s*(\d+)\s*,/i.exec(value);
+    if (repeated) return parseInt(repeated[1], 10);
+    return countTemplateTracks(value);
+  }
+  function searchSummary(result) {
+    var outcome = result.status === "partial" ? "搜索部分完成 · 失败 " + result.failed + " 期 · " : result.status === "cancelled" ? "搜索已停止 · " : "搜索完成 · ";
+    return outcome + "命中 " + result.hits + " 部（" + result.hitPeriods + " 期）" + (result.degraded ? " · 使用旧缓存 " + result.degraded + " 期" : "");
+  }
   function bootArchivePage(data) {
     var disposed = false;
     var periods = [];
@@ -1994,27 +2059,6 @@
       list.querySelectorAll(".cover,img").forEach(function(node) {
         releaseCopiedStyles(node);
       });
-    }
-    function countGridTracks(template) {
-      var value = String(template || "").trim();
-      if (!value || value === "none") return 0;
-      var repeated = /^repeat\(\s*(\d+)\s*,/i.exec(value);
-      if (repeated) return parseInt(repeated[1], 10);
-      var depth = 0;
-      var count = 0;
-      var inTrack = false;
-      for (var i = 0; i < value.length; i++) {
-        var char = value[i];
-        if (char === "(" || char === "[") depth += 1;
-        else if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
-        if (/\s/.test(char) && depth === 0) {
-          if (inTrack) count += 1;
-          inTrack = false;
-        } else {
-          inTrack = true;
-        }
-      }
-      return count + (inTrack ? 1 : 0);
     }
     function observeGridSource(source) {
       if (observedGridSource === source) return;
@@ -2404,9 +2448,7 @@
         if (disposed || generation !== searchGeneration) return;
         activeSearch = null;
         btnEl.textContent = "全期搜索";
-        setStatus(
-          (result.status === "partial" ? "搜索部分完成 · 失败 " + result.failed + " 期 · " : result.status === "cancelled" ? "搜索已停止 · " : "搜索完成 · ") + "命中 " + result.hits + " 部（" + result.hitPeriods + " 期）" + (result.degraded ? " · 使用旧缓存 " + result.degraded + " 期" : "")
-        );
+        setStatus(searchSummary(result));
         if (!result.hits) {
           var empty = document.createElement("div");
           empty.className = "jdb-ra-empty";

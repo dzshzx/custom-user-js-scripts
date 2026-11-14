@@ -1,7 +1,7 @@
 import { createPeriodSection } from './javdb-recommend-period-section.lib.ts';
 import { createSiteChrome } from './javdb-recommend-site-chrome.lib.ts';
 import { ARCHIVE_CSS, archivePageMarkup } from './javdb-recommend-page-shell.lib.ts';
-import type { ArchiveData, Movie, Period, PeriodLease, SearchJob } from './javdb-recommend-data.lib.ts';
+import type { ArchiveData, Movie, Period, PeriodLease, SearchJob, SearchResult } from './javdb-recommend-data.lib.ts';
 import type { PeriodSection } from './javdb-recommend-period-section.lib.ts';
 
 export interface ArchivePageView {
@@ -28,6 +28,53 @@ interface CompatibleGridLayout {
 }
 
 var BASE = location.origin;
+
+// Counts the whitespace-separated tracks of a grid template; whitespace inside () or [] does not separate tracks.
+function countTemplateTracks(value: string) {
+  var depth = 0;
+  var count = 0;
+  var inTrack = false;
+  for (var i = 0; i < value.length; i++) {
+    var char = value[i];
+    if (char === '(' || char === '[') depth += 1;
+    else if (char === ')' || char === ']') depth = Math.max(0, depth - 1);
+    if (/\s/.test(char) && depth === 0) {
+      if (inTrack) count += 1;
+      inTrack = false;
+    } else {
+      inTrack = true;
+    }
+  }
+  return count + (inTrack ? 1 : 0);
+}
+
+function countGridTracks(template: unknown) {
+  var value = String(template || '').trim();
+  if (!value || value === 'none') return 0;
+  var repeated = /^repeat\(\s*(\d+)\s*,/i.exec(value);
+  if (repeated) return parseInt(repeated[1], 10);
+  return countTemplateTracks(value);
+}
+
+// Status line for a finished full-period search.
+function searchSummary(result: SearchResult) {
+  var outcome =
+    result.status === 'partial'
+      ? '搜索部分完成 · 失败 ' + result.failed + ' 期 · '
+      : result.status === 'cancelled'
+        ? '搜索已停止 · '
+        : '搜索完成 · ';
+  return (
+    outcome +
+    '命中 ' +
+    result.hits +
+    ' 部（' +
+    result.hitPeriods +
+    ' 期）' +
+    (result.degraded ? ' · 使用旧缓存 ' + result.degraded + ' 期' : '')
+  );
+}
+
 export function bootArchivePage(data: ArchiveData): ArchivePageView {
   var disposed = false;
   var periods: Period[] = [];
@@ -125,28 +172,6 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
     list.querySelectorAll<HTMLElement>('.cover,img').forEach(function (node) {
       releaseCopiedStyles(node);
     });
-  }
-
-  function countGridTracks(template: unknown) {
-    var value = String(template || '').trim();
-    if (!value || value === 'none') return 0;
-    var repeated = /^repeat\(\s*(\d+)\s*,/i.exec(value);
-    if (repeated) return parseInt(repeated[1], 10);
-    var depth = 0;
-    var count = 0;
-    var inTrack = false;
-    for (var i = 0; i < value.length; i++) {
-      var char = value[i];
-      if (char === '(' || char === '[') depth += 1;
-      else if (char === ')' || char === ']') depth = Math.max(0, depth - 1);
-      if (/\s/.test(char) && depth === 0) {
-        if (inTrack) count += 1;
-        inTrack = false;
-      } else {
-        inTrack = true;
-      }
-    }
-    return count + (inTrack ? 1 : 0);
   }
 
   function observeGridSource(source: Element) {
@@ -594,19 +619,7 @@ export function bootArchivePage(data: ArchiveData): ArchivePageView {
       if (disposed || generation !== searchGeneration) return;
       activeSearch = null;
       btnEl.textContent = '全期搜索';
-      setStatus(
-        (result.status === 'partial'
-          ? '搜索部分完成 · 失败 ' + result.failed + ' 期 · '
-          : result.status === 'cancelled'
-            ? '搜索已停止 · '
-            : '搜索完成 · ') +
-          '命中 ' +
-          result.hits +
-          ' 部（' +
-          result.hitPeriods +
-          ' 期）' +
-          (result.degraded ? ' · 使用旧缓存 ' + result.degraded + ' 期' : ''),
-      );
+      setStatus(searchSummary(result));
       if (!result.hits) {
         var empty = document.createElement('div');
         empty.className = 'jdb-ra-empty';

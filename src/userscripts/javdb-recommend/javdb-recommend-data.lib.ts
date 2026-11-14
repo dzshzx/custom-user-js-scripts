@@ -168,6 +168,33 @@ const unique = (list: Period[]): Period[] =>
     ).values(),
   ].reverse();
 const project = (movie: Movie): Movie => Object.fromEntries(MOVIE_FIELDS.map((key) => [key, movie[key] || '']));
+const CATALOG_PAGE_SIZE = 48;
+
+// Index in cached of the first period found when scanning the fetched list from its end; -1 if none is cached.
+function cachedOverlap(list: Period[], cached: Period[]): number {
+  for (let i = list.length - 1; i >= 0; i--) {
+    const overlap = cached.findIndex((item) => item.period === list[i].period);
+    if (overlap >= 0) return overlap;
+  }
+  return -1;
+}
+
+// Reads catalog pages until one comes back short or, for an incremental refresh, the list reaches the cached
+// catalog. onPage sees the merged list after every page and may throw to stop.
+async function fetchCatalogPages(
+  fetchPage: (page: number) => Promise<{ periods?: Period[] }>,
+  onPage: (list: Period[]) => void,
+  cached: Period[] | null,
+): Promise<{ list: Period[]; overlap: number }> {
+  let list: Period[] = [];
+  for (let page = 1; ; page++) {
+    const batch = (await fetchPage(page)).periods || [];
+    list = unique(list.concat(batch));
+    onPage(list);
+    const overlap = cached ? cachedOverlap(list, cached) : -1;
+    if (overlap >= 0 || batch.length !== CATALOG_PAGE_SIZE) return { list, overlap };
+  }
+}
 
 // Per-period detail entries in the page origin's IndexedDB. Every call is async
 // so a missing indexedDB (or a blocked open) surfaces as a rejection.
@@ -311,31 +338,26 @@ export function createArchiveData({
       periods = unique(cached!.periods);
       return { periods: periods.slice(), degraded: true, source: '本地缓存', error };
     };
+    const fetchCatalogPage = (page: number) =>
+      request(
+        '/api/v1/movies/recommend_periods',
+        { page, limit: CATALOG_PAGE_SIZE },
+        { signal: aborter.signal },
+      ) as Promise<{ periods?: Period[] }>;
+    // A page that lands after cancellation stops the refresh before it reports progress.
+    const reportCatalogPage = (list: Period[]) => {
+      check(epoch);
+      notify(onProgress, list.length);
+    };
     work.promise = (async (): Promise<CatalogResult> => {
       try {
         const incremental = usable && now() - (cached!.fullFetchedAt || cached!.fetchedAt) < MONTH;
-        let list: Period[] = [];
-        for (let page = 1; ; page++) {
-          const response = (await request(
-            '/api/v1/movies/recommend_periods',
-            { page, limit: 48 },
-            { signal: aborter.signal },
-          )) as { periods?: Period[] };
-          check(epoch);
-          const batch = response.periods || [];
-          list = unique(list.concat(batch));
-          notify(onProgress, list.length);
-          let overlap = -1;
-          if (incremental) {
-            for (let i = list.length - 1; i >= 0; i--) {
-              overlap = cached!.periods.findIndex((item) => item.period === list[i].period);
-              if (overlap >= 0) break;
-            }
-          }
-          if (overlap >= 0 || batch.length !== 48) {
-            return storeCatalog(list, overlap);
-          }
-        }
+        const { list, overlap } = await fetchCatalogPages(
+          fetchCatalogPage,
+          reportCatalogPage,
+          incremental ? cached!.periods : null,
+        );
+        return storeCatalog(list, overlap);
       } catch (error) {
         return fallBackToCachedCatalog(error);
       } finally {
@@ -344,6 +366,62 @@ export function createArchiveData({
     })();
     catalogWork = work;
     return work.promise;
+  }
+  // Browsing keeps a cache hit in memory, rewrites its access stamp at most hourly and refreshes its index.
+  function keepNavigationHit(period: number, cached: DetailEntry) {
+    memory.set(period, cached);
+    if (now() - (cached.accessedAt || 0) >= HOUR) {
+      cached.accessedAt = now();
+      saveDetail(period, cached);
+    }
+    saveIndex(period, cached);
+  }
+  // The cached entry a lease may answer from: search reads the index, navigation needs a fresh entry.
+  function cacheHit(period: number, purpose: AcquirePurpose, local: DetailEntry | null | undefined) {
+    if (purpose === 'search') return searchable(period, local);
+    return fresh(local, period) ? local : null;
+  }
+  function cacheResult(period: number, purpose: AcquirePurpose, cached: DetailEntry): PeriodResult {
+    if (purpose === 'navigation') keepNavigationHit(period, cached);
+    return { movies: cached.movies, fetchedAt: cached.fetchedAt, degraded: false, source: 'cache' };
+  }
+  // One network request per period, shared by every lease that needs it until its last consumer leaves.
+  function periodRequest(period: number, epoch: number): NetworkRequest {
+    const existing = requests.get(period);
+    if (existing) return existing;
+    const aborter = createAborter();
+    const item = { aborter, consumers: new Set() } as NetworkRequest;
+    item.promise = (async () => request('/api/v1/movies/recommend', { period }, { signal: aborter.signal }))()
+      .then((response) => {
+        check(epoch);
+        if (aborter.signal?.aborted || !item.consumers.size) throw cancelled();
+        return { movies: (response as { movies?: Movie[] }).movies || [], fetchedAt: now() };
+      })
+      .finally(() => {
+        if (requests.get(period) === item) requests.delete(period);
+      });
+    requests.set(period, item);
+    return item;
+  }
+  function networkResult(period: number, purpose: AcquirePurpose, entry: DetailEntry): PeriodResult {
+    saveIndex(period, entry);
+    if (purpose === 'navigation') {
+      memory.set(period, entry);
+      saveDetail(period, entry);
+    }
+    return { ...entry, degraded: false, source: 'network' };
+  }
+  // A failed request falls back to a valid local entry unless the request was aborted.
+  function localFallback(
+    period: number,
+    purpose: AcquirePurpose,
+    network: NetworkRequest,
+    local: DetailEntry | null | undefined,
+    error: unknown,
+  ): PeriodResult {
+    if (network.aborter.signal?.aborted || !valid(local)) throw error;
+    if (purpose === 'navigation') memory.set(period, local!);
+    return { movies: local!.movies, fetchedAt: local!.fetchedAt, degraded: true, source: 'cache', error };
   }
   function acquire(period: number, { purpose = 'navigation', diskEntries }: AcquireOptions = {}): PeriodLease {
     const epoch = generation;
@@ -357,58 +435,23 @@ export function createArchiveData({
       check(epoch);
       if (released) throw cancelled();
     };
-    // Browsing keeps a cache hit in memory, rewrites its access stamp at most hourly and refreshes its index.
-    const keepNavigationHit = (cached: DetailEntry) => {
-      memory.set(period, cached);
-      if (now() - (cached.accessedAt || 0) >= HOUR) {
-        cached.accessedAt = now();
-        saveDetail(period, cached);
-      }
-      saveIndex(period, cached);
-    };
     let local: DetailEntry | null | undefined = null;
     const work = (async (): Promise<PeriodResult> => {
       assertActive();
       local = memory.get(period) || (diskEntries ? diskEntries[period] : await readDetail(period));
       assertActive();
-      const cached = purpose === 'search' ? searchable(period, local) : fresh(local, period) ? local : null;
-      if (cached) {
-        if (purpose === 'navigation') {
-          keepNavigationHit(cached);
-        }
-        return { movies: cached.movies, fetchedAt: cached.fetchedAt, degraded: false, source: 'cache' };
-      }
-      network = requests.get(period);
-      if (!network) {
-        const aborter = createAborter();
-        network = { aborter, consumers: new Set() } as NetworkRequest;
-        const item = network;
-        item.promise = (async () => request('/api/v1/movies/recommend', { period }, { signal: aborter.signal }))()
-          .then((response) => {
-            check(epoch);
-            if (aborter.signal?.aborted || !item.consumers.size) throw cancelled();
-            return { movies: (response as { movies?: Movie[] }).movies || [], fetchedAt: now() };
-          })
-          .finally(() => {
-            if (requests.get(period) === item) requests.delete(period);
-          });
-        requests.set(period, item);
-      }
-      network.consumers.add(cancellation);
+      const cached = cacheHit(period, purpose, local);
+      if (cached) return cacheResult(period, purpose, cached);
+      const shared = periodRequest(period, epoch);
+      network = shared;
+      shared.consumers.add(cancellation);
       try {
-        const entry = await network.promise;
+        const entry = await shared.promise;
         assertActive();
-        saveIndex(period, entry);
-        if (purpose === 'navigation') {
-          memory.set(period, entry);
-          saveDetail(period, entry);
-        }
-        return { ...entry, degraded: false, source: 'network' };
+        return networkResult(period, purpose, entry);
       } catch (error) {
         assertActive();
-        if (network.aborter.signal?.aborted || !valid(local)) throw error;
-        if (purpose === 'navigation') memory.set(period, local!);
-        return { movies: local!.movies, fetchedAt: local!.fetchedAt, degraded: true, source: 'cache', error };
+        return localFallback(period, purpose, shared, local, error);
       }
     })();
     const lease: PeriodLease = {
@@ -473,8 +516,44 @@ export function createArchiveData({
       }
       emitUpdate(group);
     };
+    const reportFailure = () => {
+      if (cancelledSearch()) return;
+      result.completed++;
+      result.failed++;
+      emitUpdate(undefined);
+    };
     // One detail-store scan for the entire local pass and missing-period fallbacks.
     let diskEntries: Record<string, DetailEntry> = {};
+    // Searches one period missing from local storage through a search lease.
+    const searchMissing = async (item: { period: number; index: number }) => {
+      const lease = acquire(item.period, { purpose: 'search', diskEntries });
+      leases.add(lease);
+      try {
+        const entry = await lease.promise;
+        if (!cancelledSearch()) report(item.period, item.index, entry);
+      } catch {
+        reportFailure();
+      } finally {
+        lease.release();
+        leases.delete(lease);
+      }
+    };
+    // Waits between network searches; false once the wait is aborted.
+    const pauseBetweenRequests = async () => {
+      try {
+        await delay(100, aborter.signal, timers);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const worker = async () => {
+      while (!cancelledSearch() && cursor < missing.length) {
+        await searchMissing(missing[cursor++]);
+        const more = !cancelledSearch() && cursor < missing.length;
+        if (more && !(await pauseBetweenRequests())) break;
+      }
+    };
     const job: SearchJob = {
       cancel() {
         if (stopped) return;
@@ -493,33 +572,6 @@ export function createArchiveData({
             if (entry) report(item.period, i, entry);
             else missing.push({ period: item.period, index: i });
           });
-        async function worker() {
-          while (!cancelledSearch() && cursor < missing.length) {
-            const item = missing[cursor++],
-              lease = acquire(item.period, { purpose: 'search', diskEntries });
-            leases.add(lease);
-            try {
-              const entry = await lease.promise;
-              if (!cancelledSearch()) report(item.period, item.index, entry);
-            } catch {
-              if (!cancelledSearch()) {
-                result.completed++;
-                result.failed++;
-                emitUpdate(undefined);
-              }
-            } finally {
-              lease.release();
-              leases.delete(lease);
-            }
-            if (!cancelledSearch() && cursor < missing.length) {
-              try {
-                await delay(100, aborter.signal, timers);
-              } catch {
-                break;
-              }
-            }
-          }
-        }
         await Promise.all([worker(), worker()]);
         result.status = cancelledSearch() ? 'cancelled' : result.failed ? 'partial' : 'complete';
         result.groups.sort((a, b) => a.index - b.index);

@@ -292,40 +292,52 @@ export function createSiteChrome({ document, window, fetch, clock, baseUrl, onCh
     return publish(diagnostic(reason));
   }
 
+  // Requests the homepage, abortable when the browser supports it, within the start deadline.
+  function fetchHomepage(homepageUrl: string) {
+    if (window.AbortController) fetchController = new window.AbortController();
+    return byDeadline(fetch(homepageUrl, fetchController ? { signal: fetchController.signal } : undefined));
+  }
+
+  // Loaded stylesheets switch from the loading media to the media the homepage declared.
+  function restoreIntendedMedia(prepared: ReturnType<typeof prepareStyles>) {
+    prepared.forEach(({ link, intendedMedia }) => {
+      if (intendedMedia) link.media = intendedMedia;
+      else link.removeAttribute('media');
+    });
+  }
+
+  // Applies the homepage's stylesheets, then its navigation and theme once those styles are in effect.
+  async function adoptHomepage(html: string, responseUrl: string): Promise<SiteChromeResult> {
+    const homeDocument = new window.DOMParser().parseFromString(html, 'text/html');
+    const homepageBase = resolveHomepageBase(homeDocument, responseUrl);
+    const styles = applicableStyles(homeDocument);
+    if (!styles.length) return publish(diagnostic('no-stylesheets'));
+    const prepared = prepareStyles(styles, homepageBase);
+    await byDeadline(Promise.all(prepared.map((item) => item.loaded)));
+    if (disposed) return notifyDisposed();
+    restoreIntendedMedia(prepared);
+    await Promise.resolve();
+    if (!nativeStylesApply()) {
+      cleanupResources();
+      return publish(diagnostic('style-check'));
+    }
+    if (disposed) return notifyDisposed();
+    installNavigation(homeDocument, homepageBase);
+    applyNativeDocumentState(homeDocument);
+    return publish({ status: 'native', reason: 'ready', stylesheets: prepared.length });
+  }
+
   async function run() {
     deadline = timer.now() + CHROME_TIMEOUT_MS;
     try {
       const homepageUrl = new window.URL('/', baseUrl).href;
-      if (window.AbortController) fetchController = new window.AbortController();
-      const response = await byDeadline(
-        fetch(homepageUrl, fetchController ? { signal: fetchController.signal } : undefined),
-      );
+      const response = await fetchHomepage(homepageUrl);
       if (disposed) return notifyDisposed();
       if (!response || !response.ok)
         return publish(diagnostic('homepage-fetch', { httpStatus: response && response.status }));
       const html = await byDeadline(response.text());
       if (disposed) return notifyDisposed();
-      const homeDocument = new window.DOMParser().parseFromString(html, 'text/html');
-      const responseUrl = response.url || homepageUrl;
-      const homepageBase = resolveHomepageBase(homeDocument, responseUrl);
-      const styles = applicableStyles(homeDocument);
-      if (!styles.length) return publish(diagnostic('no-stylesheets'));
-      const prepared = prepareStyles(styles, homepageBase);
-      await byDeadline(Promise.all(prepared.map((item) => item.loaded)));
-      if (disposed) return notifyDisposed();
-      prepared.forEach(({ link, intendedMedia }) => {
-        if (intendedMedia) link.media = intendedMedia;
-        else link.removeAttribute('media');
-      });
-      await Promise.resolve();
-      if (!nativeStylesApply()) {
-        cleanupResources();
-        return publish(diagnostic('style-check'));
-      }
-      if (disposed) return notifyDisposed();
-      installNavigation(homeDocument, homepageBase);
-      applyNativeDocumentState(homeDocument);
-      return publish({ status: 'native', reason: 'ready', stylesheets: prepared.length });
+      return await adoptHomepage(html, response.url || homepageUrl);
     } catch (error) {
       return publishFailure(error);
     }
