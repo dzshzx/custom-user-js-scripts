@@ -11,12 +11,15 @@ const workspaces = [];
 after(() => Promise.all(workspaces.map((workspace) => rm(workspace, { recursive: true, force: true }))));
 
 // Runs the full test entry in a directory holding only the given test files.
-async function runSuite(files) {
+// nodeOptions, when given, replaces the inherited NODE_OPTIONS.
+async function runSuite(files, nodeOptions) {
   const workspace = await mkdtemp(path.join(tmpdir(), 'run-tests-'));
   workspaces.push(workspace);
   await Promise.all(Object.entries(files).map(([name, content]) => writeFile(path.join(workspace, name), content)));
   // NODE_TEST_CONTEXT marks a node:test child process; the nested runner must report as a top-level run.
-  const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
+  const { NODE_TEST_CONTEXT: _context, NODE_OPTIONS: inherited, ...env } = process.env;
+  const options = nodeOptions ?? inherited;
+  if (options !== undefined) env.NODE_OPTIONS = options;
   return spawnSync(process.execPath, [runnerScript], { cwd: workspace, encoding: 'utf8', env });
 }
 
@@ -47,4 +50,34 @@ test('full test entry passes when every result passes', async () => {
   const result = await runSuite({ 'ok.test.mjs': `import test from 'node:test';\ntest('passes', () => {});\n` });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout.trim()), { pass: 1, fail: 0, skip: 0, todo: 0 });
+});
+
+// The test file passes only when NODE_OPTIONS holds the JSX loader exactly once
+// and keeps the expected other options.
+const loaderSuite = (otherOptions) => ({
+  'loader.test.mjs': `import test from 'node:test';
+import assert from 'node:assert/strict';
+test('loader', () => {
+  const options = (process.env.NODE_OPTIONS || '').split(' ').filter(Boolean);
+  const loader = options.filter((option) => option.startsWith('--import=') && option.endsWith('/scripts/jsx-loader.mjs'));
+  assert.equal(loader.length, 1, process.env.NODE_OPTIONS);
+  assert.deepEqual(options.filter((option) => !loader.includes(option)), ${JSON.stringify(otherOptions)});
+});
+`,
+});
+
+test('full test entry adds the JSX loader to the NODE_OPTIONS test files inherit', async () => {
+  for (const [nodeOptions, otherOptions] of [
+    ['', []],
+    ['--no-warnings', ['--no-warnings']],
+  ]) {
+    const result = await runSuite(loaderSuite(otherOptions), nodeOptions);
+    assert.equal(result.status, 0, result.stderr);
+  }
+});
+
+test('full test entry does not add the JSX loader twice', async () => {
+  const loaderFlag = `--import=${new URL('../scripts/jsx-loader.mjs', import.meta.url).href}`;
+  const result = await runSuite(loaderSuite(['--no-warnings']), `--no-warnings ${loaderFlag}`);
+  assert.equal(result.status, 0, result.stderr);
 });
