@@ -112,6 +112,47 @@ test('dialog rebuilds preserve scroll offset and the focused control', { skip: d
   assert.equal(refocused.checked, true);
 });
 
+test('a rebuilt dialog puts focus back on the focused field or tab button', { skip: domSkip }, async () => {
+  const { window, root } = await boot();
+  root.querySelector('.part-widget-button').click();
+  await flush();
+  // Changing the scope rebuilds the dialog without moving focus to the radio.
+  const rebuildAfterFocusing = async (selector) => {
+    const dialog = dialogOf(root);
+    dialog.querySelector(selector).focus();
+    const siteRadio = dialog.querySelector('input[name="part-scope"][value="site"]');
+    siteRadio.checked = true;
+    siteRadio.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flush();
+    assert.notEqual(dialogOf(root), dialog, 'dialog tree was rebuilt');
+    return window.document.activeElement;
+  };
+
+  const field = await rebuildAfterFocusing('[data-part-role="custom-value"]');
+  assert.equal(field.dataset.partRole, 'custom-value');
+  const tab = await rebuildAfterFocusing('[data-part-action="switch-tab"][data-part-tab="unlocker"]');
+  assert.equal(tab.dataset.partAction, 'switch-tab');
+  assert.equal(tab.dataset.partTab, 'unlocker');
+});
+
+test('an invalid custom interval is reported without writing settings', { skip: domSkip }, async () => {
+  const writes = [];
+  const { root } = await boot({ gmSetValue: (...args) => writes.push(args) });
+  root.querySelector('.part-widget-button').click();
+  await flush();
+  const writesBefore = writes.length;
+
+  const dialog = dialogOf(root);
+  dialog.querySelector('[data-part-role="custom-value"]').value = '0';
+  dialog.querySelector('[data-part-action="save-custom"]').click();
+  await flush(10);
+
+  const message = dialogOf(root).querySelector('[data-part-role="message"]');
+  assert.equal(message.dataset.tone, 'error');
+  assert.equal(message.textContent, '操作失败：请输入大于 0 的刷新时间。');
+  assert.equal(writes.length, writesBefore);
+});
+
 test('write actions show a pending state while storage is in flight', { skip: domSkip }, async () => {
   let resolveWrite;
   const { window, root } = await boot({
@@ -139,7 +180,10 @@ test('write actions show a pending state while storage is in flight', { skip: do
     await flush(10);
 
     // The dialog re-rendered with the confirmation message and the widget went live.
-    assert.match(dialogOf(root).querySelector('[data-part-role="message"]').textContent, /已保存到当前页面/);
+    assert.match(
+      dialogOf(root).querySelector('[data-part-role="message"]').textContent,
+      /已保存到当前页面：每 30 秒 刷新一次。/,
+    );
     assert.equal(root.querySelector('.part-widget').classList.contains('is-idle'), false);
     assert.ok(root.querySelector('[data-part-action="toggle-pause"]'));
     assert.match(root.querySelector('[data-part-role="widget-status"]').textContent, /自动刷新已启用/);
