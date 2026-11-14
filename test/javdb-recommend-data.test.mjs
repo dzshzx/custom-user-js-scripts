@@ -234,6 +234,30 @@ test('catalog fallback, forced full verification and duplicate periods preserve 
   assert.equal(calls, 2);
   data.dispose();
 });
+test('an incremental catalog refresh joins the cached tail at the cached period the fetched list reaches', async () => {
+  for (const [fetched, expected] of [
+    [
+      [5, 4, 3],
+      [5, 4, 3, 2, 1],
+    ],
+    [[3], [3, 2, 1]],
+  ]) {
+    const s = storage();
+    put(s, C, { fetchedAt: 0, fullFetchedAt: 99 * H, periods: [{ period: 3 }, { period: 2 }, { period: 1 }] });
+    const data = createArchiveData({
+      storage: s,
+      now: () => 100 * H,
+      request: async () => ({ periods: fetched.map((period) => ({ period })) }),
+    });
+    const result = await data.loadCatalog();
+    assert.deepEqual(
+      result.periods.map((item) => item.period),
+      expected,
+    );
+    assert.equal(result.source, '已增量更新');
+    data.dispose();
+  }
+});
 test('failing detail storage and full localStorage leave fetched data usable', async () => {
   const details = detailStore();
   details.get =

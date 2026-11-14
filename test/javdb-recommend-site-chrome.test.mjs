@@ -85,6 +85,38 @@ test(
   },
 );
 
+test('loaded homepage stylesheets take back the media they were declared with', { skip: domSkip }, async () => {
+  const window = createChromeWindow();
+  window.document.body.innerHTML = '<main class="jdb-ra"></main>';
+  window.matchMedia = (query) => ({ matches: query !== 'print' });
+  installComputedStyleFixture(window, true);
+  const chrome = createSiteChrome({
+    document: window.document,
+    window,
+    fetch: async () =>
+      response(
+        '<html><head><link rel="stylesheet" href="app.css"><link rel="stylesheet" media="screen" href="screen.css">' +
+          '</head><body><nav class="navbar main-nav"></nav></body></html>',
+      ),
+    baseUrl: 'https://javdb.com',
+  });
+  const started = chrome.start();
+  await settleLinks(window);
+  assert.deepEqual(await started, { status: 'native', reason: 'ready', stylesheets: 2 });
+  assert.deepEqual(
+    [...window.document.querySelectorAll('link[data-jdb-ra-site-chrome]')].map((link) => [
+      link.href.split('/').pop(),
+      link.getAttribute('media'),
+    ]),
+    [
+      ['app.css', null],
+      ['screen.css', 'screen'],
+    ],
+  );
+  chrome.dispose();
+  await window.happyDOM.close();
+});
+
 test(
   'no stylesheet, stylesheet failure, and empty styles all stay in complete fallback mode',
   { skip: domSkip },

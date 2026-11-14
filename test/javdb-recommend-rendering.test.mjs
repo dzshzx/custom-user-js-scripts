@@ -294,6 +294,43 @@ test(
 );
 
 test(
+  'a first grid whose template lists each track gives later period grids that many columns',
+  { skip: domSkip },
+  async () => {
+    const window = createDomWindow({ url: 'https://javdb.com/recommend-archive' });
+    let ioCallback = null;
+    class FakeIO {
+      constructor(cb) {
+        ioCallback = cb;
+      }
+      observe() {}
+      disconnect() {}
+    }
+    await runScript(
+      window,
+      async (url) => {
+        if (url === 'https://javdb.com/') return { ok: true, text: async () => CHROME_HTML };
+        const payload = url.includes('recommend_periods') ? PERIODS : DETAIL;
+        return { ok: true, json: async () => payload };
+      },
+      { IntersectionObserver: FakeIO },
+    );
+
+    const firstGrid = window.document.querySelector('.jdb-ra-sec .movie-list');
+    firstGrid.classList.add('jav-card-grid', 'javdb-card-grid');
+    firstGrid.style.setProperty('grid-template-columns', 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', 'important');
+
+    ioCallback([{ isIntersecting: true }]);
+    for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const grids = [...window.document.querySelectorAll('.jdb-ra-sec .movie-list')];
+    assert.equal(grids.length, 2);
+    assert.equal(grids[1].style.getPropertyValue('grid-template-columns'), 'repeat(3, minmax(0, 1fr))');
+    await window.happyDOM.close();
+  },
+);
+
+test(
   'layout copying leaves enhanced grids independent and releases only owned inline values on takeover',
   { skip: domSkip },
   async () => {
