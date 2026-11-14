@@ -103,6 +103,31 @@ test('open intents merge while initialization is pending and failure disables wr
 });
 
 test(
+  'an initialization failure reaching an open dialog reports it and disables writes',
+  { skip: domSkip },
+  async () => {
+    const harness = createHarness({
+      readSettings: async () => {
+        throw new Error('read failed');
+      },
+      // The dialog opens before the session starts, so the failure arrives as a session update.
+      ready: (session) => Promise.resolve({ ok: true, state: session.getState() }),
+    });
+    assert.equal((await harness.view.openSettings({ tab: 'refresh' })).ok, true);
+    assert.equal(dialogOf(harness.window).querySelector('[data-part-role="message"]').textContent, '');
+    await harness.session.start();
+    await flush();
+    const dialog = dialogOf(harness.window);
+    const message = dialog.querySelector('[data-part-role="message"]');
+    assert.equal(message.dataset.tone, 'error');
+    assert.equal(message.textContent, '初始化失败：read failed');
+    assert.equal(dialog.querySelector('[data-part-action="save-custom"]').disabled, true);
+    harness.view.dispose();
+    harness.session.dispose();
+  },
+);
+
+test(
   'dialog preserves pre-existing inert and relinquishes attributes changed by the host',
   { skip: domSkip },
   async () => {

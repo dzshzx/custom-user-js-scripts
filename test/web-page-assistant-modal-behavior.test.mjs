@@ -128,8 +128,8 @@ test('a rebuilt dialog puts focus back on the focused field or tab button', { sk
     return window.document.activeElement;
   };
 
-  const field = await rebuildAfterFocusing('[data-part-role="custom-value"]');
-  assert.equal(field.dataset.partRole, 'custom-value');
+  const field = await rebuildAfterFocusing('[data-part-role="custom-unit"]');
+  assert.equal(field.dataset.partRole, 'custom-unit');
   const tab = await rebuildAfterFocusing('[data-part-action="switch-tab"][data-part-tab="unlocker"]');
   assert.equal(tab.dataset.partAction, 'switch-tab');
   assert.equal(tab.dataset.partTab, 'unlocker');
