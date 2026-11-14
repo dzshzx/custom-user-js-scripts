@@ -18,16 +18,28 @@ function reportNonPassingResult(data, status) {
   );
 }
 
+// Adds the JSX loader to NODE_OPTIONS unless it is already there.
+function ensureJsxLoader() {
+  if ((process.env.NODE_OPTIONS || '').includes(JSX_LOADER_FLAG)) return;
+  process.env.NODE_OPTIONS = [process.env.NODE_OPTIONS, JSX_LOADER_FLAG].filter(Boolean).join(' ');
+}
+
+// Classifies one test:pass or test:fail event as pass, fail, skip or todo.
+function resultStatus(type, data) {
+  if (data.skip) return 'skip';
+  if (data.todo) return 'todo';
+  return type === 'test:pass' ? 'pass' : 'fail';
+}
+
 // Runs the complete node:test suite. Any failed, skipped or todo result fails it.
 export async function runTests() {
-  if (!(process.env.NODE_OPTIONS || '').includes(JSX_LOADER_FLAG))
-    process.env.NODE_OPTIONS = [process.env.NODE_OPTIONS, JSX_LOADER_FLAG].filter(Boolean).join(' ');
+  ensureJsxLoader();
   const counts = { pass: 0, fail: 0, skip: 0, todo: 0 };
   // Node 22 TestsStream supplies structured pass/fail/skip events. No TAP parsing.
   for await (const { type, data } of run()) {
     if (type === 'test:stderr') process.stderr.write(data.message);
     if (type !== 'test:pass' && type !== 'test:fail') continue;
-    const status = data.skip ? 'skip' : data.todo ? 'todo' : type === 'test:pass' ? 'pass' : 'fail';
+    const status = resultStatus(type, data);
     counts[status] += 1;
     if (status !== 'pass') reportNonPassingResult(data, status);
   }
