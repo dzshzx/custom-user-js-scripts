@@ -18,21 +18,7 @@
 - 当前脚本运行范围较广，安装前应确认目标用户脚本管理器的授权提示。
 - 源码是 `web-page-assistant.entry.ts` 加同目录 `*.lib.ts` TypeScript 模块，`npm run build` 打包为 dist 单文件。
 
-会话契约：
-
-- Session 直接使用 Settings 与 Refresh Runtime，独占已提交设置、规则匹配和实际应用状态；View 只接收 Session 快照并负责对话框、浮动 widget、草稿、焦点、宿主 inert 和布局绑定，Entry 只组装浏览器 adapter、注册菜单并管理页面退出。
-- `start()` 幂等，菜单在读取前注册，倒计时与常驻 widget 等待 DOM 和保存的位置就绪。widget 位置按 hostname 存在 GM key `pageAutoRefreshTimerWidgetPosition:<hostname>`，没有时放在右下角，按不含滚动条的可视区计算；按网站分存之前的共享 key `pageAutoRefreshTimerWidgetPosition` 保留不删，但不再读取。localStorage 兜底本身按 origin 隔离，key 不变。页面与站点 scope 固定为启动时的地址；初始化结算前的多个开窗请求合并，读取失败时对话框显示错误并禁用写操作。
-- 设置命令按 FIFO 持久化，成功后才重匹配并应用；暂停立即作用于当前倒计时。保存 Unlocker 不重启刷新，删除页面规则后重新匹配站点规则。
-- 多标签页共用一份设置：每次保存都在存储中的最新设置上只改本次操作的那一条规则，不写回启动时的内存副本，其他标签页保存的规则不会被覆盖；同一条规则被两个标签页先后修改时以后写为准。其他标签页保存后，本页经脚本管理器的值变化事件（`GM_addValueChangeListener`；回退到页面 `localStorage` 时为同源 `storage` 事件）重读设置，只重新应用匹配结果有变化的能力。主存储读取失败时本次保存只写回退存储，不用回退数据覆盖主存储。脚本管理器不提供跨标签事件时界面要到下次保存或刷新页面才更新，但保存本身仍基于最新设置。
-- 操作结果区分无效输入、未就绪、已销毁、存储失败和应用失败，并携带 `persisted`。设置已保存但能力安装失败时保留设置、清理安装并显示实际应用错误。
-- 快照与内部状态隔离。每秒通知仅更新倒计时和暂停状态；设置通知与异步保存结果使用对话框代次和草稿修订保护，不能覆盖保存期间的新输入或关闭重开后的新表单。必要重建保留焦点与滚动位置。
-- 对话框只移除本次添加且未被宿主继续修改的 inert 属性；widget 每次重绑先释放旧监听、hover 计时器、拖拽抑制和 pointer capture。
-- 真正退出时先 `dispose()` View，再停止 Session；两者都不接受迟到异步结果恢复界面或能力。`pagehide.persisted` 保留 bfcache 页面及其现有运行状态。
-
-迁移说明：
-
-- 更早：`src/web-page-assistant.user.js` → `src/userscripts/web-page-assistant/web-page-assistant.user.js`。
-- 当前：多文件 `@require` 入口 → `dist/web-page-assistant.user.js` 单文件。
+widget 位置按 hostname 存在 GM key `pageAutoRefreshTimerWidgetPosition:<hostname>`；按网站分存之前的共享 key `pageAutoRefreshTimerWidgetPosition` 保留不删，但不再读取。
 
 ## Feishu Preview Image Export
 
@@ -45,18 +31,12 @@
 - 运行在 `https://mi.feishu.cn/file/*`。
 - 从当前页面里找最大的可见图片。
 - 优先用 `GM_download` 下载。
-- `GM_download` 报错（含 Tampermonkey 的 `{id, error, details}` 错误对象）或同步抛错时只提示、不再改走浏览器直接下载：Tampermonkey 对用户在另存为里点「取消」同样报 `not_succeeded`，与其他失败分不开，后备下载会违背用户的取消（用户决定，2026-10-29）。`not_succeeded` 的 toast 为「已取消导出。」，其他错误码为「扩展下载失败（<错误码>），请重试。」。
+- `GM_download` 报错（含 Tampermonkey 的 `{id, error, details}` 错误对象）或同步抛错时只提示、不再改走浏览器直接下载：Tampermonkey 对用户在另存为里点「取消」同样报 `not_succeeded`，与其他失败分不开，后备下载会违背用户的取消。`not_succeeded` 的 toast 为「已取消导出。」，其他错误码为「扩展下载失败（<错误码>），请重试。」。
 - 没有 `GM_download` 的脚本管理器走 anchor 下载：blob URL 加 `<a download>`，anchor 放在脚本自建的隐藏同源 iframe 里点击，因为飞书预览页在 document 上的 click 处理器会拦掉顶层文档里的点击。
 - `GM_download` 120 秒内既不成功也不报错时按超时报失败，toast 转为失败提示。
 - 下载文件名默认取当前飞书文档标题，去掉零宽字符等 Unicode 格式类字符（`\p{Cf}`，飞书标题水印会带上），清理后为空时用 `feishu-image`。
 - 用户反馈经页面内 toast 展示导出进度、成功文件名和中文失败原因。
-- 图片选择与读取由 `readPreviewImage` 负责；userscript 使用固定 `userscript-v1` profile；`cli-v1` profile 原供已删除的本地 Playwright 导出工具，现在只有测试调用。两者共享实现，各 profile 定义 currentSrc/src、面积边界、fetch 凭据、MIME 与编码方式。
-
-迁移说明：
-
-- 更早：`src/feishu-preview-image-export.user.js`。
-- 其后：单文件 `src/userscripts/feishu-preview-image-export/feishu-preview-image-export.user.js`。
-- 当前：entry + lib ES 模块，`npm run build` 打包为 `dist/feishu-preview-image-export.user.js`。
+- 图片选择与读取由 `readPreviewImage` 负责；userscript 使用固定 `userscript-v1` profile，`cli-v1` profile 只有测试调用。两者共享实现，各 profile 定义 currentSrc/src、面积边界、fetch 凭据、MIME 与编码方式。
 
 ## JavDB Recommend Archive
 
@@ -92,8 +72,6 @@
 
 迁移说明：
 
-- 当前源码为 `javdb-recommend.entry.ts` 与数据、请求、Period Section、Site Chrome、展示 Lib Module，构建生成 Dist Bundle。数据模块负责 Catalog、Navigation Payload、Search Index、Consumer Lease 及双路搜索；Period Section 统一浏览与搜索的安全文本、稳定节点、卡片、封面失败和即时筛选；Site Chrome 独占官网资源的准备、校验、启用与清理；展示模块编排顺序与导航。内存和磁盘均按来源时间判断 TTL，缓存投影不会延长来源有效期。
-- 搜索区分完成、取消和部分失败，并显示失败期数及使用旧缓存的期数。清缓存先取消工作，再删除缓存；迟到的响应不能重新写入。请求取消同时清理超时与退避计时器。
 - `@name`、`@namespace`、`@match`、`@grant none`、缓存版本及全部存储 key 保持不变。安装路径迁移保持同一个安装身份；正式升级仍需按发布流程步进版本。
 - 入口在导航栏，配独立归档页；卡片点击直达详情页。存储 key 与安装路径与 `1.0.0` 相同。
 - 版本号从 `1.0.0` 重置为 `0.0.2`：脚本管理器只向更高版本自动更新，已安装 `1.0.0` 的副本需用安装入口手动重装一次，之后恢复正常自动更新。

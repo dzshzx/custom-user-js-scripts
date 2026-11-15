@@ -90,13 +90,7 @@ sans-serif`.
 ## Shared Widget Kit
 
 - Floating companion UI is built on the shared kit in `src/userscripts/shared/`
-  instead of per-script shell code: `shared-widget-shell.lib.ts` owns the
-  draggable/dockable floating button, panel positioning, position persistence,
-  Esc close, focus hand-off, and outside-click close. Its parts are exported
-  for widgets with their own markup: `createDragAnchor` (clamp, drag, edge
-  docking, post-drag click suppression), `createHoverExpansion` (hover intent
-  and coarse-pointer disclosure) and `createPanelPlacement` (flip/shift/
-  autoUpdate through `@floating-ui/dom`).
+  (`shared-widget-shell.lib.ts`) instead of per-script shell code.
 - Userscript manager APIs (`GM_*` / `GM.*`) are resolved only in
   `shared-gm.lib.ts` (`resolveGmApi`).
 - Color, type scale, radius, shadow, and focus-ring tokens come from
@@ -118,9 +112,6 @@ sans-serif`.
   entry; its collapsed button opens the dialog directly. Expanded, an active
   widget's button becomes a pill that hugs the icon and countdown, while the
   idle dot keeps its round shape.
-- The per-second countdown is `aria-hidden`; a visually-hidden status node
-  announces only lifecycle changes (enabled/paused/resumed/disabled) as full
-  sentences.
 - The widget sits in a host page corner, so collapsed it must not get in the
   way: only the visible button takes pointer events (the rest of its box lets
   clicks through to the host page), hover expands only after a 350ms intent
@@ -137,14 +128,6 @@ sans-serif`.
   without scrollbars.
 - The settings dialog owns scope selection, refresh settings, unlocker
   capability toggles, status boxes, and destructive delete actions.
-- The dialog is a native modal `<dialog>` (`showModal()`): the platform
-  keeps focus in the page content, closes on Esc, makes the page background
-  inert while open, and focus returns to the trigger on close. Full
-  rebuilds (tab/scope/save) preserve the panel scroll offset and the focused
-  control.
-- Write actions disable their button with a pending label while storage is in
-  flight; failures restore the button and surface the error reason in the
-  dialog message line.
 - Presentation responsibilities belong in presentation support modules:
   scoped styles, icons, dialog contract, widget markup, and dialog markup.
   Icons come from the shared `shared-icons` module (lucide-preact).
@@ -171,7 +154,6 @@ sans-serif`.
 - Script-owned styles stay scoped under `.jdb-ra` and own only what the site CSS does not cover: toolbar, period section headers, grid column count, and uncropped covers. Once a card or list carries an external enhancement marker, its observable cover mode and inline layout win over the archive defaults.
 - When another userscript decorates a native-style movie grid, the archive treats that grid's effective column count, gaps, and cover mode as the compatibility seam and applies them only to undecorated later period grids. Copied inline values are individually owned and released if that grid is later decorated, without changing values the other script wrote. Compatibility is verified against Tampermonkey and `JAV老司机-新` 2.8.4.8 DOM markers; the archive does not call that script's private functions.
 - Browsing is one scrollable stream of period sections (newest first) that auto-loads older periods via a sentinel. Navigation appends the adjacent next section when it matches the stream cursor; distant or reverse navigation re-anchors the stream at the target period so intermediate periods are neither fetched nor rendered.
-- Catalog refresh is prefix-incremental: scan newest pages until the first cached overlap, prefer remote metadata for the scanned prefix, and retain the cached immutable tail. A periodic full refresh bounds drift.
 - Navigation payloads and the full-search index are separate caches. Search index admission must not evict browsing payloads; detail transport remains single-flight per period and uses consumer leases so cancellation only aborts a request after its last consumer releases it.
 - Full-archive search renders each matching Period exactly once as it arrives. Browse and search share the Period Section module: metadata is inserted as text, filtering uses archive-owned markers, and a loading section keeps the same `section` and `.movie-list` nodes after data arrives. Identical payloads keep externally attached card controls and listeners. Off-screen Period sections may use browser-native rendering containment, but DOM order and externally decorated movie grids remain stable for multi-userscript compatibility.
 - Movie cards reuse the site's native `movie-list` markup and link directly to the site's `/v/<id>` detail pages. Covers are landscape and must render uncropped (`contain`); release dates share the restrained metadata row with scores instead of adding another card section.

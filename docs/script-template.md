@@ -5,7 +5,7 @@
 - `@name`: 脚本名称。
 - `@name:zh-CN` / `@name:en`: 脚本有中文用户界面或跨语言使用场景时，补充本地化名称。
 - `@namespace`: 通常使用仓库地址或个人域名。
-- `@version`: 档位规则以 `PRODUCT.md`「Version Policy」为准。改版本前先 `git fetch origin master`，再用 `node scripts/version-plan.mjs plan --target '<安装身份>=<目标版本>'` 只读预览完整计划；目标版本默认 patch；minor（有用户能感知的新能力）与 major（含 0.x→1.0）须先经维护者确认；内部重构、目录搬迁、已做兼容读取的内部存储格式迁移不算破坏性。候选的 `ci-ok` 通过后把同一提交手动推送快进到 `master`（步骤见 README「开发与验证」）；该快进即通过 raw update URL 发布，版本不再改写，修复使用下一个 patch。多模块脚本的版本写在 entry metadata，构建自动传播到 dist。
+- `@version`: 档位规则见 `PRODUCT.md`「Version Policy」，发版步骤见 README「开发与验证」。多模块脚本的版本写在 entry metadata。
 - `@description`: 简短说明脚本功能。
 - `@description:zh-CN` / `@description:en`: 脚本有本地化名称时，同步补充本地化简介。
 - `@match`: 脚本生效的网址规则。
@@ -19,10 +19,6 @@
 - 新文件保留完整实现，后续以新文件为主维护。
 - 保持原有存储 key，除非任务明确要求迁移用户数据。
 - 不要在同一次迁移里同时改 `@name`、`@namespace` 和文件路径，除非已经测试目标脚本管理器不会安装出重复脚本。
-
-安装文件归属由 `scripts/lib/userscript-inventory.mjs` 集中读取：每个 Dist 归属于对应的 Entry；没有 Entry 的 Dist 是孤儿。工作区与 Git ref adapter 只读取文本，按规范化路径排序，每个文件读取一次，返回归属、各份 metadata、内容和稳定类型的结构诊断。Shared Lib 不进入清单；Example 模板属于完整 Version Plan，目前共五个身份。
-
-各阶段保留自己的政策：Build 允许输出尚未生成或过时，仍验证 Entry metadata、版本常量和 import 图，Entry 的真实 I/O 错误必须失败；lint 检查安装 URL、身份唯一性及 Entry/Dist 一致，dist 是否为最新构建由 verify 的 `git diff` 把关；Version Plan 要求真实 Entry、Dist 存在和身份／版本一致，保持现有 schema、canonical JSON、摘要和审批语义。Promote 从可信 master 加载 Version Plan、Inventory、source adapter 与 metadata parser；候选始终只作 Git 对象文本读取，不动态加载候选 module。
 
 改写已有脚本时，建议额外记录：
 

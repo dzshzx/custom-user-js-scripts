@@ -83,7 +83,7 @@ npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类�
 项目在 `package.json` devDependencies 精确锁定 Playwright，测试脚本从那里读取版本；测试只加载本项目依赖和该版本的默认 Chromium，
 缺依赖或浏览器直接报错。
 聚焦调试使用 `node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs`（加载器让测试直接导入 `.ts`/`.tsx` 源码）；它不代表完整验收。
-原生 JSON 报告、准备时间和人工验收边界见 [测试说明](docs/testing.md)。
+浏览器准备与人工验收边界见 [测试说明](docs/testing.md)。
 
 提交前运行 `scripts/format.sh`：prettier（版本锁在 `package.json` devDependencies）重排
 JS/TS、Markdown、YAML 与 JSON；
@@ -128,6 +128,5 @@ CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 
 
 - [PRODUCT.md](PRODUCT.md)：产品上下文、用户、边界、数据原则和版本策略。
 - [DESIGN.md](DESIGN.md)：注入式 userscript UI 的设计上下文和组件规则。
-- [docs/index.md](docs/index.md)：仓库文档地图和职责边界。
 - [docs/scripts/installable-userscripts.md](docs/scripts/installable-userscripts.md)：可安装 userscript 列表和迁移说明。
 - [docs/script-template.md](docs/script-template.md)：新建或迁移 userscript 时需要维护的 metadata。
