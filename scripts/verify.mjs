@@ -1,8 +1,9 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { statSync } from 'node:fs';
 import { runTests } from './run-tests.mjs';
 
-function command(command, args) {
-  const result = spawnSync(command, args, { stdio: 'inherit' });
+function command(command, args, options = {}) {
+  const result = spawnSync(command, args, { stdio: 'inherit', ...options });
   if (result.error || result.status !== 0) throw new Error(command + ' ' + args.join(' ') + ' failed');
 }
 // Independent checks run concurrently with buffered output, printed whole in
@@ -29,9 +30,27 @@ async function commands(list) {
   const failed = runs.find((run) => !run.passed);
   if (failed) throw new Error(failed.command + ' ' + failed.args.join(' ') + ' failed');
 }
+// npm rewrites node_modules/.package-lock.json on every install, so its modification time is
+// the time of the last install. Nothing installed yet, or a lock file newer than that (a fresh
+// checkout, a rebase that brought a new lock file), means the dependencies are not the locked ones.
+function dependenciesAreCurrent() {
+  try {
+    return statSync('node_modules/.package-lock.json').mtimeMs > statSync('package-lock.json').mtimeMs;
+  } catch {
+    return false;
+  }
+}
+// `npm run` exports its resolved configuration as npm_config_* variables, and a nested npm
+// reads them as if given on its command line, where some user-level settings are refused.
+// Without them the nested install reads the npmrc files itself.
+function installDependencies() {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('npm_config_')));
+  command('npm', ['ci'], { env });
+}
 try {
   if (process.argv.length > 2 || process.execArgv.some((arg) => arg.startsWith('--test')))
     throw new Error('Full verify does not accept filters.');
+  if (!dependenciesAreCurrent()) installDependencies();
   command(process.execPath, ['scripts/build-userscripts.mjs']);
   command('git', ['diff', '--exit-code', '--', 'dist']);
   command('sh', ['-c', 'test -z "$(git status --porcelain dist)"']);

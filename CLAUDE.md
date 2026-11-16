@@ -6,4 +6,4 @@
 - 发布规则归 PRODUCT.md「Version Policy」；沿用任务已有发布授权，缺少决定时先完成可推候选。
 - 移动脚本同步测试路径、文档与 @downloadURL/@updateURL。安装路径、metadata 或行为变化同步 README 和相关 docs/scripts。
 - UI 改动读 DESIGN.md。
-- 门禁：`npm run verify`；改到一半只跑聚焦测试：node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs（加载器支持 .ts/.tsx）。
+- 门禁：`npm run verify`，依赖没装或落后于锁文件时它自己 `npm ci`（新任务树里没有 `node_modules`）；改到一半只跑聚焦测试：node --import ./scripts/jsx-loader.mjs --test test/<name>.test.mjs（加载器支持 .ts/.tsx）。
