@@ -21,7 +21,7 @@ export const domSkip = domAvailable
   : 'DOM library not installed; run `npm install --no-save --no-package-lock happy-dom` to enable UI/UX tests.';
 
 // Preact creates nodes through the global `document` (as it exists in a real
-// userscript page), and shared icons, toasts and the quota panel all render
+// userscript page), and shared icons, toasts and the script UIs all render
 // with preact, so every DOM window installs its document globally by default;
 // the latest window wins, and each test file runs in its own process, so the
 // global never leaks across files.
