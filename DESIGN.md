@@ -89,8 +89,10 @@ sans-serif`.
 
 ## Shared Widget Kit
 
-- Floating companion UI is built on the shared kit in `src/userscripts/shared/`
-  (`shared-widget-shell.lib.ts`) instead of per-script shell code.
+- Floating companion UI is built on the widget shell
+  (`web-page-assistant/web-page-assistant-widget-shell.lib.ts`) instead of new
+  per-script shell code. Only Web Page Assistant uses it today; the second
+  script that needs it moves it into `src/userscripts/shared/`.
 - Userscript manager APIs (`GM_*` / `GM.*`) are resolved only in
   `shared-gm.lib.ts` (`resolveGmApi`).
 - Color, type scale, radius, shadow, and focus-ring tokens come from
