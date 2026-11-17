@@ -4,8 +4,8 @@
 // read-modify-write rule that a value derived from the fallback never
 // overwrites the GM copy. It never throws on reads; a write throws only when
 // neither backend accepts it.
-import { resolveGmApi } from './shared-gm.lib.ts';
-import type { GmApi, GmOverrides } from './shared-gm.lib.ts';
+import { resolveGmApi } from '../shared/shared-gm.lib.ts';
+import type { GmApi, GmOverrides } from '../shared/shared-gm.lib.ts';
 
 export type GmFirstBackend = 'gm' | 'localStorage';
 

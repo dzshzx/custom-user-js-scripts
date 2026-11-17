@@ -1,4 +1,4 @@
-import { createGmFirstJsonStore } from '../shared/shared-gm-json-store.lib.ts';
+import { createGmFirstJsonStore } from './web-page-assistant-gm-json-store.lib.ts';
 import { resolveGmApi } from '../shared/shared-gm.lib.ts';
 import { isRecord } from '../shared/shared-values.lib.ts';
 import type { GmOverrides } from '../shared/shared-gm.lib.ts';

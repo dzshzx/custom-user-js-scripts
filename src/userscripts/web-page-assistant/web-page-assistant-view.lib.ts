@@ -14,11 +14,16 @@ import {
   createHoverExpansion,
   createPanelPlacement,
   viewportSize,
-} from '../shared/shared-widget-shell.lib.ts';
+} from './web-page-assistant-widget-shell.lib.ts';
 import { buildTokenCss, applyTheme } from '../shared/shared-tokens.lib.ts';
 import { ensureStyle } from '../shared/shared-dom.lib.ts';
 import { errorMessage } from '../shared/shared-values.lib.ts';
-import type { DragAnchor, HoverExpansion, PanelPlacement, WidgetTimers } from '../shared/shared-widget-shell.lib.ts';
+import type {
+  DragAnchor,
+  HoverExpansion,
+  PanelPlacement,
+  WidgetTimers,
+} from './web-page-assistant-widget-shell.lib.ts';
 import type { DialogTab } from './web-page-assistant-presentation.lib.ts';
 import type { Scope, ScopeKeys, UnlockerSetting } from './web-page-assistant-settings.lib.ts';
 import type {

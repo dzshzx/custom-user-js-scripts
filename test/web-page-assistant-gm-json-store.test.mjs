@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createGmFirstJsonStore } from '../src/userscripts/shared/shared-gm-json-store.lib.ts';
+import { createGmFirstJsonStore } from '../src/userscripts/web-page-assistant/web-page-assistant-gm-json-store.lib.ts';
 import { createMemoryStorage } from './helpers/dom-env.mjs';
 
 function createGm(initial = {}, { failGet = false, failSet = false } = {}) {
