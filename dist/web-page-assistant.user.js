@@ -609,7 +609,7 @@
     };
   }
 
-  // src/userscripts/shared/shared-gm-json-store.lib.ts
+  // src/userscripts/web-page-assistant/web-page-assistant-gm-json-store.lib.ts
   var UNAVAILABLE = /* @__PURE__ */ Symbol("unavailable");
   function createGmFirstJsonStore(options) {
     const {
@@ -4284,7 +4284,7 @@
     });
   };
 
-  // src/userscripts/shared/shared-widget-shell.lib.ts
+  // src/userscripts/web-page-assistant/web-page-assistant-widget-shell.lib.ts
   var BUTTON_SAFE_MARGIN = 12;
   var DOCK_THRESHOLD = 32;
   var DOCK_OFFSET = 8;
