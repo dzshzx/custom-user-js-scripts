@@ -69,7 +69,7 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 
 ## 开发与验证
 
-日常开发与 CI 使用 `.node-version` 指定的 Node.js 24 LTS。最低兼容版本为 Node.js 22.18。
+日常开发与 CI 使用 `.node-version` 指定的 Node.js 26 LTS。最低兼容版本为 Node.js 22.18。
 
 ```bash
 npm ci
