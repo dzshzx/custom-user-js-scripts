@@ -3,7 +3,7 @@
 # 用法：scripts/format.sh [--check | --lint]
 #   无参数：就地格式化本仓跟踪的文件与未被忽略的新文件；--check：只检查格式，不一致时列出文件并非零退出；
 #   --lint：跑本仓启用的检查器与复杂度上限，并检查代码文件不超过行数上限，有问题时非零退出。后两种门禁用。
-# 格式化：prettier、shfmt、ruff format、gofmt；检查：shellcheck、ruff check 与 complexipy、SwiftLint、lizard、行数上限。
+# 格式化：prettier、shfmt、ruff format、gofmt、ktfmt；检查：shellcheck、ruff check 与 complexipy、SwiftLint、lizard、detekt、行数上限。
 # 各工具自己的配置（.prettierrc.json、.prettierignore、.editorconfig、ruff.toml 等）照常生效。
 # 本文件与 scripts/gatelib.sh 在各仓逐字节相同，由同步命令 gate-sync 从同一份源头写入，不在各仓里单独改。
 set -euo pipefail
@@ -39,6 +39,8 @@ source scripts/gatelib.sh
 #   PRETTIER         npx：经 npx 取 PRETTIER_VERSION；node_modules：用本仓 devDependency，版本须等于 PRETTIER_VERSION
 #   PRETTIER_EXT     交给 prettier 的文件扩展名
 #   SHFMT、SHELLCHECK、PYTHON、GOFMT、SWIFTLINT    设为 1 即启用；PYTHON 是 ruff format、ruff check 与 complexipy
+#   KOTLIN           设为 1 即启用：.kt、.kts 用 ktfmt（kotlinlang 风格）格式化，--lint 时 detekt 查函数认知复杂度，
+#                    并计入行数上限。两者都是 jar，要有 JDK：JAVA_HOME 下的 java，没设时用 PATH 上的
 #   SHELLCHECK_ARGS  shellcheck 的额外参数
 #   SHEBANG          1：没有扩展名的文件按首行 shebang 归入 Shell，启用 PYTHON 时也归入 Python
 #   CHEZMOI          1：chezmoi 源文件按去掉属性前缀后的目标名归类，.bashrc、.profile 算 Shell
@@ -54,6 +56,7 @@ SHELLCHECK_ARGS=()
 PYTHON=0
 GOFMT=0
 SWIFTLINT=0
+KOTLIN=0
 SHEBANG=0
 CHEZMOI=0
 LIZARD=()
@@ -90,6 +93,7 @@ PY=()
 GO=()
 SWIFT=()
 SWIFT_LIZARD=()
+KT=()
 JAVA=()
 CS=()
 LINES=()
@@ -132,6 +136,13 @@ classify() {
     py | pyi)
       if [ "$PYTHON" -eq 1 ]; then
         PY+=("$f")
+        LINES+=("$f")
+        return 0
+      fi
+      ;;
+    kt | kts)
+      if [ "$KOTLIN" -eq 1 ]; then
+        KT+=("$f")
         LINES+=("$f")
         return 0
       fi
@@ -240,34 +251,100 @@ prettier() {
   fi
 }
 
+# 从官方 Release 下载的工具放在仓外的用户缓存目录，之后复用。
+GATE_TOOLS="${XDG_CACHE_HOME:-$HOME/.cache}/gate-tools"
+
+# fetch_pinned <URL> <SHA-256> <目标路径> [zip 里的文件名]：目标路径已有文件就直接返回；否则下载、校验 SHA-256，
+# 给了 zip 里的文件名就只取出这一个文件，再放到目标路径。校验与解压都成功后才放到位，中断不会留下半个文件。
+# 调用方可能在 || 或 $( ) 里调用它，那里 set -e 不生效，所以每一步自己判断失败。
+fetch_pinned() {
+  local url=$1 sum=$2 dest=$3 member=${4:-} dir tmp status=1 sha=(sha256sum)
+  [ ! -f "$dest" ] || return 0
+  command -v sha256sum >/dev/null 2>&1 || sha=(shasum -a 256)
+  dir=${dest%/*}
+  mkdir -p "$dir" && tmp=$(mktemp -d "$dir/download.XXXXXX") || return 1
+  if curl -fsSL --retry 3 -o "$tmp/download" "$url" && echo "$sum  $tmp/download" | "${sha[@]}" -c --quiet - >&2; then
+    if [ -z "$member" ]; then
+      mv "$tmp/download" "$dest" && status=0
+    elif unzip -q "$tmp/download" "$member" -d "$tmp"; then
+      mv "$tmp/$member" "$dest" && status=0
+    fi
+  fi
+  rm -rf "$tmp"
+  [ "$status" -eq 0 ] || echo "format: 下载或校验失败：$url" >&2
+  return "$status"
+}
+
 swiftlint() {
-  # 本机已装同版本（如 macOS 的 Homebrew）则直接用。否则在 Linux x86_64 上下载官方 Release 里的静态二进制，
-  # 校验 SHA-256 后放进仓外的用户缓存目录，之后复用。静态版不带 SourceKit：默认规则里只有 statement_position
-  # 依赖它，在这里会被跳过，并打印一行 warning；其余默认规则照常检查。
-  local have dir bin tmp
+  # 本机已装同版本（如 macOS 的 Homebrew）则直接用。否则在 Linux x86_64 上用官方 Release 里的静态二进制。
+  # 静态版不带 SourceKit：默认规则里只有 statement_position 依赖它，在这里会被跳过，并打印一行 warning；
+  # 其余默认规则照常检查。
+  local have bin
   have=$(command swiftlint version 2>/dev/null || true)
   if [ "$have" = "$SWIFTLINT_VERSION" ]; then
     command swiftlint "$@"
     return
   fi
-  dir="${XDG_CACHE_HOME:-$HOME/.cache}/gate-tools/swiftlint-$SWIFTLINT_VERSION"
-  bin="$dir/swiftlint-static"
-  if [ ! -x "$bin" ]; then
-    if [ "$(uname -s)-$(uname -m)" != Linux-x86_64 ]; then
-      echo "swiftlint: 需要 SwiftLint ${SWIFTLINT_VERSION}；只有 Linux x86_64 会自动下载，其他平台请先安装该版本" >&2
-      return 1
-    fi
-    mkdir -p "$dir"
-    tmp=$(mktemp -d "$dir/download.XXXXXX")
-    curl -fsSL --retry 3 -o "$tmp/swiftlint.zip" \
-      "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/swiftlint_linux_amd64.zip"
-    echo "$SWIFTLINT_LINUX_AMD64_SHA256  $tmp/swiftlint.zip" | sha256sum -c --quiet -
-    unzip -q "$tmp/swiftlint.zip" swiftlint-static -d "$tmp"
-    # 校验与解压都成功后才放到位，中断不会留下半个二进制。
-    mv "$tmp/swiftlint-static" "$bin"
-    rm -rf "$tmp"
+  if [ "$(uname -s)-$(uname -m)" != Linux-x86_64 ]; then
+    echo "swiftlint: 需要 SwiftLint ${SWIFTLINT_VERSION}；只有 Linux x86_64 会自动下载，其他平台请先安装该版本" >&2
+    return 1
   fi
+  bin="$GATE_TOOLS/swiftlint-$SWIFTLINT_VERSION/swiftlint-static"
+  fetch_pinned "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/swiftlint_linux_amd64.zip" \
+    "$SWIFTLINT_LINUX_AMD64_SHA256" "$bin" swiftlint-static
   "$bin" "$@"
+}
+
+# java_jar <jar> [参数...]：用 JAVA_HOME 下的 java 运行 jar，没设 JAVA_HOME 时用 PATH 上的 java。
+# JDK 23 起，detekt 内置的 IntelliJ 代码调用 sun.misc.Unsafe 会打印四行 WARNING；JDK 认得关掉它的参数时才加上。
+java_jar() {
+  local java=java opts=()
+  if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+    java=$JAVA_HOME/bin/java
+  elif ! command -v java >/dev/null 2>&1; then
+    echo "format: Kotlin 的工具要 JDK：设 JAVA_HOME，或把 java 放进 PATH" >&2
+    return 1
+  fi
+  if "$java" --sun-misc-unsafe-memory-access=allow -version >/dev/null 2>&1; then
+    opts+=(--sun-misc-unsafe-memory-access=allow)
+  fi
+  "$java" "${opts[@]}" -jar "$@"
+}
+
+# ktfmt 不认 -- 分隔参数，文件名直接跟在选项后面。不读 .editorconfig（没有 --enable-editorconfig），各仓风格一致。
+ktfmt() {
+  local jar="$GATE_TOOLS/ktfmt-$KTFMT_VERSION.jar"
+  fetch_pinned "https://github.com/facebook/ktfmt/releases/download/v$KTFMT_VERSION/ktfmt-$KTFMT_VERSION-with-dependencies.jar" \
+    "$KTFMT_JAR_SHA256" "$jar" || return 1
+  java_jar "$jar" --kotlinlang-style "$@"
+}
+
+detekt() {
+  local jar="$GATE_TOOLS/detekt-cli-$DETEKT_VERSION-all.jar"
+  fetch_pinned "https://github.com/detekt/detekt/releases/download/v$DETEKT_VERSION/detekt-cli-$DETEKT_VERSION-all.jar" \
+    "$DETEKT_CLI_SHA256" "$jar" || return 1
+  java_jar "$jar" "$@"
+}
+
+# kotlin_suppressions <文件...>：列出能让 detekt 跳过认知复杂度规则的 @Suppress、@SuppressWarnings 注解并失败。
+# detekt 认注解参数里的规则名 CognitiveComplexMethod、规则集名 complexity 与 all（可带 detekt: 或 detekt. 前缀，
+# 注解可以加在函数、类或整个文件上）。每个文件先拼成一行再找，跨多行的注解也找得到。
+kotlin_suppressions() {
+  awk '
+    function check(file, text, m) {
+      while (match(text, /@(file:)?Suppress(Warnings)?[[:space:]]*\([^)]*\)/)) {
+        m = substr(text, RSTART, RLENGTH)
+        if (tolower(m) ~ /"([^"]*[:.])?(all|complexity|cognitivecomplexmethod)([:.][^"]*)?"/) {
+          print file ": " m
+          bad = 1
+        }
+        text = substr(text, RSTART + RLENGTH)
+      }
+    }
+    FNR == 1 { if (NR > 1) check(name, buf); name = FILENAME; buf = "" }
+    { buf = buf " " $0 }
+    END { if (NR > 0) check(name, buf); exit bad }
+  ' "$@"
 }
 
 # lizard_check <lizard 语言名> <显示名> [文件...]：函数圈复杂度不超过 MAX_COMPLEXITY。
@@ -308,6 +385,37 @@ if [ "$LINT" -eq 1 ]; then
     echo "== SwiftLint"
     swiftlint lint --strict --quiet --no-cache -- "${SWIFT[@]}"
   fi
+  if [ ${#KT[@]} -gt 0 ]; then
+    echo "== Kotlin 函数认知复杂度不超过 $MAX_COMPLEXITY"
+    # 配置只开 CognitiveComplexMethod 一条规则，控制台只留一行一条的 LiteIssuesReport。不传 --baseline，detekt
+    # 命令行也不读仓里的 detekt.yml，所以要放宽只能改 MAX_COMPLEXITY。配置每次重写，放在本 worktree 自己的 git 目录。
+    detekt_config=$(git rev-parse --absolute-git-dir)/detekt-gate.yml
+    cat >"$detekt_config" <<EOF
+complexity:
+  active: true
+  CognitiveComplexMethod:
+    active: true
+    allowedComplexity: $MAX_COMPLEXITY
+console-reports:
+  active: true
+  exclude:
+    - ProjectStatisticsReport
+    - ComplexityReport
+    - NotificationReport
+    - IssuesReport
+    - FileBasedIssuesReport
+EOF
+    # 多个输入路径用 : 分隔。
+    detekt_input=$(
+      IFS=:
+      echo "${KT[*]}"
+    )
+    detekt --config "$detekt_config" --parallel --input "$detekt_input"
+    if ! kotlin_suppressions "${KT[@]}"; then
+      echo "lint: 不接受让 detekt 跳过认知复杂度的 @Suppress（CognitiveComplexMethod、complexity、all）" >&2
+      exit 1
+    fi
+  fi
   lizard_check java Java "${JAVA[@]}"
   lizard_check swift Swift "${SWIFT_LIZARD[@]}"
   lizard_check csharp 'C#' "${CS[@]}"
@@ -346,6 +454,18 @@ if [ "$SHFMT" -eq 1 ] && [ ${#SH[@]} -gt 0 ]; then
     fi
   else
     shfmt -w -- "${SH[@]}"
+  fi
+fi
+if [ ${#KT[@]} -gt 0 ]; then
+  if [ "$CHECK" -eq 1 ]; then
+    # --dry-run 把需要重排的文件列到标准输出；有这样的文件或解析失败（原因在 stderr）时都非零退出，两种都算失败。
+    rc=0
+    bad=$(ktfmt --dry-run --set-exit-if-changed "${KT[@]}") || rc=$?
+    if [ -n "$bad" ]; then printf 'ktfmt: 需要重排：\n%s\n' "$bad"; fi
+    if [ -n "$bad" ] || [ "$rc" -ne 0 ]; then FAIL=1; fi
+  else
+    # 每个文件在 stderr 打一行 Done formatting，只滤掉这一种，出错的原因照常显示。
+    ktfmt "${KT[@]}" 2> >(grep -v '^Done formatting ' >&2)
   fi
 fi
 # Go 文件按所属模块（往上最近的 go.mod 所在目录）分组：每个模块先核对 go 行固定的工具链（gate_go_version），

@@ -20,11 +20,18 @@ LIZARD_VERSION=1.26.0
 SWIFTLINT_VERSION=0.65.1
 # 该版本 GitHub Release 资产 swiftlint_linux_amd64.zip 的 SHA-256。
 SWIFTLINT_LINUX_AMD64_SHA256=caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d
+KTFMT_VERSION=0.65
+# 该版本 GitHub Release 资产 ktfmt-<版本>-with-dependencies.jar 的 SHA-256。
+KTFMT_JAR_SHA256=aba9753b6ab387926179ab7318ba8e0c33dad483ebc72f633e79522265b15214
+# detekt 内置自己的 Kotlin 解析器，版本要跟得上各仓用的 Kotlin：2.0 系列内置 Kotlin 2.4，1.23 系列只到 Kotlin 2.0。
+DETEKT_VERSION=2.0.0-alpha.6
+# 该版本 GitHub Release 资产 detekt-cli-<版本>-all.jar 的 SHA-256。
+DETEKT_CLI_SHA256=d46ca62ea4d62769b5d5c3ba94d49fa9b80ba11c7dba74ddb6df7fcc2c19c5fd
 # Go 的检查器与复杂度工具经 gate_go_run 取用，不进 go.mod。
 STATICCHECK=honnef.co/go/tools/cmd/staticcheck@v0.8.2
 GOCOGNIT=github.com/uudashr/gocognit/cmd/gocognit@v1.3.0
 
-# 上限：单个代码文件的行数；单个函数的复杂度（Python 量认知复杂度，Java、Swift、C#、Kotlin 量圈复杂度）；
+# 上限：单个代码文件的行数；单个函数的复杂度（Python、Kotlin 量认知复杂度，Java、Swift、C# 量圈复杂度）；
 # 单个 Go 函数的认知复杂度（测试文件里的函数也算）。
 MAX_LINES=2000
 MAX_COMPLEXITY=15
