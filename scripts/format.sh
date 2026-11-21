@@ -464,8 +464,23 @@ if [ ${#KT[@]} -gt 0 ]; then
     if [ -n "$bad" ]; then printf 'ktfmt: 需要重排：\n%s\n' "$bad"; fi
     if [ -n "$bad" ] || [ "$rc" -ne 0 ]; then FAIL=1; fi
   else
-    # 每个文件在 stderr 打一行 Done formatting，只滤掉这一种，出错的原因照常显示。
-    ktfmt "${KT[@]}" 2> >(grep -v '^Done formatting ' >&2)
+    # ktfmt 有时一遍排不到稳定（Kotlin/ktfmt#521：带 lambda 的调用后接链式调用、整行要折开时，第二遍才把 lambda
+    # 体的缩进退回去），排完的文件 --check 可能还不过。所以先用 --dry-run 列出要改的文件，只重排这些，再查一遍，
+    # 直到没有要改的；3 遍后还有就报出来。解析失败时 --dry-run 非零退出、原因在 stderr，随 set -e 退出。
+    todo=$(ktfmt --dry-run "${KT[@]}")
+    passes=0
+    while [ -n "$todo" ]; do
+      if [ "$passes" -eq 3 ]; then
+        printf 'ktfmt: 排了 3 遍还不稳定：\n%s\n' "$todo" >&2
+        FAIL=1
+        break
+      fi
+      mapfile -t changed <<<"$todo"
+      # 每个文件在 stderr 打一行 Done formatting，只滤掉这一种，出错的原因照常显示。
+      ktfmt "${changed[@]}" 2> >(grep -v '^Done formatting ' >&2)
+      todo=$(ktfmt --dry-run "${changed[@]}")
+      passes=$((passes + 1))
+    done
   fi
 fi
 # Go 文件按所属模块（往上最近的 go.mod 所在目录）分组：每个模块先核对 go 行固定的工具链（gate_go_version），
