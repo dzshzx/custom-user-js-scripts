@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 统一格式化与检查入口。本仓启用哪些工具、排除哪些路径写在 scripts/format.conf，工具版本与上限在 scripts/gatelib.sh。
 # 用法：scripts/format.sh [--check | --lint]
-#   无参数：就地格式化本仓跟踪的文件与未被忽略的新文件；--check：只检查格式，不一致时列出文件并非零退出；
+#   无参数：就地格式化本仓跟踪的文件与未被忽略的新文件；--check：只检查格式，不一致时列出文件并非零退出，另查排除项都还对得上文件；
 #   --lint：跑本仓启用的检查器与复杂度上限，并检查代码文件不超过行数上限，有问题时非零退出。后两种门禁用。
 # 格式化：prettier、shfmt、ruff format、gofmt、ktfmt；检查：shellcheck、ruff check 与 complexipy、SwiftLint、lizard、detekt、行数上限。
 # 各工具自己的配置（.prettierrc.json、.prettierignore、.editorconfig、ruff.toml 等）照常生效。
@@ -34,8 +34,8 @@ cd "$ROOT"
 source scripts/gatelib.sh
 
 # scripts/format.conf 可设的项（bash 语法），没写的项取下面的默认值，默认什么都不启用：
-#   EXCLUDE          不格式化也不检查的路径，git pathspec，如 ':(exclude)**/testdata/**'
-#   LINT_EXCLUDE     只对 --lint 生效的排除：这些路径照常格式化，但不做检查
+#   EXCLUDE          不格式化也不检查的路径，git pathspec，如 ':(exclude)**/testdata/**'。每一项都要还对得上受跟踪的文件
+#   LINT_EXCLUDE     只对 --lint 生效的排除：这些路径照常格式化，但不做检查。同样每一项都要对得上文件
 #   PRETTIER         npx：经 npx 取 PRETTIER_VERSION；node_modules：用本仓 devDependency，版本须等于 PRETTIER_VERSION
 #   PRETTIER_EXT     交给 prettier 的文件扩展名
 #   SHFMT、SHELLCHECK、PYTHON、GOFMT、SWIFTLINT    设为 1 即启用；PYTHON 是 ruff format、ruff check 与 complexipy
@@ -67,6 +67,30 @@ if [ ! -f scripts/format.conf ]; then
 fi
 # shellcheck source=/dev/null
 source scripts/format.conf
+
+# unused_excludes <排除项...>：列出已经不排除任何受跟踪文件的排除项，有就返回非零。排除项是例外：文件挪走、改名，
+# 或写法匹配不到想排除的路径时，它就成了没用的配置。git pathspec 的普通写法里 * 能跨目录，但 **/ 不匹配零层目录
+# （'**/x.json' 匹配不到仓根的 x.json）；要用 .gitignore 式的 **，写成 ':(exclude,glob)…'。
+unused_excludes() {
+  local e positive status=0
+  for e in "$@"; do
+    case $e in
+      ':(exclude)'*) positive=${e#':(exclude)'} ;;
+      ':(exclude,'*) positive=":(${e#':(exclude,'}" ;;
+      ':!'* | ':^'*) positive=${e#:?} ;;
+      *) continue ;;
+    esac
+    if [ -z "$(git ls-files -- "$positive")" ]; then
+      echo "format: scripts/format.conf 的排除项 $e 匹配不到任何受跟踪的文件" >&2
+      status=1
+    fi
+  done
+  return "$status"
+}
+if [ "$CHECK" -eq 1 ] && ! unused_excludes "${EXCLUDE[@]}" "${LINT_EXCLUDE[@]}"; then
+  echo "format: 删掉这些排除项，或改成匹配得到文件的写法（.gitignore 式的 ** 写成 ':(exclude,glob)…'）" >&2
+  exit 1
+fi
 
 # chezmoi 源文件名去掉属性前缀后的目标名写进 TARGET，例如 private_dot_zshrc → .zshrc、executable_foo.sh → foo.sh。
 chezmoi_target() {

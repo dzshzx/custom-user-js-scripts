@@ -1,9 +1,0 @@
-# prettier 只经 scripts/format.sh 处理；以下文件字节必须保持不变。
-# 锁文件与依赖目录。
-package-lock.json
-node_modules/
-# 生成物：dist 安装文件。
-dist/
-# 运行产物。
-.scratch/
-coverage/
