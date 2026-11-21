@@ -67,7 +67,7 @@ try {
       [
         '-c',
         "if git grep -n 'biome[-]ignore' -- '*.js' '*.mjs' '*.cjs' '*.jsx' '*.ts' '*.mts' '*.cts' '*.tsx' " +
-          "':(exclude)dist/**' ':(exclude)src/userscripts/*/*.user.js'; then " +
+          "':(exclude)dist/**'; then " +
           "echo 'verify: Biome suppression comments are not accepted; the complexity limit lives in biome.json' >&2; exit 1; fi",
       ],
     ],

@@ -1,6 +1,6 @@
 {
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "includes": ["**", "!**/dist", "!**/src/userscripts/*/*.user.js"] },
+  "files": { "includes": ["**", "!**/dist"] },
   "formatter": { "enabled": false },
   "assist": { "enabled": false },
   "linter": {

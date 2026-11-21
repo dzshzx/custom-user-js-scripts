@@ -9,7 +9,7 @@ const UNUSED_VARS_OPTIONS = { argsIgnorePattern: '^_', varsIgnorePattern: '^_', 
 
 export default [
   {
-    ignores: ['dist/**', 'src/userscripts/*/*.user.js', '.scratch/**', 'coverage/**'],
+    ignores: ['dist/**', '.scratch/**', 'coverage/**'],
   },
   js.configs.recommended,
   {
