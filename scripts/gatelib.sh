@@ -37,6 +37,23 @@ MAX_LINES=2000
 MAX_COMPLEXITY=15
 MAX_COGNITIVE=30
 
+# 测试临时文件用的内存盘的挂载点，见 gate_test_tmpdir。
+TEST_TMPFS=/run/gotest
+
+# gate_test_tmpdir <命令> [参数...]：运行命令，机器上挂了 $TEST_TMPFS 时把这一条命令的 TMPDIR 指到
+# $TEST_TMPFS/<uid>（没有就建，0700）。用于 go test：测试写 SQLite 这类要落盘的文件时不再等磁盘。
+# 路径固定不变，因为 Go 测试缓存把 TMPDIR 的值算进缓存条件，每次换目录就不命中。
+# 挂载点不在、目录建不成、是符号链接或不归本账户时，照常用原来的临时目录。返回命令的退出码。
+gate_test_tmpdir() {
+  local dir
+  dir="$TEST_TMPFS/$(id -u)"
+  if [ -d "$TEST_TMPFS" ] && [ ! -L "$dir" ] && { [ -d "$dir" ] || mkdir -m 700 "$dir" 2>/dev/null; } && [ -O "$dir" ]; then
+    TMPDIR=$dir "$@"
+  else
+    "$@"
+  fi
+}
+
 # gate_go_run <包@版本> [参数...]：go run 包@版本，先查本机模块缓存，缓存里没有才走原来的代理下载。
 gate_go_run() {
   GOPROXY="file://$(go env GOMODCACHE)/cache/download,$(go env GOPROXY)" go run "$@"
