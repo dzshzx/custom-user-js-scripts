@@ -48,17 +48,26 @@ TEST_TMPFS=/run/gotest
 # - 在 GitHub Actions 里（每晚的 CI、发版）给 GOFLAGS 追加 -count=1：合入门禁取测试缓存，只重跑受改动影响的包；
 #   CI 不取缓存全部重跑，兜住缓存认不到的输入。追加在原有的 GOFLAGS 后面（环境变量里的，或 go env 文件里的），
 #   不认 -count 的 go 命令忽略它。
-gate_test_tmpdir() (
+# 两个变量都用「变量=值 命令」的写法只交给这一条命令，不放进子 shell 里改：调用方脚本之后还会读 TMPDIR、GOFLAGS，
+# 在子 shell 里改过的变量，shellcheck 会在调用方读它的那一行报 SC2031。
+gate_test_tmpdir() {
+  local dir
   dir="$TEST_TMPFS/$(id -u)"
   if [ -d "$TEST_TMPFS" ] && [ ! -L "$dir" ] && { [ -d "$dir" ] || mkdir -m 700 "$dir" 2>/dev/null; } && [ -O "$dir" ]; then
-    export TMPDIR="$dir"
+    TMPDIR=$dir gate_test_uncached_in_ci "$@"
+  else
+    gate_test_uncached_in_ci "$@"
   fi
+}
+
+# gate_test_uncached_in_ci <命令> [参数...]：gate_test_tmpdir 的后一半，不单独调用。
+gate_test_uncached_in_ci() {
   if [ "${GITHUB_ACTIONS:-}" = true ]; then
-    GOFLAGS="$(go env GOFLAGS) -count=1"
-    export GOFLAGS
+    GOFLAGS="$(go env GOFLAGS) -count=1" "$@"
+  else
+    "$@"
   fi
-  "$@"
-)
+}
 
 # gate_go_run <包@版本> [参数...]：go run 包@版本，先查本机模块缓存，缓存里没有才走原来的代理下载。
 gate_go_run() {
