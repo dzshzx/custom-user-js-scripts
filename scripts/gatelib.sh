@@ -130,10 +130,16 @@ gate_python_allowlist() {
     }' "$list" - >&2
 }
 
-# gate_go_deps <清单文件> <包模式...>：这些包（按 linux/amd64、CGO_ENABLED=0 构建）链接的第三方 Go 模块与清单逐行相同，
-# 多一个少一个都失败。清单一行一个模块路径、按字典序（LC_ALL=C）不重复，# 起注释。在 go.mod 所在目录调用。
+# gate_go_deps [-goos <系统>] <清单文件> <包模式...>：这些包（按 <系统>/amd64、CGO_ENABLED=0 构建，<系统> 默认 linux）链接的
+# 第三方 Go 模块与清单逐行相同，多一个少一个都失败。发给别的系统的程序用 -goos 按它实际发出去的系统核对（如 -goos windows），
+# 各系统链接的模块可能不同。清单一行一个模块路径、按字典序（LC_ALL=C）不重复，# 起注释。在 go.mod 所在目录调用。
 gate_go_deps() {
-  local list want got status
+  local goos list want got status
+  goos=linux
+  if [ "${1:-}" = -goos ]; then
+    goos=$2
+    shift 2
+  fi
   list=$1
   shift
   want=$(mktemp)
@@ -144,7 +150,7 @@ gate_go_deps() {
     echo "gate: $list 须按字典序排列且不重复" >&2
     status=1
   fi
-  if [ "$status" -eq 0 ] && ! GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go list -deps \
+  if [ "$status" -eq 0 ] && ! GOOS="$goos" GOARCH=amd64 CGO_ENABLED=0 go list -deps \
     -f '{{if not .Standard}}{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}{{end}}' "$@" >"$got"; then
     status=1
   fi
