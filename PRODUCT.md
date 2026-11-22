@@ -66,7 +66,7 @@ unless a task explicitly introduces one.
 
 - Use the maintainer's existing release decision for the task. If the release
   decision is missing, prepare and validate the changes on the task branch,
-  then ask before pushing the candidate. Script managers key update discovery
+  then ask before landing on `master`. Script managers key update discovery
   and cache refresh on `@version`.
 - Default each target `@version` to the next patch. A minor (the release adds
   a capability the user can notice) and a major (including `0.x` -> `1.0.0`)
@@ -78,7 +78,7 @@ unless a task explicitly introduces one.
   delete the entry and dist together and add `{namespace, name, lastVersion}`
   to `retired-userscripts.json`, where `lastVersion` is that published final
   version.
-- Release steps (version plan, `candidate/**` push, fast-forward of `master`)
+- Release steps (version plan, the gate, fast-forward of `master`)
   are in README.md "开发与验证". Fast-forwarding `master` is the external
   publication boundary, because raw `@downloadURL` / `@updateURL` endpoints
   read `master`.

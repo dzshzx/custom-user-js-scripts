@@ -1,26 +1,30 @@
 name: CI
 
+# The gate is scripts/check.sh. It runs once per commit: wt land runs it on the commit it is about
+# to push to master (and records the pass as the commit status wt-land/gate), so a push starts no
+# run here. The daily run and a manual run do the same gate on a clean GitHub-hosted machine; the
+# daily run is also what checks a commit that reached master without wt land.
 on:
-  push:
-    branches: ['candidate/**']
-  pull_request:
-    branches: [master]
+  schedule:
+    # 03:53 Asia/Shanghai.
+    - cron: '53 19 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  # Candidates finish so the exact SHA is verified before it is pushed to master.
-  group: ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  verify:
+  check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The version plan in the gate reads origin/master.
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -29,26 +33,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:prepare
-      # A candidate or PR reaching master publishes its installable artifacts.
-      # If master advances, the candidate is rebased and pushed again for a fresh check.
-      - name: Check the version plan against master
-        run: node scripts/version-plan.mjs check --base-ref origin/master --target-ref HEAD
-      - run: npm run verify
-
-  # The required check is produced before master advances. Failure, cancellation
-  # or a skipped verification cannot satisfy it.
-  ci-ok:
-    if: always()
-    needs: [verify]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Require verification to succeed
-        env:
-          RESULT: ${{ needs.verify.result }}
-        run: |
-          [ "$RESULT" = success ] || {
-            echo "::error::verification concluded $RESULT"
-            exit 1
-          }
+      - name: Gate
+        run: bash scripts/check.sh

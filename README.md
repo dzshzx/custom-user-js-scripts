@@ -75,6 +75,7 @@ JavDB Recommend Archive 运行在 JavDB 官网（javdb.com 及 javdb575.com、ja
 npm ci
 npm run test:prepare # 项目锁定的 Playwright CLI 安装对应 Chromium 和系统依赖
 npm run verify      # 一次构建、产物一致性、metadata lint、tsc 类型检查、ESLint、Biome 认知复杂度、全部测试
+bash scripts/check.sh # 合入门禁：npm run verify 加版本计划核对
 ```
 
 `npm run lint` 与 `npm test` 可独立运行，会先自动构建；`npm run lint` 依次跑 metadata 检查、`tsc`（strict，只做类型检查）、ESLint 与 Biome（每个函数的认知复杂度不超过 15，上限写在 `biome.json`），单独类型检查用 `npm run typecheck`。
@@ -99,26 +100,17 @@ JS/TS、Markdown、YAML 与 JSON；
 在不写文件的情况下查看全部可安装脚本从 `origin/master` 基线到目标版本的完整计划。
 目标版本按 `PRODUCT.md`「Version Policy」：默认 patch；minor（有用户能感知的新能力）
 与 major（含 0.x→1.0）须先经维护者确认。改 metadata、
-重建后按下面的步骤推候选。
-CI 在候选上按当时的 `origin/master` 基线校验版本计划；`master` 在合入前前进时，
-先变基或更新候选并重新验证，再通过同一 SHA 的提交门禁后合入。
+重建后合入。
+门禁 `bash scripts/check.sh` 先跑 `npm run verify`，再按当时的 `origin/master` 基线校验版本计划。
 首次发版、基线未知、脚本集合不完整、孤立 dist、降级或生成副本版本不一致
 都会暂停；其余递增直接通过。下架脚本分两次发布：先发只提示停止维护的停更版，
 再一起删入口与 dist 并登记进 `retired-userscripts.json`（`lastVersion` 填停更版），
 版本计划记为 removed。
 
-发版候选在任务分支上递增版本并重建产物，然后手动推送：
-
-1. 把任务分支变基到 `origin/master`；
-2. `git push origin HEAD:refs/heads/candidate/<sha 前 12 位>`；
-3. 等该 SHA 的 CI `verify` 与 `ci-ok` 变绿（`gh run watch`，或
-   `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`）；
-4. `git push origin <sha>:refs/heads/master` 把 `master` 快进到该同一提交；
-   若 `master` 在此期间前进，快进会被拒绝，回到第 1 步；
-5. `git push origin --delete candidate/<sha 前 12 位>`。
-
-`master` 的 ruleset 要求每个提交都带绿色
-`ci-ok` 检查并禁止非快进，因此没有「先推再看 CI」的路径，也无需 pull request。
+合入用 `wt land`：它把任务分支接到最新的 `origin/master` 上，在这个提交上跑门禁，
+通过后把同一个提交快进推送到 `master`；`master` 在此期间前进时它自己重来。
+`master` 的 ruleset 禁止删除与非快进。CI 每天一次在干净的托管机器上对 `master`
+跑同一个门禁，手动复跑用 `gh workflow run ci.yml`。
 已进入 `master` 的版本视为不可变，后续修复使用下一个 patch。若维护者明确选择
 暂不发版，可以不递增版本，但已安装脚本也不会自动获得这次变更。
 
