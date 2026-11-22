@@ -40,19 +40,25 @@ MAX_COGNITIVE=30
 # 测试临时文件用的内存盘的挂载点，见 gate_test_tmpdir。
 TEST_TMPFS=/run/gotest
 
-# gate_test_tmpdir <命令> [参数...]：运行命令，机器上挂了 $TEST_TMPFS 时把这一条命令的 TMPDIR 指到
-# $TEST_TMPFS/<uid>（没有就建，0700）。用于 go test：测试写 SQLite 这类要落盘的文件时不再等磁盘。
-# 路径固定不变，因为 Go 测试缓存把 TMPDIR 的值算进缓存条件，每次换目录就不命中。
-# 挂载点不在、目录建不成、是符号链接或不归本账户时，照常用原来的临时目录。返回命令的退出码。
-gate_test_tmpdir() {
-  local dir
+# gate_test_tmpdir <命令> [参数...]：跑 go test 的命令经它执行，只对这一条命令生效，返回命令的退出码。命令可以是
+# 调用方的 shell 函数。做两件事：
+# - 机器上挂了 $TEST_TMPFS 时把 TMPDIR 指到 $TEST_TMPFS/<uid>（没有就建，0700）：测试写 SQLite 这类要落盘的文件时
+#   不再等磁盘。路径固定不变，因为 Go 测试缓存把 TMPDIR 的值算进缓存条件，每次换目录就不命中。挂载点不在、
+#   目录建不成、是符号链接或不归本账户时，照常用原来的临时目录。
+# - 在 GitHub Actions 里（每晚的 CI、发版）给 GOFLAGS 追加 -count=1：合入门禁取测试缓存，只重跑受改动影响的包；
+#   CI 不取缓存全部重跑，兜住缓存认不到的输入。追加在原有的 GOFLAGS 后面（环境变量里的，或 go env 文件里的），
+#   不认 -count 的 go 命令忽略它。
+gate_test_tmpdir() (
   dir="$TEST_TMPFS/$(id -u)"
   if [ -d "$TEST_TMPFS" ] && [ ! -L "$dir" ] && { [ -d "$dir" ] || mkdir -m 700 "$dir" 2>/dev/null; } && [ -O "$dir" ]; then
-    TMPDIR=$dir "$@"
-  else
-    "$@"
+    export TMPDIR="$dir"
   fi
-}
+  if [ "${GITHUB_ACTIONS:-}" = true ]; then
+    GOFLAGS="$(go env GOFLAGS) -count=1"
+    export GOFLAGS
+  fi
+  "$@"
+)
 
 # gate_go_run <包@版本> [参数...]：go run 包@版本，先查本机模块缓存，缓存里没有才走原来的代理下载。
 gate_go_run() {
