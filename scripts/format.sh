@@ -69,18 +69,14 @@ fi
 source scripts/format.conf
 
 # unused_excludes <排除项...>：列出已经不排除任何受跟踪文件的排除项，有就返回非零。排除项是例外：文件挪走、改名，
-# 或写法匹配不到想排除的路径时，它就成了没用的配置。git pathspec 的普通写法里 * 能跨目录，但 **/ 不匹配零层目录
-# （'**/x.json' 匹配不到仓根的 x.json）；要用 .gitignore 式的 **，写成 ':(exclude,glob)…'。
+# 或写法匹配不到想排除的路径时，它就成了没用的配置。判断看效果，不解析写法：只给 git 一条排除项时，它列出的是全部
+# 文件减去这一条排除掉的，数目和全部文件一样就是什么也没排除。git pathspec 的普通写法里 * 能跨目录，但 **/ 不匹配
+# 零层目录（'**/x.json' 匹配不到仓根的 x.json）；要用 .gitignore 式的 **，写成 ':(exclude,glob)…'。
 unused_excludes() {
-  local e positive status=0
+  local e total status=0
+  total=$(git ls-files | wc -l)
   for e in "$@"; do
-    case $e in
-      ':(exclude)'*) positive=${e#':(exclude)'} ;;
-      ':(exclude,'*) positive=":(${e#':(exclude,'}" ;;
-      ':!'* | ':^'*) positive=${e#:?} ;;
-      *) continue ;;
-    esac
-    if [ -z "$(git ls-files -- "$positive")" ]; then
+    if [ "$(git ls-files -- "$e" | wc -l)" -eq "$total" ]; then
       echo "format: scripts/format.conf 的排除项 $e 匹配不到任何受跟踪的文件" >&2
       status=1
     fi
