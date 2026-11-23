@@ -130,6 +130,18 @@ gate_python_allowlist() {
     }' "$list" - >&2
 }
 
+# gate_go_goos <系统> [包模式...]：按 <系统>/amd64 再跑一遍 go vet 和 staticcheck（含测试），包模式默认 ./...。只在那个系统上
+# 编译的文件（*_windows.go、带构建约束的包）在本机的 vet、staticcheck 里看不到，发给别的系统的程序要按它再查一遍。
+# staticcheck 照常编成本机程序：go run -exec 只让它的进程带上目标系统。在 go.mod 所在目录调用。
+gate_go_goos() {
+  local goos
+  goos=$1
+  shift
+  [ "$#" -gt 0 ] || set -- ./...
+  GOOS="$goos" GOARCH=amd64 go vet "$@" \
+    && gate_go_run -exec "env GOOS=$goos GOARCH=amd64" "$STATICCHECK" "$@"
+}
+
 # gate_go_deps [-goos <系统>] <清单文件> <包模式...>：这些包（按 <系统>/amd64、CGO_ENABLED=0 构建，<系统> 默认 linux）链接的
 # 第三方 Go 模块与清单逐行相同，多一个少一个都失败。发给别的系统的程序用 -goos 按它实际发出去的系统核对（如 -goos windows），
 # 各系统链接的模块可能不同。清单一行一个模块路径、按字典序（LC_ALL=C）不重复，# 起注释。在 go.mod 所在目录调用。
