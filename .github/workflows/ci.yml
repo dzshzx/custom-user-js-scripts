@@ -1,9 +1,9 @@
 name: CI
 
 # The gate is scripts/check.sh. It runs once per commit: wt land runs it on the commit it is about
-# to push to master (and records the pass as the commit status wt-land/gate), so a push starts no
-# run here. The daily run and a manual run do the same gate on a clean GitHub-hosted machine; the
-# daily run is also what checks a commit that reached master without wt land.
+# to push to master, so a push starts no run here. The daily run and a manual run do the same gate
+# on a clean GitHub-hosted machine; the daily run is also what checks a commit that reached master
+# without wt land.
 on:
   schedule:
     # 03:53 Asia/Shanghai.
