@@ -138,8 +138,8 @@ gate_go_goos() {
   goos=$1
   shift
   [ "$#" -gt 0 ] || set -- ./...
-  GOOS="$goos" GOARCH=amd64 go vet "$@" \
-    && gate_go_run -exec "env GOOS=$goos GOARCH=amd64" "$STATICCHECK" "$@"
+  GOOS="$goos" GOARCH=amd64 go vet "$@" || return
+  gate_go_run -exec "env GOOS=$goos GOARCH=amd64" "$STATICCHECK" "$@"
 }
 
 # gate_go_deps [-goos <系统>] <清单文件> <包模式...>：这些包（按 <系统>/amd64、CGO_ENABLED=0 构建，<系统> 默认 linux）链接的
