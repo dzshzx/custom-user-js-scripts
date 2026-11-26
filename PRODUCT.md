@@ -68,6 +68,9 @@ unless a task explicitly introduces one.
   decision is missing, prepare and validate the changes on the task branch,
   then ask before landing on `master`. Script managers key update discovery
   and cache refresh on `@version`.
+- Dependency updates from the weekly batch have a standing release decision;
+  its rules are in fleet-state
+  `docs/runbooks/versioning/dependency-weekly-upgrade.md`.
 - Default each target `@version` to the next patch. A minor (the release adds
   a capability the user can notice) and a major (including `0.x` -> `1.0.0`)
   need the maintainer's confirmation first. Internal refactors, directory
