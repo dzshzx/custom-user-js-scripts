@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Feishu Preview Image Export
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.1.35
+// @version      0.1.36
 // @description  Export the main visible image from a Feishu file preview page.
 // @author       dzshzx
 // @match        https://mi.feishu.cn/file/*
@@ -486,13 +486,8 @@ ${root} :focus-visible {
     return n2.__v.__b - t3.__v.__b;
   }, e = /* @__PURE__ */ Symbol(), l = /(PointerCapture)$|Capture$/i, c = 0, a = {}, s = 0;
 
-  // node_modules/lucide-preact/dist/esm/shared/src/utils/mergeClasses.mjs
-  var mergeClasses = (...classes) => classes.filter((className, index, array) => {
-    return Boolean(className) && className.trim() !== "" && array.indexOf(className) === index;
-  }).join(" ").trim();
-
   // node_modules/lucide-preact/dist/esm/shared/src/utils/toKebabCase.mjs
-  var toKebabCase = (string) => string?.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+  var toKebabCase = (value) => (value.match(/\d+[xX]\d+|[A-Z]?[a-z]+|[A-Z]|\d+/g) ?? []).join("-").toLowerCase();
 
   // node_modules/lucide-preact/dist/esm/shared/src/utils/toLucideIconData.mjs
   function toLucideIconData(iconName, iconNode, aliases = []) {
@@ -543,6 +538,18 @@ ${root} :focus-visible {
     "stroke-width": 2,
     "stroke-linecap": "round",
     "stroke-linejoin": "round"
+  };
+
+  // node_modules/lucide-preact/dist/esm/shared/src/utils/mergeClasses.mjs
+  var mergeClasses = (...classes) => {
+    const tokens = /* @__PURE__ */ new Set();
+    for (const cls of classes) {
+      if (typeof cls !== "string") continue;
+      for (const token of cls.split(/\s+/)) {
+        if (token) tokens.add(token);
+      }
+    }
+    return [...tokens].join(" ");
   };
 
   // node_modules/lucide-preact/dist/esm/shared/src/build/buildLucideIconNode.mjs
@@ -600,8 +607,11 @@ ${root} :focus-visible {
 
   // node_modules/lucide-preact/dist/esm/shared/src/utils/hasA11yProp.mjs
   var hasA11yProp = (props) => {
+    if (props == null || typeof props !== "object") {
+      return false;
+    }
     for (const prop in props) {
-      if (prop.startsWith("aria-") || prop === "role" || prop === "title") {
+      if (Object.prototype.hasOwnProperty.call(props, prop) && (prop.startsWith("aria-") || prop === "role" || prop === "title") && props[prop] != null) {
         return true;
       }
     }
@@ -726,6 +736,7 @@ ${root} :focus-visible {
   var useLucideContext = () => j2(LucideContext);
 
   // node_modules/lucide-preact/dist/esm/Icon.mjs
+  var resolveClassName = (value) => typeof value === "object" ? value?.value : value;
   var Icon = ({
     color,
     size,
@@ -742,6 +753,7 @@ ${root} :focus-visible {
       size: 24
     },
     class: classes = "",
+    className = "",
     ...rest
   }) => {
     const {
@@ -759,7 +771,7 @@ ${root} :focus-visible {
       strokeWidth: strokeWidth ?? contextStrokeWidth,
       absoluteStrokeWidth: absoluteStrokeWidth ?? contextAbsoluteStrokeWidth,
       nonScalingStroke: nonScalingStroke ?? contextNonScalingStroke,
-      className: mergeClasses(contextClass, classes),
+      className: mergeClasses(contextClass, resolveClassName(classes), resolveClassName(className)),
       hasA11yProp: Boolean(children) || hasA11yProp(rest),
       attributes: rest
     });
@@ -772,12 +784,11 @@ ${root} :focus-visible {
   // node_modules/lucide-preact/dist/esm/createLucideIcon.mjs
   function createLucideIcon(iconDataOrName, iconNode, aliases = []) {
     const iconData = typeof iconDataOrName === "string" ? toLucideIconData(iconDataOrName, iconNode, aliases) : iconDataOrName;
-    const Component = ({ class: classes = "", className = "", children, ...props }) => k(
+    const Component = ({ children, ...props }) => k(
       Icon,
       {
         ...props,
-        icon: iconData,
-        class: mergeClasses(classes, className)
+        icon: iconData
       },
       children
     );
@@ -2152,12 +2163,12 @@ ${root} :focus-visible {
 // @license      MIT
 /*! Bundled license information:
 
-lucide-preact/dist/esm/shared/src/utils/mergeClasses.mjs:
 lucide-preact/dist/esm/shared/src/utils/toKebabCase.mjs:
 lucide-preact/dist/esm/shared/src/utils/toLucideIconData.mjs:
 lucide-preact/dist/esm/shared/src/utils/toCamelCase.mjs:
 lucide-preact/dist/esm/shared/src/utils/toPascalCase.mjs:
 lucide-preact/dist/esm/shared/src/build/defaultAttributes.mjs:
+lucide-preact/dist/esm/shared/src/utils/mergeClasses.mjs:
 lucide-preact/dist/esm/shared/src/build/buildLucideIconNode.mjs:
 lucide-preact/dist/esm/shared/src/utils/hasA11yProp.mjs:
 lucide-preact/dist/esm/context.mjs:
@@ -2171,7 +2182,7 @@ lucide-preact/dist/esm/icons/triangle-exclamation-point.mjs:
 lucide-preact/dist/esm/icons/x.mjs:
 lucide-preact/dist/esm/lucide-preact.mjs:
   (**
-   * @license lucide-preact v1.73.0 - ISC
+   * @license lucide-preact v1.77.0 - ISC
    *
    * This source code is licensed under the ISC license.
    * See the LICENSE file in the root directory of this source tree.

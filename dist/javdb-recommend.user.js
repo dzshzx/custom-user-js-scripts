@@ -2,7 +2,7 @@
 // @name         JavDB Recommend Archive
 // @name:zh-CN   JavDB 佳片推荐 · 历史期数
 // @namespace    https://github.com/dzshzx/custom-user-js-scripts
-// @version      0.0.15
+// @version      0.0.16
 // @description  Adds a "Recommend" entry to the JavDB navbar that opens a standalone archive page for every historical issue (updated Mon/Thu), with flip, search and full-archive keyword search.
 // @description:zh-CN  在 JavDB 导航栏加入「佳片推荐」入口，打开独立页面浏览全部历史期数（每周一/四更新），支持翻期、搜索、全期关键词搜索。
 // @author       dzshzx
@@ -659,8 +659,14 @@
   }
 
   // node_modules/quick-lru/index.js
+  var isValidMaxSize = (value) => typeof value === "number" && value > 0 && (Number.isInteger(value) || value === Infinity);
+  var hasExpiry = (item) => item.expiry !== void 0 && !Number.isNaN(item.expiry);
+  var MODE_KEYS = 0;
+  var MODE_VALUES = 1;
+  var MODE_ENTRIES = 2;
+  var MODE_ITEMS = 3;
+  var INVALID_MAX_SIZE_MESSAGE = "`maxSize` must be a whole number greater than 0 or `Infinity`";
   var QuickLRU = class extends Map {
-    #size = 0;
     #cache = /* @__PURE__ */ new Map();
     #oldCache = /* @__PURE__ */ new Map();
     #maxSize;
@@ -668,243 +674,226 @@
     #onEviction;
     constructor(options = {}) {
       super();
-      if (!(options.maxSize && options.maxSize > 0)) {
-        throw new TypeError("`maxSize` must be a number greater than 0");
+      if (!isValidMaxSize(options.maxSize)) {
+        throw new TypeError(INVALID_MAX_SIZE_MESSAGE);
       }
-      if (typeof options.maxAge === "number" && options.maxAge === 0) {
+      if (typeof options.maxAge === "number" && !(options.maxAge > 0)) {
         throw new TypeError("`maxAge` must be a number greater than 0");
       }
       this.#maxSize = options.maxSize;
-      this.#maxAge = options.maxAge || Number.POSITIVE_INFINITY;
+      this.#maxAge = typeof options.maxAge === "number" ? options.maxAge : Infinity;
       this.#onEviction = options.onEviction;
-    }
-    // For tests.
-    get __oldCache() {
-      return this.#oldCache;
     }
     #emitEvictions(cache) {
       if (typeof this.#onEviction !== "function") {
         return;
       }
-      for (const [key, item] of cache) {
+      const evictions = [...cache].filter(([key]) => !this.#cache.has(key) && !this.#oldCache.has(key));
+      for (const [key, item] of evictions) {
         this.#onEviction(key, item.value);
       }
     }
     #deleteIfExpired(key, item) {
-      if (typeof item.expiry === "number" && item.expiry <= Date.now()) {
-        if (typeof this.#onEviction === "function") {
+      if (hasExpiry(item) && item.expiry <= Date.now()) {
+        const deleted = this.delete(key);
+        if (deleted && typeof this.#onEviction === "function") {
           this.#onEviction(key, item.value);
         }
-        return this.delete(key);
+        return deleted;
       }
       return false;
     }
-    #getOrDeleteIfExpired(key, item) {
-      const deleted = this.#deleteIfExpired(key, item);
-      if (deleted === false) {
-        return item.value;
-      }
-    }
+    // Returns the value, or `undefined` once the item has been removed as expired.
     #getItemValue(key, item) {
-      return item.expiry ? this.#getOrDeleteIfExpired(key, item) : item.value;
+      return this.#deleteIfExpired(key, item) === false ? item.value : void 0;
     }
-    #peek(key, cache) {
-      const item = cache.get(key);
-      return this.#getItemValue(key, item);
-    }
-    #set(key, value) {
-      this.#cache.set(key, value);
-      this.#size++;
-      if (this.#size >= this.#maxSize) {
-        this.#size = 0;
-        this.#emitEvictions(this.#oldCache);
-        this.#oldCache = this.#cache;
-        this.#cache = /* @__PURE__ */ new Map();
+    #set(key, item) {
+      this.#cache.set(key, item);
+      if (this.#cache.size < this.#maxSize) {
+        return;
       }
+      const oldCache = this.#oldCache;
+      this.#oldCache = this.#cache;
+      this.#cache = /* @__PURE__ */ new Map();
+      this.#emitEvictions(oldCache);
     }
     #moveToRecent(key, item) {
       this.#oldCache.delete(key);
       this.#set(key, item);
     }
-    *#entriesAscending() {
-      for (const item of this.#oldCache) {
-        const [key, value] = item;
+    // The current item for `key`, or `undefined` if it is gone or has expired. The recent cache wins, since an old cache copy of a key that is in both is stale. Not a generator, since this runs once per item during iteration.
+    #liveItem(key) {
+      const item = this.#cache.get(key) ?? this.#oldCache.get(key);
+      if (item !== void 0 && this.#deleteIfExpired(key, item) === false) {
+        return item;
+      }
+    }
+    // The current item for `key`, promoted to the recent cache when it was in the old one, or `undefined` when the key is missing or has expired. Only for the methods that refresh recency, since promoting is what separates them from `peek()`. One lookup per cache, since where the item is found decides the promotion. Not a generator, since this runs once per lookup.
+    #getLiveItem(key) {
+      let item = this.#cache.get(key);
+      if (item === void 0) {
+        item = this.#oldCache.get(key);
+        if (item === void 0 || this.#deleteIfExpired(key, item)) {
+          return;
+        }
+        this.#moveToRecent(key, item);
+      } else if (this.#deleteIfExpired(key, item)) {
+        return;
+      }
+      return item;
+    }
+    // The old cache keys that are not also in the recent cache, since an old copy of such a key is stale. A plain loop, since this runs once per item during iteration.
+    #olderKeys() {
+      const keys2 = [];
+      for (const key of this.#oldCache.keys()) {
         if (!this.#cache.has(key)) {
-          const deleted = this.#deleteIfExpired(key, value);
-          if (deleted === false) {
-            yield item;
-          }
+          keys2.push(key);
         }
       }
-      for (const item of this.#cache) {
-        const [key, value] = item;
-        const deleted = this.#deleteIfExpired(key, value);
-        if (deleted === false) {
-          yield item;
+      return keys2;
+    }
+    *#walk(mode, descending) {
+      const keys2 = [...this.#olderKeys(), ...this.#cache.keys()];
+      if (descending) {
+        keys2.reverse();
+      }
+      for (const key of keys2) {
+        const item = this.#liveItem(key);
+        if (item === void 0) {
+          continue;
+        }
+        if (mode === MODE_KEYS) {
+          yield key;
+        } else if (mode === MODE_VALUES) {
+          yield item.value;
+        } else if (mode === MODE_ITEMS) {
+          yield [key, item];
+        } else {
+          yield [key, item.value];
         }
       }
+    }
+    // For tests. Public on purpose, so the test suite can see where an item lives.
+    // eslint-disable-next-line unicorn/prefer-private-class-fields
+    get __oldCache() {
+      return this.#oldCache;
     }
     get(key) {
-      if (this.#cache.has(key)) {
-        const item = this.#cache.get(key);
-        return this.#getItemValue(key, item);
+      const item = this.#getLiveItem(key);
+      return item === void 0 ? void 0 : item.value;
+    }
+    getOrInsert(key, value) {
+      const item = this.#getLiveItem(key);
+      if (item === void 0) {
+        this.set(key, value);
+        return value;
       }
-      if (this.#oldCache.has(key)) {
-        const item = this.#oldCache.get(key);
-        if (this.#deleteIfExpired(key, item) === false) {
-          this.#moveToRecent(key, item);
-          return item.value;
-        }
+      return item.value;
+    }
+    getOrInsertComputed(key, callback) {
+      const item = this.#getLiveItem(key);
+      if (item === void 0) {
+        const value = callback(key);
+        this.set(key, value);
+        return value;
       }
+      return item.value;
     }
     set(key, value, { maxAge = this.#maxAge } = {}) {
-      const expiry = typeof maxAge === "number" && maxAge !== Number.POSITIVE_INFINITY ? Date.now() + maxAge : void 0;
-      if (this.#cache.has(key)) {
-        this.#cache.set(key, {
-          value,
-          expiry
-        });
-      } else {
-        this.#set(key, { value, expiry });
-      }
+      const expiry = typeof maxAge === "number" && maxAge !== Infinity ? Date.now() + maxAge : void 0;
+      this.#set(key, { value, expiry });
       return this;
     }
     has(key) {
-      if (this.#cache.has(key)) {
-        return !this.#deleteIfExpired(key, this.#cache.get(key));
-      }
-      if (this.#oldCache.has(key)) {
-        return !this.#deleteIfExpired(key, this.#oldCache.get(key));
-      }
-      return false;
+      const item = this.#cache.get(key) ?? this.#oldCache.get(key);
+      return item !== void 0 && !this.#deleteIfExpired(key, item);
     }
     peek(key) {
-      if (this.#cache.has(key)) {
-        return this.#peek(key, this.#cache);
-      }
-      if (this.#oldCache.has(key)) {
-        return this.#peek(key, this.#oldCache);
-      }
+      const item = this.#cache.get(key) ?? this.#oldCache.get(key);
+      return item === void 0 ? void 0 : this.#getItemValue(key, item);
     }
     expiresIn(key) {
       const item = this.#cache.get(key) ?? this.#oldCache.get(key);
       if (item) {
-        return item.expiry ? item.expiry - Date.now() : Number.POSITIVE_INFINITY;
+        return hasExpiry(item) ? item.expiry - Date.now() : Infinity;
       }
     }
     delete(key) {
       const deleted = this.#cache.delete(key);
-      if (deleted) {
-        this.#size--;
-      }
       return this.#oldCache.delete(key) || deleted;
     }
     clear() {
       this.#cache.clear();
       this.#oldCache.clear();
-      this.#size = 0;
     }
     resize(newSize) {
-      if (!(newSize && newSize > 0)) {
-        throw new TypeError("`maxSize` must be a number greater than 0");
+      if (!isValidMaxSize(newSize)) {
+        throw new TypeError(INVALID_MAX_SIZE_MESSAGE);
       }
-      const items = [...this.#entriesAscending()];
+      const items = [...this.#walk(MODE_ITEMS)];
       const removeCount = items.length - newSize;
       if (removeCount < 0) {
         this.#cache = new Map(items);
         this.#oldCache = /* @__PURE__ */ new Map();
-        this.#size = items.length;
       } else {
-        if (removeCount > 0) {
-          this.#emitEvictions(items.slice(0, removeCount));
-        }
         this.#oldCache = new Map(items.slice(removeCount));
         this.#cache = /* @__PURE__ */ new Map();
-        this.#size = 0;
       }
       this.#maxSize = newSize;
+      if (removeCount > 0) {
+        this.#emitEvictions(items.slice(0, removeCount));
+      }
     }
     evict(count = 1) {
       const requested = Number(count);
       if (!requested || requested <= 0) {
         return;
       }
-      const items = [...this.#entriesAscending()];
-      const evictCount = Math.trunc(Math.min(requested, Math.max(items.length - 1, 0)));
-      if (evictCount <= 0) {
-        return;
-      }
-      this.#emitEvictions(items.slice(0, evictCount));
-      this.#oldCache = new Map(items.slice(evictCount));
-      this.#cache = /* @__PURE__ */ new Map();
-      this.#size = 0;
-    }
-    *keys() {
-      for (const [key] of this) {
-        yield key;
-      }
-    }
-    *values() {
-      for (const [, value] of this) {
-        yield value;
-      }
-    }
-    *[Symbol.iterator]() {
-      for (const item of this.#cache) {
-        const [key, value] = item;
-        const deleted = this.#deleteIfExpired(key, value);
-        if (deleted === false) {
-          yield [key, value.value];
+      const live = [...this.#walk(MODE_ITEMS)];
+      const evictCount = Math.min(Math.trunc(requested), Math.max(live.length - 1, 0));
+      const evicted = [];
+      for (const [key] of live.slice(0, evictCount)) {
+        const item = this.#cache.get(key) ?? this.#oldCache.get(key);
+        if (item !== void 0 && this.delete(key)) {
+          evicted.push([key, item]);
         }
       }
-      for (const item of this.#oldCache) {
-        const [key, value] = item;
-        if (!this.#cache.has(key)) {
-          const deleted = this.#deleteIfExpired(key, value);
-          if (deleted === false) {
-            yield [key, value.value];
-          }
-        }
-      }
+      this.#emitEvictions(evicted);
     }
-    *entriesDescending() {
-      let items = [...this.#cache];
-      for (let i = items.length - 1; i >= 0; --i) {
-        const item = items[i];
-        const [key, value] = item;
-        const deleted = this.#deleteIfExpired(key, value);
-        if (deleted === false) {
-          yield [key, value.value];
-        }
-      }
-      items = [...this.#oldCache];
-      for (let i = items.length - 1; i >= 0; --i) {
-        const item = items[i];
-        const [key, value] = item;
-        if (!this.#cache.has(key)) {
-          const deleted = this.#deleteIfExpired(key, value);
-          if (deleted === false) {
-            yield [key, value.value];
-          }
-        }
-      }
+    keys() {
+      return this.#walk(MODE_KEYS);
     }
-    *entriesAscending() {
-      for (const [key, value] of this.#entriesAscending()) {
-        yield [key, value.value];
-      }
+    values() {
+      return this.#walk(MODE_VALUES);
+    }
+    [Symbol.iterator]() {
+      return this.entriesAscending();
+    }
+    entriesDescending() {
+      return this.#walk(MODE_ENTRIES, true);
+    }
+    entriesAscending() {
+      return this.#walk(MODE_ENTRIES);
     }
     get size() {
-      if (!this.#size) {
-        return this.#oldCache.size;
+      const recentSize = this.#cache.size;
+      const olderSize = this.#oldCache.size;
+      if (recentSize === 0 || olderSize === 0) {
+        return Math.min(recentSize + olderSize, this.#maxSize);
       }
-      let oldCacheSize = 0;
-      for (const key of this.#oldCache.keys()) {
-        if (!this.#cache.has(key)) {
-          oldCacheSize++;
+      let walked = this.#cache;
+      let checked = this.#oldCache;
+      if (olderSize < recentSize) {
+        walked = this.#oldCache;
+        checked = this.#cache;
+      }
+      let duplicates = 0;
+      for (const key of walked.keys()) {
+        if (checked.has(key)) {
+          duplicates++;
         }
       }
-      return Math.min(this.#size + oldCacheSize, this.#maxSize);
+      return Math.min(recentSize + olderSize - duplicates, this.#maxSize);
     }
     get maxSize() {
       return this.#maxSize;
