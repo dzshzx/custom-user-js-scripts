@@ -116,7 +116,7 @@ SWIFT_LIZARD=()
 KT=()
 JAVA=()
 CS=()
-LINES=()
+LINE_FILES=()
 prettier_ext=" ${PRETTIER_EXT[*]} "
 lines_ext=" ${LINES_EXT[*]} "
 lizard_langs=" ${LIZARD[*]} "
@@ -150,20 +150,20 @@ classify() {
   case $ext in
     sh | bash)
       SH+=("$f")
-      LINES+=("$f")
+      LINE_FILES+=("$f")
       return 0
       ;;
     py | pyi)
       if [ "$PYTHON" -eq 1 ]; then
         PY+=("$f")
-        LINES+=("$f")
+        LINE_FILES+=("$f")
         return 0
       fi
       ;;
     kt | kts)
       if [ "$KOTLIN" -eq 1 ]; then
         KT+=("$f")
-        LINES+=("$f")
+        LINE_FILES+=("$f")
         return 0
       fi
       ;;
@@ -175,7 +175,7 @@ classify() {
     swift) if [[ $lizard_langs == *" swift "* ]]; then SWIFT_LIZARD+=("$f"); fi ;;
     cs) if [[ $lizard_langs == *" csharp "* ]]; then CS+=("$f"); fi ;;
   esac
-  if [[ $lines_ext == *" $ext "* ]]; then LINES+=("$f"); fi
+  if [[ $lines_ext == *" $ext "* ]]; then LINE_FILES+=("$f"); fi
 }
 
 pathspec=("${EXCLUDE[@]}")
@@ -442,7 +442,7 @@ EOF
   if [ "$MAX_LINES" -gt 0 ]; then
     echo "== 代码文件不超过 $MAX_LINES 行"
     # 列出超过上限的文件并非零退出。末尾加 /dev/null 保证 wc 总会多打一行合计，sed 把这一行去掉。
-    wc -l -- "${LINES[@]}" /dev/null | sed '$d' | awk -v max="$MAX_LINES" '$1 > max { print; bad = 1 } END { exit bad }'
+    wc -l -- "${LINE_FILES[@]}" /dev/null | sed '$d' | awk -v max="$MAX_LINES" '$1 > max { print; bad = 1 } END { exit bad }'
   fi
   echo "lint: ok"
   exit 0
